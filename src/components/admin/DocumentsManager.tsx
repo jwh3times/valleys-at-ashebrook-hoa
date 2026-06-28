@@ -59,7 +59,11 @@ export default function DocumentsManager() {
     <div>
       <h2>Upload a document</h2>
       {msg && <div className="form-message form-message--success">{msg}</div>}
-      <form className="card" onSubmit={handleUpload} style={{ marginBottom: '2rem' }}>
+      <form
+        className="card"
+        onSubmit={handleUpload}
+        style={{ marginBottom: '2rem' }}
+      >
         <div className="field">
           <label>Title</label>
           <input
@@ -72,7 +76,10 @@ export default function DocumentsManager() {
         </div>
         <div className="field">
           <label>Category</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
             {DOCUMENT_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c}

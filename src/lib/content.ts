@@ -22,11 +22,14 @@ export async function fetchAnnouncements(): Promise<Announcement[]> {
   const snap = await getDocs(
     query(collection(db, 'announcements'), orderBy('date', 'desc')),
   );
-  const items = snap.docs.map(
-    (d) => ({ id: d.id, ...(d.data() as Omit<Announcement, 'id'>) }),
-  );
+  const items = snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<Announcement, 'id'>),
+  }));
   // Pinned announcements float to the top, otherwise keep date-desc order.
-  return items.sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false));
+  return items.sort(
+    (a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false),
+  );
 }
 
 export async function fetchDocuments(): Promise<DocumentItem[]> {
@@ -34,23 +37,30 @@ export async function fetchDocuments(): Promise<DocumentItem[]> {
   const snap = await getDocs(
     query(collection(db, 'documents'), orderBy('title')),
   );
-  return snap.docs.map(
-    (d) => ({ id: d.id, ...(d.data() as Omit<DocumentItem, 'id'>) }),
-  );
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as Omit<DocumentItem, 'id'>),
+  }));
 }
 
 export async function fetchDuesSettings(): Promise<DuesSettings> {
   const db = getDb();
   const snap = await getDoc(doc(db, 'settings', 'dues'));
   if (!snap.exists()) return DEFAULT_DUES_SETTINGS;
-  return { ...DEFAULT_DUES_SETTINGS, ...(snap.data() as Partial<DuesSettings>) };
+  return {
+    ...DEFAULT_DUES_SETTINGS,
+    ...(snap.data() as Partial<DuesSettings>),
+  };
 }
 
 export async function fetchSiteSettings(): Promise<SiteSettings> {
   const db = getDb();
   const snap = await getDoc(doc(db, 'settings', 'site'));
   if (!snap.exists()) return DEFAULT_SITE_SETTINGS;
-  return { ...DEFAULT_SITE_SETTINGS, ...(snap.data() as Partial<SiteSettings>) };
+  return {
+    ...DEFAULT_SITE_SETTINGS,
+    ...(snap.data() as Partial<SiteSettings>),
+  };
 }
 
 /** Group documents by their category for display. */

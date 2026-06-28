@@ -1,7 +1,8 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 
-const calendarId = import.meta.env.PUBLIC_GOOGLE_CALENDAR_ID as string | undefined;
+const calendarId = import.meta.env.PUBLIC_GOOGLE_CALENDAR_ID as
+  string | undefined;
 const tz =
   (import.meta.env.PUBLIC_GOOGLE_CALENDAR_TIMEZONE as string | undefined) ??
   'America/New_York';
@@ -33,7 +34,12 @@ const icalUrl = calendarId
     calendarId ? (
       <>
         <div style="margin-bottom: 1rem; display: flex; gap: 0.6rem; flex-wrap: wrap;">
-          <a class="btn" href={addToGoogleUrl} target="_blank" rel="noopener noreferrer">
+          <a
+            class="btn"
+            href={addToGoogleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             + Add to your Google Calendar
           </a>
           <a class="btn btn--outline" href={icalUrl}>

@@ -32,7 +32,11 @@ export default function DocumentsList() {
   return (
     <div>
       {Object.entries(groups).map(([category, items]) => (
-        <section key={category} className="card" style={{ marginBottom: '1rem' }}>
+        <section
+          key={category}
+          className="card"
+          style={{ marginBottom: '1rem' }}
+        >
           <h2 style={{ marginTop: 0 }}>{category}</h2>
           <ul className="doc-list">
             {items.map((d) => (

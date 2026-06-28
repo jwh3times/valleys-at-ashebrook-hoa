@@ -70,7 +70,11 @@ export default function AnnouncementsManager() {
     <div>
       <h2>{editingId ? 'Edit announcement' : 'New announcement'}</h2>
       {msg && <div className="form-message form-message--success">{msg}</div>}
-      <form className="card" onSubmit={handleSave} style={{ marginBottom: '2rem' }}>
+      <form
+        className="card"
+        onSubmit={handleSave}
+        style={{ marginBottom: '2rem' }}
+      >
         <div className="field">
           <label>Title</label>
           <input

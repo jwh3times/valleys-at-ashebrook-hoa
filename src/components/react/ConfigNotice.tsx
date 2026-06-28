@@ -10,8 +10,8 @@ export default function ConfigNotice() {
   return (
     <div className="notice">
       <strong>Setup needed:</strong> Firebase isn’t configured yet, so live
-      content can’t load. Copy <code>.env.example</code> to <code>.env</code> and
-      fill in your Firebase project values (see <code>SETUP.md</code>).
+      content can’t load. Copy <code>.env.example</code> to <code>.env</code>{' '}
+      and fill in your Firebase project values (see <code>SETUP.md</code>).
     </div>
   );
 }

@@ -42,7 +42,9 @@ export default function SiteManager() {
           <input
             type="text"
             value={site.welcomeHeading}
-            onChange={(e) => setSite({ ...site, welcomeHeading: e.target.value })}
+            onChange={(e) =>
+              setSite({ ...site, welcomeHeading: e.target.value })
+            }
           />
         </div>
         <div className="field">
