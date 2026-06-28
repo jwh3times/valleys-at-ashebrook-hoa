@@ -9,7 +9,7 @@
 
 export const site = {
   /** The full legal/display name of your homeowners association. */
-  name: "The Valleys at Ashebrook HOA",
+  name: "Valleys at Ashebrook",
   /** Short name used in the navbar and tight spaces. */
   shortName: "Valleys at Ashebrook",
   /** One-line description used for the hero and SEO metadata. */
@@ -17,7 +17,7 @@ export const site = {
   /** Mailing address shown in the footer and contact page. */
   address: "1 Ashebrook Drive, Your City, ST 00000",
   /** Public contact email for the board. The contact form also delivers here. */
-  email: "board@valleysatashebrook.example",
+  email: "ashebrookhoa@gmail.com",
   /** Public phone number (optional — leave empty string to hide). */
   phone: "(555) 555-0123",
   /** Office / meeting hours blurb shown on the contact page. */
@@ -41,19 +41,7 @@ export const duesOptions: DuesOption[] = [
     id: "annual",
     label: "Annual Dues",
     description: "Full-year assessment (January–December).",
-    amount: 450,
-  },
-  {
-    id: "semiannual",
-    label: "Semi-Annual Dues",
-    description: "Half-year assessment installment.",
-    amount: 225,
-  },
-  {
-    id: "special-assessment",
-    label: "Special Assessment",
-    description: "One-time special assessment as approved by the board.",
-    amount: 150,
+    amount: 275,
   },
 ];
 
