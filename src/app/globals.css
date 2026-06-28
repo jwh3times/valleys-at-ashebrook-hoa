@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+/*
+ * HOA community theme. Adjust the brand colors below to match your community —
+ * everything else derives from these tokens.
+ */
+:root {
+  --background: #f7f8f6;
+  --foreground: #1b2420;
+  --surface: #ffffff;
+  --border: #e3e8e2;
+  --muted: #5d6b63;
+  --brand: #2f6f4e; /* primary green */
+  --brand-dark: #245a3f;
+  --brand-light: #e7f1ea;
+  --accent: #b9842b; /* warm gold accent */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-light: var(--brand-light);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Rich text rendered from Markdown announcement bodies. */
+.prose-hoa {
+  line-height: 1.7;
+}
+.prose-hoa h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 1.6rem 0 0.6rem;
+  color: var(--brand-dark);
+}
+.prose-hoa h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 1.3rem 0 0.5rem;
+}
+.prose-hoa p {
+  margin: 0.75rem 0;
+}
+.prose-hoa ul,
+.prose-hoa ol {
+  margin: 0.75rem 0 0.75rem 1.4rem;
+}
+.prose-hoa ul {
+  list-style: disc;
+}
+.prose-hoa ol {
+  list-style: decimal;
+}
+.prose-hoa li {
+  margin: 0.3rem 0;
+}
+.prose-hoa a {
+  color: var(--brand);
+  text-decoration: underline;
+}
+.prose-hoa strong {
+  font-weight: 700;
+}

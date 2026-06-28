@@ -1,0 +1,51 @@
+[
+  {
+    "title": "Volunteer Cleanup Day",
+    "date": "2026-04-18",
+    "time": "9:00 AM – 12:00 PM",
+    "location": "Clubhouse Parking Lot",
+    "description": "Annual common-area cleanup. Gloves, bags, and refreshments provided."
+  },
+  {
+    "title": "Community Pool Opens",
+    "date": "2026-05-23",
+    "time": "10:00 AM",
+    "location": "Community Pool",
+    "description": "Opening day for the 2026 swim season."
+  },
+  {
+    "title": "Memorial Day Cookout",
+    "date": "2026-05-25",
+    "time": "12:00 PM – 4:00 PM",
+    "location": "Community Pavilion",
+    "description": "Neighborhood potluck cookout. Burgers and hot dogs provided by the social committee."
+  },
+  {
+    "title": "Monthly Board Meeting",
+    "date": "2026-06-09",
+    "time": "7:00 PM",
+    "location": "Clubhouse",
+    "description": "Open to all residents. Agenda posted on the documents page."
+  },
+  {
+    "title": "Annual Homeowners Meeting",
+    "date": "2026-06-12",
+    "time": "6:30 PM",
+    "location": "Clubhouse",
+    "description": "Board elections, 2026 budget review, and open floor for questions."
+  },
+  {
+    "title": "Independence Day Bike Parade",
+    "date": "2026-07-04",
+    "time": "10:00 AM",
+    "location": "Ashebrook Drive",
+    "description": "Kids' decorated bike parade followed by popsicles at the pavilion."
+  },
+  {
+    "title": "Monthly Board Meeting",
+    "date": "2026-07-14",
+    "time": "7:00 PM",
+    "location": "Clubhouse",
+    "description": "Open to all residents."
+  }
+]
