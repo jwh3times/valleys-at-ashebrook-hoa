@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
+import ConfigNotice from '../components/react/ConfigNotice.tsx';
+---
+
+<BaseLayout
+  title="Announcements"
+  description="Community announcements and news from the Valleys at Ashebrook HOA board."
+>
+  <h1>Announcements</h1>
+  <p class="page-intro">
+    News and updates from the board. Be sure to check the calendar for upcoming
+    meetings and events.
+  </p>
+
+  <ConfigNotice client:only="react" />
+  <AnnouncementsList client:only="react" />
+</BaseLayout>
