@@ -1,0 +1,19 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import DuesInfo from '../components/react/DuesInfo.tsx';
+import ConfigNotice from '../components/react/ConfigNotice.tsx';
+---
+
+<BaseLayout
+  title="Dues"
+  description="Annual dues amounts and payment options for the Valleys at Ashebrook HOA."
+>
+  <h1>Annual Dues &amp; Payments</h1>
+  <p class="page-intro">
+    Your annual dues keep our community running. Below are the current amount
+    and the ways you can pay.
+  </p>
+
+  <ConfigNotice client:only="react" />
+  <DuesInfo client:only="react" />
+</BaseLayout>

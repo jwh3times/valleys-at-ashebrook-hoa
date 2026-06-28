@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Mirrors the Firestore admin check: a user is an admin if a document with
+    // their UID exists in the Firestore /admins collection.
+    function isAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    // Governing documents (PDFs): anyone can download; only board admins can
+    // upload or delete. Uploads are limited to 25 MB and PDF content type.
+    match /documents/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin()
+        && request.resource.size < 25 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+      allow delete: if isAdmin();
+    }
+  }
+}
