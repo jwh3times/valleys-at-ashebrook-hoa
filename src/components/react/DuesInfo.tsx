@@ -16,7 +16,8 @@ export default function DuesInfo() {
       .catch(() => setDues(DEFAULT_DUES_SETTINGS));
   }, []);
 
-  if (dues === null) return <p className="loading">Loading dues information…</p>;
+  if (dues === null)
+    return <p className="loading">Loading dues information…</p>;
 
   return (
     <div>

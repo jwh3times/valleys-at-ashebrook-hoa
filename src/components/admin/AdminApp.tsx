@@ -9,7 +9,11 @@ import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
 
 const TABS = [
-  { key: 'announcements', label: 'Announcements', render: () => <AnnouncementsManager /> },
+  {
+    key: 'announcements',
+    label: 'Announcements',
+    render: () => <AnnouncementsManager />,
+  },
   { key: 'documents', label: 'Documents', render: () => <DocumentsManager /> },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
   { key: 'site', label: 'Site Settings', render: () => <SiteManager /> },
@@ -42,7 +46,10 @@ export default function AdminApp() {
           isn’t on the board admin list. Ask the site administrator to add your
           account, then sign in again.
         </p>
-        <button className="btn btn--outline" onClick={() => signOut(getFirebaseAuth())}>
+        <button
+          className="btn btn--outline"
+          onClick={() => signOut(getFirebaseAuth())}
+        >
           Sign out
         </button>
       </div>

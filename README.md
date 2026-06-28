@@ -33,14 +33,30 @@ the only optional expense, ~$10–15/yr). Firebase's free plan does not pause.
 See **[SETUP.md](./SETUP.md)** for the complete, step-by-step setup and
 deployment guide.
 
+This project targets the Node version in [`.nvmrc`](./.nvmrc) (run `nvm use`).
+
 Quick commands:
 
 ```bash
-npm install      # install dependencies
-npm run dev      # local dev server at http://localhost:4321
-npm run build    # build the static site to dist/
-npm run deploy   # build + deploy to Firebase Hosting
+npm install        # install dependencies
+npm run dev        # local dev server at http://localhost:4321
+npm run build      # build the static site to dist/
+npm test           # run the Vitest spec suite
+npm run check      # Astro + TypeScript type check
+npm run format     # format all files with Prettier
+npm run deploy     # build + deploy to Firebase Hosting
 ```
+
+## Testing & formatting
+
+- **Tests:** [Vitest](https://vitest.dev) + [Testing Library](https://testing-library.com).
+  Component specs live next to each component (`*.test.tsx`); a page-level
+  integration test renders a real Astro page via the Container API
+  (`src/test/pages.test.ts`). Run `npm test` (or `npm run test:watch`).
+- **Formatting:** [Prettier](https://prettier.io) with `prettier-plugin-astro`.
+  Run `npm run format`; CI enforces `npm run format:check`.
+- **CI:** `.github/workflows/build.yml` runs format check, type check, tests,
+  and build on every push and pull request.
 
 ## Project layout
 

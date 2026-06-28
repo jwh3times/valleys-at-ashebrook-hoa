@@ -32,7 +32,10 @@ export default function DuesManager() {
   function addOption() {
     setDues((prev) => ({
       ...prev,
-      paymentOptions: [...prev.paymentOptions, { label: '', details: '', url: '' }],
+      paymentOptions: [
+        ...prev.paymentOptions,
+        { label: '', details: '', url: '' },
+      ],
     }));
   }
 
@@ -101,7 +104,11 @@ export default function DuesManager() {
 
       <div className="admin-bar">
         <h2 style={{ margin: 0 }}>Payment options</h2>
-        <button type="button" className="btn btn--outline btn--small" onClick={addOption}>
+        <button
+          type="button"
+          className="btn btn--outline btn--small"
+          onClick={addOption}
+        >
           + Add option
         </button>
       </div>
@@ -148,7 +155,12 @@ export default function DuesManager() {
         </div>
       ))}
 
-      <button className="btn" type="submit" disabled={busy} style={{ marginTop: '1rem' }}>
+      <button
+        className="btn"
+        type="submit"
+        disabled={busy}
+        style={{ marginTop: '1rem' }}
+      >
         {busy ? 'Saving…' : 'Save dues information'}
       </button>
     </form>
