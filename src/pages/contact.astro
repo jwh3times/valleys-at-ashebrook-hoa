@@ -1,0 +1,18 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ContactForm from '../components/react/ContactForm.tsx';
+---
+
+<BaseLayout
+  title="Contact"
+  description="Contact the Valleys at Ashebrook HOA board."
+>
+  <h1>Contact the Board</h1>
+  <p class="page-intro">
+    Have a question, concern, or suggestion? Send the board a message using the
+    form below and we’ll get back to you. Your message goes straight to the
+    HOA’s email inbox.
+  </p>
+
+  <ContactForm client:only="react" />
+</BaseLayout>

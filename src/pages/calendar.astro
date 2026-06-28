@@ -1,0 +1,65 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const calendarId = import.meta.env.PUBLIC_GOOGLE_CALENDAR_ID as
+  string | undefined;
+const tz =
+  (import.meta.env.PUBLIC_GOOGLE_CALENDAR_TIMEZONE as string | undefined) ??
+  'America/New_York';
+
+const encodedId = calendarId ? encodeURIComponent(calendarId) : '';
+const embedSrc = calendarId
+  ? `https://calendar.google.com/calendar/embed?src=${encodedId}&ctz=${encodeURIComponent(tz)}&mode=MONTH&showTitle=0`
+  : '';
+const addToGoogleUrl = calendarId
+  ? `https://calendar.google.com/calendar/r?cid=${encodedId}`
+  : '';
+const icalUrl = calendarId
+  ? `https://calendar.google.com/calendar/ical/${encodedId}/public/basic.ics`
+  : '';
+---
+
+<BaseLayout
+  title="Calendar"
+  description="Community calendar for the Valleys at Ashebrook HOA — board meetings, events, and virtual meeting links."
+>
+  <h1>Community Calendar</h1>
+  <p class="page-intro">
+    Board meetings, community events, and important dates. Virtual meetings
+    include a Google Meet link directly in the calendar event — just open the
+    event and click to join.
+  </p>
+
+  {
+    calendarId ? (
+      <>
+        <div style="margin-bottom: 1rem; display: flex; gap: 0.6rem; flex-wrap: wrap;">
+          <a
+            class="btn"
+            href={addToGoogleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            + Add to your Google Calendar
+          </a>
+          <a class="btn btn--outline" href={icalUrl}>
+            Subscribe (Apple / Outlook iCal)
+          </a>
+        </div>
+        <iframe
+          class="calendar-frame"
+          src={embedSrc}
+          title="Valleys at Ashebrook HOA community calendar"
+          loading="lazy"
+        />
+      </>
+    ) : (
+      <div class="notice">
+        <strong>Setup needed:</strong> the community calendar isn’t connected
+        yet. Make the HOA Google Calendar public and add its Calendar ID as{' '}
+        <code>PUBLIC_GOOGLE_CALENDAR_ID</code> in your <code>.env</code> file
+        (see <code>SETUP.md</code>).
+      </div>
+    )
+  }
+</BaseLayout>

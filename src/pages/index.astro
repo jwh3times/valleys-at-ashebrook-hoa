@@ -1,0 +1,47 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
+import ConfigNotice from '../components/react/ConfigNotice.tsx';
+---
+
+<BaseLayout
+  title="Home"
+  description="Official website for the Valleys at Ashebrook Homeowners Association — announcements, community calendar, governing documents, dues, and board contact."
+>
+  <section class="hero">
+    <h1>Welcome to the Valleys at Ashebrook</h1>
+    <p>
+      The official home for our community. Find the latest announcements, our
+      shared calendar, governing documents, dues payment options, and a direct
+      line to the HOA board.
+    </p>
+  </section>
+
+  <ConfigNotice client:only="react" />
+
+  <section style="margin-bottom: 2.5rem;">
+    <h2>Quick Links</h2>
+    <div class="quick-links">
+      <a class="quick-link" href="/announcements">
+        Announcements<span>Latest community news</span>
+      </a>
+      <a class="quick-link" href="/calendar">
+        Calendar<span>Meetings &amp; events</span>
+      </a>
+      <a class="quick-link" href="/documents">
+        Documents<span>Bylaws, CC&amp;Rs, minutes</span>
+      </a>
+      <a class="quick-link" href="/dues">
+        Pay Dues<span>Annual dues &amp; options</span>
+      </a>
+      <a class="quick-link" href="/contact">
+        Contact<span>Reach the board</span>
+      </a>
+    </div>
+  </section>
+
+  <section>
+    <h2>Latest Announcements</h2>
+    <AnnouncementsList client:only="react" limit={3} showMoreLink={true} />
+  </section>
+</BaseLayout>
