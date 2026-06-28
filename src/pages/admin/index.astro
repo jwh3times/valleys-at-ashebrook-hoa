@@ -1,0 +1,8 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import AdminApp from '../../components/admin/AdminApp.tsx';
+---
+
+<BaseLayout title="Board Admin" description="HOA board administration.">
+  <AdminApp client:only="react" />
+</BaseLayout>
