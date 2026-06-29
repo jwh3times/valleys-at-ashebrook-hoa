@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchDocuments, groupDocumentsByCategory } from '../../lib/content';
 import { isFirebaseConfigured } from '../../lib/firebase';
+import { formatDate } from '../../lib/format';
 import type { DocumentItem } from '../../lib/types';
 
 export default function DocumentsList() {
@@ -30,25 +31,30 @@ export default function DocumentsList() {
   const groups = groupDocumentsByCategory(docs);
 
   return (
-    <div>
+    <div className="doc-groups">
       {Object.entries(groups).map(([category, items]) => (
-        <section
-          key={category}
-          className="card"
-          style={{ marginBottom: '1rem' }}
-        >
-          <h2 style={{ marginTop: 0 }}>{category}</h2>
+        <section key={category}>
+          <h2 className="doc-group__label">{category}</h2>
           <ul className="doc-list">
             {items.map((d) => (
               <li key={d.id}>
-                <span>📄 {d.title}</span>
+                <span className="doc-icon" aria-hidden="true">
+                  <span>PDF</span>
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="doc-name">{d.title}</div>
+                  <div className="doc-meta">
+                    PDF
+                    {d.updatedAt ? ` · Updated ${formatDate(d.updatedAt)}` : ''}
+                  </div>
+                </div>
                 <a
-                  className="btn btn--outline btn--small"
+                  className="doc-dl"
                   href={d.url}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Download
+                  Download ↓
                 </a>
               </li>
             ))}

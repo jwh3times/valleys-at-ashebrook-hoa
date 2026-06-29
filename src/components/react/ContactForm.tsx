@@ -25,7 +25,9 @@ export default function ContactForm() {
     const form = e.currentTarget;
     const data = new FormData(form);
     data.append('access_key', ACCESS_KEY!);
-    data.append('subject', 'New message from the HOA website');
+    if (!data.get('subject')) {
+      data.set('subject', 'New message from the HOA website');
+    }
     data.append('from_name', 'Valleys at Ashebrook HOA Website');
 
     try {
@@ -49,15 +51,26 @@ export default function ContactForm() {
 
   if (status === 'success') {
     return (
-      <div className="form-message form-message--success">
-        Thank you! Your message has been sent to the board. We’ll be in touch
-        soon.
+      <div className="contact-success">
+        <div className="contact-success__h">Message sent ✓</div>
+        <p className="contact-success__p">
+          Thank you — the board has received your note and will be in touch
+          soon.
+        </p>
+        <button
+          type="button"
+          className="linklike"
+          style={{ marginTop: '18px' }}
+          onClick={() => setStatus('idle')}
+        >
+          Send another →
+        </button>
       </div>
     );
   }
 
   return (
-    <form className="card" onSubmit={handleSubmit}>
+    <form className="form-stack" onSubmit={handleSubmit}>
       {status === 'error' && (
         <div className="form-message form-message--error">{errorMsg}</div>
       )}
@@ -71,19 +84,35 @@ export default function ContactForm() {
         autoComplete="off"
       />
 
-      <div className="field">
-        <label htmlFor="name">Your name</label>
-        <input id="name" name="name" type="text" required />
+      <div className="form-row">
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="name">Your name</label>
+          <input id="name" name="name" type="text" required />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="email">Your email</label>
+          <input id="email" name="email" type="email" required />
+        </div>
       </div>
-      <div className="field">
-        <label htmlFor="email">Your email</label>
-        <input id="email" name="email" type="email" required />
+      <div className="field" style={{ margin: 0 }}>
+        <label htmlFor="subject">Subject</label>
+        <input
+          id="subject"
+          name="subject"
+          type="text"
+          placeholder="What’s this about?"
+        />
       </div>
-      <div className="field">
+      <div className="field" style={{ margin: 0 }}>
         <label htmlFor="message">Message</label>
         <textarea id="message" name="message" required />
       </div>
-      <button className="btn" type="submit" disabled={status === 'submitting'}>
+      <button
+        className="btn"
+        type="submit"
+        disabled={status === 'submitting'}
+        style={{ alignSelf: 'flex-start' }}
+      >
         {status === 'submitting' ? 'Sending…' : 'Send message'}
       </button>
     </form>
