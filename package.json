@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Website for the Valleys at Ashebrook HOA",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=26.4.0"
   },
   "scripts": {
     "dev": "astro dev",
