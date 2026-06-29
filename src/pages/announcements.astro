@@ -8,12 +8,14 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
   title="Announcements"
   description="Community announcements and news from the Valleys at Ashebrook HOA board."
 >
-  <h1>Announcements</h1>
-  <p class="page-intro">
-    News and updates from the board. Be sure to check the calendar for upcoming
-    meetings and events.
-  </p>
+  <div class="page-section">
+    <p class="eyebrow">Community</p>
+    <h1 class="page-title">Announcements</h1>
+    <p class="page-lead">
+      News and reminders from the Ashebrook board, newest first.
+    </p>
 
-  <ConfigNotice client:only="react" />
-  <AnnouncementsList client:only="react" />
+    <ConfigNotice client:only="react" />
+    <AnnouncementsList client:only="react" variant="page" />
+  </div>
 </BaseLayout>

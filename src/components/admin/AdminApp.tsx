@@ -8,7 +8,7 @@ import DocumentsManager from './DocumentsManager';
 import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
 
-const TABS = [
+const SECTIONS = [
   {
     key: 'announcements',
     label: 'Announcements',
@@ -19,75 +19,114 @@ const TABS = [
   { key: 'site', label: 'Site Settings', render: () => <SiteManager /> },
 ] as const;
 
+/** A centered card on the full-screen navy field (login / status screens). */
+function AuthShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="admin-login">
+      <span
+        className="admin-login__plat admin-login__plat--a"
+        aria-hidden="true"
+      />
+      <span
+        className="admin-login__plat admin-login__plat--b"
+        aria-hidden="true"
+      />
+      <div className="admin-login__inner">{children}</div>
+    </div>
+  );
+}
+
 export default function AdminApp() {
   const { loading, user, isAdmin } = useAuth();
-  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('announcements');
+  const [section, setSection] =
+    useState<(typeof SECTIONS)[number]['key']>('announcements');
 
   if (!isFirebaseConfigured) {
     return (
-      <div className="notice">
-        <strong>Setup needed:</strong> Firebase isn’t configured. Add your
-        Firebase project values to <code>.env</code> before using the admin (see{' '}
-        <code>SETUP.md</code>).
-      </div>
+      <AuthShell>
+        <div className="admin-login__card">
+          <h1>Setup needed</h1>
+          <p>
+            Firebase isn’t configured yet. Add your Firebase project values to{' '}
+            <code>.env</code> before using the admin (see <code>SETUP.md</code>
+            ).
+          </p>
+        </div>
+      </AuthShell>
     );
   }
 
-  if (loading) return <p className="loading">Loading…</p>;
+  if (loading) {
+    return (
+      <AuthShell>
+        <p className="loading" style={{ color: '#fff', textAlign: 'center' }}>
+          Loading…
+        </p>
+      </AuthShell>
+    );
+  }
 
   if (!user) return <Login />;
 
   if (!isAdmin) {
     return (
-      <div className="login-box card">
-        <h1 style={{ marginTop: 0 }}>Not authorized</h1>
-        <p>
-          You’re signed in as <strong>{user.email}</strong>, but this account
-          isn’t on the board admin list. Ask the site administrator to add your
-          account, then sign in again.
-        </p>
-        <button
-          className="btn btn--outline"
-          onClick={() => signOut(getFirebaseAuth())}
-        >
-          Sign out
-        </button>
-      </div>
-    );
-  }
-
-  const active = TABS.find((t) => t.key === tab) ?? TABS[0];
-
-  return (
-    <div className="admin-shell">
-      <div className="admin-bar">
-        <h1 style={{ margin: 0 }}>Board Admin</h1>
-        <div>
-          <span className="muted" style={{ marginRight: '0.75rem' }}>
-            {user.email}
-          </span>
+      <AuthShell>
+        <div className="admin-login__card">
+          <h1>Not authorized</h1>
+          <p>
+            You’re signed in as <strong>{user.email}</strong>, but this account
+            isn’t on the board admin list. Ask the site administrator to add
+            your account, then sign in again.
+          </p>
           <button
-            className="btn btn--outline btn--small"
+            className="btn btn--outline"
+            style={{ width: '100%', marginTop: '4px' }}
             onClick={() => signOut(getFirebaseAuth())}
           >
             Sign out
           </button>
         </div>
-      </div>
+      </AuthShell>
+    );
+  }
 
-      <div className="admin-tabs">
-        {TABS.map((t) => (
+  const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0];
+
+  return (
+    <div className="admin-shell">
+      <h1 className="sr-only">Board Admin</h1>
+      <aside className="admin-side">
+        <div className="admin-side__brand">
+          <span className="mark mark--lg mark--inverse" aria-hidden="true">
+            <i></i>
+          </span>
+          <span className="admin-side__brandtext">
+            Ashebrook
+            <br />
+            <span>Admin</span>
+          </span>
+        </div>
+        <div className="admin-side__label">Manage</div>
+        {SECTIONS.map((s) => (
           <button
-            key={t.key}
-            className={t.key === tab ? 'active' : ''}
-            onClick={() => setTab(t.key)}
+            key={s.key}
+            className={`admin-navbtn${s.key === section ? ' active' : ''}`}
+            onClick={() => setSection(s.key)}
           >
-            {t.label}
+            <span>{s.label}</span>
           </button>
         ))}
-      </div>
+        <div className="admin-side__foot">
+          <div className="lbl">Signed in as</div>
+          <div className="who">{user.email}</div>
+          <div className="acts">
+            <a href="/">View site</a>
+            <button onClick={() => signOut(getFirebaseAuth())}>Log out</button>
+          </div>
+        </div>
+      </aside>
 
-      {active.render()}
+      <main className="admin-main">{active.render()}</main>
     </div>
   );
 }

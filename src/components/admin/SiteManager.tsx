@@ -30,13 +30,26 @@ export default function SiteManager() {
     }
   }
 
-  if (loading) return <p className="loading">Loading…</p>;
+  if (loading)
+    return (
+      <div className="admin-panel">
+        <p className="loading">Loading…</p>
+      </div>
+    );
 
   return (
-    <form onSubmit={handleSave}>
-      <h2>Site &amp; contact settings</h2>
+    <form className="admin-panel" onSubmit={handleSave}>
+      <div className="admin-bar">
+        <h1>Site Settings</h1>
+      </div>
+      <p className="admin-panel__intro">
+        Edit the headline and intro copy that appear across the public pages,
+        plus the board’s contact email.
+      </p>
+
       {msg && <div className="form-message form-message--success">{msg}</div>}
-      <div className="card">
+
+      <div className="panel-card" style={{ maxWidth: '620px' }}>
         <div className="field">
           <label>Welcome heading (home page)</label>
           <input
@@ -63,9 +76,11 @@ export default function SiteManager() {
             placeholder="valleysatashebrook@gmail.com"
           />
         </div>
-        <button className="btn" type="submit" disabled={busy}>
-          {busy ? 'Saving…' : 'Save settings'}
-        </button>
+        <div className="btn-row">
+          <button className="btn btn--small" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save settings'}
+          </button>
+        </div>
       </div>
     </form>
   );
