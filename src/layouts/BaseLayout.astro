@@ -6,9 +6,11 @@ import '../styles/global.css';
 interface Props {
   title: string;
   description?: string;
+  /** Render without the public site chrome (used by the admin app). */
+  bare?: boolean;
 }
 
-const { title, description } = Astro.props;
+const { title, description, bare = false } = Astro.props;
 const fullTitle =
   title === 'Home'
     ? 'Valleys at Ashebrook HOA'
@@ -24,12 +26,26 @@ const fullTitle =
     <title>{fullTitle}</title>
     {description && <meta name="description" content={description} />}
     <meta name="generator" content={Astro.generator} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
   </head>
-  <body>
-    <Header />
-    <main>
-      <slot />
-    </main>
-    <Footer />
+  <body class={bare ? 'body--bare' : undefined}>
+    {
+      bare ? (
+        <slot />
+      ) : (
+        <div class="site-canvas">
+          <Header />
+          <main class="site-main">
+            <slot />
+          </main>
+          <Footer />
+        </div>
+      )
+    }
   </body>
 </html>

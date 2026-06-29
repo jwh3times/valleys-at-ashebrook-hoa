@@ -8,12 +8,13 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
   title="Dues"
   description="Annual dues amounts and payment options for the Valleys at Ashebrook HOA."
 >
-  <h1>Annual Dues &amp; Payments</h1>
-  <p class="page-intro">
-    Your annual dues keep our community running. Below are the current amount
-    and the ways you can pay.
-  </p>
+  <div class="page-section">
+    <p class="eyebrow">Payments</p>
+    <h1 class="page-title" style="margin-bottom: 36px;">
+      Dues &amp; Assessments
+    </h1>
 
-  <ConfigNotice client:only="react" />
-  <DuesInfo client:only="react" />
+    <ConfigNotice client:only="react" />
+    <DuesInfo client:only="react" />
+  </div>
 </BaseLayout>

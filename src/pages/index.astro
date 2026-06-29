@@ -9,39 +9,62 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
   description="Official website for the Valleys at Ashebrook Homeowners Association — announcements, community calendar, governing documents, dues, and board contact."
 >
   <section class="hero">
-    <h1>Welcome to the Valleys at Ashebrook</h1>
-    <p>
-      The official home for our community. Find the latest announcements, our
-      shared calendar, governing documents, dues payment options, and a direct
-      line to the HOA board.
-    </p>
-  </section>
-
-  <ConfigNotice client:only="react" />
-
-  <section style="margin-bottom: 2.5rem;">
-    <h2>Quick Links</h2>
-    <div class="quick-links">
-      <a class="quick-link" href="/announcements">
-        Announcements<span>Latest community news</span>
-      </a>
-      <a class="quick-link" href="/calendar">
-        Calendar<span>Meetings &amp; events</span>
-      </a>
-      <a class="quick-link" href="/documents">
-        Documents<span>Bylaws, CC&amp;Rs, minutes</span>
-      </a>
-      <a class="quick-link" href="/dues">
-        Pay Dues<span>Annual dues &amp; options</span>
-      </a>
-      <a class="quick-link" href="/contact">
-        Contact<span>Reach the board</span>
-      </a>
+    <span class="hero__plat hero__plat--a" aria-hidden="true"></span>
+    <span class="hero__plat hero__plat--b" aria-hidden="true"></span>
+    <div class="hero__inner">
+      <p class="eyebrow eyebrow--onnavy">Raleigh, North Carolina</p>
+      <h1>A well-kept community, kept simple.</h1>
+      <p>
+        Announcements, the community calendar, governing documents, and dues —
+        all in one place for every Ashebrook homeowner.
+      </p>
+      <div class="hero__cta">
+        <a class="btn btn--light" href="/dues">Pay Dues</a>
+        <a class="btn btn--ghost-light" href="/documents">View Documents</a>
+      </div>
     </div>
   </section>
 
-  <section>
-    <h2>Latest Announcements</h2>
-    <AnnouncementsList client:only="react" limit={3} showMoreLink={true} />
-  </section>
+  <div style="padding: 0 var(--gutter);">
+    <div style="margin-top: 28px;">
+      <ConfigNotice client:only="react" />
+    </div>
+  </div>
+
+  <div class="home-grid">
+    <div>
+      <div class="section-head">
+        <h2>Latest Announcements</h2>
+        <a class="link-more" href="/announcements">View all →</a>
+      </div>
+      <AnnouncementsList client:only="react" limit={3} showMoreLink={true} />
+    </div>
+
+    <div class="upcoming">
+      <h2>Upcoming</h2>
+      <div class="cal-note">
+        <div class="cal-note__title">Meetings &amp; events</div>
+        Board meetings and community events are posted on our shared Google Calendar.
+        Open any event for details and a Google Meet link.
+      </div>
+      <a class="subscribe-box" href="/calendar"
+        >+ Subscribe to the community calendar</a
+      >
+    </div>
+  </div>
+
+  <div class="tiles">
+    <a class="tile" href="/dues">
+      <div class="tile__title">Pay Your Dues →</div>
+      <div class="tile__desc">PayPal, Venmo, Zelle, or check.</div>
+    </a>
+    <a class="tile" href="/documents">
+      <div class="tile__title">Governing Documents →</div>
+      <div class="tile__desc">CC&amp;Rs, bylaws, and meeting minutes.</div>
+    </a>
+    <a class="tile" href="/contact">
+      <div class="tile__title">Contact the Board →</div>
+      <div class="tile__desc">Questions go straight to our inbox.</div>
+    </a>
+  </div>
 </BaseLayout>
