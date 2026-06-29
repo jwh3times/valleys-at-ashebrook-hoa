@@ -56,36 +56,47 @@ export default function DocumentsManager() {
   }
 
   return (
-    <div>
-      <h2>Upload a document</h2>
+    <div className="admin-panel">
+      <div className="admin-bar">
+        <h1>Documents</h1>
+      </div>
+      <p className="admin-panel__intro">
+        Upload, organize, and remove the PDFs shown on the public Documents
+        page.
+      </p>
+
       {msg && <div className="form-message form-message--success">{msg}</div>}
+
       <form
-        className="card"
+        className="panel-card"
         onSubmit={handleUpload}
-        style={{ marginBottom: '2rem' }}
+        style={{ marginBottom: '26px' }}
       >
-        <div className="field">
-          <label>Title</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Bylaws (2024)"
-            required
-          />
-        </div>
-        <div className="field">
-          <label>Category</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            {DOCUMENT_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+        <div className="panel-editor__title">Upload a document</div>
+        <div className="field-grid" style={{ marginBottom: '16px' }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label>Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Bylaws (2024)"
+              required
+            />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label>Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              {DOCUMENT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="field">
           <label>PDF file (max 25 MB)</label>
@@ -97,44 +108,45 @@ export default function DocumentsManager() {
             required
           />
         </div>
-        <button className="btn" type="submit" disabled={busy}>
-          {busy ? 'Uploading…' : 'Upload document'}
-        </button>
+        <div className="btn-row">
+          <button className="btn btn--small" type="submit" disabled={busy}>
+            {busy ? 'Uploading…' : 'Upload document'}
+          </button>
+        </div>
       </form>
 
-      <h2>Documents</h2>
-      {loading ? (
-        <p className="loading">Loading…</p>
-      ) : items.length === 0 ? (
-        <p className="muted">None yet.</p>
-      ) : (
-        items.map((d) => (
-          <div key={d.id} className="list-row">
-            <div>
-              <strong>{d.title}</strong>
-              <div className="muted" style={{ fontSize: '0.85rem' }}>
-                {d.category}
+      <div className="panel-list">
+        {loading ? (
+          <p className="loading panel-pad">Loading…</p>
+        ) : items.length === 0 ? (
+          <p className="muted panel-pad">None yet.</p>
+        ) : (
+          items.map((d) => (
+            <div key={d.id} className="list-row">
+              <div className="admin-row-main">
+                <div className="admin-row-title">{d.title}</div>
+                <div className="admin-row-sub">{d.category}</div>
+              </div>
+              <div className="row-actions">
+                <a
+                  className="row-link"
+                  href={d.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View
+                </a>
+                <button
+                  className="row-link row-link--danger"
+                  onClick={() => handleDelete(d)}
+                >
+                  Delete
+                </button>
               </div>
             </div>
-            <div className="row-actions">
-              <a
-                className="btn btn--outline btn--small"
-                href={d.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View
-              </a>
-              <button
-                className="btn btn--danger btn--small"
-                onClick={() => handleDelete(d)}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))
-      )}
+          ))
+        )}
+      </div>
     </div>
   );
 }

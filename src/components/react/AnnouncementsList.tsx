@@ -9,9 +9,15 @@ interface Props {
   limit?: number;
   /** Link to the full announcements page when truncated. */
   showMoreLink?: boolean;
+  /** 'list' is the compact home-page list; 'page' is the wide date column. */
+  variant?: 'list' | 'page';
 }
 
-export default function AnnouncementsList({ limit, showMoreLink }: Props) {
+export default function AnnouncementsList({
+  limit,
+  showMoreLink,
+  variant = 'list',
+}: Props) {
   const [items, setItems] = useState<Announcement[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,20 +39,24 @@ export default function AnnouncementsList({ limit, showMoreLink }: Props) {
   const shown = limit ? items.slice(0, limit) : items;
 
   return (
-    <div>
+    <div className={variant === 'page' ? 'ann-page' : 'ann-list'}>
       {shown.map((a) => (
-        <article key={a.id} className="card announcement">
-          <div className="announcement__meta">
+        <article key={a.id} className="ann">
+          <div className="ann__date">
             {formatDate(a.date)}
             {a.pinned && <span className="pinned-badge">Pinned</span>}
           </div>
-          <h3 style={{ margin: '0 0 0.4rem' }}>{a.title}</h3>
-          <div className="announcement__body">{a.body}</div>
+          <div>
+            <h3 className="ann__title">{a.title}</h3>
+            <div className="ann__body">{a.body}</div>
+          </div>
         </article>
       ))}
       {showMoreLink && limit && items.length > limit && (
-        <p style={{ marginTop: '1rem' }}>
-          <a href="/announcements">View all announcements →</a>
+        <p style={{ marginTop: '1.25rem' }}>
+          <a className="link-more" href="/announcements">
+            View all announcements →
+          </a>
         </p>
       )}
     </div>

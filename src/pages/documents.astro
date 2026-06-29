@@ -8,12 +8,15 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
   title="Documents"
   description="Governing documents, meeting minutes, financials, and forms for the Valleys at Ashebrook HOA."
 >
-  <h1>Governing Documents</h1>
-  <p class="page-intro">
-    Bylaws, covenants (CC&amp;Rs), meeting minutes, financial reports, and
-    forms. Click any document to download.
-  </p>
+  <div class="page-section">
+    <p class="eyebrow">Reference</p>
+    <h1 class="page-title">Governing Documents</h1>
+    <p class="page-lead">
+      Official documents for the Valleys at Ashebrook community. Click any file
+      to download the PDF.
+    </p>
 
-  <ConfigNotice client:only="react" />
-  <DocumentsList client:only="react" />
+    <ConfigNotice client:only="react" />
+    <DocumentsList client:only="react" />
+  </div>
 </BaseLayout>

@@ -14,18 +14,23 @@ const isCurrent = (href: string) =>
 ---
 
 <header class="site-header">
-  <div class="site-header__inner">
-    <a class="brand" href="/">
+  <a class="brand" href="/">
+    <span class="mark mark--lg" aria-hidden="true"><i></i></span>
+    <span>
       <span class="brand__name">Valleys at Ashebrook</span>
       <span class="brand__tag">Homeowners Association</span>
-    </a>
-    <button
-      class="nav-toggle"
-      aria-label="Toggle navigation"
-      aria-expanded="false"
-    >
-      ☰
-    </button>
+    </span>
+  </a>
+
+  <button
+    class="nav-toggle"
+    aria-label="Toggle navigation"
+    aria-expanded="false"
+  >
+    ☰
+  </button>
+
+  <div class="nav-cluster">
     <nav class="site-nav" aria-label="Primary">
       <ul>
         {
@@ -42,14 +47,15 @@ const isCurrent = (href: string) =>
         }
       </ul>
     </nav>
+    <a class="nav-login" href="/admin">Board Login</a>
   </div>
 </header>
 
 <script>
   const toggle = document.querySelector('.nav-toggle');
-  const nav = document.querySelector('.site-nav');
+  const cluster = document.querySelector('.nav-cluster');
   toggle?.addEventListener('click', () => {
-    const open = nav?.classList.toggle('open');
+    const open = cluster?.classList.toggle('open');
     toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 </script>
