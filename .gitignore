@@ -37,3 +37,8 @@ private/
 
 # subagent-driven-development scratch
 .superpowers/
+
+# cloudflare
+.dev.vars
+.wrangler/
+worker-configuration.d.ts

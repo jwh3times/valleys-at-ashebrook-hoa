@@ -1,0 +1,13 @@
+name = "valleys-at-ashebrook-hoa"
+compatibility_date = "2026-06-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DATABASE"
+database_name = "ashebrook-hoa"
+database_id = "local-dev-placeholder"  # replace with `wrangler d1 create` output at deploy time
+
+[[kv_namespaces]]
+binding = "KV"
+id = "local-dev-placeholder"           # replace with `wrangler kv namespace create` output at deploy time
