@@ -7,6 +7,7 @@ pages_build_output_dir = "dist"
 binding = "DATABASE"
 database_name = "ashebrook-hoa"
 database_id = "local-dev-placeholder"  # replace with `wrangler d1 create` output at deploy time
+migrations_dir = "src/server/db/migrations"
 
 [[kv_namespaces]]
 binding = "KV"
