@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { normalizeAddress } from '../src/server/roster/lookup';
 
 export interface NewOwner {
@@ -42,4 +43,4 @@ async function main() {
   console.log(`Wrote private/roster-import.sql (${ownersList.length} owners). Apply with: wrangler d1 execute ashebrook-hoa --remote --file private/roster-import.sql`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) void main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) void main();
