@@ -237,3 +237,47 @@ cp .dev.vars.example .dev.vars
 # Edit .dev.vars and set BETTER_AUTH_SECRET to a strong random value:
 #   openssl rand -base64 32
 ```
+
+---
+
+## Create the first board account (one-time bootstrap)
+
+After deploying the Worker and after applying the roster import, you must seed the first
+board member account. Because no admin exists yet, the normal self-service flow cannot be
+used — instead, `seedBoard` writes the `role` and `emailVerified` fields directly in the
+database.
+
+**When to run:** once, immediately after the first `wrangler deploy` and roster import.
+
+**How to run:** add a short-lived admin route to the Worker (or call it inline from a
+temporary script under `wrangler dev`) that reads `BOARD_EMAIL`, `BOARD_PASSWORD`, and
+`BOARD_NAME` from environment variables and calls `seedBoard`:
+
+```ts
+import { seedBoard } from '../../scripts/seed-board';
+
+// Example: temporary Hono route — remove after first use.
+app.get('/internal/bootstrap', async (c) => {
+  const userId = await seedBoard(
+    c.env,
+    c.env.BOARD_EMAIL,
+    c.env.BOARD_PASSWORD,
+    c.env.BOARD_NAME,
+  );
+  return c.text(`board account created: ${userId}`);
+});
+```
+
+Set the variables in `.dev.vars` (local) or as Cloudflare secrets (remote), hit the
+route once, then **remove it before the next deploy**.
+
+The `seedBoard` function:
+
+1. Creates the user via `auth.api.signUpEmail` (which also sends a verification email if
+   `EMAIL_API_KEY` is configured — ensure the email secrets are set before running).
+2. Immediately sets `role = 'board'` and `emailVerified = true` directly in the database,
+   so the account is usable even if the verification email is not acted upon.
+
+After seeding, the board member can log in at `/login` and change their password via the
+**Forgot password** link. Remove the temporary bootstrap route from your Worker before
+the next deploy.
