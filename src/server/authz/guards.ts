@@ -11,7 +11,8 @@ export interface AuthContext {
 const RANK: Record<Role, number> = { visitor: 0, homeowner: 1, board: 2 };
 
 export function requireRole(ctx: AuthContext, role: Role): void {
-  if (RANK[ctx.role] < RANK[role]) throw new Forbidden(`requires ${role}`);
+  const ctxRank = RANK[ctx.role] ?? -1;
+  if (ctxRank < RANK[role]) throw new Forbidden(`requires ${role}`);
 }
 
 export function requireOwnerAccess(ctx: AuthContext, ownerId: string): void {
