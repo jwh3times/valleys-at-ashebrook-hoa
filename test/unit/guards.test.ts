@@ -20,4 +20,16 @@ describe('guards', () => {
   it('requireOwnerAccess allows board for any owner record', () => {
     expect(() => requireOwnerAccess(boardCtx, 'o2')).not.toThrow();
   });
+  it('requireRole blocks a visitor from homeowner access', () => {
+    expect(() => requireRole({ userId: 'u', role: 'visitor', ownerIds: [] }, 'homeowner')).toThrow(Forbidden);
+  });
+  it('requireRole allows same-rank access', () => {
+    expect(() => requireRole(homeownerCtx, 'homeowner')).not.toThrow();
+  });
+  it('requireRole fails closed for an unknown role', () => {
+    expect(() => requireRole({ userId: 'u', role: 'wat' as never, ownerIds: [] }, 'homeowner')).toThrow(Forbidden);
+  });
+  it('requireOwnerAccess blocks a visitor even with a matching ownerId', () => {
+    expect(() => requireOwnerAccess({ userId: 'u', role: 'visitor', ownerIds: ['o1'] }, 'o1')).toThrow(Forbidden);
+  });
 });
