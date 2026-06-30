@@ -35,7 +35,10 @@ export default function ContactForm() {
         method: 'POST',
         body: data,
       });
-      const json = (await res.json()) as { success?: boolean; message?: string };
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+      };
       if (json.success) {
         setStatus('success');
         form.reset();

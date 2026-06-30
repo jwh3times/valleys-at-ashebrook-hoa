@@ -41,4 +41,3 @@ private/
 # cloudflare
 .dev.vars
 .wrangler/
-worker-configuration.d.ts
