@@ -1,0 +1,20 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { RegisterForm } from '../components/react/AuthForms';
+---
+
+<BaseLayout
+  title="Create Account"
+  description="Create a Valleys at Ashebrook HOA account to access homeowner resources."
+>
+  <div class="page-section">
+    <p class="eyebrow">Member access</p>
+    <h1 class="page-title">Create Account</h1>
+    <p class="page-lead">
+      Already have an account? <a href="/login">Sign in</a>. After registering, verify your
+      property on the <a href="/verify-property">verify property page</a> to unlock homeowner
+      access.
+    </p>
+    <RegisterForm client:only="react" />
+  </div>
+</BaseLayout>
