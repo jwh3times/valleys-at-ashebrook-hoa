@@ -19,7 +19,6 @@
     "format:check": "prettier --check .",
     "emulators": "firebase emulators:start",
     "deploy": "astro build && firebase deploy",
-    "cf:types": "wrangler types",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply ashebrook-hoa --local",
     "db:migrate:remote": "wrangler d1 migrations apply ashebrook-hoa --remote",
