@@ -194,3 +194,46 @@ They don't need any of the above. They just:
 | Contact form emails | Web3Forms → HOA Gmail |
 | Who can edit | Firestore `admins` collection (by user UID) |
 | Hosting | Firebase Hosting |
+
+---
+
+## Cloudflare provisioning (run once, needs account)
+
+The `wrangler.toml` file uses placeholder IDs (`"local-dev-placeholder"`) for the D1
+database and KV namespace. Before deploying to Cloudflare Workers/Pages, a Cloudflare
+account holder must run the following commands **once** and replace the placeholder
+values with the real IDs output by each command.
+
+```bash
+# Log in to Cloudflare
+wrangler login
+
+# Create the D1 database — copy the "database_id" from the output
+wrangler d1 create ashebrook-hoa
+
+# Create the KV namespace — copy the "id" from the output
+wrangler kv namespace create KV
+```
+
+After running the above, open `wrangler.toml` and replace:
+
+- `database_id = "local-dev-placeholder"` with the real D1 database ID
+- `id = "local-dev-placeholder"` (under `[[kv_namespaces]]`) with the real KV namespace ID
+
+Then apply the D1 migrations for the first time:
+
+```bash
+# Apply locally (uses Wrangler's local SQLite emulation)
+npm run db:migrate:local
+
+# Apply against the live Cloudflare D1 database
+npm run db:migrate:remote
+```
+
+Copy `.dev.vars.example` to `.dev.vars` and fill in the secrets (never commit `.dev.vars`):
+
+```bash
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars and set BETTER_AUTH_SECRET to a strong random value:
+#   openssl rand -base64 32
+```
