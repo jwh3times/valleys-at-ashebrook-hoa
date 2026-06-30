@@ -1,38 +1,15 @@
-import { useEffect, useState } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { getFirebaseAuth } from '../../lib/firebase';
-import { checkIsAdmin } from '../../lib/admin';
+import { authClient } from '../../lib/auth-client';
 
+/** Shape returned by useAuth for consuming components. */
 export interface AuthState {
   loading: boolean;
-  user: User | null;
+  user: { email?: string | null; [key: string]: unknown } | null;
   isAdmin: boolean;
 }
 
-/** Tracks the signed-in Firebase user and whether they are a board admin. */
+/** Tracks the Better Auth session and whether the user has the board role. */
 export function useAuth(): AuthState {
-  const [state, setState] = useState<AuthState>({
-    loading: true,
-    user: null,
-    isAdmin: false,
-  });
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(getFirebaseAuth(), async (user) => {
-      if (!user) {
-        setState({ loading: false, user: null, isAdmin: false });
-        return;
-      }
-      let isAdmin = false;
-      try {
-        isAdmin = await checkIsAdmin(user.uid);
-      } catch {
-        isAdmin = false;
-      }
-      setState({ loading: false, user, isAdmin });
-    });
-    return () => unsub();
-  }, []);
-
-  return state;
+  const { data, isPending } = authClient.useSession();
+  const role = (data?.user as { role?: string } | undefined)?.role ?? 'visitor';
+  return { loading: isPending, user: data?.user ?? null, isAdmin: role === 'board' };
 }
