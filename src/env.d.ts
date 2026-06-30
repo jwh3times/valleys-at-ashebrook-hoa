@@ -23,5 +23,7 @@ interface Env extends Cloudflare.Env {}
 
 type Runtime = import('@astrojs/cloudflare').Runtime;
 declare namespace App {
-  interface Locals extends Runtime {}
+  interface Locals extends Runtime {
+    authContext: import('./server/authz/guards').AuthContext | null;
+  }
 }
