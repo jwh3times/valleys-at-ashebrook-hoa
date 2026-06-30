@@ -12,6 +12,7 @@ const baseConfig = getViteConfig({
     globals: false,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'test/**/*.test.ts'],
+    exclude: ['test/server/**'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx,astro}'],

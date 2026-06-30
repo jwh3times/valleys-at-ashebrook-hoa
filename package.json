@@ -22,7 +22,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply ashebrook-hoa --local",
     "db:migrate:remote": "wrangler d1 migrations apply ashebrook-hoa --remote",
-    "auth:generate": "npx @better-auth/cli generate --output src/server/db/auth-schema.ts"
+    "auth:generate": "npx @better-auth/cli generate --output src/server/db/auth-schema.ts",
+    "test:server": "vitest run --config vitest.workers.config.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.0.2",
