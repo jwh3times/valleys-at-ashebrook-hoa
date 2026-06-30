@@ -32,12 +32,14 @@ export function createAuth(env?: Env, cf?: IncomingRequestCfProperties, baseURL?
           requireEmailVerification: true,
           minPasswordLength: 10,
           sendResetPassword: async ({ user, url }) => {
-            await sendEmail(env!, user.email, 'Reset your HOA password', `Reset link: ${url}`);
+            if (!env) return;
+            await sendEmail(env, user.email, 'Reset your HOA password', `Reset link: ${url}`);
           },
         },
         emailVerification: {
           sendVerificationEmail: async ({ user, url }) => {
-            await sendEmail(env!, user.email, 'Verify your HOA account', `Verify link: ${url}`);
+            if (!env) return;
+            await sendEmail(env, user.email, 'Verify your HOA account', `Verify link: ${url}`);
           },
         },
         plugins: [
