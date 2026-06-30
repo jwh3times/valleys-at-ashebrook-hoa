@@ -254,22 +254,25 @@ temporary script under `wrangler dev`) that reads `BOARD_EMAIL`, `BOARD_PASSWORD
 `BOARD_NAME` from environment variables and calls `seedBoard`:
 
 ```ts
-import { seedBoard } from '../../scripts/seed-board';
+import { seedBoard } from '../../scripts/seed-board'; // path depends on where you place this file
 
 // Example: temporary Hono route — remove after first use.
-app.get('/internal/bootstrap', async (c) => {
-  const userId = await seedBoard(
-    c.env,
-    c.env.BOARD_EMAIL,
-    c.env.BOARD_PASSWORD,
-    c.env.BOARD_NAME,
-  );
-  return c.text(`board account created: ${userId}`);
+app.post('/internal/bootstrap', async (c) => {
+  if (c.req.header('x-bootstrap-secret') !== c.env.BOOTSTRAP_SECRET) {
+    return c.text('Forbidden', 403);
+  }
+  const { BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME } = c.env;
+  if (!BOARD_EMAIL || !BOARD_PASSWORD || !BOARD_NAME) {
+    return c.text('Missing BOARD_EMAIL, BOARD_PASSWORD, or BOARD_NAME', 400);
+  }
+  await seedBoard(c.env, BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME);
+  return new Response(null, { status: 204 });
 });
 ```
 
-Set the variables in `.dev.vars` (local) or as Cloudflare secrets (remote), hit the
-route once, then **remove it before the next deploy**.
+Set `BOARD_EMAIL`, `BOARD_PASSWORD`, `BOARD_NAME`, and `BOOTSTRAP_SECRET` in `.dev.vars`
+(local) or as Cloudflare secrets (remote), send a single POST with the matching
+`x-bootstrap-secret` header, then **remove the route before the next deploy**.
 
 The `seedBoard` function:
 
