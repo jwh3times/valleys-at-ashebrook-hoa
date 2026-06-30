@@ -6,6 +6,6 @@ import cloudflare from '@astrojs/cloudflare';
 export default defineConfig({
   site: 'https://valleys-ashebrook.web.app',
   output: 'server',
-  adapter: cloudflare({ platformProxy: { enabled: true } }),
+  adapter: cloudflare(),
   integrations: [react()],
 });
