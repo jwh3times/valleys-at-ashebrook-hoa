@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { sendEmail, sendSms } from '../auth/senders';
 import { findActiveOwnerByAddress } from '../roster/lookup';
@@ -25,6 +25,7 @@ export async function requestPropertyVerification(
     });
     return { ok: false, queued: true };
   }
+  await db.delete(propertyVerifications).where(and(eq(propertyVerifications.userId, userId), isNull(propertyVerifications.consumedAt)));
   const code = generateCode();
   await db.insert(propertyVerifications).values({
     id: crypto.randomUUID(),
@@ -53,14 +54,14 @@ export async function confirmPropertyVerification(
     .select()
     .from(propertyVerifications)
     .where(and(eq(propertyVerifications.userId, userId), isNull(propertyVerifications.consumedAt)))
-    .orderBy(propertyVerifications.createdAt);
+    .orderBy(desc(propertyVerifications.createdAt));
   if (!pv) return { ok: false, reason: 'mismatch' };
   if (pv.attempts >= MAX_ATTEMPTS) return { ok: false, reason: 'locked' };
   if (pv.expiresAt.getTime() < Date.now()) return { ok: false, reason: 'expired' };
   if (!(await verifyCode(code, pv.codeHash))) {
     await db
       .update(propertyVerifications)
-      .set({ attempts: pv.attempts + 1 })
+      .set({ attempts: sql`${propertyVerifications.attempts} + 1` })
       .where(eq(propertyVerifications.id, pv.id));
     return { ok: false, reason: 'mismatch' };
   }

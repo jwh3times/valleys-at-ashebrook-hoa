@@ -43,4 +43,21 @@ describe('property verification', () => {
     const [consumed] = await db.select().from(propertyVerifications).where(eq(propertyVerifications.id, 'pv-1'));
     expect(consumed.consumedAt).not.toBeNull();
   });
+
+  it('confirm selects the newest pending code when multiple exist', async () => {
+    const db = getDb(env);
+    const base = new Date();
+    await db.insert(propertyVerifications).values({
+      id: 'pv-old', userId: 'user-multi', ownerId: 'own-1', channel: 'email',
+      codeHash: await hashCode('111111'), expiresAt: new Date(base.getTime() + 600_000),
+      attempts: 0, consumedAt: null, createdAt: new Date(base.getTime() - 60_000),
+    });
+    await db.insert(propertyVerifications).values({
+      id: 'pv-new', userId: 'user-multi', ownerId: 'own-1', channel: 'email',
+      codeHash: await hashCode('654321'), expiresAt: new Date(base.getTime() + 600_000),
+      attempts: 0, consumedAt: null, createdAt: new Date(base.getTime() + 60_000),
+    });
+    const res = await confirmPropertyVerification(env, 'user-multi', '654321');
+    expect(res.ok).toBe(true);
+  });
 });
