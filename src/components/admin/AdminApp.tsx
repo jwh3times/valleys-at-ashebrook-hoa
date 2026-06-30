@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { signOut } from 'firebase/auth';
-import { getFirebaseAuth, isFirebaseConfigured } from '../../lib/firebase';
+import { authClient } from '../../lib/auth-client';
+import { isFirebaseConfigured } from '../../lib/firebase';
 import { useAuth } from './useAuth';
 import Login from './Login';
 import AnnouncementsManager from './AnnouncementsManager';
@@ -47,7 +47,7 @@ export default function AdminApp() {
         <div className="admin-login__card">
           <h1>Setup needed</h1>
           <p>
-            Firebase isn’t configured yet. Add your Firebase project values to{' '}
+            Firebase isn't configured yet. Add your Firebase project values to{' '}
             <code>.env</code> before using the admin (see <code>SETUP.md</code>
             ).
           </p>
@@ -74,14 +74,14 @@ export default function AdminApp() {
         <div className="admin-login__card">
           <h1>Not authorized</h1>
           <p>
-            You’re signed in as <strong>{user.email}</strong>, but this account
-            isn’t on the board admin list. Ask the site administrator to add
-            your account, then sign in again.
+            You're signed in as <strong>{user.email as string}</strong>, but
+            this account isn't on the board admin list. Ask the site
+            administrator to add your account, then sign in again.
           </p>
           <button
             className="btn btn--outline"
             style={{ width: '100%', marginTop: '4px' }}
-            onClick={() => signOut(getFirebaseAuth())}
+            onClick={() => authClient.signOut()}
           >
             Sign out
           </button>
@@ -118,14 +118,15 @@ export default function AdminApp() {
         ))}
         <div className="admin-side__foot">
           <div className="lbl">Signed in as</div>
-          <div className="who">{user.email}</div>
+          <div className="who">{user.email as string}</div>
           <div className="acts">
             <a href="/">View site</a>
-            <button onClick={() => signOut(getFirebaseAuth())}>Log out</button>
+            <button onClick={() => authClient.signOut()}>Log out</button>
           </div>
         </div>
       </aside>
 
+      {/* TODO(subproject-B): migrate data layer to D1 — managers still read/write Firestore via lib/admin */}
       <main className="admin-main">{active.render()}</main>
     </div>
   );
