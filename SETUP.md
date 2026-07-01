@@ -194,3 +194,93 @@ They don't need any of the above. They just:
 | Contact form emails | Web3Forms → HOA Gmail |
 | Who can edit | Firestore `admins` collection (by user UID) |
 | Hosting | Firebase Hosting |
+
+---
+
+## Cloudflare provisioning (run once, needs account)
+
+The `wrangler.toml` file uses placeholder IDs (`"local-dev-placeholder"`) for the D1
+database and KV namespace. Before deploying to Cloudflare Workers/Pages, a Cloudflare
+account holder must run the following commands **once** and replace the placeholder
+values with the real IDs output by each command.
+
+```bash
+# Log in to Cloudflare
+wrangler login
+
+# Create the D1 database — copy the "database_id" from the output
+wrangler d1 create ashebrook-hoa
+
+# Create the KV namespace — copy the "id" from the output
+wrangler kv namespace create KV
+```
+
+After running the above, open `wrangler.toml` and replace:
+
+- `database_id = "local-dev-placeholder"` with the real D1 database ID
+- `id = "local-dev-placeholder"` (under `[[kv_namespaces]]`) with the real KV namespace ID
+
+Then apply the D1 migrations for the first time:
+
+```bash
+# Apply locally (uses Wrangler's local SQLite emulation)
+npm run db:migrate:local
+
+# Apply against the live Cloudflare D1 database
+npm run db:migrate:remote
+```
+
+Copy `.dev.vars.example` to `.dev.vars` and fill in the secrets (never commit `.dev.vars`):
+
+```bash
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars and set BETTER_AUTH_SECRET to a strong random value:
+#   openssl rand -base64 32
+```
+
+---
+
+## Create the first board account (one-time bootstrap)
+
+After deploying the Worker and after applying the roster import, you must seed the first
+board member account. Because no admin exists yet, the normal self-service flow cannot be
+used — instead, `seedBoard` writes the `role` and `emailVerified` fields directly in the
+database.
+
+**When to run:** once, immediately after the first `wrangler deploy` and roster import.
+
+**How to run:** add a short-lived admin route to the Worker (or call it inline from a
+temporary script under `wrangler dev`) that reads `BOARD_EMAIL`, `BOARD_PASSWORD`, and
+`BOARD_NAME` from environment variables and calls `seedBoard`:
+
+```ts
+import { seedBoard } from '../../scripts/seed-board'; // path depends on where you place this file
+
+// Example: temporary Hono route — remove after first use.
+app.post('/internal/bootstrap', async (c) => {
+  if (c.req.header('x-bootstrap-secret') !== c.env.BOOTSTRAP_SECRET) {
+    return c.text('Forbidden', 403);
+  }
+  const { BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME } = c.env;
+  if (!BOARD_EMAIL || !BOARD_PASSWORD || !BOARD_NAME) {
+    return c.text('Missing BOARD_EMAIL, BOARD_PASSWORD, or BOARD_NAME', 400);
+  }
+  await seedBoard(c.env, BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME);
+  return new Response(null, { status: 204 });
+});
+```
+
+Set `BOARD_EMAIL`, `BOARD_PASSWORD`, `BOARD_NAME`, and `BOOTSTRAP_SECRET` in `.dev.vars`
+(local) or as Cloudflare secrets (remote), send a single POST with the matching
+`x-bootstrap-secret` header, then **remove the route before the next deploy**.
+
+The `seedBoard` function:
+
+1. Creates the user via `auth.api.signUpEmail` (which also sends a verification email if
+   `EMAIL_API_KEY` is configured — ensure the email secrets are set before running).
+2. Immediately sets `role = 'board'` and `emailVerified = true` directly in the database,
+   so the account is usable even if the verification email is not acted upon.
+
+After seeding, the board member can log in at `/login` and change their password via the
+**Forgot password** link. Remove the temporary bootstrap route from your Worker before
+the next deploy.

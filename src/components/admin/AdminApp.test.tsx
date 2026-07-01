@@ -1,16 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { User } from 'firebase/auth';
 
 vi.mock('./useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../lib/firebase', () => ({
   isFirebaseConfigured: true,
   getFirebaseAuth: vi.fn(() => ({})),
 }));
-vi.mock('firebase/auth', () => ({
-  signOut: vi.fn(),
-  signInWithEmailAndPassword: vi.fn(),
-  sendPasswordResetEmail: vi.fn(),
+vi.mock('../../lib/auth-client', () => ({
+  authClient: {
+    signOut: vi.fn().mockResolvedValue({}),
+    signIn: { email: vi.fn().mockResolvedValue({ data: null, error: null }) },
+    requestPasswordReset: vi
+      .fn()
+      .mockResolvedValue({ data: null, error: null }),
+    useSession: vi.fn().mockReturnValue({ data: null, isPending: false }),
+  },
 }));
 // Keep the manager tabs from touching Firestore on mount.
 vi.mock('../../lib/content', async (orig) => ({
@@ -22,7 +26,7 @@ vi.mock('../../lib/content', async (orig) => ({
 import AdminApp from './AdminApp';
 import { useAuth } from './useAuth';
 
-const fakeUser = { email: 'board@example.com', uid: 'abc' } as User;
+const fakeUser = { email: 'board@example.com', uid: 'abc' };
 
 describe('AdminApp', () => {
   beforeEach(() => vi.mocked(useAuth).mockReset());
