@@ -47,7 +47,7 @@ describe('DocumentsList', () => {
 
     const links = screen.getAllByRole('link', { name: /download/i });
     expect(links).toHaveLength(2);
-    expect(links[0]).toHaveAttribute('href', 'https://example.com/bylaws.pdf');
+    expect(links[0]).toHaveAttribute('href', '/api/files/a');
   });
 
   it('shows an empty message when there are no documents', async () => {

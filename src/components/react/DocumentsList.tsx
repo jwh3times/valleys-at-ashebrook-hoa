@@ -50,7 +50,7 @@ export default function DocumentsList() {
                 </div>
                 <a
                   className="doc-dl"
-                  href={d.url}
+                  href={`/api/files/${d.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
