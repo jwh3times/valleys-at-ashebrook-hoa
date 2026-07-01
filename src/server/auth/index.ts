@@ -8,6 +8,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import * as schema from '../db/schema';
 import { ac, visitor, homeowner, board } from './permissions';
 import { sendEmail } from './senders';
+import { SITE_NAME } from '../../lib/site';
 
 export function createAuth(
   env?: Env,
@@ -42,7 +43,7 @@ export function createAuth(
             await sendEmail(
               env,
               user.email,
-              'Reset your HOA password',
+              `Reset your password — ${SITE_NAME}`,
               `Reset link: ${url}`,
             );
           },
@@ -53,7 +54,7 @@ export function createAuth(
             await sendEmail(
               env,
               user.email,
-              'Verify your HOA account',
+              `Verify your account — ${SITE_NAME}`,
               `Verify link: ${url}`,
             );
           },

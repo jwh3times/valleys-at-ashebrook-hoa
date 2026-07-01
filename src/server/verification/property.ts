@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { sendEmail, sendSms } from '../auth/senders';
+import { SITE_NAME } from '../../lib/site';
 import { findActiveOwnerByAddress } from '../roster/lookup';
 import {
   generateCode,
@@ -62,7 +63,12 @@ export async function requestPropertyVerification(
   });
   const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
   if (channel === 'email')
-    await sendEmail(env, owner.email!, 'Your HOA verification code', message);
+    await sendEmail(
+      env,
+      owner.email!,
+      `Your verification code — ${SITE_NAME}`,
+      message,
+    );
   else await sendSms(env, owner.phone!, message);
   return { ok: true };
 }
