@@ -1,3 +1,5 @@
+# Server-side secrets only. PUBLIC_* build-time vars belong in .env, not here
+# (a PUBLIC_* var in .dev.vars shadows .env at build time and hides the real value).
 BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=http://localhost:4321
 EMAIL_API_KEY=
@@ -6,4 +8,3 @@ TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_FROM=
 TURNSTILE_SECRET_KEY=
-PUBLIC_TURNSTILE_SITE_KEY=

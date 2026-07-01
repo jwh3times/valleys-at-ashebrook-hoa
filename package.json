@@ -17,7 +17,7 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "deploy": "astro build && wrangler pages deploy dist",
+    "deploy": "astro build && wrangler deploy -c dist/server/wrangler.json",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply ashebrook-hoa --local",
     "db:migrate:remote": "wrangler d1 migrations apply ashebrook-hoa --remote",
