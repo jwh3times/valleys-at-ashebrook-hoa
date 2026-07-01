@@ -1,11 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { RegisterForm } from '../components/react/AuthForms';
+import { NEIGHBORHOOD } from '../lib/site';
 ---
 
 <BaseLayout
   title="Create Account"
-  description="Create a Valleys at Ashebrook HOA account to access homeowner resources."
+  description={`Create an account to access resident resources for ${NEIGHBORHOOD}.`}
 >
   <div class="page-section">
     <p class="eyebrow">Member access</p>

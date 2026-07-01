@@ -1,11 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { LoginForm } from '../components/react/AuthForms';
+import { NEIGHBORHOOD } from '../lib/site';
 ---
 
 <BaseLayout
   title="Sign In"
-  description="Sign in to your Valleys at Ashebrook HOA account."
+  description={`Sign in to your resident account for ${NEIGHBORHOOD}.`}
 >
   <div class="page-section">
     <p class="eyebrow">Member access</p>
