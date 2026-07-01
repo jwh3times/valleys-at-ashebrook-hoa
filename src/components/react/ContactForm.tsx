@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { SITE_NAME } from '../../lib/site';
 
 const ACCESS_KEY = import.meta.env.PUBLIC_WEB3FORMS_KEY as string | undefined;
 
@@ -26,9 +27,9 @@ export default function ContactForm() {
     const data = new FormData(form);
     data.append('access_key', ACCESS_KEY!);
     if (!data.get('subject')) {
-      data.set('subject', 'New message from the HOA website');
+      data.set('subject', `New message from the ${SITE_NAME} website`);
     }
-    data.append('from_name', 'Valleys at Ashebrook HOA Website');
+    data.append('from_name', `${SITE_NAME} website`);
 
     try {
       const res = await fetch('https://api.web3forms.com/submit', {
@@ -57,8 +58,7 @@ export default function ContactForm() {
       <div className="contact-success">
         <div className="contact-success__h">Message sent ✓</div>
         <p className="contact-success__p">
-          Thank you — the board has received your note and will be in touch
-          soon.
+          Thanks — your message has been sent. You’ll hear back soon.
         </p>
         <button
           type="button"

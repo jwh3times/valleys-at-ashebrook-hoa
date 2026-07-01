@@ -1,18 +1,31 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import DuesInfo from '../components/react/DuesInfo.tsx';
+import { OFFICIAL_ORG_NAME } from '../lib/site';
+
+const official = Astro.locals.site.officialMode;
+const description = official
+  ? 'Annual dues amounts and payment options for the Valleys at Ashebrook HOA.'
+  : 'Dues are handled by the HOA — how to reach the board with questions about your dues.';
 ---
 
-<BaseLayout
-  title="Dues"
-  description="Annual dues amounts and payment options for the Valleys at Ashebrook HOA."
->
+<BaseLayout title="Dues" description={description}>
   <div class="page-section">
     <p class="eyebrow">Payments</p>
     <h1 class="page-title" style="margin-bottom: 36px;">
       Dues &amp; Assessments
     </h1>
 
-    <DuesInfo client:only="react" />
+    {
+      official ? (
+        <DuesInfo client:only="react" />
+      ) : (
+        <p class="page-lead">
+          Dues are handled by the {OFFICIAL_ORG_NAME}. This resident-run site
+          does not collect payments and is not involved in dues. For questions
+          about your dues or a payment, please contact the HOA board directly.
+        </p>
+      )
+    }
   </div>
 </BaseLayout>
