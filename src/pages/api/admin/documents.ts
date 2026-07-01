@@ -8,6 +8,7 @@ import { documents } from '../../../server/db/schema';
 export const prerender = false;
 
 const MAX_BYTES = 25 * 1024 * 1024;
+const VISIBILITIES = ['public', 'homeowner', 'board'] as const;
 
 export const POST: APIRoute = async ({ request }) => {
   const denied = await requireBoard(request, env);
@@ -18,6 +19,8 @@ export const POST: APIRoute = async ({ request }) => {
   const category = String(form.get('category') ?? '');
   const visibility = String(form.get('visibility') ?? 'board');
   if (!(file instanceof File) || !title || !category)
+    return new Response('Bad Request', { status: 400 });
+  if (!(VISIBILITIES as readonly string[]).includes(visibility))
     return new Response('Bad Request', { status: 400 });
   if (file.size > MAX_BYTES) return new Response('Too large', { status: 413 });
   const id = crypto.randomUUID();
@@ -53,6 +56,11 @@ export const PATCH: APIRoute = async ({ request }) => {
     visibility?: string;
   };
   if (!body.id) return new Response('Bad Request', { status: 400 });
+  if (
+    body.visibility !== undefined &&
+    !(VISIBILITIES as readonly string[]).includes(body.visibility)
+  )
+    return new Response('Bad Request', { status: 400 });
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   for (const k of ['title', 'category', 'visibility'] as const)
     if (k in body) patch[k] = body[k];

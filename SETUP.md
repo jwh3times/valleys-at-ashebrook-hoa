@@ -145,7 +145,10 @@ Load the HOA document archive into the library. Each file's visibility tier
 reviews and adjusts tiers in `/admin` afterward.
 
 ```bash
-npm run docs:import          # uploads files to R2 + inserts metadata into D1
+npm run docs:import          # generates private/documents-manifest.json — a review manifest
+                             # of the folder→tier mapping; review and adjust tiers, then
+                             # complete the R2 upload + D1 insert as a follow-up step with
+                             # the Worker bindings configured
 ```
 
 ## 8. Connect the community calendar (Google Calendar)
