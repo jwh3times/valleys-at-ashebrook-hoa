@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react';
 import { fetchDuesSettings } from '../../lib/content';
-import { isFirebaseConfigured } from '../../lib/firebase';
 import { DEFAULT_DUES_SETTINGS, type DuesSettings } from '../../lib/types';
 
 export default function DuesInfo() {
   const [dues, setDues] = useState<DuesSettings | null>(null);
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      setDues(DEFAULT_DUES_SETTINGS);
-      return;
-    }
     fetchDuesSettings()
       .then(setDues)
       .catch(() => setDues(DEFAULT_DUES_SETTINGS));

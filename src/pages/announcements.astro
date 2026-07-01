@@ -1,7 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
-import ConfigNotice from '../components/react/ConfigNotice.tsx';
 ---
 
 <BaseLayout
@@ -15,7 +14,6 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
       News and reminders from the Ashebrook board, newest first.
     </p>
 
-    <ConfigNotice client:only="react" />
     <AnnouncementsList client:only="react" variant="page" />
   </div>
 </BaseLayout>
