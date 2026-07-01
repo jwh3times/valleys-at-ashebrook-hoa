@@ -1,13 +1,10 @@
 ---
+import { navLinks, brandTag } from '../lib/site';
+
 const { pathname } = Astro.url;
-const links = [
-  { href: '/', label: 'Home' },
-  { href: '/announcements', label: 'Announcements' },
-  { href: '/calendar', label: 'Calendar' },
-  { href: '/documents', label: 'Documents' },
-  { href: '/dues', label: 'Dues' },
-  { href: '/contact', label: 'Contact' },
-];
+const { site } = Astro.locals;
+const links = navLinks(site.officialMode);
+const tag = brandTag(site.officialMode);
 
 const isCurrent = (href: string) =>
   href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -18,7 +15,7 @@ const isCurrent = (href: string) =>
     <span class="mark mark--lg" aria-hidden="true"><i></i></span>
     <span>
       <span class="brand__name">Valleys at Ashebrook</span>
-      <span class="brand__tag">Homeowners Association</span>
+      <span class="brand__tag">{tag}</span>
     </span>
   </a>
 
@@ -47,7 +44,7 @@ const isCurrent = (href: string) =>
         }
       </ul>
     </nav>
-    <a class="nav-login" href="/admin">Board Login</a>
+    <a class="nav-login" href="/admin">Admin sign in</a>
   </div>
 </header>
 

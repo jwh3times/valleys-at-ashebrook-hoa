@@ -610,6 +610,18 @@ textarea.input {
   font-family: var(--font-display);
 }
 
+.site-footer__disclaimer {
+  display: block;
+  max-width: 70ch;
+  margin: 6px auto 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  opacity: 0.75;
+}
+.site-footer__disclaimer a {
+  text-decoration: underline;
+}
+
 /* =========================================================================
    Home
    ========================================================================= */
