@@ -1,11 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import DocumentsList from '../components/react/DocumentsList.tsx';
+import { NEIGHBORHOOD } from '../lib/site';
 ---
 
 <BaseLayout
   title="Documents"
-  description="Governing documents, meeting minutes, financials, and forms for The Valleys at Ashebrook."
+  description={`Governing documents, meeting minutes, financials, and forms for ${NEIGHBORHOOD}.`}
 >
   <div class="page-section">
     <p class="eyebrow">Reference</p>

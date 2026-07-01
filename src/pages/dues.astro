@@ -5,7 +5,7 @@ import { OFFICIAL_ORG_NAME } from '../lib/site';
 
 const official = Astro.locals.site.officialMode;
 const description = official
-  ? 'Annual dues amounts and payment options for the Valleys at Ashebrook HOA.'
+  ? `Annual dues amounts and payment options for the ${OFFICIAL_ORG_NAME}.`
   : 'Dues are handled by the HOA — how to reach the board with questions about your dues.';
 ---
 

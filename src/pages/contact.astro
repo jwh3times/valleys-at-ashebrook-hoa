@@ -9,7 +9,7 @@ const official = Astro.locals.site.officialMode;
 <BaseLayout
   title="Contact"
   description={official
-    ? 'Contact the Valleys at Ashebrook HOA board.'
+    ? `Contact the ${OFFICIAL_ORG_NAME} board.`
     : `Contact the resident who maintains this independent ${NEIGHBORHOOD} site.`}
 >
   <div class="page-section">

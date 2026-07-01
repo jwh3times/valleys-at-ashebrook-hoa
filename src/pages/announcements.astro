@@ -1,11 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
+import { NEIGHBORHOOD } from '../lib/site';
 ---
 
 <BaseLayout
   title="Announcements"
-  description="Community announcements and news for The Valleys at Ashebrook."
+  description={`Community announcements and news for ${NEIGHBORHOOD}.`}
 >
   <div class="page-section">
     <p class="eyebrow">Community</p>

@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { NEIGHBORHOOD } from '../lib/site';
 
 const calendarId = import.meta.env.PUBLIC_GOOGLE_CALENDAR_ID as
   string | undefined;
@@ -21,7 +22,7 @@ const icalUrl = calendarId
 
 <BaseLayout
   title="Calendar"
-  description="Community calendar for The Valleys at Ashebrook — events and virtual meeting links."
+  description={`Community calendar for ${NEIGHBORHOOD} — events and virtual meeting links.`}
 >
   <div class="page-section">
     <div class="cal-head">
@@ -54,7 +55,7 @@ const icalUrl = calendarId
           <iframe
             class="calendar-frame"
             src={embedSrc}
-            title="The Valleys at Ashebrook community calendar"
+            title={`${NEIGHBORHOOD} community calendar`}
             loading="lazy"
           />
           <div>
