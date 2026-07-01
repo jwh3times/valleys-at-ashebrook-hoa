@@ -11,18 +11,18 @@
 version: 2
 updates:
   # npm dependencies (package.json / package-lock.json)
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "daily"
-      time: "07:00"
-      timezone: "America/New_York"
+      interval: 'daily'
+      time: '07:00'
+      timezone: 'America/New_York'
     commit-message:
-      prefix: "chore"
-      include: "scope"
+      prefix: 'chore'
+      include: 'scope'
     open-pull-requests-limit: 10
     labels:
-      - "dependencies"
+      - 'dependencies'
     groups:
       # --- Peer-locked families — majors only. All minor/patch bumps land in the
       #     catch-all group at the bottom. ---
@@ -32,65 +32,65 @@ updates:
       # can break peer constraints.
       astro-ecosystem:
         patterns:
-          - "astro"
-          - "@astrojs/*"
+          - 'astro'
+          - '@astrojs/*'
         update-types:
-          - "major"
+          - 'major'
 
       # react + react-dom ship at identical versions and must match at runtime;
       # the @types/* packages track the same major.
       react:
         patterns:
-          - "react"
-          - "react-dom"
-          - "@types/react"
-          - "@types/react-dom"
+          - 'react'
+          - 'react-dom'
+          - '@types/react'
+          - '@types/react-dom'
         update-types:
-          - "major"
+          - 'major'
 
       # @testing-library/react and user-event both peer-require @testing-library/dom.
       testing-library:
         patterns:
-          - "@testing-library/*"
+          - '@testing-library/*'
         update-types:
-          - "major"
+          - 'major'
 
       # @vitejs/plugin-react requires a matching Vite major; vitest and @vitest/*
       # track the Vite majors they support.
       vite-ecosystem:
         patterns:
-          - "vite"
-          - "vitest"
-          - "@vitejs/plugin-react"
-          - "@vitest/*"
+          - 'vite'
+          - 'vitest'
+          - '@vitejs/plugin-react'
+          - '@vitest/*'
         update-types:
-          - "major"
+          - 'major'
 
       # Bundle low-risk minor + patch bumps into one PR; majors stay separate.
       npm-minor-and-patch:
         patterns:
-          - "*"
+          - '*'
         update-types:
-          - "minor"
-          - "patch"
+          - 'minor'
+          - 'patch'
 
   # GitHub Actions used in .github/workflows
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: 'github-actions'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "07:00"
-      timezone: "America/New_York"
+      interval: 'weekly'
+      day: 'monday'
+      time: '07:00'
+      timezone: 'America/New_York'
     commit-message:
-      prefix: "chore"
+      prefix: 'chore'
     open-pull-requests-limit: 10
     labels:
-      - "dependencies"
+      - 'dependencies'
     groups:
       actions-minor-and-patch:
         patterns:
-          - "*"
+          - '*'
         update-types:
-          - "minor"
-          - "patch"
+          - 'minor'
+          - 'patch'
