@@ -50,7 +50,7 @@ export function brandTag(officialMode: boolean): string {
   return officialMode ? 'Homeowners Association' : 'Residents';
 }
 
-/** Name shown in titles + footer copyright: the org name in official mode, else the admin-set site name. */
+/** Name shown in titles + footer copyright: the org name in official mode, else the fixed resident brand. */
 export function displayName(s: ModeName): string {
   // Off-mode name is the fixed resident brand, NOT the stored siteName: a legacy
   // settings blob carries the old default hoaName ("Valleys at Ashebrook HOA"), which
