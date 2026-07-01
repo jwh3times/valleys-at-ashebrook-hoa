@@ -1,17 +1,25 @@
-# Valleys at Ashebrook HOA
+# The Valleys at Ashebrook Residents
 
-The official website for the Valleys at Ashebrook Homeowners Association.
+An independent, resident-run website for the Valleys at Ashebrook neighborhood — **not**
+the official Valleys at Ashebrook HOA site. It's built and maintained by a resident as a
+convenience for neighbors. An admin-toggleable **official mode** (off by default) lets a
+board that wants to adopt the site turn on HOA branding and dues/board copy; while it's
+off, the site presents as an unofficial resident hub with a "not affiliated with the
+HOA" disclaimer (see `/about`) and hides dues/board-only surfaces.
 
 It provides:
 
-- 📣 **Announcements** — community news posted by the board
-- 📅 **Community calendar** — board meetings and events via Google Calendar,
+- 📣 **Announcements** — community news
+- 📅 **Community calendar** — meetings and events via Google Calendar,
   with Google Meet links for virtual meetings
 - 📄 **Governing documents** — bylaws, CC&Rs, minutes, and forms (PDF downloads)
-- 💳 **Dues & payments** — annual dues amount and payment options
-- ✉️ **Contact form** — homeowners can email the board
-- 🔐 **Board admin** — a built-in, password-protected admin panel (`/admin`) for
-  board members to manage everything without touching code
+- 💳 **Dues & payments** — annual dues amount and payment options (shown in official
+  mode)
+- ✉️ **Contact form** — reaches the resident who maintains the site (or the board, in
+  official mode)
+- 🔐 **Admin panel** — a built-in, password-protected admin panel (`/admin`) for site
+  administrators (the `board` role) to manage everything without touching code,
+  including the official-mode toggle
 
 Homeowners can create accounts (verified against the owner roster via a one-time code)
 to access homeowner-only content. Content visibility has three tiers: public, homeowner,
