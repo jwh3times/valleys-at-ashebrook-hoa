@@ -1,9 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import {
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-} from 'firebase/auth';
-import { getFirebaseAuth } from '../../lib/firebase';
+import { authClient } from '../../lib/auth-client';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -17,27 +13,28 @@ export default function Login() {
     setError('');
     setInfo('');
     setBusy(true);
-    try {
-      await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
-    } catch {
+    const result = await authClient.signIn.email({ email, password });
+    if (result.error) {
       setError('Incorrect email or password. Please try again.');
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   }
 
   async function handleReset() {
     setError('');
     setInfo('');
     if (!email) {
-      setError('Enter your email above first, then click “Forgot password”.');
+      setError('Enter your email above first, then click "Forgot password".');
       return;
     }
-    try {
-      await sendPasswordResetEmail(getFirebaseAuth(), email);
-      setInfo('Password reset email sent. Check your inbox.');
-    } catch {
+    const result = await authClient.requestPasswordReset({
+      email,
+      redirectTo: '/login',
+    });
+    if (result.error) {
       setError('Could not send reset email. Check the address and try again.');
+    } else {
+      setInfo('Password reset email sent. Check your inbox.');
     }
   }
 

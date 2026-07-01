@@ -31,3 +31,13 @@ yarn-error.log*
 .DS_Store
 .vscode/
 .idea/
+
+# private files
+private/
+
+# subagent-driven-development scratch
+.superpowers/
+
+# cloudflare
+.dev.vars
+.wrangler/
