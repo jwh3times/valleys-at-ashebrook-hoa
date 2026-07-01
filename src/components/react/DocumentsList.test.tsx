@@ -15,17 +15,15 @@ const docs: DocumentItem[] = [
     id: 'a',
     title: 'Bylaws',
     category: 'Governing Documents',
-    url: 'https://example.com/bylaws.pdf',
-    storagePath: 'documents/bylaws.pdf',
     updatedAt: '2026-01-01',
+    visibility: 'public',
   },
   {
     id: 'b',
     title: 'March Minutes',
     category: 'Meeting Minutes',
-    url: 'https://example.com/march.pdf',
-    storagePath: 'documents/march.pdf',
     updatedAt: '2026-03-15',
+    visibility: 'public',
   },
 ];
 
@@ -45,7 +43,7 @@ describe('DocumentsList', () => {
 
     const links = screen.getAllByRole('link', { name: /download/i });
     expect(links).toHaveLength(2);
-    expect(links[0]).toHaveAttribute('href', 'https://example.com/bylaws.pdf');
+    expect(links[0]).toHaveAttribute('href', '/api/files/a');
   });
 
   it('shows an empty message when there are no documents', async () => {

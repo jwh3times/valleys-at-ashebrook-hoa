@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
-import { isFirebaseConfigured } from '../../lib/firebase';
 import { useAuth } from './useAuth';
 import Login from './Login';
 import AnnouncementsManager from './AnnouncementsManager';
@@ -40,21 +39,6 @@ export default function AdminApp() {
   const { loading, user, isAdmin } = useAuth();
   const [section, setSection] =
     useState<(typeof SECTIONS)[number]['key']>('announcements');
-
-  if (!isFirebaseConfigured) {
-    return (
-      <AuthShell>
-        <div className="admin-login__card">
-          <h1>Setup needed</h1>
-          <p>
-            Firebase isn't configured yet. Add your Firebase project values to{' '}
-            <code>.env</code> before using the admin (see <code>SETUP.md</code>
-            ).
-          </p>
-        </div>
-      </AuthShell>
-    );
-  }
 
   if (loading) {
     return (
@@ -126,7 +110,6 @@ export default function AdminApp() {
         </div>
       </aside>
 
-      {/* TODO(subproject-B): migrate data layer to D1 — managers still read/write Firestore via lib/admin */}
       <main className="admin-main">{active.render()}</main>
     </div>
   );

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { fetchDocuments, groupDocumentsByCategory } from '../../lib/content';
-import { isFirebaseConfigured } from '../../lib/firebase';
 import { formatDate } from '../../lib/format';
 import type { DocumentItem } from '../../lib/types';
 
@@ -9,10 +8,6 @@ export default function DocumentsList() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      setDocs([]);
-      return;
-    }
     fetchDocuments()
       .then(setDocs)
       .catch((e) => setError(e.message ?? 'Could not load documents.'));
@@ -50,7 +45,7 @@ export default function DocumentsList() {
                 </div>
                 <a
                   className="doc-dl"
-                  href={d.url}
+                  href={`/api/files/${d.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

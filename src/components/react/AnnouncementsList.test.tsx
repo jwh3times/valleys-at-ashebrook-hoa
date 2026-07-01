@@ -20,24 +20,28 @@ const sample: Announcement[] = [
     title: 'Pool opens Saturday',
     body: 'See you there!',
     date: '2026-06-20',
+    visibility: 'public',
   },
   {
     id: '2',
     title: 'Annual meeting',
     body: 'Agenda attached.',
     date: '2026-06-10',
+    visibility: 'public',
   },
   {
     id: '3',
     title: 'Landscaping update',
     body: 'New shrubs.',
     date: '2026-05-30',
+    visibility: 'public',
   },
   {
     id: '4',
     title: 'Welcome new neighbors',
     body: 'Hello!',
     date: '2026-05-01',
+    visibility: 'public',
   },
 ];
 

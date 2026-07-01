@@ -12,3 +12,7 @@ migrations_dir = "src/server/db/migrations"
 [[kv_namespaces]]
 binding = "KV"
 id = "local-dev-placeholder"           # replace with `wrangler kv namespace create` output at deploy time
+
+[[r2_buckets]]
+binding = "DOCS"
+bucket_name = "ashebrook-hoa-docs"

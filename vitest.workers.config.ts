@@ -18,6 +18,7 @@ export default defineConfig(async () => {
           compatibilityDate: '2026-06-01',
           d1Databases: ['DATABASE'],
           kvNamespaces: ['KV'],
+          r2Buckets: ['DOCS'],
           bindings: {
             MIGRATIONS: migrations,
             BETTER_AUTH_SECRET: 'test-secret-not-real',

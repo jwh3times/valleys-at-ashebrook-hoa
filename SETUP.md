@@ -1,286 +1,224 @@
 # Setup Guide — Valleys at Ashebrook HOA Website
 
 This site is built with [Astro](https://astro.build) (public pages) + [React](https://react.dev)
-(the admin panel), and uses **Firebase** for the database, file storage,
-authentication, and hosting. Everything fits in Firebase's **free Spark plan**,
-which does not expire or pause.
+(the admin panel and interactive islands) and runs entirely on **Cloudflare**:
 
-Total cost: **$0** (optional ~$10–15/yr only if you want a custom domain).
+- **Pages / Workers** — hosting + server-side rendering and API routes
+- **D1** — the database (announcements, documents metadata, dues, site settings, accounts)
+- **R2** — document file storage (governing docs, minutes, etc.)
+- **KV** — session / rate-limit storage for authentication
+- **Better Auth** — email/password accounts and roles (visitor / homeowner / board)
 
-Follow the steps in order. You only do this once.
+Plus a few external services: a public **Google Calendar** (community events), **Web3Forms**
+(contact form email), an **email provider** and **Twilio** (one-time codes for homeowner
+verification), and **Cloudflare Turnstile** (bot protection).
+
+**Cost:** the Cloudflare free tier comfortably covers this site (D1, KV, R2 with no egress
+fees, Workers). The only usage-based costs are Twilio SMS (~1¢ per text) and a small email
+allowance; a custom domain is optional (~$10–15/yr). Follow the steps in order — you only do
+this once.
 
 ---
 
 ## What you'll need
 
-- A Google account (the HOA Gmail is perfect).
-- About 30–45 minutes.
-- [Node.js 18+](https://nodejs.org) installed on your computer (only needed to
-  build/deploy from your machine; not needed for day-to-day editing).
+- A **Cloudflare account** (free).
+- **Node.js** at the version in `.nvmrc` (run `nvm use`), only needed to build/deploy — not
+  for day-to-day content editing.
+- Accounts for: an **email provider** (these instructions use [Resend](https://resend.com)),
+  **[Twilio](https://twilio.com)** (SMS), and **[Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)** (free).
+- A **Google account** for the public HOA calendar (optional but recommended).
+- About 45 minutes.
 
 ---
 
-## 1. Create the Firebase project
-
-1. Go to <https://console.firebase.google.com> and sign in with the HOA Google
-   account.
-2. Click **Add project**, name it (e.g. `valleys-ashebrook-hoa`), and finish.
-   You can disable Google Analytics — it isn't needed.
-
-## 2. Enable the services
-
-In the Firebase console for your new project:
-
-- **Authentication** → *Get started* → enable **Email/Password**.
-- **Firestore Database** → *Create database* → start in **production mode** →
-  pick a location close to you.
-- **Storage** → *Get started* → accept the default rules prompt (we'll deploy
-  our own rules later).
-
-## 3. Get your web config
-
-1. In the console, click the gear icon → **Project settings**.
-2. Under **Your apps**, click the **Web** icon (`</>`) to register a web app
-   (give it any nickname; you do **not** need Firebase Hosting checkbox here).
-3. Copy the `firebaseConfig` values shown.
-
-Create a file named `.env` in the project root (copy from `.env.example`) and
-fill in the values:
-
-```
-PUBLIC_FIREBASE_API_KEY=...
-PUBLIC_FIREBASE_AUTH_DOMAIN=...
-PUBLIC_FIREBASE_PROJECT_ID=...
-PUBLIC_FIREBASE_STORAGE_BUCKET=...
-PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
-PUBLIC_FIREBASE_APP_ID=...
-```
-
-> These values are safe to commit/ship — they're public by design. Security is
-> enforced by the rules files, not by hiding the config. (The `.env` file is
-> gitignored only to keep per-environment values out of the repo.)
-
-## 4. Install tools and deploy the security rules
+## 1. Install tools and log in
 
 ```bash
 npm install
-npm install -g firebase-tools     # one time
-firebase login                    # sign in with the HOA Google account
+npx wrangler login     # opens a browser; sign in to the HOA Cloudflare account
 ```
 
-Edit `.firebaserc` and replace `REPLACE_WITH_YOUR_FIREBASE_PROJECT_ID` with your
-actual project ID, then deploy the rules:
+## 2. Create the Cloudflare resources
+
+Run each command once and copy the printed IDs into `wrangler.toml` where noted.
 
 ```bash
-firebase deploy --only firestore:rules,storage
+# D1 database — copy the "database_id" from the output into wrangler.toml
+npx wrangler d1 create ashebrook-hoa
+
+# KV namespace (auth sessions / rate limits) — copy the "id" into wrangler.toml
+npx wrangler kv namespace create KV
+
+# R2 bucket (document files) — bound as DOCS in wrangler.toml
+npx wrangler r2 bucket create ashebrook-hoa-docs
 ```
 
-## 5. Create board member accounts
+In `wrangler.toml`, replace the placeholder values:
 
-Board members log in with **email + password** — no GitHub or Google account
-required.
+- `database_id = "local-dev-placeholder"` → your real D1 database ID
+- `id = "local-dev-placeholder"` (under `[[kv_namespaces]]`) → your real KV namespace ID
 
-1. Firebase console → **Authentication** → **Users** → **Add user**. Enter each
-   board member's email and a temporary password. (They can change it later via
-   the "Forgot password" link on the login page.)
-2. For each user, copy their **User UID** (shown in the Users table).
+## 3. Configure secrets and public values
 
-## 6. Grant admin rights
+Two kinds of configuration:
 
-The site treats a user as a board admin only if a document with their UID exists
-in the `admins` collection.
+**a) Server secrets** — copy `.dev.vars.example` to `.dev.vars` (gitignored) for local
+development, and set the same values as Cloudflare secrets for production
+(`npx wrangler secret put NAME`, or the Pages dashboard → Settings → Variables).
 
-1. Firebase console → **Firestore Database** → **Start collection** → collection
-   ID `admins`.
-2. For each board member, add a document whose **Document ID is their User UID**
-   (from step 5). It can have a single field for reference, e.g.
-   `email: "name@example.com"`.
+| Secret | What it is |
+| --- | --- |
+| `BETTER_AUTH_SECRET` | A strong random string — generate with `openssl rand -base64 32` |
+| `BETTER_AUTH_URL` | Your site's URL (e.g. `https://valleys-ashebrook.pages.dev`) |
+| `EMAIL_API_KEY`, `EMAIL_FROM` | Resend API key + the "from" address (verification / reset emails) |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Twilio credentials + sending number (SMS codes) |
+| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret (server-side verification) |
 
-Repeat for every board member who should be able to edit the site.
+**b) Public build-time values** — set these `PUBLIC_*` values (they are safe to expose; Astro
+inlines them into the client at build):
 
-## 7. Connect the community calendar
+```
+PUBLIC_TURNSTILE_SITE_KEY=...              # Turnstile site key (widget)
+PUBLIC_GOOGLE_CALENDAR_ID=xxxx@group.calendar.google.com
+PUBLIC_GOOGLE_CALENDAR_TIMEZONE=America/New_York
+PUBLIC_WEB3FORMS_KEY=...                   # contact form (see step 8)
+```
 
-1. Open [Google Calendar](https://calendar.google.com) with the HOA account
-   (or create a dedicated "Valleys at Ashebrook HOA" calendar).
-2. Calendar **Settings** → select the calendar → **Access permissions** → check
-   **Make available to public** (set to "See all event details").
-3. Scroll to **Integrate calendar** and copy the **Calendar ID**
-   (looks like `xxxx@group.calendar.google.com`).
-4. Put it in `.env`:
-   ```
-   PUBLIC_GOOGLE_CALENDAR_ID=xxxx@group.calendar.google.com
-   PUBLIC_GOOGLE_CALENDAR_TIMEZONE=America/New_York
-   ```
-
-**Virtual meetings (Google Meet):** when you create an event in this calendar,
-click **Add Google Meet video conferencing**. The Meet link is saved in the
-event, so homeowners just open the event on the website's calendar and click to
-join — no extra setup.
-
-## 8. Connect the contact form
-
-1. Go to <https://web3forms.com>, enter the HOA Gmail address, and get a free
-   **Access Key** (it's emailed to you). Submissions are delivered to that
-   inbox.
-2. Put it in `.env`:
-   ```
-   PUBLIC_WEB3FORMS_KEY=your-access-key
-   ```
-
-## 9. Deploy the website
+## 4. Apply the database migrations
 
 ```bash
-npm run build      # builds the static site into dist/
-firebase deploy --only hosting
+npm run db:migrate:local     # local SQLite emulation for development
+npm run db:migrate:remote    # the live Cloudflare D1 database
 ```
 
-Firebase prints your live URL (e.g. `https://valleys-ashebrook.web.app`).
-Update the `site` value in `astro.config.mjs` to match.
+## 5. Import the owner roster
 
-> Tip: `npm run deploy` runs the build and a full `firebase deploy` together.
+Homeowner sign-up is verified against the HOA owner roster (a one-time code is sent to the
+phone/email already on file). Import your contact list:
 
-## 10. Add your first content
+```bash
+npm run roster:import        # reads private/HOA_files/Ashebrook HOA Contact List.xlsx
+                             # → writes private/roster-import.sql
+npx wrangler d1 execute ashebrook-hoa --remote --file private/roster-import.sql
+```
 
-Go to `https://your-site.web.app/admin`, sign in as a board member, and use the
-tabs to:
+The board maintains the roster afterward from the `/admin` panel; ownership transfers mark the
+old owner inactive (revoking access) and add the new owner.
 
-- **Announcements** — post community news (optionally pin important ones).
-- **Documents** — upload governing-document PDFs (bylaws, CC&Rs, minutes).
-- **Dues** — set the dues amount and add payment options (PayPal/Venmo/Zelle/check).
-- **Site Settings** — edit the home-page welcome text and public contact email.
+## 6. Seed the first board account (one-time bootstrap)
+
+Because no admin exists yet, the first board account can't be created through the normal
+self-service flow — `seedBoard` writes the `role`/`emailVerified` fields directly in the
+database. Run this once, right after the first deploy and the roster import.
+
+Add a **short-lived** admin route to the Worker (remove it before the next deploy) that reads
+`BOARD_EMAIL` / `BOARD_PASSWORD` / `BOARD_NAME` and calls `seedBoard`, guarded by a secret:
+
+```ts
+import { seedBoard } from '../../scripts/seed-board'; // adjust to where you place this route
+
+// Temporary route — DELETE after first use.
+export const POST = async ({ request, locals }) => {
+  const env = locals.runtime?.env ?? /* or import { env } from 'cloudflare:workers' */ null;
+  if (request.headers.get('x-bootstrap-secret') !== env.BOOTSTRAP_SECRET) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  const { BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME } = env;
+  if (!BOARD_EMAIL || !BOARD_PASSWORD || !BOARD_NAME) {
+    return new Response('Missing BOARD_EMAIL / BOARD_PASSWORD / BOARD_NAME', { status: 400 });
+  }
+  await seedBoard(env, BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME);
+  return new Response(null, { status: 204 });
+};
+```
+
+Set `BOARD_EMAIL`, `BOARD_PASSWORD`, `BOARD_NAME`, and `BOOTSTRAP_SECRET` as Cloudflare secrets
+(and ensure the email secrets from step 3 are set, since sign-up sends a verification email),
+POST once with the matching `x-bootstrap-secret` header, then **remove the route and redeploy**.
+The board member can then sign in at `/login` and change their password via **Forgot password**.
+
+## 7. Import the document archive
+
+Load the HOA document archive into the library. Each file's visibility tier
+(public / homeowner / board) and category are auto-proposed from its folder path; the board
+reviews and adjusts tiers in `/admin` afterward.
+
+```bash
+npm run docs:import          # generates private/documents-manifest.json — a review manifest
+                             # of the folder→tier mapping; review and adjust tiers, then
+                             # complete the R2 upload + D1 insert as a follow-up step with
+                             # the Worker bindings configured
+```
+
+## 8. Connect the community calendar (Google Calendar)
+
+1. Open [Google Calendar](https://calendar.google.com) with the HOA account (or create a
+   dedicated "Valleys at Ashebrook HOA" calendar).
+2. Calendar **Settings** → select the calendar → **Access permissions** → check **Make
+   available to public** ("See all event details").
+3. Under **Integrate calendar**, copy the **Calendar ID** (looks like
+   `xxxx@group.calendar.google.com`) into `PUBLIC_GOOGLE_CALENDAR_ID` (step 3b).
+
+**Virtual meetings:** when you create an event, click **Add Google Meet video conferencing** —
+the Meet link is saved in the event, so homeowners open it from the website's calendar and
+click to join. No extra setup.
+
+## 9. Connect the contact form (Web3Forms)
+
+1. Go to <https://web3forms.com>, enter the HOA email address, and get a free **Access Key**
+   (emailed to you). Submissions are delivered to that inbox.
+2. Put it in `PUBLIC_WEB3FORMS_KEY` (step 3b).
+
+## 10. Deploy
+
+```bash
+npm run build                       # builds to dist/ with the Cloudflare adapter
+npx wrangler pages deploy dist      # deploy to Cloudflare Pages
+```
+
+Cloudflare prints your live URL (e.g. `https://valleys-ashebrook.pages.dev`). Set that as
+`BETTER_AUTH_URL` (step 3a) and as `site` in `astro.config.mjs`, then redeploy.
+
+> You can also connect the GitHub repo in the Cloudflare Pages dashboard for automatic
+> deploys on push instead of deploying from your machine.
 
 ---
 
 ## Optional: custom domain
 
-In the Firebase console → **Hosting** → **Add custom domain**, follow the DNS
-steps. Buy a domain from any registrar (~$10–15/yr). Firebase provides the SSL
-certificate for free. Then update `site` in `astro.config.mjs`.
-
----
+In the Cloudflare dashboard → **Workers & Pages** → your project → **Custom domains**, add your
+domain and follow the DNS steps (buy one from any registrar, ~$10–15/yr; Cloudflare provides
+free SSL). Then update `BETTER_AUTH_URL` and `site` in `astro.config.mjs`.
 
 ## Local development
 
 ```bash
-npm run dev        # http://localhost:4321
+npm run dev          # http://localhost:4321 (frontend)
 ```
 
-To test against local fakes instead of the live Firebase project, install the
-emulators and set `PUBLIC_USE_EMULATORS=true` in `.env`:
-
-```bash
-firebase init emulators   # one time (auth, firestore, storage)
-npm run emulators         # in one terminal
-npm run dev               # in another
-```
-
----
+For local work against the D1/R2/KV bindings, run the app through Wrangler
+(`npx wrangler pages dev dist` after a build) so the bindings and `.dev.vars` secrets are
+available. Migrations against the local database use `npm run db:migrate:local`.
 
 ## Day-to-day: how board members update the site
 
-They don't need any of the above. They just:
+No setup needed — board members just:
 
-1. Go to `https://your-site.web.app/admin`
+1. Go to `https://your-site/admin`
 2. Sign in with their email + password
-3. Edit through the on-screen forms — changes appear on the site immediately.
+3. Edit through the on-screen forms (announcements, documents + visibility tiers, dues, site
+   settings) — changes appear on the site immediately.
 
 ## Where things live (quick reference)
 
 | Thing | Where |
 | --- | --- |
-| Announcements, dues, site text | Firestore (`announcements`, `settings`) |
-| Document PDFs | Cloud Storage (`documents/`) + metadata in Firestore |
+| Announcements, dues, site text | Cloudflare D1 (`announcements`, `settings`) |
+| Documents (files) | Cloudflare R2 (`ashebrook-hoa-docs`) + metadata in D1 (`documents`) |
+| Accounts, roles, roster, verification | Cloudflare D1 (Better Auth tables + `owners`, `user_property_links`) |
+| Auth sessions / rate limits | Cloudflare KV |
 | Calendar & Meet links | The HOA's public Google Calendar |
-| Contact form emails | Web3Forms → HOA Gmail |
-| Who can edit | Firestore `admins` collection (by user UID) |
-| Hosting | Firebase Hosting |
-
----
-
-## Cloudflare provisioning (run once, needs account)
-
-The `wrangler.toml` file uses placeholder IDs (`"local-dev-placeholder"`) for the D1
-database and KV namespace. Before deploying to Cloudflare Workers/Pages, a Cloudflare
-account holder must run the following commands **once** and replace the placeholder
-values with the real IDs output by each command.
-
-```bash
-# Log in to Cloudflare
-wrangler login
-
-# Create the D1 database — copy the "database_id" from the output
-wrangler d1 create ashebrook-hoa
-
-# Create the KV namespace — copy the "id" from the output
-wrangler kv namespace create KV
-```
-
-After running the above, open `wrangler.toml` and replace:
-
-- `database_id = "local-dev-placeholder"` with the real D1 database ID
-- `id = "local-dev-placeholder"` (under `[[kv_namespaces]]`) with the real KV namespace ID
-
-Then apply the D1 migrations for the first time:
-
-```bash
-# Apply locally (uses Wrangler's local SQLite emulation)
-npm run db:migrate:local
-
-# Apply against the live Cloudflare D1 database
-npm run db:migrate:remote
-```
-
-Copy `.dev.vars.example` to `.dev.vars` and fill in the secrets (never commit `.dev.vars`):
-
-```bash
-cp .dev.vars.example .dev.vars
-# Edit .dev.vars and set BETTER_AUTH_SECRET to a strong random value:
-#   openssl rand -base64 32
-```
-
----
-
-## Create the first board account (one-time bootstrap)
-
-After deploying the Worker and after applying the roster import, you must seed the first
-board member account. Because no admin exists yet, the normal self-service flow cannot be
-used — instead, `seedBoard` writes the `role` and `emailVerified` fields directly in the
-database.
-
-**When to run:** once, immediately after the first `wrangler deploy` and roster import.
-
-**How to run:** add a short-lived admin route to the Worker (or call it inline from a
-temporary script under `wrangler dev`) that reads `BOARD_EMAIL`, `BOARD_PASSWORD`, and
-`BOARD_NAME` from environment variables and calls `seedBoard`:
-
-```ts
-import { seedBoard } from '../../scripts/seed-board'; // path depends on where you place this file
-
-// Example: temporary Hono route — remove after first use.
-app.post('/internal/bootstrap', async (c) => {
-  if (c.req.header('x-bootstrap-secret') !== c.env.BOOTSTRAP_SECRET) {
-    return c.text('Forbidden', 403);
-  }
-  const { BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME } = c.env;
-  if (!BOARD_EMAIL || !BOARD_PASSWORD || !BOARD_NAME) {
-    return c.text('Missing BOARD_EMAIL, BOARD_PASSWORD, or BOARD_NAME', 400);
-  }
-  await seedBoard(c.env, BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME);
-  return new Response(null, { status: 204 });
-});
-```
-
-Set `BOARD_EMAIL`, `BOARD_PASSWORD`, `BOARD_NAME`, and `BOOTSTRAP_SECRET` in `.dev.vars`
-(local) or as Cloudflare secrets (remote), send a single POST with the matching
-`x-bootstrap-secret` header, then **remove the route before the next deploy**.
-
-The `seedBoard` function:
-
-1. Creates the user via `auth.api.signUpEmail` (which also sends a verification email if
-   `EMAIL_API_KEY` is configured — ensure the email secrets are set before running).
-2. Immediately sets `role = 'board'` and `emailVerified = true` directly in the database,
-   so the account is usable even if the verification email is not acted upon.
-
-After seeding, the board member can log in at `/login` and change their password via the
-**Forgot password** link. Remove the temporary bootstrap route from your Worker before
-the next deploy.
+| Contact-form emails | Web3Forms → HOA inbox |
+| Verification codes | Email provider (Resend) + Twilio SMS |
+| Hosting | Cloudflare Pages / Workers |

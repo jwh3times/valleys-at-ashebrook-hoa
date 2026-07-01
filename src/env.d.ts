@@ -6,6 +6,7 @@ declare namespace Cloudflare {
   interface Env {
     DATABASE: import('@cloudflare/workers-types').D1Database;
     KV: import('@cloudflare/workers-types').KVNamespace;
+    DOCS: import('@cloudflare/workers-types').R2Bucket;
     BETTER_AUTH_SECRET: string;
     BETTER_AUTH_URL: string;
     EMAIL_API_KEY: string;

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { fetchAnnouncements } from '../../lib/content';
-import { isFirebaseConfigured } from '../../lib/firebase';
 import { formatDate } from '../../lib/format';
 import type { Announcement } from '../../lib/types';
 
@@ -22,10 +21,6 @@ export default function AnnouncementsList({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      setItems([]);
-      return;
-    }
     fetchAnnouncements()
       .then(setItems)
       .catch((e) => setError(e.message ?? 'Could not load announcements.'));
