@@ -2,8 +2,15 @@ export const MAX_ATTEMPTS = 5;
 export const CODE_TTL_MS = 600_000;
 
 export function generateCode(): string {
-  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
-  return n.toString().padStart(6, '0');
+  // Rejection sampling avoids the modulo bias of `random % 1_000_000`:
+  // discard the top partial bucket so every 6-digit value is equally likely.
+  const range = 1_000_000;
+  const limit = Math.floor(0x1_0000_0000 / range) * range;
+  let n = crypto.getRandomValues(new Uint32Array(1))[0];
+  while (n >= limit) {
+    n = crypto.getRandomValues(new Uint32Array(1))[0];
+  }
+  return (n % range).toString().padStart(6, '0');
 }
 
 export async function hashCode(code: string): Promise<string> {
