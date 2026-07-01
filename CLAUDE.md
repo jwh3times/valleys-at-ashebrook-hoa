@@ -4,30 +4,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-The public website for the Valleys at Ashebrook HOA. A static Astro site with React
-islands, backed entirely by Firebase free-tier services (Firestore, Storage, Auth,
-Hosting) plus a public Google Calendar and Web3Forms for the contact form. Board
-members manage all content through a password-protected admin panel at `/admin` — no
-code changes needed to edit content. `SETUP.md` is the human deployment guide.
+The public + homeowner website for the Valleys at Ashebrook HOA. An Astro SSR app
+(`output: 'server'`) running on **Cloudflare Workers** via the `@astrojs/cloudflare`
+adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2** (document files),
+and **KV** (Astro sessions). Auth is **Better Auth** (email/password + admin plugin).
+Homeowner sign-up is verified against the owner roster via a one-time code sent to the
+phone/email already on file (email through Resend, SMS through Twilio), gated by
+Cloudflare Turnstile captcha. Board members manage all content through the admin panel
+at `/admin`. `SETUP.md` is the human deployment guide.
 
 ## Commands
 
 ```bash
-npm run dev          # dev server at http://localhost:4321
-npm run build        # static build to dist/
-npm run check        # Astro + TypeScript type check
-npm test             # run Vitest suite once
-npm run test:watch   # Vitest in watch mode
-npm run format       # Prettier write; format:check is what CI enforces
-npm run emulators    # Firebase Emulator Suite (auth/firestore/storage)
-npm run deploy       # astro build && firebase deploy
+npm run dev               # dev server at http://localhost:4321
+npm run build             # SSR build to dist/
+npm run check             # Astro + TypeScript type check
+npm test                  # run jsdom component/unit tests (Vitest)
+npm run test:watch        # Vitest in watch mode
+npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)
+npm run format            # Prettier write; format:check is what CI enforces
+npm run db:generate       # generate Drizzle migration files
+npm run db:migrate:local  # apply migrations to local D1 (wrangler)
+npm run db:migrate:remote # apply migrations to the live D1 database
+npm run auth:generate     # regenerate Better Auth schema from config
+npm run roster:import     # import owner roster for homeowner verification
+npm run docs:import       # generate documents-manifest.json (see SETUP.md)
+npm run deploy            # astro build && deploy the Worker
 ```
 
 Run a single test file or name:
 
 ```bash
-npx vitest run src/components/react/AnnouncementsList.test.tsx
+npx vitest run test/unit/example.test.ts
 npx vitest run -t "shows an empty message"
+# Worker integration tests:
+npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 ```
 
 Node version is pinned in `.nvmrc` (run `nvm use`). CI (`.github/workflows/build.yml`)
@@ -36,38 +47,61 @@ locally before pushing.
 
 ## Architecture
 
-**Rendering model.** Pages are `.astro` files in `src/pages/` wrapped in
-`BaseLayout.astro`. All dynamic content is a React island mounted with
-`client:only="react"` (the data is fetched client-side from Firestore, so there is no
-SSR of live content). Static, build-time content (e.g. the Google Calendar embed in
-`calendar.astro`) is computed in the Astro frontmatter from `import.meta.env`.
+**Rendering model.** Pages are `.astro` files in `src/pages/`. The site is full SSR
+(`output: 'server'`); dynamic data is fetched from same-origin API endpoints under
+`src/pages/api/`. Runtime bindings and secrets are read via
+`import { env } from 'cloudflare:workers'`. Build-time `PUBLIC_*` vars are inlined by
+Astro from `.env`.
 
-**Firebase access is lazy and centralized.** `src/lib/firebase.ts` holds singleton
-getters (`getDb`, `getFirebaseAuth`, `getStorageInstance`) that initialize the app on
-first use and throw if config is absent. Never call `getFirestore`/`getAuth` directly
-elsewhere — go through these getters. Setting `PUBLIC_USE_EMULATORS=true` makes them
-connect to the local emulators (browser only).
+**Cloudflare bindings (`wrangler.toml`).** `DATABASE` (D1 `ashebrook-hoa`), `KV` (app
+KV), `SESSION` (KV for Astro sessions), `DOCS` (R2 `ashebrook-hoa-docs`).
 
-**Read/write split.**
+**HTTP endpoints (all under `src/pages/api/`).**
+- Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`
+- Gated document download (R2, tier-checked): `GET /api/files/[id]`
+- Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
+  `/api/admin/{owners,roles,members}`
+- Homeowner verification: `/api/verify/{request,confirm}`
+- Better Auth handler: `/api/auth/[...all]`
 
-- `src/lib/content.ts` — public read helpers (announcements, documents, dues, site
-  settings). Used by the public React islands.
-- `src/lib/admin.ts` — write helpers (create/update/delete, file upload). Used only by
-  the admin app.
-- `src/lib/types.ts` — shared Firestore data shapes plus `DEFAULT_*` fallbacks and
-  `DOCUMENT_CATEGORIES`. Reads merge stored data over the defaults, so missing fields
-  are safe.
+**Client helpers.**
+- `src/lib/content.ts` — public reads (fetch `/api/content/*` endpoints).
+- `src/lib/admin.ts` — board writes (fetch `/api/admin/*` endpoints).
+- `src/lib/types.ts` — shared shapes + `DEFAULT_*` fallbacks + `DOCUMENT_CATEGORIES` +
+  the `Visibility` type.
+- `src/lib/auth-client.ts` — Better Auth browser client.
 
-**Data model (Firestore).** Collections: `announcements`, `documents` (metadata only;
-PDFs live in Cloud Storage under `documents/`), `settings` (singleton docs `dues` and
-`site`), and `admins` (one doc per board member, keyed by Auth UID). A user is an admin
-iff a doc with their UID exists in `/admins`.
+**Server code (`src/server/`).** `auth/` (Better Auth config, Resend + Twilio senders),
+`authz/` (`getAuthContext`, `requireRole`, `requireBoard`, Turnstile check), `content/`
+(`visibility.ts` = `tierAllows`/`visibleTiers`; `reads.ts`), `db/` (Drizzle
+`schema.ts` + `auth-schema.ts`, `client.ts` = `getDb(env)`, `migrations/`), `roster/`,
+`verification/`.
 
-**Security is enforced by rules, not client code.** `firestore.rules` and
-`storage.rules` are the source of truth: public read, admin-only write, and `/admins`
-is console-managed (`allow write: if false`). The client `checkIsAdmin` is only for UI
+**Data model (D1 tables).** `announcements`, `documents` (metadata; files in R2 under
+`documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), plus Better
+Auth tables (`user`, `session`, `account`, `verification`, roster/owner tables). A
+user's role is a column on the user record; `board` is never self-grantable through the
+app.
 
-- Component specs live next to the component (`*.test.tsx`).
-- Page-level integration tests use the Astro Container API
-  (`src/test/pages.test.ts`) and **must** declare `// @vitest-environment node` at the
-  top — the container's esbuild compile conflicts with jsdom's `TextEncoder`.
+**Roles & access.** Roles `visitor | homeowner | board`; content visibility tiers
+`public | homeowner | board`. Access is enforced server-side and fail-closed (anonymous
+→ visitor; unknown → most restrictive).
+
+**Testing.**
+- `npm test` — jsdom component/unit specs (`vitest.config.ts`); files under
+  `test/unit/**` and component `*.test.tsx` files.
+- `npm run test:server` — Worker/D1 integration tests via
+  `@cloudflare/vitest-pool-workers` (`vitest.workers.config.ts`) under
+  `test/server/**`. These import `{ env, applyD1Migrations }` from `cloudflare:test`
+  and invoke handlers directly.
+
+**Deploy.**
+
+```bash
+npm run build                                      # astro build → dist/
+npx wrangler deploy -c dist/server/wrangler.json   # deploy the Worker
+```
+
+The root `wrangler.toml` intentionally has no `main` field — the adapter emits
+`dist/server/wrangler.json` with `main`, `assets`, and bindings, which is what you
+deploy with `-c`.

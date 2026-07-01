@@ -3,7 +3,7 @@
 This site is built with [Astro](https://astro.build) (public pages) + [React](https://react.dev)
 (the admin panel and interactive islands) and runs entirely on **Cloudflare**:
 
-- **Pages / Workers** — hosting + server-side rendering and API routes
+- **Workers** — hosting + server-side rendering and API routes
 - **D1** — the database (announcements, documents metadata, dues, site settings, accounts)
 - **R2** — document file storage (governing docs, minutes, etc.)
 - **KV** — session / rate-limit storage for authentication
@@ -65,12 +65,12 @@ Two kinds of configuration:
 
 **a) Server secrets** — copy `.dev.vars.example` to `.dev.vars` (gitignored) for local
 development, and set the same values as Cloudflare secrets for production
-(`npx wrangler secret put NAME`, or the Pages dashboard → Settings → Variables).
+(`npx wrangler secret put NAME`, or the Cloudflare dashboard → Workers → your Worker → Settings → Variables).
 
 | Secret | What it is |
 | --- | --- |
 | `BETTER_AUTH_SECRET` | A strong random string — generate with `openssl rand -base64 32` |
-| `BETTER_AUTH_URL` | Your site's URL (e.g. `https://valleys-ashebrook.pages.dev`) |
+| `BETTER_AUTH_URL` | Your site's URL (e.g. `https://valleys-at-ashebrook-hoa.jerryholland00.workers.dev`) |
 | `EMAIL_API_KEY`, `EMAIL_FROM` | Resend API key + the "from" address (verification / reset emails) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Twilio credentials + sending number (SMS codes) |
 | `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret (server-side verification) |
@@ -173,23 +173,28 @@ click to join. No extra setup.
 ## 10. Deploy
 
 ```bash
-npm run build                       # builds to dist/ with the Cloudflare adapter
-npx wrangler pages deploy dist      # deploy to Cloudflare Pages
+npm run build                                      # builds to dist/ with the Cloudflare adapter
+npx wrangler deploy -c dist/server/wrangler.json   # deploy the Worker
 ```
 
-Cloudflare prints your live URL (e.g. `https://valleys-ashebrook.pages.dev`). Set that as
-`BETTER_AUTH_URL` (step 3a) and as `site` in `astro.config.mjs`, then redeploy.
+The live Worker URL for this project is
+`https://valleys-at-ashebrook-hoa.jerryholland00.workers.dev` (a custom domain can be
+attached later — see Optional below). Set that URL as `BETTER_AUTH_URL` (step 3a) and
+as `site` in `astro.config.mjs`, then redeploy.
 
-> You can also connect the GitHub repo in the Cloudflare Pages dashboard for automatic
-> deploys on push instead of deploying from your machine.
+> **Note:** the root `wrangler.toml` intentionally has no `main` field — the
+> `@astrojs/cloudflare` adapter emits `dist/server/wrangler.json` with `main`, `assets`,
+> and the bindings at build time, which is what you deploy with `-c`. Adding `main` to
+> the root `wrangler.toml` breaks the build.
 
 ---
 
 ## Optional: custom domain
 
-In the Cloudflare dashboard → **Workers & Pages** → your project → **Custom domains**, add your
-domain and follow the DNS steps (buy one from any registrar, ~$10–15/yr; Cloudflare provides
-free SSL). Then update `BETTER_AUTH_URL` and `site` in `astro.config.mjs`.
+In the Cloudflare dashboard → **Workers & Pages** → your Worker → **Settings** → **Domains &
+Routes**, add your domain and follow the DNS steps (buy one from any registrar, ~$10–15/yr;
+Cloudflare provides free SSL). Then update `BETTER_AUTH_URL` and `site` in
+`astro.config.mjs`.
 
 ## Local development
 
@@ -198,7 +203,7 @@ npm run dev          # http://localhost:4321 (frontend)
 ```
 
 For local work against the D1/R2/KV bindings, run the app through Wrangler
-(`npx wrangler pages dev dist` after a build) so the bindings and `.dev.vars` secrets are
+(`npx wrangler dev` after a build) so the bindings and `.dev.vars` secrets are
 available. Migrations against the local database use `npm run db:migrate:local`.
 
 ## Day-to-day: how board members update the site
@@ -221,4 +226,4 @@ No setup needed — board members just:
 | Calendar & Meet links | The HOA's public Google Calendar |
 | Contact-form emails | Web3Forms → HOA inbox |
 | Verification codes | Email provider (Resend) + Twilio SMS |
-| Hosting | Cloudflare Pages / Workers |
+| Hosting | Cloudflare Workers |
