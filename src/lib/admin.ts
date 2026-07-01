@@ -1,6 +1,5 @@
-// Admin-only write helpers. All of these require the signed-in user to be in
-// the Firestore /admins collection — enforced by security rules, not just here.
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+// Admin-only write helpers.
+import { doc, getDoc } from 'firebase/firestore';
 import { getDb } from './firebase';
 import type { Announcement, DuesSettings, SiteSettings } from './types';
 
@@ -83,9 +82,19 @@ export async function deleteDocument(id: string): Promise<void> {
 
 // ---------- Settings (singletons) ----------
 export async function saveDues(dues: DuesSettings): Promise<void> {
-  await setDoc(doc(getDb(), 'settings', 'dues'), dues);
+  const res = await fetch('/api/admin/dues', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(dues),
+  });
+  if (!res.ok) throw new Error(`Save dues failed: ${res.status}`);
 }
 
 export async function saveSite(site: SiteSettings): Promise<void> {
-  await setDoc(doc(getDb(), 'settings', 'site'), site);
+  const res = await fetch('/api/admin/site', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(site),
+  });
+  if (!res.ok) throw new Error(`Save site failed: ${res.status}`);
 }
