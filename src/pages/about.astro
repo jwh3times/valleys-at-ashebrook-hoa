@@ -1,0 +1,17 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { DISCLAIMER_LONG, NEIGHBORHOOD } from '../lib/site';
+---
+
+<BaseLayout
+  title="About this site"
+  description={`About this independent, resident-run site for ${NEIGHBORHOOD} — and its relationship to the HOA.`}
+>
+  <div class="page-section">
+    <p class="eyebrow">About</p>
+    <h1 class="page-title">About this site</h1>
+    <div class="prose">
+      {DISCLAIMER_LONG.map((para) => <p class="page-lead">{para}</p>)}
+    </div>
+  </div>
+</BaseLayout>
