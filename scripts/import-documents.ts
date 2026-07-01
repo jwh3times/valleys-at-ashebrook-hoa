@@ -45,17 +45,28 @@ function sqlStr(v: string): string {
   return `'${v.replace(/'/g, "''")}'`;
 }
 
-export function buildInsertSql(entries: DocumentEntry[]): string {
+// Emit batched multi-row INSERTs. A single INSERT with one row per file would
+// approach SQLite's compound-term limit (~500) and D1's per-statement size cap
+// for a full archive, so split into batches.
+export function buildInsertSql(
+  entries: DocumentEntry[],
+  batchSize = 50,
+): string {
   const now = Math.floor(Date.now() / 1000);
   const cols =
     'id, title, category, visibility, r2_key, filename, size_bytes, content_type, uploaded_at, updated_at';
-  const values = entries
-    .map(
-      (e) =>
-        `(${sqlStr(e.id)}, ${sqlStr(e.title)}, ${sqlStr(e.category)}, ${sqlStr(e.visibility)}, ${sqlStr(e.r2Key)}, ${sqlStr(e.filename)}, ${e.sizeBytes}, ${sqlStr(e.contentType)}, ${now}, ${now})`,
-    )
-    .join(',\n');
-  return `INSERT INTO documents (${cols}) VALUES\n${values};\n`;
+  const statements: string[] = [];
+  for (let i = 0; i < entries.length; i += batchSize) {
+    const values = entries
+      .slice(i, i + batchSize)
+      .map(
+        (e) =>
+          `(${sqlStr(e.id)}, ${sqlStr(e.title)}, ${sqlStr(e.category)}, ${sqlStr(e.visibility)}, ${sqlStr(e.r2Key)}, ${sqlStr(e.filename)}, ${e.sizeBytes}, ${sqlStr(e.contentType)}, ${now}, ${now})`,
+      )
+      .join(',\n');
+    statements.push(`INSERT INTO documents (${cols}) VALUES\n${values};`);
+  }
+  return statements.join('\n') + '\n';
 }
 
 async function walkDirectory(dir: string): Promise<string[]> {
