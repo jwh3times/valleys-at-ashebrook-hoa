@@ -1,4 +1,4 @@
-# Setup Guide — Valleys at Ashebrook HOA Website
+# Setup Guide — The Valleys at Ashebrook Residents
 
 This site is built with [Astro](https://astro.build) (public pages) + [React](https://react.dev)
 (the admin panel and interactive islands) and runs entirely on **Cloudflare**:
@@ -27,7 +27,7 @@ this once.
   for day-to-day content editing.
 - Accounts for: an **email provider** (these instructions use [Resend](https://resend.com)),
   **[Twilio](https://twilio.com)** (SMS), and **[Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)** (free).
-- A **Google account** for the public HOA calendar (optional but recommended).
+- A **Google account** for the public community calendar (optional but recommended).
 - About 45 minutes.
 
 ---
@@ -36,7 +36,7 @@ this once.
 
 ```bash
 npm install
-npx wrangler login     # opens a browser; sign in to the HOA Cloudflare account
+npx wrangler login     # opens a browser; sign in to your Cloudflare account
 ```
 
 ## 2. Create the Cloudflare resources
@@ -153,8 +153,8 @@ The board can re-tier any document later from `/admin`.
 
 ## 8. Connect the community calendar (Google Calendar)
 
-1. Open [Google Calendar](https://calendar.google.com) with the HOA account (or create a
-   dedicated "Valleys at Ashebrook HOA" calendar).
+1. Open [Google Calendar](https://calendar.google.com) with your Google account (or
+   create a dedicated "Valleys at Ashebrook Residents" calendar).
 2. Calendar **Settings** → select the calendar → **Access permissions** → check **Make
    available to public** ("See all event details").
 3. Under **Integrate calendar**, copy the **Calendar ID** (looks like
@@ -166,8 +166,8 @@ click to join. No extra setup.
 
 ## 9. Connect the contact form (Web3Forms)
 
-1. Go to <https://web3forms.com>, enter the HOA email address, and get a free **Access Key**
-   (emailed to you). Submissions are delivered to that inbox.
+1. Go to <https://web3forms.com>, enter your contact email address, and get a free
+   **Access Key** (emailed to you). Submissions are delivered to that inbox.
 2. Put it in `PUBLIC_WEB3FORMS_KEY` (step 3b).
 
 ## 10. Deploy
@@ -215,6 +215,21 @@ No setup needed — board members just:
 3. Edit through the on-screen forms (announcements, documents + visibility tiers, dues, site
    settings) — changes appear on the site immediately.
 
+## Official mode
+
+The public site defaults to **unofficial mode**: it presents as an independent,
+resident-run information hub — the header shows a "Residents" tag instead of "Homeowners
+Association", the Dues nav link and dues/board-specific copy are hidden, and the footer
+(plus a dedicated `/about` page) carries a "not affiliated with the HOA" disclaimer.
+
+If the HOA board formally adopts the site, a board member can flip it on from the admin
+panel: `/admin` → **Site Settings** → check **Official mode** → **Save**. The change
+takes effect for every visitor immediately — no redeploy or rebuild needed, since the
+flag is read from D1 (the `settings` table) on every request. Official mode restores the
+"Homeowners Association" tag, the Dues nav link, "Pay Dues" / "Contact the Board" copy,
+and removes the disclaimer. Unchecking the box and saving reverts to unofficial mode just
+as quickly.
+
 ## Where things live (quick reference)
 
 | Thing | Where |
@@ -223,7 +238,7 @@ No setup needed — board members just:
 | Documents (files) | Cloudflare R2 (`ashebrook-hoa-docs`) + metadata in D1 (`documents`) |
 | Accounts, roles, roster, verification | Cloudflare D1 (Better Auth tables + `owners`, `user_property_links`) |
 | Auth sessions / rate limits | Cloudflare KV |
-| Calendar & Meet links | The HOA's public Google Calendar |
-| Contact-form emails | Web3Forms → HOA inbox |
+| Calendar & Meet links | The site's public Google Calendar |
+| Contact-form emails | Web3Forms → your inbox |
 | Verification codes | Email provider (Resend) + Twilio SMS |
 | Hosting | Cloudflare Workers |
