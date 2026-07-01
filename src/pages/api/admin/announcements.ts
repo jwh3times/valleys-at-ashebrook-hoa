@@ -60,6 +60,8 @@ export const PATCH: APIRoute = async ({ request }) => {
   const patch: Record<string, unknown> = {};
   for (const k of ['title', 'body', 'date', 'pinned', 'visibility'] as const)
     if (k in body) patch[k] = body[k];
+  if (Object.keys(patch).length === 0)
+    return new Response('Bad Request', { status: 400 });
   await getDb(env)
     .update(announcements)
     .set(patch)
