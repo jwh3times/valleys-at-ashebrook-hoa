@@ -51,3 +51,35 @@ export const manualApprovalQueue = sqliteTable('manual_approval_queue', {
     .default('pending'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
+
+export const documents = sqliteTable('documents', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  category: text('category').notNull(),
+  visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] })
+    .notNull()
+    .default('board'),
+  r2Key: text('r2_key').notNull(),
+  filename: text('filename').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  contentType: text('content_type').notNull(),
+  uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const announcements = sqliteTable('announcements', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  date: text('date').notNull(),
+  pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
+  visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] })
+    .notNull()
+    .default('public'),
+});
+
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});

@@ -1,5 +1,7 @@
 // Shared data shapes for content stored in Firestore.
 
+export type Visibility = 'public' | 'homeowner' | 'board';
+
 export interface Announcement {
   id: string;
   title: string;
@@ -7,6 +9,7 @@ export interface Announcement {
   /** ISO date string, e.g. "2026-06-28". */
   date: string;
   pinned?: boolean;
+  visibility: Visibility;
 }
 
 export interface DocumentItem {
@@ -19,6 +22,7 @@ export interface DocumentItem {
   storagePath: string;
   /** ISO date the document was added/updated. */
   updatedAt: string;
+  visibility: Visibility;
 }
 
 export interface PaymentOption {
