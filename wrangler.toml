@@ -1,17 +1,21 @@
 name = "valleys-at-ashebrook-hoa"
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "DATABASE"
 database_name = "ashebrook-hoa"
-database_id = "local-dev-placeholder"  # replace with `wrangler d1 create` output at deploy time
+database_id = "8abbb40e-5436-4884-b3af-583d92368fe0"
 migrations_dir = "src/server/db/migrations"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "local-dev-placeholder"           # replace with `wrangler kv namespace create` output at deploy time
+id = "f778a5efde9f42e491ea3f35fe2a007e"
+
+# Astro Sessions store (auto-bound as SESSION by @astrojs/cloudflare)
+[[kv_namespaces]]
+binding = "SESSION"
+id = "1974eb0f5ccd4c4e9c12bdde96308e72"
 
 [[r2_buckets]]
 binding = "DOCS"
