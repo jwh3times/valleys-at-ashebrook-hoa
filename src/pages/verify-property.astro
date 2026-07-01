@@ -11,11 +11,14 @@ import { VerifyPropertyForm } from '../components/react/AuthForms';
     <p class="eyebrow">Homeowner access</p>
     <h1 class="page-title">Verify Your Property</h1>
     <p class="page-lead">
-      Enter your property address to receive a verification code. Once verified, you will have
-      full homeowner access to the site.
+      Enter your property address to receive a verification code. Once verified,
+      you will have full homeowner access to the site.
     </p>
 
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <script
+      src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+      async
+      defer></script>
     <div
       class="cf-turnstile"
       data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY}

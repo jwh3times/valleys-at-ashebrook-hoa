@@ -11,5 +11,9 @@ export interface AuthState {
 export function useAuth(): AuthState {
   const { data, isPending } = authClient.useSession();
   const role = (data?.user as { role?: string } | undefined)?.role ?? 'visitor';
-  return { loading: isPending, user: data?.user ?? null, isAdmin: role === 'board' };
+  return {
+    loading: isPending,
+    user: data?.user ?? null,
+    isAdmin: role === 'board',
+  };
 }

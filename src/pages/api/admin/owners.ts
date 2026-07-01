@@ -26,7 +26,8 @@ export const POST: APIRoute = async ({ request }) => {
     email?: string;
     notes?: string;
   };
-  if (!body.fullName || !body.address) return new Response('Bad Request', { status: 400 });
+  if (!body.fullName || !body.address)
+    return new Response('Bad Request', { status: 400 });
   const now = new Date();
   await getDb(env)
     .insert(owners)
@@ -62,10 +63,19 @@ export const PATCH: APIRoute = async ({ request }) => {
   if (!body.id) return new Response('Bad Request', { status: 400 });
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   const src = body as Record<string, unknown>;
-  for (const k of ['fullName', 'address', 'unit', 'phone', 'email', 'status', 'notes']) {
+  for (const k of [
+    'fullName',
+    'address',
+    'unit',
+    'phone',
+    'email',
+    'status',
+    'notes',
+  ]) {
     if (k in src) patch[k] = src[k];
   }
-  if (body.address !== undefined) patch.addressNormalized = normalizeAddress(body.address);
+  if (body.address !== undefined)
+    patch.addressNormalized = normalizeAddress(body.address);
   await getDb(env).update(owners).set(patch).where(eq(owners.id, body.id));
   return new Response(null, { status: 204 });
 };

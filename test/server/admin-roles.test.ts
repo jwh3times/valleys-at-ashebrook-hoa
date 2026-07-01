@@ -19,7 +19,9 @@ describe('admin members + roles', () => {
     expect(res.status).toBe(401);
   });
   it('rejects unauthenticated members list with 401', async () => {
-    const res = await membersGet({ request: new Request('http://localhost/api/admin/members') } as never);
+    const res = await membersGet({
+      request: new Request('http://localhost/api/admin/members'),
+    } as never);
     expect(res.status).toBe(401);
   });
 });

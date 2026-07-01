@@ -9,7 +9,9 @@ export function generateCode(): string {
 export async function hashCode(code: string): Promise<string> {
   const data = new TextEncoder().encode(code);
   const digest = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export async function verifyCode(code: string, hash: string): Promise<boolean> {

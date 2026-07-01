@@ -14,7 +14,11 @@ describe('auth config', () => {
       new Request('http://localhost/api/auth/sign-up/email', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'a@b.com', password: 'short', name: 'A' }),
+        body: JSON.stringify({
+          email: 'a@b.com',
+          password: 'short',
+          name: 'A',
+        }),
       }),
     );
     expect(res.status).toBeGreaterThanOrEqual(400);
