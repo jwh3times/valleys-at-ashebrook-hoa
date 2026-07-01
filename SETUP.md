@@ -141,15 +141,15 @@ The board member can then sign in at `/login` and change their password via **Fo
 ## 7. Import the document archive
 
 Load the HOA document archive into the library. Each file's visibility tier
-(public / homeowner / board) and category are auto-proposed from its folder path; the board
-reviews and adjusts tiers in `/admin` afterward.
+(public / homeowner / board) and category are auto-proposed from its folder path.
 
 ```bash
-npm run docs:import          # generates private/documents-manifest.json — a review manifest
-                             # of the folder→tier mapping; review and adjust tiers, then
-                             # complete the R2 upload + D1 insert as a follow-up step with
-                             # the Worker bindings configured
+npm run docs:import              # dry run → writes private/documents-manifest.json (review the tiers!)
+# Review the manifest; sensitive folders default to the board tier (fail-safe). Adjust if needed.
+npm run docs:import -- --commit  # uploads the files to R2 and inserts the documents rows into D1
 ```
+
+The board can re-tier any document later from `/admin`.
 
 ## 8. Connect the community calendar (Google Calendar)
 

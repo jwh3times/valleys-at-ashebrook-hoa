@@ -1,11 +1,72 @@
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { pathToDocMeta } from './doc-tiers';
 
-export interface DocumentManifestEntry {
-  filename: string;
+export interface DocumentEntry {
+  id: string;
   relativePath: string;
-  visibility: string;
+  filename: string;
+  title: string;
   category: string;
+  visibility: string;
+  r2Key: string;
+  sizeBytes: number;
+  contentType: string;
+}
+
+const MIME: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx':
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx':
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.msg': 'application/vnd.ms-outlook',
+  '.zip': 'application/zip',
+  '.rtf': 'application/rtf',
+};
+
+export function contentTypeFor(filename: string): string {
+  const dot = filename.lastIndexOf('.');
+  const ext = dot === -1 ? '' : filename.slice(dot).toLowerCase();
+  return MIME[ext] ?? 'application/octet-stream';
+}
+
+function sqlStr(v: string): string {
+  return `'${v.replace(/'/g, "''")}'`;
+}
+
+// Emit batched multi-row INSERTs. A single INSERT with one row per file would
+// approach SQLite's compound-term limit (~500) and D1's per-statement size cap
+// for a full archive, so split into batches.
+export function buildInsertSql(
+  entries: DocumentEntry[],
+  batchSize = 50,
+): string {
+  const now = Math.floor(Date.now() / 1000);
+  const cols =
+    'id, title, category, visibility, r2_key, filename, size_bytes, content_type, uploaded_at, updated_at';
+  const statements: string[] = [];
+  for (let i = 0; i < entries.length; i += batchSize) {
+    const values = entries
+      .slice(i, i + batchSize)
+      .map(
+        (e) =>
+          `(${sqlStr(e.id)}, ${sqlStr(e.title)}, ${sqlStr(e.category)}, ${sqlStr(e.visibility)}, ${sqlStr(e.r2Key)}, ${sqlStr(e.filename)}, ${e.sizeBytes}, ${sqlStr(e.contentType)}, ${now}, ${now})`,
+      )
+      .join(',\n');
+    statements.push(`INSERT INTO documents (${cols}) VALUES\n${values};`);
+  }
+  return statements.join('\n') + '\n';
 }
 
 async function walkDirectory(dir: string): Promise<string[]> {
@@ -34,6 +95,7 @@ async function main() {
   const fs = await import('node:fs');
   const path = await import('node:path');
 
+  const commit = process.argv.includes('--commit');
   const sourceDir = 'private/HOA_files';
 
   if (!fs.existsSync(sourceDir)) {
@@ -42,32 +104,97 @@ async function main() {
   }
 
   const files = await walkDirectory(sourceDir);
-  const manifest: DocumentManifestEntry[] = [];
+  const entries: DocumentEntry[] = [];
 
-  for (const file of files) {
-    const fullPath = path.join(sourceDir, file);
+  for (const relativePath of files) {
+    const fullPath = path.join(sourceDir, relativePath);
     const stats = fs.statSync(fullPath);
-    if (stats.isFile()) {
-      const meta = pathToDocMeta(file);
-      manifest.push({
-        filename: path.basename(file),
-        relativePath: file,
-        visibility: meta.visibility,
-        category: meta.category,
-      });
-    }
+    if (!stats.isFile()) continue;
+
+    const filename = path.basename(relativePath);
+    const safeName = filename.replace(/[^\w.\-]/g, '_');
+    const id = crypto.randomUUID();
+    const r2Key = `documents/${id}/${safeName}`;
+    const { visibility, category } = pathToDocMeta(relativePath);
+    const title = filename.replace(/\.[^.]+$/, '');
+    const sizeBytes = stats.size;
+    const contentType = contentTypeFor(filename);
+
+    entries.push({
+      id,
+      relativePath,
+      filename,
+      title,
+      category,
+      visibility,
+      r2Key,
+      sizeBytes,
+      contentType,
+    });
   }
 
-  // Write manifest for review
+  // Always write the manifest and SQL regardless of mode.
   const manifestPath = 'private/documents-manifest.json';
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  fs.writeFileSync(manifestPath, JSON.stringify(entries, null, 2));
+
+  const sqlPath = 'private/documents-import.sql';
+  fs.writeFileSync(sqlPath, buildInsertSql(entries));
 
   console.log(
-    `Processed ${manifest.length} documents. Manifest written to ${manifestPath}.`,
+    `Processed ${entries.length} documents. Manifest written to ${manifestPath}, SQL to ${sqlPath}.`,
   );
-  console.log(
-    'To upload to R2 and insert rows, run with Worker bindings configured.',
+
+  if (!commit) {
+    console.log(
+      `\nReview ${manifestPath} (especially the board/homeowner tiers), then re-run with \`-- --commit\` to upload.`,
+    );
+    return;
+  }
+
+  // Commit phase: upload each file to R2, then run the D1 insert.
+  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const total = entries.length;
+
+  for (let i = 0; i < total; i++) {
+    const entry = entries[i];
+    const fullPath = path.resolve(sourceDir, entry.relativePath);
+    console.log(
+      `[${i + 1}/${total}] Uploading ${entry.filename} → ${entry.r2Key}`,
+    );
+    execFileSync(
+      npx,
+      [
+        'wrangler',
+        'r2',
+        'object',
+        'put',
+        `ashebrook-hoa-docs/${entry.r2Key}`,
+        '--file',
+        fullPath,
+        '--remote',
+        '--content-type',
+        entry.contentType,
+      ],
+      { stdio: 'inherit' },
+    );
+  }
+
+  console.log(`\nAll ${total} files uploaded. Running D1 insert...`);
+  execFileSync(
+    npx,
+    [
+      'wrangler',
+      'd1',
+      'execute',
+      'ashebrook-hoa',
+      '--remote',
+      '--file',
+      sqlPath,
+    ],
+    { stdio: 'inherit' },
   );
+
+  console.log(`\nDone. ${total} documents imported.`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1])
