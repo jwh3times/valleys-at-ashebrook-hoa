@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('./useAuth', () => ({ useAuth: vi.fn() }));
-vi.mock('../../lib/firebase', () => ({
-  isFirebaseConfigured: true,
-  getFirebaseAuth: vi.fn(() => ({})),
-}));
 vi.mock('../../lib/auth-client', () => ({
   authClient: {
     signOut: vi.fn().mockResolvedValue({}),
@@ -16,7 +12,7 @@ vi.mock('../../lib/auth-client', () => ({
     useSession: vi.fn().mockReturnValue({ data: null, isPending: false }),
   },
 }));
-// Keep the manager tabs from touching Firestore on mount.
+// Keep the manager tabs from making real API calls on mount.
 vi.mock('../../lib/content', async (orig) => ({
   ...(await orig<typeof import('../../lib/content')>()),
   fetchAnnouncements: vi.fn().mockResolvedValue([]),

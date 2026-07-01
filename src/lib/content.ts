@@ -1,66 +1,33 @@
-// Client-side read helpers for public content stored in Firestore.
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-} from 'firebase/firestore';
-import { getDb } from './firebase';
-import {
-  DEFAULT_DUES_SETTINGS,
-  DEFAULT_SITE_SETTINGS,
-  type Announcement,
-  type DocumentItem,
-  type DuesSettings,
-  type SiteSettings,
+// Client-side read helpers — fetches public content from the D1-backed API endpoints.
+import type {
+  Announcement,
+  DocumentItem,
+  DuesSettings,
+  SiteSettings,
 } from './types';
 
 export async function fetchAnnouncements(): Promise<Announcement[]> {
-  const db = getDb();
-  const snap = await getDocs(
-    query(collection(db, 'announcements'), orderBy('date', 'desc')),
-  );
-  const items = snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<Announcement, 'id'>),
-  }));
-  // Pinned announcements float to the top, otherwise keep date-desc order.
-  return items.sort(
-    (a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false),
-  );
+  const res = await fetch('/api/content/announcements');
+  if (!res.ok) throw new Error(`announcements ${res.status}`);
+  return (await res.json()) as Announcement[];
 }
 
 export async function fetchDocuments(): Promise<DocumentItem[]> {
-  const db = getDb();
-  const snap = await getDocs(
-    query(collection(db, 'documents'), orderBy('title')),
-  );
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...(d.data() as Omit<DocumentItem, 'id'>),
-  }));
+  const res = await fetch('/api/content/documents');
+  if (!res.ok) throw new Error(`documents ${res.status}`);
+  return (await res.json()) as DocumentItem[];
 }
 
 export async function fetchDuesSettings(): Promise<DuesSettings> {
-  const db = getDb();
-  const snap = await getDoc(doc(db, 'settings', 'dues'));
-  if (!snap.exists()) return DEFAULT_DUES_SETTINGS;
-  return {
-    ...DEFAULT_DUES_SETTINGS,
-    ...(snap.data() as Partial<DuesSettings>),
-  };
+  const res = await fetch('/api/content/dues');
+  if (!res.ok) throw new Error(`dues ${res.status}`);
+  return (await res.json()) as DuesSettings;
 }
 
 export async function fetchSiteSettings(): Promise<SiteSettings> {
-  const db = getDb();
-  const snap = await getDoc(doc(db, 'settings', 'site'));
-  if (!snap.exists()) return DEFAULT_SITE_SETTINGS;
-  return {
-    ...DEFAULT_SITE_SETTINGS,
-    ...(snap.data() as Partial<SiteSettings>),
-  };
+  const res = await fetch('/api/content/site');
+  if (!res.ok) throw new Error(`site ${res.status}`);
+  return (await res.json()) as SiteSettings;
 }
 
 /** Group documents by their category for display. */

@@ -2,9 +2,21 @@ import { useEffect, useState } from 'react';
 import { fetchAnnouncements } from '../../lib/content';
 import { deleteAnnouncement, saveAnnouncement } from '../../lib/admin';
 import { formatDate, todayIso } from '../../lib/format';
-import type { Announcement } from '../../lib/types';
+import type { Announcement, Visibility } from '../../lib/types';
 
-const empty = { title: '', body: '', date: todayIso(), pinned: false };
+const empty: {
+  title: string;
+  body: string;
+  date: string;
+  pinned: boolean;
+  visibility: Visibility;
+} = {
+  title: '',
+  body: '',
+  date: todayIso(),
+  pinned: false,
+  visibility: 'public',
+};
 
 export default function AnnouncementsManager() {
   const [items, setItems] = useState<Announcement[]>([]);
@@ -26,7 +38,13 @@ export default function AnnouncementsManager() {
 
   function startEdit(a: Announcement) {
     setEditingId(a.id);
-    setForm({ title: a.title, body: a.body, date: a.date, pinned: !!a.pinned });
+    setForm({
+      title: a.title,
+      body: a.body,
+      date: a.date,
+      pinned: !!a.pinned,
+      visibility: a.visibility,
+    });
     setMsg('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -47,6 +65,7 @@ export default function AnnouncementsManager() {
           body: form.body,
           date: form.date,
           pinned: form.pinned,
+          visibility: form.visibility,
         },
         editingId ?? undefined,
       );
@@ -72,8 +91,9 @@ export default function AnnouncementsManager() {
         <h1>Announcements</h1>
       </div>
       <p className="admin-panel__intro">
-        Anything you publish here appears on the public Home and Announcements
-        pages.
+        Announcements appear on the Home and Announcements pages. Use the
+        Visibility field to control who sees each one: Public (everyone),
+        Homeowners only, or Board only.
       </p>
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
@@ -133,6 +153,22 @@ export default function AnnouncementsManager() {
           />
           Pin to top
         </label>
+        <div className="field" style={{ marginBottom: '18px' }}>
+          <label>Visibility</label>
+          <select
+            value={form.visibility}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                visibility: e.target.value as typeof form.visibility,
+              })
+            }
+          >
+            <option value="public">Public</option>
+            <option value="homeowner">Homeowners only</option>
+            <option value="board">Board only</option>
+          </select>
+        </div>
         <div className="btn-row">
           <button className="btn btn--small" type="submit" disabled={busy}>
             {busy ? 'Saving…' : editingId ? 'Save Changes' : 'Publish'}

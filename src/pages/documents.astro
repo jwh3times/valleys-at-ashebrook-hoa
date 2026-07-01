@@ -1,7 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import DocumentsList from '../components/react/DocumentsList.tsx';
-import ConfigNotice from '../components/react/ConfigNotice.tsx';
 ---
 
 <BaseLayout
@@ -16,7 +15,6 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
       to download the PDF.
     </p>
 
-    <ConfigNotice client:only="react" />
     <DocumentsList client:only="react" />
   </div>
 </BaseLayout>

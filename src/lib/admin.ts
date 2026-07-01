@@ -1,49 +1,35 @@
-// Admin-only write helpers. All of these require the signed-in user to be in
-// the Firestore /admins collection — enforced by security rules, not just here.
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
-import {
-  deleteObject,
-  getDownloadURL,
-  ref,
-  uploadBytes,
-} from 'firebase/storage';
-import { getDb, getStorageInstance } from './firebase';
-import type {
-  Announcement,
-  DocumentItem,
-  DuesSettings,
-  SiteSettings,
-} from './types';
-
-/** Check whether a user UID has board-admin rights. */
-export async function checkIsAdmin(uid: string): Promise<boolean> {
-  const snap = await getDoc(doc(getDb(), 'admins', uid));
-  return snap.exists();
-}
+// Admin-only write helpers.
+import type { Announcement, DuesSettings, SiteSettings } from './types';
 
 // ---------- Announcements ----------
 export async function saveAnnouncement(
   data: Omit<Announcement, 'id'>,
   id?: string,
 ): Promise<void> {
-  const db = getDb();
   if (id) {
-    await updateDoc(doc(db, 'announcements', id), data);
+    const res = await fetch('/api/admin/announcements', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, ...data }),
+    });
+    if (!res.ok) throw new Error(`Update failed: ${res.status}`);
   } else {
-    await addDoc(collection(db, 'announcements'), data);
+    const res = await fetch('/api/admin/announcements', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`Create failed: ${res.status}`);
   }
 }
 
 export async function deleteAnnouncement(id: string): Promise<void> {
-  await deleteDoc(doc(getDb(), 'announcements', id));
+  const res = await fetch('/api/admin/announcements', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
 // ---------- Documents ----------
@@ -51,37 +37,56 @@ export async function uploadDocument(
   file: File,
   title: string,
   category: string,
+  visibility: string = 'board',
 ): Promise<void> {
-  const storage = getStorageInstance();
-  const safeName = file.name.replace(/[^\w.\-]+/g, '_');
-  const storagePath = `documents/${Date.now()}-${safeName}`;
-  const fileRef = ref(storage, storagePath);
-  await uploadBytes(fileRef, file, { contentType: 'application/pdf' });
-  const url = await getDownloadURL(fileRef);
-  await addDoc(collection(getDb(), 'documents'), {
-    title,
-    category,
-    url,
-    storagePath,
-    updatedAt: new Date().toISOString().slice(0, 10),
-  } satisfies Omit<DocumentItem, 'id'>);
+  const form = new FormData();
+  form.set('file', file);
+  form.set('title', title);
+  form.set('category', category);
+  form.set('visibility', visibility);
+  const res = await fetch('/api/admin/documents', {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
 }
 
-export async function deleteDocument(item: DocumentItem): Promise<void> {
-  // Remove the stored file first, then its metadata.
-  try {
-    await deleteObject(ref(getStorageInstance(), item.storagePath));
-  } catch {
-    // File may already be gone; continue removing the metadata.
-  }
-  await deleteDoc(doc(getDb(), 'documents', item.id));
+export async function editDocument(
+  id: string,
+  patch: { title?: string; category?: string; visibility?: string },
+): Promise<void> {
+  const res = await fetch('/api/admin/documents', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id, ...patch }),
+  });
+  if (!res.ok) throw new Error(`Edit failed: ${res.status}`);
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch('/api/admin/documents', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
 // ---------- Settings (singletons) ----------
 export async function saveDues(dues: DuesSettings): Promise<void> {
-  await setDoc(doc(getDb(), 'settings', 'dues'), dues);
+  const res = await fetch('/api/admin/dues', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(dues),
+  });
+  if (!res.ok) throw new Error(`Save dues failed: ${res.status}`);
 }
 
 export async function saveSite(site: SiteSettings): Promise<void> {
-  await setDoc(doc(getDb(), 'settings', 'site'), site);
+  const res = await fetch('/api/admin/site', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(site),
+  });
+  if (!res.ok) throw new Error(`Save site failed: ${res.status}`);
 }
