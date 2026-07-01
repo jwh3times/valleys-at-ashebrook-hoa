@@ -2,8 +2,12 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
 import { NEIGHBORHOOD } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 
-const official = Astro.locals.site.officialMode;
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this page is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+const official = site.officialMode;
 const description = official
   ? 'Official website for the Valleys at Ashebrook Homeowners Association — announcements, community calendar, governing documents, dues, and board contact.'
   : `An independent, resident-run hub for ${NEIGHBORHOOD} — announcements, the community calendar, and documents in one place.`;

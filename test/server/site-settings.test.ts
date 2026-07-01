@@ -33,4 +33,20 @@ describe('getSiteSettings', () => {
     expect(s.welcomeHeading).toBe('Hi');
     expect(s.officialMode).toBe(false);
   });
+
+  // Placed last: this seeds a malformed value that overwrites the row, so it
+  // must not run before the earlier cases that depend on well-formed data.
+  it('fails closed to defaults when the stored value is malformed JSON', async () => {
+    const value = '{not json';
+    await getDb(env)
+      .insert(settings)
+      .values({ key: 'site', value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
+      });
+    const s = await getSiteSettings(env);
+    expect(s.officialMode).toBe(false);
+    expect(s.siteName).toBe(DEFAULT_SITE_SETTINGS.siteName);
+  });
 });

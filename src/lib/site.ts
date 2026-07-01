@@ -52,7 +52,11 @@ export function brandTag(officialMode: boolean): string {
 
 /** Name shown in titles + footer copyright: the org name in official mode, else the admin-set site name. */
 export function displayName(s: ModeName): string {
-  return s.officialMode ? OFFICIAL_ORG_NAME : s.siteName;
+  // Off-mode name is the fixed resident brand, NOT the stored siteName: a legacy
+  // settings blob carries the old default hoaName ("Valleys at Ashebrook HOA"), which
+  // must never surface in unofficial mode. siteName is not admin-editable, so the
+  // constant is the source of truth here.
+  return s.officialMode ? OFFICIAL_ORG_NAME : SITE_NAME;
 }
 
 /** Full <title> string; "Home" gets no suffix separator. */

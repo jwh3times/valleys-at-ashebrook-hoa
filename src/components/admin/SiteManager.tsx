@@ -44,7 +44,7 @@ export default function SiteManager() {
       </div>
       <p className="admin-panel__intro">
         Edit the headline and intro copy that appear across the public pages,
-        plus the board’s contact email.
+        plus the public contact email.
       </p>
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
