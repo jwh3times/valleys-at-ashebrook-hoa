@@ -35,7 +35,9 @@ describe('ContactForm', () => {
     await user.type(screen.getByLabelText(/message/i), 'Hello board');
     await user.click(screen.getByRole('button', { name: /send message/i }));
 
-    expect(await screen.findByText(/Thank you/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Thanks — your message has been sent/i),
+    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.web3forms.com/submit',
       expect.objectContaining({ method: 'POST' }),

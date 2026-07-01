@@ -1,19 +1,38 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import ContactForm from '../components/react/ContactForm.tsx';
+import { OFFICIAL_ORG_NAME, NEIGHBORHOOD } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this page is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+const official = site.officialMode;
 ---
 
 <BaseLayout
   title="Contact"
-  description="Contact the Valleys at Ashebrook HOA board."
+  description={official
+    ? `Contact the ${OFFICIAL_ORG_NAME} board.`
+    : `Contact the resident who maintains this independent ${NEIGHBORHOOD} site.`}
 >
   <div class="page-section">
     <p class="eyebrow">Get in touch</p>
-    <h1 class="page-title">Contact the Board</h1>
-    <p class="page-lead">
-      Send a message and it goes straight to the board’s inbox. We typically
-      reply within a few days.
-    </p>
+    <h1 class="page-title">{official ? 'Contact the Board' : 'Contact'}</h1>
+    {
+      official ? (
+        <p class="page-lead">
+          Send a message and it goes straight to the board’s inbox. We typically
+          reply within a few days.
+        </p>
+      ) : (
+        <p class="page-lead">
+          Send a message and it reaches the resident who maintains this site.
+          Note this site is not affiliated with the HOA — for official HOA
+          business, contact the HOA or its management company directly.
+        </p>
+      )
+    }
 
     <div class="contact-grid">
       <ContactForm client:only="react" />
@@ -24,23 +43,26 @@ import ContactForm from '../components/react/ContactForm.tsx';
           <div>
             <div class="contact-aside__label">Email</div>
             <div class="contact-aside__val">
-              The form reaches the board inbox directly — no separate email
-              needed.
+              The form reaches the inbox directly — no separate email needed.
             </div>
           </div>
           <div>
             <div class="contact-aside__label">Mail</div>
             <div class="contact-aside__val">
-              Valleys at Ashebrook HOA<br />Raleigh, NC
+              {official ? OFFICIAL_ORG_NAME : NEIGHBORHOOD}<br />Raleigh, NC
             </div>
           </div>
-          <div>
-            <div class="contact-aside__label">Board meetings</div>
-            <div class="contact-aside__val">
-              Quarterly and open to all owners. See the Calendar for the next
-              date.
-            </div>
-          </div>
+          {
+            official && (
+              <div>
+                <div class="contact-aside__label">Board meetings</div>
+                <div class="contact-aside__val">
+                  Quarterly and open to all owners. See the Calendar for the
+                  next date.
+                </div>
+              </div>
+            )
+          }
         </div>
       </aside>
     </div>

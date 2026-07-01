@@ -70,7 +70,7 @@ describe('AdminApp', () => {
     });
     render(<AdminApp />);
     expect(
-      screen.getByRole('heading', { name: /board admin/i }),
+      screen.getByRole('heading', { name: /site admin/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Documents' }),

@@ -1,8 +1,22 @@
 ---
+import { displayName, DISCLAIMER_SHORT } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+
 const year = new Date().getFullYear();
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this component is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+const name = displayName(site);
 ---
 
 <footer class="site-footer">
-  <span>&copy; {year} Valleys at Ashebrook HOA &middot; Raleigh, NC</span>
-  <a class="site-footer__domain" href="/">valleys-ashebrook.web.app</a>
+  <span>&copy; {year} {name} &middot; Raleigh, NC</span>
+  {
+    !site.officialMode && (
+      <span class="site-footer__disclaimer">
+        {DISCLAIMER_SHORT} <a href="/about">About this site</a>
+      </span>
+    )
+  }
+  <a class="site-footer__domain" href="/">ashebrookresidents.com</a>
 </footer>

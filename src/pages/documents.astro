@@ -1,18 +1,19 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import DocumentsList from '../components/react/DocumentsList.tsx';
+import { NEIGHBORHOOD } from '../lib/site';
 ---
 
 <BaseLayout
   title="Documents"
-  description="Governing documents, meeting minutes, financials, and forms for the Valleys at Ashebrook HOA."
+  description={`Governing documents, meeting minutes, financials, and forms for ${NEIGHBORHOOD}.`}
 >
   <div class="page-section">
     <p class="eyebrow">Reference</p>
     <h1 class="page-title">Governing Documents</h1>
     <p class="page-lead">
-      Official documents for the Valleys at Ashebrook community. Click any file
-      to download the PDF.
+      Documents for the Valleys at Ashebrook community. Click any file to
+      download the PDF.
     </p>
 
     <DocumentsList client:only="react" />

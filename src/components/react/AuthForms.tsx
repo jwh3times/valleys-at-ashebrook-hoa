@@ -108,7 +108,7 @@ export function VerifyPropertyForm() {
     const data = (await res.json()) as { ok?: boolean; queued?: boolean };
     if (data.queued)
       setMsg(
-        'Sent to the board for manual review — they will confirm your account.',
+        "Sent for manual review — you'll get a confirmation once your account is approved.",
       );
     else if (data.ok) {
       setMsg('Code sent — check your phone/email.');

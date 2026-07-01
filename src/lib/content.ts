@@ -1,9 +1,10 @@
 // Client-side read helpers — fetches public content from the D1-backed API endpoints.
-import type {
-  Announcement,
-  DocumentItem,
-  DuesSettings,
-  SiteSettings,
+import {
+  type Announcement,
+  type DocumentItem,
+  type DuesSettings,
+  type SiteSettings,
+  normalizeSiteSettings,
 } from './types';
 
 export async function fetchAnnouncements(): Promise<Announcement[]> {
@@ -27,7 +28,7 @@ export async function fetchDuesSettings(): Promise<DuesSettings> {
 export async function fetchSiteSettings(): Promise<SiteSettings> {
   const res = await fetch('/api/content/site');
   if (!res.ok) throw new Error(`site ${res.status}`);
-  return (await res.json()) as SiteSettings;
+  return normalizeSiteSettings(await res.json());
 }
 
 /** Group documents by their category for display. */

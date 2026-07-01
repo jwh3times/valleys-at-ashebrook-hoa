@@ -1,6 +1,8 @@
 ---
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import { siteTitle } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 import '../styles/global.css';
 
 interface Props {
@@ -11,10 +13,11 @@ interface Props {
 }
 
 const { title, description, bare = false } = Astro.props;
-const fullTitle =
-  title === 'Home'
-    ? 'Valleys at Ashebrook HOA'
-    : `${title} | Valleys at Ashebrook HOA`;
+// Astro.locals.site is set by middleware on every real request; the Astro
+// Container API (used in page tests) does not run middleware, so fall back
+// to the default settings to keep the chrome renderable there.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+const fullTitle = siteTitle(title, site);
 ---
 
 <!doctype html>

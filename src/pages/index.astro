@@ -1,25 +1,50 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
+import { NEIGHBORHOOD } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this page is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+const official = site.officialMode;
+const description = official
+  ? 'Official website for the Valleys at Ashebrook Homeowners Association — announcements, community calendar, governing documents, dues, and board contact.'
+  : `An independent, resident-run hub for ${NEIGHBORHOOD} — announcements, the community calendar, and documents in one place.`;
 ---
 
-<BaseLayout
-  title="Home"
-  description="Official website for the Valleys at Ashebrook Homeowners Association — announcements, community calendar, governing documents, dues, and board contact."
->
+<BaseLayout title="Home" description={description}>
   <section class="hero">
     <span class="hero__plat hero__plat--a" aria-hidden="true"></span>
     <span class="hero__plat hero__plat--b" aria-hidden="true"></span>
     <div class="hero__inner">
       <p class="eyebrow eyebrow--onnavy">Raleigh, North Carolina</p>
       <h1>A well-kept community, kept simple.</h1>
-      <p>
-        Announcements, the community calendar, governing documents, and dues —
-        all in one place for every Ashebrook homeowner.
-      </p>
+      {
+        official ? (
+          <p>
+            Announcements, the community calendar, governing documents, and dues
+            — all in one place for every Ashebrook homeowner.
+          </p>
+        ) : (
+          <p>
+            Announcements, the community calendar, and documents — gathered in
+            one place for neighbors in {NEIGHBORHOOD}.
+          </p>
+        )
+      }
       <div class="hero__cta">
-        <a class="btn btn--light" href="/dues">Pay Dues</a>
-        <a class="btn btn--ghost-light" href="/documents">View Documents</a>
+        {
+          official && (
+            <a class="btn btn--light" href="/dues">
+              Pay Dues
+            </a>
+          )
+        }
+        <a
+          class={official ? 'btn btn--ghost-light' : 'btn btn--light'}
+          href="/documents">View Documents</a
+        >
       </div>
     </div>
   </section>
@@ -37,8 +62,8 @@ import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
       <h2>Upcoming</h2>
       <div class="cal-note">
         <div class="cal-note__title">Meetings &amp; events</div>
-        Board meetings and community events are posted on our shared Google Calendar.
-        Open any event for details and a Google Meet link.
+        Community events are posted on our shared Google Calendar. Open any event
+        for details and a Google Meet link.
       </div>
       <a class="subscribe-box" href="/calendar"
         >+ Subscribe to the community calendar</a
@@ -47,17 +72,29 @@ import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
   </div>
 
   <div class="tiles">
-    <a class="tile" href="/dues">
-      <div class="tile__title">Pay Your Dues →</div>
-      <div class="tile__desc">PayPal, Venmo, Zelle, or check.</div>
-    </a>
+    {
+      official && (
+        <a class="tile" href="/dues">
+          <div class="tile__title">Pay Your Dues →</div>
+          <div class="tile__desc">PayPal, Venmo, Zelle, or check.</div>
+        </a>
+      )
+    }
     <a class="tile" href="/documents">
-      <div class="tile__title">Governing Documents →</div>
-      <div class="tile__desc">CC&amp;Rs, bylaws, and meeting minutes.</div>
+      <div class="tile__title">Documents →</div>
+      <div class="tile__desc">Governing documents, minutes, and forms.</div>
     </a>
     <a class="tile" href="/contact">
-      <div class="tile__title">Contact the Board →</div>
-      <div class="tile__desc">Questions go straight to our inbox.</div>
+      <div class="tile__title">Contact →</div>
+      {
+        official ? (
+          <div class="tile__desc">Questions go straight to our inbox.</div>
+        ) : (
+          <div class="tile__desc">
+            Reach the resident who maintains this site.
+          </div>
+        )
+      }
     </a>
   </div>
 </BaseLayout>

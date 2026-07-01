@@ -78,7 +78,7 @@ export default function AdminApp() {
 
   return (
     <div className="admin-shell">
-      <h1 className="sr-only">Board Admin</h1>
+      <h1 className="sr-only">Site Admin</h1>
       <aside className="admin-side">
         <div className="admin-side__brand">
           <span className="mark mark--lg mark--inverse" aria-hidden="true">

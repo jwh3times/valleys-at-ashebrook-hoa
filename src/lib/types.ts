@@ -35,21 +35,50 @@ export interface DuesSettings {
 }
 
 export interface SiteSettings {
-  hoaName: string;
+  siteName: string;
   tagline: string;
-  contactEmail: string; // HOA Gmail (shown on contact page)
+  contactEmail: string; // public contact email (shown on contact page)
   welcomeHeading: string;
   welcomeBody: string;
+  /** When true, the site presents as the official HOA site (dues/board surfaces on, disclaimer off). */
+  officialMode: boolean;
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
-  hoaName: 'Valleys at Ashebrook HOA',
+  siteName: 'The Valleys at Ashebrook Residents',
   tagline: 'Welcome to our community',
   contactEmail: '',
   welcomeHeading: 'Welcome to the Valleys at Ashebrook',
   welcomeBody:
-    'This is the official website for our homeowners association. Here you can read the latest announcements, view the community calendar, find governing documents, learn how to pay your annual dues, and contact the board.',
+    'This is an independent, resident-run website for neighbors in The Valleys at Ashebrook. Here you can read the latest announcements, view the community calendar, and find documents.',
+  officialMode: false,
 };
+
+/**
+ * Coerce a raw parsed settings blob into a complete SiteSettings.
+ * Applies the legacy `hoaName` -> `siteName` fallback and a strict boolean for officialMode.
+ */
+export function normalizeSiteSettings(raw: unknown): SiteSettings {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const str = (v: unknown, fallback: string) =>
+    typeof v === 'string' ? v : fallback;
+  const legacyName = typeof r.hoaName === 'string' ? r.hoaName : undefined;
+  const name =
+    typeof r.siteName === 'string' && r.siteName.trim()
+      ? r.siteName
+      : (legacyName ?? DEFAULT_SITE_SETTINGS.siteName);
+  return {
+    siteName: name,
+    tagline: str(r.tagline, DEFAULT_SITE_SETTINGS.tagline),
+    contactEmail: str(r.contactEmail, DEFAULT_SITE_SETTINGS.contactEmail),
+    welcomeHeading: str(r.welcomeHeading, DEFAULT_SITE_SETTINGS.welcomeHeading),
+    welcomeBody: str(r.welcomeBody, DEFAULT_SITE_SETTINGS.welcomeBody),
+    officialMode: r.officialMode === true,
+  };
+}
 
 export const DEFAULT_DUES_SETTINGS: DuesSettings = {
   amount: 'Amount to be announced',

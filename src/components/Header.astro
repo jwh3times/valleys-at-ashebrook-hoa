@@ -1,13 +1,13 @@
 ---
+import { navLinks, brandTag } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+
 const { pathname } = Astro.url;
-const links = [
-  { href: '/', label: 'Home' },
-  { href: '/announcements', label: 'Announcements' },
-  { href: '/calendar', label: 'Calendar' },
-  { href: '/documents', label: 'Documents' },
-  { href: '/dues', label: 'Dues' },
-  { href: '/contact', label: 'Contact' },
-];
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this component is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+const links = navLinks(site.officialMode);
+const tag = brandTag(site.officialMode);
 
 const isCurrent = (href: string) =>
   href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -18,7 +18,7 @@ const isCurrent = (href: string) =>
     <span class="mark mark--lg" aria-hidden="true"><i></i></span>
     <span>
       <span class="brand__name">Valleys at Ashebrook</span>
-      <span class="brand__tag">Homeowners Association</span>
+      <span class="brand__tag">{tag}</span>
     </span>
   </a>
 
@@ -47,7 +47,7 @@ const isCurrent = (href: string) =>
         }
       </ul>
     </nav>
-    <a class="nav-login" href="/admin">Board Login</a>
+    <a class="nav-login" href="/admin">Admin sign in</a>
   </div>
 </header>
 
