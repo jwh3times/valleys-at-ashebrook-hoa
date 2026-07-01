@@ -49,6 +49,30 @@ export default function SiteManager() {
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
 
+      <div
+        className="panel-card"
+        style={{ maxWidth: '620px', marginBottom: '18px' }}
+      >
+        <div className="field" style={{ margin: 0 }}>
+          <label style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={site.officialMode}
+              onChange={(e) =>
+                setSite({ ...site, officialMode: e.target.checked })
+              }
+            />
+            <span>Official mode</span>
+          </label>
+          <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+            When off, the site presents as an unofficial resident-run hub: it
+            shows a “not affiliated with the HOA” disclaimer and hides the dues
+            and board features. Turn this on only if the HOA board formally
+            adopts this site.
+          </p>
+        </div>
+      </div>
+
       <div className="panel-card" style={{ maxWidth: '620px' }}>
         <div className="field">
           <label>Welcome heading (home page)</label>
