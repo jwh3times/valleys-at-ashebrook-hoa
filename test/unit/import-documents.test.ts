@@ -84,4 +84,17 @@ describe('buildInsertSql', () => {
     expect(sql).toContain("'board'");
     expect(sql).toContain("O''Brien");
   });
+
+  it('keeps a small entry set in a single INSERT statement', () => {
+    const sql = buildInsertSql([entry1, entry2]);
+    expect((sql.match(/INSERT INTO documents/g) ?? []).length).toBe(1);
+  });
+
+  it('splits entries into multiple INSERT statements past the batch size', () => {
+    const sql = buildInsertSql([entry1, entry2], 1);
+    expect((sql.match(/INSERT INTO documents/g) ?? []).length).toBe(2);
+    // both rows still present
+    expect(sql).toContain("'homeowner'");
+    expect(sql).toContain("'board'");
+  });
 });
