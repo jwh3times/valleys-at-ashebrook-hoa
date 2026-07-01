@@ -1,7 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import DuesInfo from '../components/react/DuesInfo.tsx';
-import ConfigNotice from '../components/react/ConfigNotice.tsx';
 ---
 
 <BaseLayout
@@ -14,7 +13,6 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
       Dues &amp; Assessments
     </h1>
 
-    <ConfigNotice client:only="react" />
     <DuesInfo client:only="react" />
   </div>
 </BaseLayout>

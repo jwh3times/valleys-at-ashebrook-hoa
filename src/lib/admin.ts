@@ -1,13 +1,5 @@
 // Admin-only write helpers.
-import { doc, getDoc } from 'firebase/firestore';
-import { getDb } from './firebase';
 import type { Announcement, DuesSettings, SiteSettings } from './types';
-
-/** Check whether a user UID has board-admin rights. */
-export async function checkIsAdmin(uid: string): Promise<boolean> {
-  const snap = await getDoc(doc(getDb(), 'admins', uid));
-  return snap.exists();
-}
 
 // ---------- Announcements ----------
 export async function saveAnnouncement(

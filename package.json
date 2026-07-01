@@ -17,8 +17,7 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "emulators": "firebase emulators:start",
-    "deploy": "astro build && firebase deploy",
+    "deploy": "astro build && wrangler pages deploy dist",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply ashebrook-hoa --local",
     "db:migrate:remote": "wrangler d1 migrations apply ashebrook-hoa --remote",
@@ -34,7 +33,6 @@
     "better-auth": "^1.6.23",
     "better-auth-cloudflare": "^0.3.0",
     "drizzle-orm": "^0.45.2",
-    "firebase": "^12.15.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

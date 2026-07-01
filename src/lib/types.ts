@@ -1,4 +1,4 @@
-// Shared data shapes for content stored in Firestore.
+// Shared data shapes for site content.
 
 export type Visibility = 'public' | 'homeowner' | 'board';
 
@@ -16,10 +16,6 @@ export interface DocumentItem {
   id: string;
   title: string;
   category: string; // e.g. "Governing Documents", "Meeting Minutes", "Forms"
-  /** Public download URL from Cloud Storage. */
-  url: string;
-  /** Storage path, kept so the file can be deleted later. */
-  storagePath: string;
   /** ISO date the document was added/updated. */
   updatedAt: string;
   visibility: Visibility;

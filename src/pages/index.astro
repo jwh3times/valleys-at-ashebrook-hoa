@@ -1,7 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
-import ConfigNotice from '../components/react/ConfigNotice.tsx';
 ---
 
 <BaseLayout
@@ -24,12 +23,6 @@ import ConfigNotice from '../components/react/ConfigNotice.tsx';
       </div>
     </div>
   </section>
-
-  <div style="padding: 0 var(--gutter);">
-    <div style="margin-top: 28px;">
-      <ConfigNotice client:only="react" />
-    </div>
-  </div>
 
   <div class="home-grid">
     <div>

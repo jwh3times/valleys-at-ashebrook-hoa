@@ -91,8 +91,9 @@ export default function AnnouncementsManager() {
         <h1>Announcements</h1>
       </div>
       <p className="admin-panel__intro">
-        Anything you publish here appears on the public Home and Announcements
-        pages.
+        Announcements appear on the Home and Announcements pages. Use the
+        Visibility field to control who sees each one: Public (everyone),
+        Homeowners only, or Board only.
       </p>
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
