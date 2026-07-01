@@ -55,6 +55,11 @@
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "wrangler": "^4.106.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
   }
 }

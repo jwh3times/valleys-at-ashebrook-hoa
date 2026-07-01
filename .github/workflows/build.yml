@@ -5,6 +5,10 @@ on:
     branches: ['**']
   pull_request:
 
+# Minimal token scope: CI only reads the repo to build and test.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
