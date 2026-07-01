@@ -152,6 +152,22 @@ export default function AnnouncementsManager() {
           />
           Pin to top
         </label>
+        <div className="field" style={{ marginBottom: '18px' }}>
+          <label>Visibility</label>
+          <select
+            value={form.visibility}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                visibility: e.target.value as typeof form.visibility,
+              })
+            }
+          >
+            <option value="public">Public</option>
+            <option value="homeowner">Homeowners only</option>
+            <option value="board">Board only</option>
+          </select>
+        </div>
         <div className="btn-row">
           <button className="btn btn--small" type="submit" disabled={busy}>
             {busy ? 'Saving…' : editingId ? 'Save Changes' : 'Publish'}

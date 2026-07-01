@@ -1,14 +1,6 @@
 // Admin-only write helpers. All of these require the signed-in user to be in
 // the Firestore /admins collection — enforced by security rules, not just here.
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-} from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { getDb } from './firebase';
 import type { Announcement, DuesSettings, SiteSettings } from './types';
 
@@ -23,16 +15,30 @@ export async function saveAnnouncement(
   data: Omit<Announcement, 'id'>,
   id?: string,
 ): Promise<void> {
-  const db = getDb();
   if (id) {
-    await updateDoc(doc(db, 'announcements', id), data);
+    const res = await fetch('/api/admin/announcements', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, ...data }),
+    });
+    if (!res.ok) throw new Error(`Update failed: ${res.status}`);
   } else {
-    await addDoc(collection(db, 'announcements'), data);
+    const res = await fetch('/api/admin/announcements', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`Create failed: ${res.status}`);
   }
 }
 
 export async function deleteAnnouncement(id: string): Promise<void> {
-  await deleteDoc(doc(getDb(), 'announcements', id));
+  const res = await fetch('/api/admin/announcements', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
 // ---------- Documents ----------
