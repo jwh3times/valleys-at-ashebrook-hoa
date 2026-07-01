@@ -64,6 +64,7 @@ export async function uploadDocument(
     url,
     storagePath,
     updatedAt: new Date().toISOString().slice(0, 10),
+    visibility: 'board',
   } satisfies Omit<DocumentItem, 'id'>);
 }
 

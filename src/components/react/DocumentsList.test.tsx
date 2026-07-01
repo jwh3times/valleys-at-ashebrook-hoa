@@ -18,6 +18,7 @@ const docs: DocumentItem[] = [
     url: 'https://example.com/bylaws.pdf',
     storagePath: 'documents/bylaws.pdf',
     updatedAt: '2026-01-01',
+    visibility: 'public',
   },
   {
     id: 'b',
@@ -26,6 +27,7 @@ const docs: DocumentItem[] = [
     url: 'https://example.com/march.pdf',
     storagePath: 'documents/march.pdf',
     updatedAt: '2026-03-15',
+    visibility: 'public',
   },
 ];
 

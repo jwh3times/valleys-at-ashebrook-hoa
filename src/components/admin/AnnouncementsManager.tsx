@@ -2,9 +2,21 @@ import { useEffect, useState } from 'react';
 import { fetchAnnouncements } from '../../lib/content';
 import { deleteAnnouncement, saveAnnouncement } from '../../lib/admin';
 import { formatDate, todayIso } from '../../lib/format';
-import type { Announcement } from '../../lib/types';
+import type { Announcement, Visibility } from '../../lib/types';
 
-const empty = { title: '', body: '', date: todayIso(), pinned: false };
+const empty: {
+  title: string;
+  body: string;
+  date: string;
+  pinned: boolean;
+  visibility: Visibility;
+} = {
+  title: '',
+  body: '',
+  date: todayIso(),
+  pinned: false,
+  visibility: 'public',
+};
 
 export default function AnnouncementsManager() {
   const [items, setItems] = useState<Announcement[]>([]);
@@ -26,7 +38,13 @@ export default function AnnouncementsManager() {
 
   function startEdit(a: Announcement) {
     setEditingId(a.id);
-    setForm({ title: a.title, body: a.body, date: a.date, pinned: !!a.pinned });
+    setForm({
+      title: a.title,
+      body: a.body,
+      date: a.date,
+      pinned: !!a.pinned,
+      visibility: a.visibility,
+    });
     setMsg('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -47,6 +65,7 @@ export default function AnnouncementsManager() {
           body: form.body,
           date: form.date,
           pinned: form.pinned,
+          visibility: form.visibility,
         },
         editingId ?? undefined,
       );
