@@ -18,8 +18,7 @@ export default function DocumentsList() {
   if (docs.length === 0)
     return (
       <p className="muted">
-        No documents have been posted yet. The board will add governing
-        documents, meeting minutes, and forms here.
+        No documents have been posted yet. Check back soon.
       </p>
     );
 
