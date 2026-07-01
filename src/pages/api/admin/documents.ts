@@ -1,0 +1,80 @@
+import type { APIRoute } from 'astro';
+import { eq } from 'drizzle-orm';
+import { env } from 'cloudflare:workers';
+import { requireBoard } from '../../../server/authz/api-guards';
+import { getDb } from '../../../server/db/client';
+import { documents } from '../../../server/db/schema';
+
+export const prerender = false;
+
+const MAX_BYTES = 25 * 1024 * 1024;
+
+export const POST: APIRoute = async ({ request }) => {
+  const denied = await requireBoard(request, env);
+  if (denied) return denied;
+  const form = await request.formData();
+  const file = form.get('file');
+  const title = String(form.get('title') ?? '');
+  const category = String(form.get('category') ?? '');
+  const visibility = String(form.get('visibility') ?? 'board');
+  if (!(file instanceof File) || !title || !category)
+    return new Response('Bad Request', { status: 400 });
+  if (file.size > MAX_BYTES) return new Response('Too large', { status: 413 });
+  const id = crypto.randomUUID();
+  const r2Key = `documents/${id}/${file.name.replace(/[^\w.\-]/g, '_')}`;
+  await env.DOCS.put(r2Key, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type },
+  });
+  const now = new Date();
+  await getDb(env)
+    .insert(documents)
+    .values({
+      id,
+      title,
+      category,
+      visibility: visibility as 'public' | 'homeowner' | 'board',
+      r2Key,
+      filename: file.name,
+      sizeBytes: file.size,
+      contentType: file.type || 'application/octet-stream',
+      uploadedAt: now,
+      updatedAt: now,
+    });
+  return new Response(null, { status: 201 });
+};
+
+export const PATCH: APIRoute = async ({ request }) => {
+  const denied = await requireBoard(request, env);
+  if (denied) return denied;
+  const body = (await request.json()) as {
+    id?: string;
+    title?: string;
+    category?: string;
+    visibility?: string;
+  };
+  if (!body.id) return new Response('Bad Request', { status: 400 });
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  for (const k of ['title', 'category', 'visibility'] as const)
+    if (k in body) patch[k] = body[k];
+  await getDb(env)
+    .update(documents)
+    .set(patch)
+    .where(eq(documents.id, body.id));
+  return new Response(null, { status: 204 });
+};
+
+export const DELETE: APIRoute = async ({ request }) => {
+  const denied = await requireBoard(request, env);
+  if (denied) return denied;
+  const body = (await request.json()) as { id?: string };
+  if (!body.id) return new Response('Bad Request', { status: 400 });
+  const [doc] = await getDb(env)
+    .select()
+    .from(documents)
+    .where(eq(documents.id, body.id));
+  if (doc) {
+    await env.DOCS.delete(doc.r2Key);
+    await getDb(env).delete(documents).where(eq(documents.id, body.id));
+  }
+  return new Response(null, { status: 204 });
+};

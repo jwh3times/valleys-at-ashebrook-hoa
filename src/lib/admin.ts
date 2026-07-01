@@ -9,19 +9,8 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
-import {
-  deleteObject,
-  getDownloadURL,
-  ref,
-  uploadBytes,
-} from 'firebase/storage';
-import { getDb, getStorageInstance } from './firebase';
-import type {
-  Announcement,
-  DocumentItem,
-  DuesSettings,
-  SiteSettings,
-} from './types';
+import { getDb } from './firebase';
+import type { Announcement, DuesSettings, SiteSettings } from './types';
 
 /** Check whether a user UID has board-admin rights. */
 export async function checkIsAdmin(uid: string): Promise<boolean> {
@@ -51,31 +40,39 @@ export async function uploadDocument(
   file: File,
   title: string,
   category: string,
+  visibility: string = 'board',
 ): Promise<void> {
-  const storage = getStorageInstance();
-  const safeName = file.name.replace(/[^\w.\-]+/g, '_');
-  const storagePath = `documents/${Date.now()}-${safeName}`;
-  const fileRef = ref(storage, storagePath);
-  await uploadBytes(fileRef, file, { contentType: 'application/pdf' });
-  const url = await getDownloadURL(fileRef);
-  await addDoc(collection(getDb(), 'documents'), {
-    title,
-    category,
-    url,
-    storagePath,
-    updatedAt: new Date().toISOString().slice(0, 10),
-    visibility: 'board',
-  } satisfies Omit<DocumentItem, 'id'>);
+  const form = new FormData();
+  form.set('file', file);
+  form.set('title', title);
+  form.set('category', category);
+  form.set('visibility', visibility);
+  const res = await fetch('/api/admin/documents', {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
 }
 
-export async function deleteDocument(item: DocumentItem): Promise<void> {
-  // Remove the stored file first, then its metadata.
-  try {
-    await deleteObject(ref(getStorageInstance(), item.storagePath));
-  } catch {
-    // File may already be gone; continue removing the metadata.
-  }
-  await deleteDoc(doc(getDb(), 'documents', item.id));
+export async function editDocument(
+  id: string,
+  patch: { title?: string; category?: string; visibility?: string },
+): Promise<void> {
+  const res = await fetch('/api/admin/documents', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id, ...patch }),
+  });
+  if (!res.ok) throw new Error(`Edit failed: ${res.status}`);
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const res = await fetch('/api/admin/documents', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
 // ---------- Settings (singletons) ----------
