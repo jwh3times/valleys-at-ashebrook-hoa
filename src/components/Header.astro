@@ -1,8 +1,11 @@
 ---
 import { navLinks, brandTag } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 
 const { pathname } = Astro.url;
-const { site } = Astro.locals;
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this component is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 const links = navLinks(site.officialMode);
 const tag = brandTag(site.officialMode);
 
