@@ -1,6 +1,7 @@
 ---
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import { siteTitle } from '../lib/site';
 import '../styles/global.css';
 
 interface Props {
@@ -11,10 +12,7 @@ interface Props {
 }
 
 const { title, description, bare = false } = Astro.props;
-const fullTitle =
-  title === 'Home'
-    ? 'Valleys at Ashebrook HOA'
-    : `${title} | Valleys at Ashebrook HOA`;
+const fullTitle = siteTitle(title, Astro.locals.site);
 ---
 
 <!doctype html>
