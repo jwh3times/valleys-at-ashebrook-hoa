@@ -2,7 +2,10 @@
 // Uses @cloudflare/vitest-pool-workers v4 API: cloudflareTest plugin + vitest defineConfig.
 // (The v3 defineWorkersConfig / @cloudflare/vitest-pool-workers/config API is not available
 // in the installed v0.17.x — that subpath was removed in v4.)
-import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers';
+import {
+  cloudflareTest,
+  readD1Migrations,
+} from '@cloudflare/vitest-pool-workers';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig(async () => {

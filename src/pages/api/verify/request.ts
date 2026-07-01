@@ -14,8 +14,15 @@ export const POST: APIRoute = async ({ request }) => {
     channel: string;
     turnstileToken: string;
   };
-  if (channel !== 'email' && channel !== 'sms') return new Response('Bad channel', { status: 400 });
-  if (!(await verifyTurnstile(env, turnstileToken, request))) return new Response('Bad captcha', { status: 400 });
-  const result = await requestPropertyVerification(env, ctx.userId, address, channel);
+  if (channel !== 'email' && channel !== 'sms')
+    return new Response('Bad channel', { status: 400 });
+  if (!(await verifyTurnstile(env, turnstileToken, request)))
+    return new Response('Bad captcha', { status: 400 });
+  const result = await requestPropertyVerification(
+    env,
+    ctx.userId,
+    address,
+    channel,
+  );
   return Response.json(result);
 };

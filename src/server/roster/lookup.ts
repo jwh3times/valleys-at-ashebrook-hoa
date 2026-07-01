@@ -11,6 +11,8 @@ export async function findActiveOwnerByAddress(db: Db, address: string) {
   const [owner] = await db
     .select()
     .from(owners)
-    .where(and(eq(owners.addressNormalized, norm), eq(owners.status, 'active')));
+    .where(
+      and(eq(owners.addressNormalized, norm), eq(owners.status, 'active')),
+    );
   return owner ?? null;
 }

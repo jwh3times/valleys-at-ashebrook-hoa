@@ -2,8 +2,19 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { sendEmail, sendSms } from '../auth/senders';
 import { findActiveOwnerByAddress } from '../roster/lookup';
-import { generateCode, hashCode, verifyCode, MAX_ATTEMPTS, CODE_TTL_MS } from './codes';
-import { manualApprovalQueue, propertyVerifications, userPropertyLinks, users } from '../db/schema';
+import {
+  generateCode,
+  hashCode,
+  verifyCode,
+  MAX_ATTEMPTS,
+  CODE_TTL_MS,
+} from './codes';
+import {
+  manualApprovalQueue,
+  propertyVerifications,
+  userPropertyLinks,
+  users,
+} from '../db/schema';
 
 export async function requestPropertyVerification(
   env: Env,
@@ -14,7 +25,11 @@ export async function requestPropertyVerification(
   const db = getDb(env);
   const owner = await findActiveOwnerByAddress(db, address);
   const now = new Date();
-  if (!owner || (channel === 'email' && !owner.email) || (channel === 'sms' && !owner.phone)) {
+  if (
+    !owner ||
+    (channel === 'email' && !owner.email) ||
+    (channel === 'sms' && !owner.phone)
+  ) {
     await db.insert(manualApprovalQueue).values({
       id: crypto.randomUUID(),
       userId,
@@ -25,7 +40,14 @@ export async function requestPropertyVerification(
     });
     return { ok: false, queued: true };
   }
-  await db.delete(propertyVerifications).where(and(eq(propertyVerifications.userId, userId), isNull(propertyVerifications.consumedAt)));
+  await db
+    .delete(propertyVerifications)
+    .where(
+      and(
+        eq(propertyVerifications.userId, userId),
+        isNull(propertyVerifications.consumedAt),
+      ),
+    );
   const code = generateCode();
   await db.insert(propertyVerifications).values({
     id: crypto.randomUUID(),
@@ -39,7 +61,8 @@ export async function requestPropertyVerification(
     createdAt: now,
   });
   const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
-  if (channel === 'email') await sendEmail(env, owner.email!, 'Your HOA verification code', message);
+  if (channel === 'email')
+    await sendEmail(env, owner.email!, 'Your HOA verification code', message);
   else await sendSms(env, owner.phone!, message);
   return { ok: true };
 }
@@ -53,11 +76,17 @@ export async function confirmPropertyVerification(
   const [pv] = await db
     .select()
     .from(propertyVerifications)
-    .where(and(eq(propertyVerifications.userId, userId), isNull(propertyVerifications.consumedAt)))
+    .where(
+      and(
+        eq(propertyVerifications.userId, userId),
+        isNull(propertyVerifications.consumedAt),
+      ),
+    )
     .orderBy(desc(propertyVerifications.createdAt));
   if (!pv) return { ok: false, reason: 'mismatch' };
   if (pv.attempts >= MAX_ATTEMPTS) return { ok: false, reason: 'locked' };
-  if (pv.expiresAt.getTime() < Date.now()) return { ok: false, reason: 'expired' };
+  if (pv.expiresAt.getTime() < Date.now())
+    return { ok: false, reason: 'expired' };
   if (!(await verifyCode(code, pv.codeHash))) {
     await db
       .update(propertyVerifications)

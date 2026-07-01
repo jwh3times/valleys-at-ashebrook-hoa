@@ -10,7 +10,9 @@ vi.mock('../../lib/auth-client', () => ({
   authClient: {
     signOut: vi.fn().mockResolvedValue({}),
     signIn: { email: vi.fn().mockResolvedValue({ data: null, error: null }) },
-    requestPasswordReset: vi.fn().mockResolvedValue({ data: null, error: null }),
+    requestPasswordReset: vi
+      .fn()
+      .mockResolvedValue({ data: null, error: null }),
     useSession: vi.fn().mockReturnValue({ data: null, isPending: false }),
   },
 }));

@@ -13,10 +13,14 @@ export const POST: APIRoute = async ({ request }) => {
     role: string;
     action: string;
   };
-  if (body.role !== 'homeowner' && body.role !== 'board') return new Response('Bad role', { status: 400 });
+  if (body.role !== 'homeowner' && body.role !== 'board')
+    return new Response('Bad role', { status: 400 });
   const auth = createAuth(env);
   const target = body.action === 'revoke' ? 'visitor' : body.role;
   // Caller is board (verified above); the admin plugin authorizes setRole from the board session.
-  await auth.api.setRole({ body: { userId: body.userId, role: target }, headers: request.headers });
+  await auth.api.setRole({
+    body: { userId: body.userId, role: target },
+    headers: request.headers,
+  });
   return new Response(null, { status: 204 });
 };

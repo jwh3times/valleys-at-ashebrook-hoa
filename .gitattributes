@@ -1,0 +1,4 @@
+# Normalize all text files to LF in the repository and on checkout.
+# Ends the CRLF/LF divergence between Windows working trees and the Linux CI,
+# so `prettier --check` behaves identically everywhere.
+* text=auto eol=lf

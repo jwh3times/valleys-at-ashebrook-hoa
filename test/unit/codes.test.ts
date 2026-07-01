@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { generateCode, hashCode, verifyCode, MAX_ATTEMPTS } from '../../src/server/verification/codes';
+import {
+  generateCode,
+  hashCode,
+  verifyCode,
+  MAX_ATTEMPTS,
+} from '../../src/server/verification/codes';
 
 describe('codes', () => {
   it('generates a 6-digit numeric code', () => {

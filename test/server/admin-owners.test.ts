@@ -8,7 +8,9 @@ beforeAll(async () => {
 
 describe('admin owners', () => {
   it('rejects an unauthenticated GET with 401', async () => {
-    const res = await GET({ request: new Request('http://localhost/api/admin/owners') } as never);
+    const res = await GET({
+      request: new Request('http://localhost/api/admin/owners'),
+    } as never);
     expect(res.status).toBe(401);
   });
   it('rejects an unauthenticated POST with 401', async () => {

@@ -101,15 +101,20 @@ export function VerifyPropertyForm() {
       body: JSON.stringify({
         address,
         channel,
-        turnstileToken: (window as unknown as { turnstileToken?: string }).turnstileToken,
+        turnstileToken: (window as unknown as { turnstileToken?: string })
+          .turnstileToken,
       }),
     });
     const data = (await res.json()) as { ok?: boolean; queued?: boolean };
-    if (data.queued) setMsg('Sent to the board for manual review — they will confirm your account.');
+    if (data.queued)
+      setMsg(
+        'Sent to the board for manual review — they will confirm your account.',
+      );
     else if (data.ok) {
       setMsg('Code sent — check your phone/email.');
       setStage('confirm');
-    } else setMsg('Could not start verification. Check the address and try again.');
+    } else
+      setMsg('Could not start verification. Check the address and try again.');
   }
   async function confirm(e: React.FormEvent) {
     e.preventDefault();
@@ -118,7 +123,11 @@ export function VerifyPropertyForm() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ code }),
     });
-    setMsg(res.ok ? 'Verified! You now have homeowner access.' : 'Code invalid or expired.');
+    setMsg(
+      res.ok
+        ? 'Verified! You now have homeowner access.'
+        : 'Code invalid or expired.',
+    );
   }
   return stage === 'request' ? (
     <form onSubmit={request}>
@@ -128,7 +137,10 @@ export function VerifyPropertyForm() {
         placeholder="Your property address"
         required
       />
-      <select value={channel} onChange={(e) => setChannel(e.target.value as 'email' | 'sms')}>
+      <select
+        value={channel}
+        onChange={(e) => setChannel(e.target.value as 'email' | 'sms')}
+      >
         <option value="email">Email me the code</option>
         <option value="sms">Text me the code</option>
       </select>
