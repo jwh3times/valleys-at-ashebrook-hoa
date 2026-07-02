@@ -94,3 +94,21 @@ export const DOCUMENT_CATEGORIES = [
   'Forms',
   'Other',
 ] as const;
+
+export interface Property {
+  id: string;
+  address: string;
+  unit: string | null;
+  status: 'active' | 'inactive';
+  notes: string | null;
+}
+
+export interface Owner {
+  id: string;
+  propertyId: string;
+  fullName: string;
+  phone: string | null; // E.164
+  email: string | null;
+  status: 'active' | 'inactive';
+  notes: string | null;
+}

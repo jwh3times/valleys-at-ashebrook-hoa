@@ -5,7 +5,7 @@ vi.mock('../../src/server/authz/context', () => ({
   getAuthContext: async () => ({
     userId: 'u-hoa',
     role: 'homeowner',
-    ownerIds: [],
+    propertyIds: [],
   }),
 }));
 

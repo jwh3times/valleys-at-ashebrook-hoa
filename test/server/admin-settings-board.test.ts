@@ -2,7 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', () => ({
-  getAuthContext: async () => ({ userId: 'b', role: 'board', ownerIds: [] }),
+  getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
 }));
 
 import { PUT } from '../../src/pages/api/admin/dues';

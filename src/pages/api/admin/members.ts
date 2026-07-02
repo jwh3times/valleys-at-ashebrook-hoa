@@ -38,7 +38,7 @@ export const POST: APIRoute = async ({ request }) => {
     action: string;
     userId?: string;
     queueId?: string;
-    ownerId?: string;
+    propertyId?: string;
   };
   if (body.action === 'revoke') {
     if (!body.userId) return new Response('Bad Request', { status: 400 });
@@ -50,7 +50,7 @@ export const POST: APIRoute = async ({ request }) => {
       .delete(userPropertyLinks)
       .where(eq(userPropertyLinks.userId, body.userId));
   } else if (body.action === 'approve') {
-    if (!body.queueId || !body.ownerId)
+    if (!body.queueId || !body.propertyId)
       return new Response('Bad Request', { status: 400 });
     const [row] = await db
       .select()
@@ -60,7 +60,7 @@ export const POST: APIRoute = async ({ request }) => {
     await db.insert(userPropertyLinks).values({
       id: crypto.randomUUID(),
       userId: row.userId,
-      ownerId: body.ownerId,
+      propertyId: body.propertyId,
       verifiedAt: new Date(),
       method: 'board_manual',
     });

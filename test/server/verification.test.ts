@@ -6,6 +6,7 @@ import {
 } from '../../src/server/verification/property';
 import { getDb } from '../../src/server/db/client';
 import {
+  properties,
   owners,
   propertyVerifications,
   userPropertyLinks,
@@ -28,15 +29,23 @@ describe('property verification', () => {
     expect(result).toEqual({ ok: false, queued: true });
   });
 
-  it('confirm: wrong code increments attempts and returns mismatch; correct code links and consumes', async () => {
+  it('confirm: wrong code increments attempts; correct code links the property and consumes', async () => {
     const db = getDb(env);
     const now = new Date();
-    await db.insert(owners).values({
-      id: 'own-1',
-      fullName: 'Test Owner',
+    await db.insert(properties).values({
+      id: 'prop-1',
       address: '1 Test St',
       addressNormalized: '1 test st',
       unit: null,
+      status: 'active',
+      notes: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(owners).values({
+      id: 'own-1',
+      propertyId: 'prop-1',
+      fullName: 'Test Owner',
       phone: '+15551234567',
       email: 't@example.com',
       status: 'active',
@@ -47,7 +56,7 @@ describe('property verification', () => {
     await db.insert(propertyVerifications).values({
       id: 'pv-1',
       userId: 'user-confirm',
-      ownerId: 'own-1',
+      propertyId: 'prop-1',
       channel: 'email',
       codeHash: await hashCode('123456'),
       expiresAt: new Date(now.getTime() + 600_000),
@@ -79,7 +88,7 @@ describe('property verification', () => {
       .from(userPropertyLinks)
       .where(eq(userPropertyLinks.userId, 'user-confirm'));
     expect(links.length).toBe(1);
-    expect(links[0].ownerId).toBe('own-1');
+    expect(links[0].propertyId).toBe('prop-1');
     const [consumed] = await db
       .select()
       .from(propertyVerifications)
@@ -93,7 +102,7 @@ describe('property verification', () => {
     await db.insert(propertyVerifications).values({
       id: 'pv-old',
       userId: 'user-multi',
-      ownerId: 'own-1',
+      propertyId: 'prop-1',
       channel: 'email',
       codeHash: await hashCode('111111'),
       expiresAt: new Date(base.getTime() + 600_000),
@@ -104,7 +113,7 @@ describe('property verification', () => {
     await db.insert(propertyVerifications).values({
       id: 'pv-new',
       userId: 'user-multi',
-      ownerId: 'own-1',
+      propertyId: 'prop-1',
       channel: 'email',
       codeHash: await hashCode('654321'),
       expiresAt: new Date(base.getTime() + 600_000),
