@@ -18,6 +18,14 @@ export function createAuth(
   return betterAuth({
     baseURL: baseURL ?? env?.BETTER_AUTH_URL,
     secret: env?.BETTER_AUTH_SECRET,
+    // Origins allowed to make auth requests. baseURL is trusted automatically;
+    // list the custom domain (apex + www) and the workers.dev fallback explicitly
+    // so sign-up/sign-in work no matter which host a visitor lands on.
+    trustedOrigins: [
+      'https://ashebrookresidents.com',
+      'https://www.ashebrookresidents.com',
+      'https://valleys-at-ashebrook-hoa.jerryholland00.workers.dev',
+    ],
     ...withCloudflare(
       {
         autoDetectIpAddress: true,
