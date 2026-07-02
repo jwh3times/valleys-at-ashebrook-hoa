@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 # Non-secret runtime vars. Kept here (not as dashboard-only values) so the repo is
 # the source of truth and Git auto-deploys stay in sync. Secrets stay out of this file.
 [vars]
-BETTER_AUTH_URL = "https://ashebrookeresidents.com"
+BETTER_AUTH_URL = "https://ashebrookresidents.com"
 
 [[d1_databases]]
 binding = "DATABASE"
