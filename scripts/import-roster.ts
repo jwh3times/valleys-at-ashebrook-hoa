@@ -63,6 +63,16 @@ export function rowsToRoster(rows: Record<string, string>[]): {
         email: firstEmail(r['Homeowner 1 Email']),
       });
     }
+    const name2 = String(r['Homeowner 2'] ?? '').trim();
+    if (name2) {
+      owners.push({
+        id: crypto.randomUUID(),
+        propertyId,
+        fullName: name2,
+        phone: firstPhoneE164(r['Homeowner 2 Phone']),
+        email: firstEmail(r['Homeowner 2 Email']),
+      });
+    }
   }
   return { properties, owners };
 }

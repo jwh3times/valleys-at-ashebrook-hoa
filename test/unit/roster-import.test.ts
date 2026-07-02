@@ -58,4 +58,34 @@ describe('rowsToRoster', () => {
     expect(owners[0].phone).toBe('+19194517647');
     expect(owners[0].email).toBe('johnjordan108@mail.com');
   });
+
+  it('emits a second owner when Homeowner 2 is present, sharing the propertyId', () => {
+    const { owners } = rowsToRoster([
+      {
+        'Homeowner 1': 'Elizabeth M. Capek',
+        'Homeowner 1 Phone': '(630) 707-1482',
+        'Homeowner 2': 'Raymond C. Capek',
+        'Homeowner 2 Phone': '(630) 707-1482',
+        'Homeowner 2 Email': 'rbcapek@sbcglobal.net',
+        'Property Address': '3045 Cinder Bluff Drive Raleigh, NC  27603',
+      } as Record<string, string>,
+    ]);
+    expect(owners).toHaveLength(2);
+    expect(owners[0].propertyId).toBe(owners[1].propertyId);
+    expect(owners[0].phone).toBe('+16307071482');
+    expect(owners[1].phone).toBe('+16307071482'); // shared phone preserved
+    expect(owners[1].email).toBe('rbcapek@sbcglobal.net');
+  });
+
+  it('emits a single owner when Homeowner 2 is blank', () => {
+    const { owners } = rowsToRoster([
+      {
+        'Homeowner 1': 'Solo Owner',
+        'Homeowner 1 Phone': '(919) 000-0000',
+        'Homeowner 2': '',
+        'Property Address': '1 Solo St',
+      } as Record<string, string>,
+    ]);
+    expect(owners).toHaveLength(1);
+  });
 });
