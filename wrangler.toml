@@ -2,6 +2,11 @@ name = "valleys-at-ashebrook-hoa"
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Non-secret runtime vars. Kept here (not as dashboard-only values) so the repo is
+# the source of truth and Git auto-deploys stay in sync. Secrets stay out of this file.
+[vars]
+BETTER_AUTH_URL = "https://ashebrookresidents.com"
+
 [[d1_databases]]
 binding = "DATABASE"
 database_name = "ashebrook-hoa"
