@@ -96,7 +96,7 @@ overwritten on the next deploy):
 
 ```toml
 [vars]
-BETTER_AUTH_URL = "https://ashebrookeresidents.com"
+BETTER_AUTH_URL = "https://ashebrookresidents.com"
 ```
 
 It must exactly match the hostname visitors use (protocol, apex vs `www`, no trailing slash) —

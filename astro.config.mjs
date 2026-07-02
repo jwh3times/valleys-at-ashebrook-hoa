@@ -4,7 +4,7 @@ import react from '@astrojs/react';
 import cloudflare from '@astrojs/cloudflare';
 
 export default defineConfig({
-  site: 'https://ashebrookeresidents.com',
+  site: 'https://ashebrookresidents.com',
   output: 'server',
   adapter: cloudflare(),
   integrations: [react()],
