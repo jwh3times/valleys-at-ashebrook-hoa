@@ -61,7 +61,7 @@ In `wrangler.toml`, replace the placeholder values:
 
 ## 3. Configure secrets and public values
 
-Two kinds of configuration:
+Three kinds of configuration:
 
 **a) Server secrets** — copy `.dev.vars.example` to `.dev.vars` (gitignored) for local
 development, and set the same values as Cloudflare secrets for production
@@ -70,7 +70,6 @@ development, and set the same values as Cloudflare secrets for production
 | Secret | What it is |
 | --- | --- |
 | `BETTER_AUTH_SECRET` | A strong random string — generate with `openssl rand -base64 32` |
-| `BETTER_AUTH_URL` | Your site's URL (e.g. `https://valleys-at-ashebrook-hoa.jerryholland00.workers.dev`) |
 | `EMAIL_API_KEY`, `EMAIL_FROM` | Resend API key + the "from" address (verification / reset emails) |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Twilio credentials + sending number (SMS codes) |
 | `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret (server-side verification) |
@@ -78,12 +77,30 @@ development, and set the same values as Cloudflare secrets for production
 **b) Public build-time values** — set these `PUBLIC_*` values (they are safe to expose; Astro
 inlines them into the client at build):
 
-```
+```ini
 PUBLIC_TURNSTILE_SITE_KEY=...              # Turnstile site key (widget)
 PUBLIC_GOOGLE_CALENDAR_ID=xxxx@group.calendar.google.com
 PUBLIC_GOOGLE_CALENDAR_TIMEZONE=America/New_York
 PUBLIC_WEB3FORMS_KEY=...                   # contact form (see step 8)
 ```
+
+> **Git auto-deploy note:** `PUBLIC_*` values are inlined **at build time**. If you deploy
+> by connecting the repo to Cloudflare (Workers Builds), the build runs on Cloudflare where
+> `.env` is not present, so set these as **build variables** in the Worker's Build settings —
+> otherwise they ship empty (e.g. the Turnstile widget breaks).
+
+**c) Non-secret runtime vars** — `BETTER_AUTH_URL` (your site's URL) is not sensitive, so it
+lives in `wrangler.toml` under `[vars]` rather than as a secret. Keeping it in the repo makes
+it the source of truth, so Git auto-deploys stay in sync (a dashboard-only value would be
+overwritten on the next deploy):
+
+```toml
+[vars]
+BETTER_AUTH_URL = "https://ashebrookeresidents.com"
+```
+
+It must exactly match the hostname visitors use (protocol, apex vs `www`, no trailing slash) —
+Better Auth uses it for cookies and for the links in verification / reset emails.
 
 ## 4. Apply the database migrations
 
@@ -179,8 +196,8 @@ npx wrangler deploy -c dist/server/wrangler.json   # deploy the Worker
 
 The live Worker URL for this project is
 `https://valleys-at-ashebrook-hoa.jerryholland00.workers.dev` (a custom domain can be
-attached later — see Optional below). Set that URL as `BETTER_AUTH_URL` (step 3a) and
-as `site` in `astro.config.mjs`, then redeploy.
+attached later — see Optional below). Set that URL as `BETTER_AUTH_URL` in `wrangler.toml`
+(step 3c) and as `site` in `astro.config.mjs`, then redeploy.
 
 > **Note:** the root `wrangler.toml` intentionally has no `main` field — the
 > `@astrojs/cloudflare` adapter emits `dist/server/wrangler.json` with `main`, `assets`,
@@ -193,8 +210,8 @@ as `site` in `astro.config.mjs`, then redeploy.
 
 In the Cloudflare dashboard → **Workers & Pages** → your Worker → **Settings** → **Domains &
 Routes**, add your domain and follow the DNS steps (buy one from any registrar, ~$10–15/yr;
-Cloudflare provides free SSL). Then update `BETTER_AUTH_URL` and `site` in
-`astro.config.mjs`.
+Cloudflare provides free SSL). Then update `BETTER_AUTH_URL` in `wrangler.toml` (`[vars]`)
+and `site` in `astro.config.mjs`, and redeploy.
 
 ## Local development
 
