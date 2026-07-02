@@ -82,14 +82,25 @@ export async function requestPropertyVerification(
     createdAt: now,
   });
   const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
-  if (channel === 'email')
-    await sendEmail(
-      env,
-      recipients[0],
-      `Your verification code — ${SITE_NAME}`,
-      message,
-    );
-  else await sendSms(env, recipients[0], message);
+  const subject = `Your verification code — ${SITE_NAME}`;
+  const results = await Promise.allSettled(
+    recipients.map((to) =>
+      channel === 'email'
+        ? sendEmail(env, to, subject, message)
+        : sendSms(env, to, message),
+    ),
+  );
+  if (!results.some((r) => r.status === 'fulfilled')) {
+    await db.insert(manualApprovalQueue).values({
+      id: crypto.randomUUID(),
+      userId,
+      claimedAddress: address,
+      reason: 'all sends failed',
+      status: 'pending',
+      createdAt: now,
+    });
+    return { ok: false, queued: true };
+  }
   return { ok: true };
 }
 
