@@ -1,5 +1,5 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/auth/senders', () => ({
   sendEmail: vi.fn().mockResolvedValue(undefined),
@@ -10,7 +10,7 @@ import {
   requestPropertyVerification,
   confirmPropertyVerification,
 } from '../../src/server/verification/property';
-import { sendSms } from '../../src/server/auth/senders';
+import { sendEmail, sendSms } from '../../src/server/auth/senders';
 import { getDb } from '../../src/server/db/client';
 import {
   properties,
@@ -24,6 +24,15 @@ import { eq } from 'drizzle-orm';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+});
+
+beforeEach(() => {
+  // Reset call history AND re-establish the resolved default for both senders.
+  // clearAllMocks() clears history but not the implementation, so a
+  // mockRejectedValue from one test would otherwise leak into later tests.
+  vi.clearAllMocks();
+  vi.mocked(sendEmail).mockResolvedValue(undefined);
+  vi.mocked(sendSms).mockResolvedValue(undefined);
 });
 
 describe('property verification', () => {
@@ -136,7 +145,6 @@ describe('property verification', () => {
   it('fans a verification code out to every distinct sms contact on the home, deduped', async () => {
     const db = getDb(env);
     const now = new Date();
-    vi.clearAllMocks();
     await db.insert(properties).values({
       id: 'prop-fan',
       address: '9 Fan St',
@@ -241,5 +249,46 @@ describe('property verification', () => {
       .where(eq(manualApprovalQueue.userId, 'user-noemail'));
     expect(rows).toHaveLength(1);
     expect(rows[0].reason).toBe('no contact on file for channel');
+  });
+
+  it('queues manual approval when every send fails', async () => {
+    const db = getDb(env);
+    const now = new Date();
+    vi.mocked(sendSms).mockRejectedValue(new Error('boom'));
+    await db.insert(properties).values({
+      id: 'prop-allfail',
+      address: '11 AllFail St',
+      addressNormalized: '11 allfail st',
+      unit: null,
+      status: 'active',
+      notes: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(owners).values({
+      id: 'own-allfail',
+      propertyId: 'prop-allfail',
+      fullName: 'All Fail',
+      phone: '+19195550004',
+      email: null,
+      status: 'active',
+      notes: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const res = await requestPropertyVerification(
+      env,
+      'user-allfail',
+      '11 AllFail St',
+      'sms',
+    );
+    expect(res).toEqual({ ok: false, queued: true });
+    expect(vi.mocked(sendSms)).toHaveBeenCalledTimes(1);
+    const rows = await db
+      .select()
+      .from(manualApprovalQueue)
+      .where(eq(manualApprovalQueue.userId, 'user-allfail'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].reason).toBe('all sends failed');
   });
 });
