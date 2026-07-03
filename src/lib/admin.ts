@@ -1,5 +1,11 @@
 // Admin-only write helpers.
-import type { Announcement, DuesSettings, SiteSettings } from './types';
+import type {
+  Announcement,
+  DuesSettings,
+  SiteSettings,
+  PropertyWithOwners,
+  MembersView,
+} from './types';
 
 // ---------- Announcements ----------
 export async function saveAnnouncement(
@@ -89,4 +95,68 @@ export async function saveSite(site: SiteSettings): Promise<void> {
     body: JSON.stringify(site),
   });
   if (!res.ok) throw new Error(`Save site failed: ${res.status}`);
+}
+
+// ---------- Roster (board-only reads + writes) ----------
+export async function fetchProperties(): Promise<PropertyWithOwners[]> {
+  const res = await fetch('/api/admin/properties');
+  if (!res.ok) throw new Error(`Load homes failed: ${res.status}`);
+  return res.json();
+}
+
+export async function saveProperty(
+  data: {
+    address?: string;
+    unit?: string | null;
+    notes?: string | null;
+    status?: 'active' | 'inactive';
+  },
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/properties', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok) throw new Error(`Save home failed: ${res.status}`);
+}
+
+export async function saveOwner(
+  data: {
+    propertyId?: string;
+    fullName?: string;
+    phone?: string | null;
+    email?: string | null;
+    notes?: string | null;
+    status?: 'active' | 'inactive';
+  },
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/owners', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok) throw new Error(`Save owner failed: ${res.status}`);
+}
+
+// ---------- Members / access ----------
+export async function fetchMembers(): Promise<MembersView> {
+  const res = await fetch('/api/admin/members');
+  if (!res.ok) throw new Error(`Load members failed: ${res.status}`);
+  return res.json();
+}
+
+export async function memberAction(payload: {
+  action: 'approve' | 'deny' | 'revoke';
+  userId?: string;
+  queueId?: string;
+  propertyId?: string;
+}): Promise<void> {
+  const res = await fetch('/api/admin/members', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Action failed: ${res.status}`);
 }
