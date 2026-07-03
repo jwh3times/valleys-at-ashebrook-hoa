@@ -40,4 +40,43 @@ describe('admin documents — board', () => {
     const obj = await env.DOCS.get(rows[0].r2Key);
     expect(obj).not.toBeNull();
   });
+
+  it('rejects a disallowed extension with 415', async () => {
+    const form = new FormData();
+    form.set('file', new File(['x'], 'evil.html', { type: 'text/html' }));
+    form.set('title', 'Evil');
+    form.set('category', 'Other');
+    form.set('visibility', 'public');
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/documents', {
+        method: 'POST',
+        body: form,
+      }),
+    } as never);
+    expect(res.status).toBe(415);
+  });
+
+  it('stores a server-derived content type, ignoring the client MIME', async () => {
+    const form = new FormData();
+    // Wrong/empty client MIME on a .csv — server should canonicalize to text/csv.
+    form.set(
+      'file',
+      new File(['a,b'], 'roster.csv', { type: 'application/octet-stream' }),
+    );
+    form.set('title', 'Roster CSV');
+    form.set('category', 'Other');
+    form.set('visibility', 'public');
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/documents', {
+        method: 'POST',
+        body: form,
+      }),
+    } as never);
+    expect(res.status).toBe(201);
+    const [row] = await getDb(env)
+      .select()
+      .from(documents)
+      .where(eq(documents.title, 'Roster CSV'));
+    expect(row.contentType).toBe('text/csv');
+  });
 });
