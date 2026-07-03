@@ -105,7 +105,16 @@ export function VerifyPropertyForm() {
           .turnstileToken,
       }),
     });
-    const data = (await res.json()) as { ok?: boolean; queued?: boolean };
+    const data = (await res.json()) as {
+      ok?: boolean;
+      queued?: boolean;
+      rateLimited?: boolean;
+      message?: string;
+    };
+    if (res.status === 429 || data.rateLimited) {
+      setMsg(data.message ?? 'Too many requests. Please wait and try again.');
+      return;
+    }
     if (data.queued)
       setMsg(
         "Sent for manual review — you'll get a confirmation once your account is approved.",
