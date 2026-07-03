@@ -23,8 +23,17 @@ export const GET: APIRoute = async ({ request }) => {
     .orderBy(desc(users.createdAt))
     .limit(50);
   const queue = await db
-    .select()
+    .select({
+      id: manualApprovalQueue.id,
+      userId: manualApprovalQueue.userId,
+      email: users.email,
+      claimedAddress: manualApprovalQueue.claimedAddress,
+      reason: manualApprovalQueue.reason,
+      status: manualApprovalQueue.status,
+      createdAt: manualApprovalQueue.createdAt,
+    })
     .from(manualApprovalQueue)
+    .leftJoin(users, eq(manualApprovalQueue.userId, users.id))
     .where(eq(manualApprovalQueue.status, 'pending'))
     .orderBy(desc(manualApprovalQueue.createdAt));
   return Response.json({ recent, queue });
