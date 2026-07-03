@@ -75,7 +75,7 @@ export async function requestPropertyVerification(
     userId,
     propertyId: property.id,
     channel,
-    codeHash: await hashCode(code),
+    codeHash: await hashCode(code, env.BETTER_AUTH_SECRET),
     expiresAt: new Date(now.getTime() + CODE_TTL_MS),
     attempts: 0,
     consumedAt: null,
@@ -124,7 +124,7 @@ export async function confirmPropertyVerification(
   if (pv.attempts >= MAX_ATTEMPTS) return { ok: false, reason: 'locked' };
   if (pv.expiresAt.getTime() < Date.now())
     return { ok: false, reason: 'expired' };
-  if (!(await verifyCode(code, pv.codeHash))) {
+  if (!(await verifyCode(code, pv.codeHash, env.BETTER_AUTH_SECRET))) {
     await db
       .update(propertyVerifications)
       .set({ attempts: sql`${propertyVerifications.attempts} + 1` })
