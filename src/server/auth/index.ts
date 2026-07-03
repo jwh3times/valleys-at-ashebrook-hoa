@@ -62,6 +62,10 @@ export function createAuth(
           },
         },
         emailVerification: {
+          // Send the verification email immediately on sign-up (default is false,
+          // which only sends on a subsequent sign-in attempt) so it matches the
+          // "check your email" message the register form shows.
+          sendOnSignUp: true,
           sendVerificationEmail: async ({ user, url }) => {
             if (!env) return;
             try {
