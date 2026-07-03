@@ -11,7 +11,7 @@ const baseConfig = getViteConfig({
     environment: 'jsdom',
     globals: false,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'test/**/*.test.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'test/**/*.test.{ts,tsx}'],
     exclude: ['test/server/**'],
     coverage: {
       provider: 'v8',
