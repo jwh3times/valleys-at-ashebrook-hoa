@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { createAuth } from '../auth';
 import { getDb } from '../db/client';
-import { owners, userPropertyLinks, users } from '../db/schema';
+import { properties, userPropertyLinks, users } from '../db/schema';
 import type { AuthContext, Role } from './guards';
 
 const VALID_ROLES = new Set<string>(['visitor', 'homeowner', 'board']);
@@ -20,13 +20,13 @@ export async function getAuthContext(
       .from(users)
       .where(eq(users.id, result.user.id)),
     db
-      .select({ ownerId: userPropertyLinks.ownerId })
+      .select({ propertyId: userPropertyLinks.propertyId })
       .from(userPropertyLinks)
-      .innerJoin(owners, eq(userPropertyLinks.ownerId, owners.id))
+      .innerJoin(properties, eq(userPropertyLinks.propertyId, properties.id))
       .where(
         and(
           eq(userPropertyLinks.userId, result.user.id),
-          eq(owners.status, 'active'),
+          eq(properties.status, 'active'),
         ),
       ),
   ]);
@@ -36,6 +36,6 @@ export async function getAuthContext(
   return {
     userId: result.user.id,
     role,
-    ownerIds: links.map((l) => l.ownerId),
+    propertyIds: links.map((l) => l.propertyId),
   };
 }

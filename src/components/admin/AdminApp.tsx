@@ -6,6 +6,8 @@ import AnnouncementsManager from './AnnouncementsManager';
 import DocumentsManager from './DocumentsManager';
 import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
+import RosterManager from './RosterManager';
+import MembersManager from './MembersManager';
 
 const SECTIONS = [
   {
@@ -14,6 +16,8 @@ const SECTIONS = [
     render: () => <AnnouncementsManager />,
   },
   { key: 'documents', label: 'Documents', render: () => <DocumentsManager /> },
+  { key: 'roster', label: 'Roster', render: () => <RosterManager /> },
+  { key: 'members', label: 'Members', render: () => <MembersManager /> },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
   { key: 'site', label: 'Site Settings', render: () => <SiteManager /> },
 ] as const;
