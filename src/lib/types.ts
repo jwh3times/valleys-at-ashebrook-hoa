@@ -87,6 +87,47 @@ export const DEFAULT_DUES_SETTINGS: DuesSettings = {
   paymentOptions: [],
 };
 
+/**
+ * Coerce a raw parsed dues blob into a complete DuesSettings: string fields,
+ * a well-formed paymentOptions array, and payment urls restricted to http(s)
+ * (the url is rendered as an <a href> in DuesInfo.tsx). Unknown keys are dropped.
+ */
+export function normalizeDuesSettings(raw: unknown): DuesSettings {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const str = (v: unknown, fallback: string) =>
+    typeof v === 'string' ? v : fallback;
+  const rawOptions = Array.isArray(r.paymentOptions) ? r.paymentOptions : [];
+  const paymentOptions: PaymentOption[] = rawOptions.map((o) => {
+    const opt = (o && typeof o === 'object' ? o : {}) as Record<
+      string,
+      unknown
+    >;
+    const option: PaymentOption = {
+      label: str(opt.label, ''),
+      details: str(opt.details, ''),
+    };
+    if (typeof opt.url === 'string') {
+      try {
+        const u = new URL(opt.url);
+        if (u.protocol === 'http:' || u.protocol === 'https:')
+          option.url = opt.url;
+      } catch {
+        /* drop unparseable url */
+      }
+    }
+    return option;
+  });
+  return {
+    amount: str(r.amount, DEFAULT_DUES_SETTINGS.amount),
+    dueDate: str(r.dueDate, DEFAULT_DUES_SETTINGS.dueDate),
+    notes: str(r.notes, DEFAULT_DUES_SETTINGS.notes),
+    paymentOptions,
+  };
+}
+
 export const DOCUMENT_CATEGORIES = [
   'Governing Documents',
   'Meeting Minutes',

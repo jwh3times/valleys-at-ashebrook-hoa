@@ -28,10 +28,15 @@ export const GET: APIRoute = async ({ params, request }) => {
 
   const headers = new Headers();
   headers.set('content-type', doc.contentType);
-  headers.set(
-    'content-disposition',
-    `inline; filename="${doc.filename.replace(/"/g, '')}"`,
-  );
+  headers.set('x-content-type-options', 'nosniff');
+  // Strip control chars and quotes/backslashes so the filename can't break the
+  // header or inject a second directive.
+  const safeName = [...doc.filename]
+    .filter((ch) => ch.charCodeAt(0) >= 0x20 && ch !== '"' && ch !== '\\')
+    .join('');
+  const disposition =
+    doc.contentType === 'application/pdf' ? 'inline' : 'attachment';
+  headers.set('content-disposition', `${disposition}; filename="${safeName}"`);
   headers.set(
     'cache-control',
     doc.visibility === 'public' ? 'public, max-age=3600' : 'private, no-store',

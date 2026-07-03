@@ -7,6 +7,34 @@ import { getAuthContext } from './server/authz/context';
 import { getSiteSettings } from './server/content/settings';
 import { DEFAULT_SITE_SETTINGS } from './lib/types';
 
+// Enumerated from the code's external dependencies: Google Fonts, the Google
+// Calendar embed (frame), Turnstile (script+frame), Web3Forms (connect).
+// Shipped Report-Only first: Astro injects inline styles + island hydration, so
+// enforce-mode is flipped in a follow-up once no legitimate resource is blocked.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "img-src 'self' data:",
+  "font-src 'self' https://fonts.gstatic.com",
+  "connect-src 'self' https://api.web3forms.com",
+  'frame-src https://calendar.google.com https://challenges.cloudflare.com',
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
+function applySecurityHeaders(headers: Headers): void {
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=()',
+  );
+  headers.set('Content-Security-Policy-Report-Only', CSP);
+}
+
 export const onRequest: MiddlewareHandler = async (context, next) => {
   const ctx = await getAuthContext(context.request, env);
   context.locals.authContext = ctx;
@@ -18,11 +46,17 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     ? { ...DEFAULT_SITE_SETTINGS }
     : await getSiteSettings(env);
 
+  let response: Response;
   if (path.startsWith('/admin') && ctx?.role !== 'board') {
-    return context.redirect('/login', 302);
+    response = context.redirect('/login', 302);
+  } else if (
+    path.startsWith('/homeowner') &&
+    (!ctx || ctx.role === 'visitor')
+  ) {
+    response = context.redirect('/login', 302);
+  } else {
+    response = await next();
   }
-  if (path.startsWith('/homeowner') && (!ctx || ctx.role === 'visitor')) {
-    return context.redirect('/login', 302);
-  }
-  return next();
+  applySecurityHeaders(response.headers);
+  return response;
 };
