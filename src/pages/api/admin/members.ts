@@ -23,8 +23,17 @@ export const GET: APIRoute = async ({ request }) => {
     .orderBy(desc(users.createdAt))
     .limit(50);
   const queue = await db
-    .select()
+    .select({
+      id: manualApprovalQueue.id,
+      userId: manualApprovalQueue.userId,
+      email: users.email,
+      claimedAddress: manualApprovalQueue.claimedAddress,
+      reason: manualApprovalQueue.reason,
+      status: manualApprovalQueue.status,
+      createdAt: manualApprovalQueue.createdAt,
+    })
     .from(manualApprovalQueue)
+    .leftJoin(users, eq(manualApprovalQueue.userId, users.id))
     .where(eq(manualApprovalQueue.status, 'pending'))
     .orderBy(desc(manualApprovalQueue.createdAt));
   return Response.json({ recent, queue });
@@ -38,7 +47,7 @@ export const POST: APIRoute = async ({ request }) => {
     action: string;
     userId?: string;
     queueId?: string;
-    ownerId?: string;
+    propertyId?: string;
   };
   if (body.action === 'revoke') {
     if (!body.userId) return new Response('Bad Request', { status: 400 });
@@ -50,7 +59,7 @@ export const POST: APIRoute = async ({ request }) => {
       .delete(userPropertyLinks)
       .where(eq(userPropertyLinks.userId, body.userId));
   } else if (body.action === 'approve') {
-    if (!body.queueId || !body.ownerId)
+    if (!body.queueId || !body.propertyId)
       return new Response('Bad Request', { status: 400 });
     const [row] = await db
       .select()
@@ -60,7 +69,7 @@ export const POST: APIRoute = async ({ request }) => {
     await db.insert(userPropertyLinks).values({
       id: crypto.randomUUID(),
       userId: row.userId,
-      ownerId: body.ownerId,
+      propertyId: body.propertyId,
       verifiedAt: new Date(),
       method: 'board_manual',
     });

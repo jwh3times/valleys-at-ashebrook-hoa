@@ -2,7 +2,10 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { sendEmail, sendSms } from '../auth/senders';
 import { SITE_NAME } from '../../lib/site';
-import { findActiveOwnerByAddress } from '../roster/lookup';
+import {
+  findActivePropertyByAddress,
+  getActiveOwnersForProperty,
+} from '../roster/lookup';
 import {
   generateCode,
   hashCode,
@@ -24,23 +27,40 @@ export async function requestPropertyVerification(
   channel: 'email' | 'sms',
 ): Promise<{ ok: true } | { ok: false; queued: true }> {
   const db = getDb(env);
-  const owner = await findActiveOwnerByAddress(db, address);
+  const property = await findActivePropertyByAddress(db, address);
   const now = new Date();
-  if (
-    !owner ||
-    (channel === 'email' && !owner.email) ||
-    (channel === 'sms' && !owner.phone)
-  ) {
+  if (!property) {
     await db.insert(manualApprovalQueue).values({
       id: crypto.randomUUID(),
       userId,
       claimedAddress: address,
-      reason: owner ? 'no contact on file for channel' : 'address not found',
+      reason: 'address not found',
       status: 'pending',
       createdAt: now,
     });
     return { ok: false, queued: true };
   }
+
+  const propertyOwners = await getActiveOwnersForProperty(db, property.id);
+  const recipients = [
+    ...new Set(
+      propertyOwners
+        .map((o) => (channel === 'email' ? o.email : o.phone))
+        .filter((v): v is string => !!v),
+    ),
+  ];
+  if (recipients.length === 0) {
+    await db.insert(manualApprovalQueue).values({
+      id: crypto.randomUUID(),
+      userId,
+      claimedAddress: address,
+      reason: 'no contact on file for channel',
+      status: 'pending',
+      createdAt: now,
+    });
+    return { ok: false, queued: true };
+  }
+
   await db
     .delete(propertyVerifications)
     .where(
@@ -53,7 +73,7 @@ export async function requestPropertyVerification(
   await db.insert(propertyVerifications).values({
     id: crypto.randomUUID(),
     userId,
-    ownerId: owner.id,
+    propertyId: property.id,
     channel,
     codeHash: await hashCode(code),
     expiresAt: new Date(now.getTime() + CODE_TTL_MS),
@@ -62,14 +82,25 @@ export async function requestPropertyVerification(
     createdAt: now,
   });
   const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
-  if (channel === 'email')
-    await sendEmail(
-      env,
-      owner.email!,
-      `Your verification code — ${SITE_NAME}`,
-      message,
-    );
-  else await sendSms(env, owner.phone!, message);
+  const subject = `Your verification code — ${SITE_NAME}`;
+  const results = await Promise.allSettled(
+    recipients.map((to) =>
+      channel === 'email'
+        ? sendEmail(env, to, subject, message)
+        : sendSms(env, to, message),
+    ),
+  );
+  if (!results.some((r) => r.status === 'fulfilled')) {
+    await db.insert(manualApprovalQueue).values({
+      id: crypto.randomUUID(),
+      userId,
+      claimedAddress: address,
+      reason: 'all sends failed',
+      status: 'pending',
+      createdAt: now,
+    });
+    return { ok: false, queued: true };
+  }
   return { ok: true };
 }
 
@@ -107,7 +138,7 @@ export async function confirmPropertyVerification(
   await db.insert(userPropertyLinks).values({
     id: crypto.randomUUID(),
     userId,
-    ownerId: pv.ownerId,
+    propertyId: pv.propertyId,
     verifiedAt: new Date(),
     method: pv.channel === 'email' ? 'otp_email' : 'otp_sms',
   });

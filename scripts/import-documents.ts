@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { pathToDocMeta } from './doc-tiers';
+import { pathToDocMeta } from './doc-tiers.ts';
 
 export interface DocumentEntry {
   id: string;
