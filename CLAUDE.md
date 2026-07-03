@@ -4,7 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-The public + homeowner website for the Valleys at Ashebrook HOA. An Astro SSR app
+The public + homeowner website for the Valleys at Ashebrook neighborhood, branded
+**"The Valleys at Ashebrook Residents"**. An admin-toggleable **official mode** switches the site to
+official-HOA presentation — branding, footer disclaimer, and HOA-only surfaces like `/dues` are
+driven by the `officialMode` site setting through `src/lib/site.ts`. An Astro SSR app
 (`output: 'server'`) running on **Cloudflare Workers** via the `@astrojs/cloudflare`
 adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2** (document files),
 and **KV** (Astro sessions). Auth is **Better Auth** (email/password + admin plugin).
@@ -60,7 +63,7 @@ KV), `SESSION` (KV for Astro sessions), `DOCS` (R2 `ashebrook-hoa-docs`).
 - Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`
 - Gated document download (R2, tier-checked): `GET /api/files/[id]`
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
-  `/api/admin/{owners,roles,members}`
+  `/api/admin/{properties,owners,roles,members}`
 - Homeowner verification: `/api/verify/{request,confirm}`
 - Better Auth handler: `/api/auth/[...all]`
 
@@ -69,6 +72,9 @@ KV), `SESSION` (KV for Astro sessions), `DOCS` (R2 `ashebrook-hoa-docs`).
 - `src/lib/admin.ts` — board writes (fetch `/api/admin/*` endpoints).
 - `src/lib/types.ts` — shared shapes + `DEFAULT_*` fallbacks + `DOCUMENT_CATEGORIES` +
   the `Visibility` type.
+- `src/lib/site.ts` — branding constants + official-mode presentation logic (`navLinks`,
+  `brandTag`, disclaimers). Pure module — usable in `.astro` files, islands, and unit tests.
+- `src/lib/format.ts` — shared formatting helpers (unit-tested in `format.test.ts`).
 - `src/lib/auth-client.ts` — Better Auth browser client.
 
 **Server code (`src/server/`).** `auth/` (Better Auth config, Resend + Twilio senders),
@@ -77,11 +83,12 @@ KV), `SESSION` (KV for Astro sessions), `DOCS` (R2 `ashebrook-hoa-docs`).
 `schema.ts` + `auth-schema.ts`, `client.ts` = `getDb(env)`, `migrations/`), `roster/`,
 `verification/`.
 
-**Data model (D1 tables).** `announcements`, `documents` (metadata; files in R2 under
-`documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), plus Better
-Auth tables (`user`, `session`, `account`, `verification`, roster/owner tables). A
-user's role is a column on the user record; `board` is never self-grantable through the
-app.
+**Data model (D1 tables, `src/server/db/schema.ts`).** `announcements`, `documents` (metadata;
+files in R2 under `documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), and the
+roster/verification tables — `properties` (homes) + `owners` (people, many per home; split in
+migration `0002`), `user_property_links`, `property_verifications`, `manual_approval_queue` — plus
+the Better Auth tables (`user`, `session`, `account`, `verification`). A user's role is a column on
+the user record; `board` is never self-grantable through the app.
 
 **Roles & access.** Roles `visitor | homeowner | board`; content visibility tiers
 `public | homeowner | board`. Access is enforced server-side and fail-closed (anonymous
@@ -105,3 +112,7 @@ npx wrangler deploy -c dist/server/wrangler.json   # deploy the Worker
 The root `wrangler.toml` intentionally has no `main` field — the adapter emits
 `dist/server/wrangler.json` with `main`, `assets`, and bindings, which is what you
 deploy with `-c`.
+
+**Reference assets.** `design/Ashebrook HOA.dc.html` is a static design mockup kept as a visual
+reference — it is not built or imported; don't edit it. Implementation plans and design specs live
+in `docs/superpowers/{plans,specs}/`.
