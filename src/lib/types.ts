@@ -112,3 +112,27 @@ export interface Owner {
   status: 'active' | 'inactive';
   notes: string | null;
 }
+
+export type PropertyWithOwners = Property & { owners: Owner[] };
+
+export interface MemberUser {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string; // ISO
+}
+
+export interface ManualApprovalItem {
+  id: string;
+  userId: string;
+  email: string | null;
+  claimedAddress: string;
+  reason: string;
+  status: string;
+  createdAt: string; // ISO
+}
+
+export interface MembersView {
+  recent: MemberUser[];
+  queue: ManualApprovalItem[];
+}
