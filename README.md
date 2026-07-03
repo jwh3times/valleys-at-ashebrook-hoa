@@ -72,7 +72,9 @@ npm run deploy     # build + deploy to Cloudflare Workers
 - **Formatting:** [Prettier](https://prettier.io) with `prettier-plugin-astro`.
   Run `npm run format`; CI enforces `npm run format:check`.
 - **CI:** `.github/workflows/build.yml` runs format check, type check, tests,
-  and build on every push and pull request, plus CodeQL.
+  and build on every push and pull request. CodeQL code scanning runs via GitHub's
+  default setup (configured in repo Settings — there is intentionally no CodeQL
+  workflow file in the repo).
 
 ## Project layout
 
@@ -83,7 +85,7 @@ src/
   layouts/            Shared page shell
   components/         Header/Footer + React islands
     admin/            The board admin app
-  lib/                Client helpers (content.ts, admin.ts, types.ts, auth-client.ts)
+  lib/                Client helpers (content.ts, admin.ts, site.ts, format.ts, types.ts, auth-client.ts)
   server/             Server-only code
     auth/             Better Auth config, Resend + Twilio senders
     authz/            getAuthContext, requireRole, requireBoard, Turnstile check
@@ -108,3 +110,11 @@ board over time. A board member can't escalate their own access beyond `board`, 
 the Better Auth admin plugin's impersonation/ban/set-role endpoints are not granted to
 board sessions. The *first* board account is still bootstrapped out-of-band — see
 SETUP.md for how to seed it via `scripts/seed-board.ts`.
+
+## Contributing & support
+
+Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow and local
+checks, and [CLAUDE.md](./CLAUDE.md) for the architecture and conventions. By participating you
+agree to the [Code of Conduct](./CODE_OF_CONDUCT.md). For help and bug reports, see
+[SUPPORT.md](./SUPPORT.md); report vulnerabilities privately per [SECURITY.md](./SECURITY.md).
+Shipped changes are tracked in the [changelog](./CHANGELOG.md).
