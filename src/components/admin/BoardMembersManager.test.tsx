@@ -14,16 +14,14 @@ import BoardMembersManager from './BoardMembersManager';
 
 describe('BoardMembersManager', () => {
   beforeEach(() => {
-    fetchBoardMembers
-      .mockReset()
-      .mockResolvedValue([
-        {
-          id: 'u1',
-          name: 'Alice',
-          email: 'alice@example.com',
-          createdAt: '2026-01-01',
-        },
-      ]);
+    fetchBoardMembers.mockReset().mockResolvedValue([
+      {
+        id: 'u1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        createdAt: '2026-01-01',
+      },
+    ]);
     promoteToBoard.mockClear();
     demoteFromBoard.mockClear();
   });
