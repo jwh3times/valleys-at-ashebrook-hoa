@@ -34,10 +34,11 @@ export function createAuth(
         // an empty object satisfies the check that cf is truthy (required when
         // autoDetectIpAddress is true).
         cf: (cf ?? {}) as CloudflareGeolocation,
-        // Use a plain drizzle(D1) instance (no schema) for better-auth's adapter —
-        // better-auth manages its own schema definitions; the schema arg is not needed here.
+        // Better Auth's Drizzle adapter needs the schema to resolve models (e.g.
+        // "users"). withCloudflare spreads d1.options straight into drizzleAdapter,
+        // so pass `schema` there; usePlural matches our plural table names.
         d1: env
-          ? { db: drizzle(env.DATABASE), options: { usePlural: true } }
+          ? { db: drizzle(env.DATABASE), options: { usePlural: true, schema } }
           : undefined,
         kv: env?.KV,
       },
