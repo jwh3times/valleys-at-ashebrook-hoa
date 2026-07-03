@@ -10,6 +10,20 @@ export const prerender = false;
 const MAX_BYTES = 25 * 1024 * 1024;
 const VISIBILITIES = ['public', 'homeowner', 'board'] as const;
 
+// Server-side allowlist keyed by extension. Client MIME is unreliable for
+// .md/.csv, so derive the stored content type here. text/html and image/svg+xml
+// are deliberately excluded — they are the stored-XSS vectors when served inline.
+const EXT_TO_TYPE: Record<string, string> = {
+  pdf: 'application/pdf',
+  txt: 'text/plain',
+  md: 'text/markdown',
+  csv: 'text/csv',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
 export const POST: APIRoute = async ({ request }) => {
   const denied = await requireBoard(request, env);
   if (denied) return denied;
@@ -23,10 +37,14 @@ export const POST: APIRoute = async ({ request }) => {
   if (!(VISIBILITIES as readonly string[]).includes(visibility))
     return new Response('Bad Request', { status: 400 });
   if (file.size > MAX_BYTES) return new Response('Too large', { status: 413 });
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const contentType = EXT_TO_TYPE[ext];
+  if (!contentType)
+    return new Response('Unsupported file type', { status: 415 });
   const id = crypto.randomUUID();
   const r2Key = `documents/${id}/${file.name.replace(/[^\w.\-]/g, '_')}`;
   await env.DOCS.put(r2Key, await file.arrayBuffer(), {
-    httpMetadata: { contentType: file.type },
+    httpMetadata: { contentType },
   });
   const now = new Date();
   await getDb(env)
@@ -39,7 +57,7 @@ export const POST: APIRoute = async ({ request }) => {
       r2Key,
       filename: file.name,
       sizeBytes: file.size,
-      contentType: file.type || 'application/octet-stream',
+      contentType,
       uploadedAt: now,
       updatedAt: now,
     });
