@@ -58,12 +58,14 @@ export default function RosterManager() {
     toTop();
   }
   function startAddOwner(propertyId: string) {
+    resetHome();
     resetOwner();
     setOwnerPropertyId(propertyId);
     setMsg('');
     toTop();
   }
   function startEditOwner(o: Owner) {
+    resetHome();
     setEditingOwnerId(o.id);
     setOwnerPropertyId(o.propertyId);
     setOwnerForm({
@@ -209,6 +211,16 @@ export default function RosterManager() {
             </select>
           </div>
         )}
+        <div className="field" style={{ marginBottom: '16px' }}>
+          <label htmlFor="home-notes">Home notes (optional)</label>
+          <textarea
+            id="home-notes"
+            value={homeForm.notes}
+            onChange={(e) =>
+              setHomeForm({ ...homeForm, notes: e.target.value })
+            }
+          />
+        </div>
         <div className="btn-row">
           <button className="btn btn--small" type="submit" disabled={busy}>
             {busy ? 'Saving…' : editingHomeId ? 'Save Home' : 'Add Home'}
@@ -286,6 +298,16 @@ export default function RosterManager() {
               </select>
             </div>
           )}
+          <div className="field" style={{ marginBottom: '16px' }}>
+            <label htmlFor="owner-notes">Owner notes (optional)</label>
+            <textarea
+              id="owner-notes"
+              value={ownerForm.notes}
+              onChange={(e) =>
+                setOwnerForm({ ...ownerForm, notes: e.target.value })
+              }
+            />
+          </div>
           <div className="btn-row">
             <button className="btn btn--small" type="submit" disabled={busy}>
               {busy ? 'Saving…' : editingOwnerId ? 'Save Owner' : 'Add Owner'}

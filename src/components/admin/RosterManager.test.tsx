@@ -52,11 +52,15 @@ describe('RosterManager', () => {
     fireEvent.change(screen.getByLabelText(/full name/i), {
       target: { value: 'John Roe' },
     });
+    fireEvent.change(screen.getByLabelText(/owner notes/i), {
+      target: { value: 'Prefers email' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /^add owner$/i }));
     await waitFor(() => expect(saveOwner).toHaveBeenCalledTimes(1));
     expect(saveOwner.mock.calls[0][0]).toMatchObject({
       propertyId: 'p1',
       fullName: 'John Roe',
+      notes: 'Prefers email',
     });
     expect(saveOwner.mock.calls[0][1]).toBeUndefined(); // create (no id)
   });
