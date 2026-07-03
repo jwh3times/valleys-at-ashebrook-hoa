@@ -48,23 +48,31 @@ export function createAuth(
           minPasswordLength: 10,
           sendResetPassword: async ({ user, url }) => {
             if (!env) return;
-            await sendEmail(
-              env,
-              user.email,
-              `Reset your password — ${SITE_NAME}`,
-              `Reset link: ${url}`,
-            );
+            try {
+              await sendEmail(
+                env,
+                user.email,
+                `Reset your password — ${SITE_NAME}`,
+                `Reset link: ${url}`,
+              );
+            } catch (err) {
+              console.error('[auth] sendResetPassword failed:', err);
+            }
           },
         },
         emailVerification: {
           sendVerificationEmail: async ({ user, url }) => {
             if (!env) return;
-            await sendEmail(
-              env,
-              user.email,
-              `Verify your account — ${SITE_NAME}`,
-              `Verify link: ${url}`,
-            );
+            try {
+              await sendEmail(
+                env,
+                user.email,
+                `Verify your account — ${SITE_NAME}`,
+                `Verify link: ${url}`,
+              );
+            } catch (err) {
+              console.error('[auth] sendVerificationEmail failed:', err);
+            }
           },
         },
         plugins: [
