@@ -1,13 +1,20 @@
 name: CI
 
+# push→main + pull_request covers merges and PR branches without double-running
+# every PR commit (the old push:'**' trigger ran each PR commit twice).
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
 
 # Minimal token scope: CI only reads the repo to build and test.
 permissions:
   contents: read
+
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -22,4 +29,7 @@ jobs:
       - run: npm run format:check
       - run: npm run check
       - run: npm test
+      # Worker/D1 integration tests (vitest-pool-workers) — exercises the API
+      # handlers against a real workerd + D1 with migrations applied.
+      - run: npm run test:server
       - run: npm run build
