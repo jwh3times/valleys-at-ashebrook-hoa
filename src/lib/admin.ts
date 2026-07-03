@@ -5,6 +5,7 @@ import type {
   SiteSettings,
   PropertyWithOwners,
   MembersView,
+  MemberUser,
 } from './types';
 
 // ---------- Announcements ----------
@@ -159,4 +160,32 @@ export async function memberAction(payload: {
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Action failed: ${res.status}`);
+}
+
+// ---------- Board membership (handoff) ----------
+export async function fetchBoardMembers(): Promise<MemberUser[]> {
+  const res = await fetch('/api/admin/roles');
+  if (!res.ok) throw new Error(`Load board failed: ${res.status}`);
+  const data = (await res.json()) as { board: MemberUser[] };
+  return data.board;
+}
+
+export async function promoteToBoard(email: string): Promise<void> {
+  const res = await fetch('/api/admin/roles', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'promote', email }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Promote failed: ${res.status}`);
+}
+
+export async function demoteFromBoard(userId: string): Promise<void> {
+  const res = await fetch('/api/admin/roles', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'demote', userId }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Demote failed: ${res.status}`);
 }
