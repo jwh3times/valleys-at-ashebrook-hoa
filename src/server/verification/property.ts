@@ -19,13 +19,16 @@ import {
   userPropertyLinks,
   users,
 } from '../db/schema';
+import { checkPropertyRateLimit, recordVerificationSend } from './rate-limit';
 
 export async function requestPropertyVerification(
   env: Env,
   userId: string,
   address: string,
   channel: 'email' | 'sms',
-): Promise<{ ok: true } | { ok: false; queued: true }> {
+): Promise<
+  { ok: true } | { ok: false; queued: true } | { ok: false; rateLimited: true }
+> {
   const db = getDb(env);
   const property = await findActivePropertyByAddress(db, address);
   const now = new Date();
@@ -61,6 +64,9 @@ export async function requestPropertyVerification(
     return { ok: false, queued: true };
   }
 
+  const prl = await checkPropertyRateLimit(env, property.id);
+  if (!prl.ok) return { ok: false, rateLimited: true };
+
   await db
     .delete(propertyVerifications)
     .where(
@@ -75,7 +81,7 @@ export async function requestPropertyVerification(
     userId,
     propertyId: property.id,
     channel,
-    codeHash: await hashCode(code),
+    codeHash: await hashCode(code, env.BETTER_AUTH_SECRET),
     expiresAt: new Date(now.getTime() + CODE_TTL_MS),
     attempts: 0,
     consumedAt: null,
@@ -101,6 +107,7 @@ export async function requestPropertyVerification(
     });
     return { ok: false, queued: true };
   }
+  await recordVerificationSend(env, userId, property.id);
   return { ok: true };
 }
 
@@ -124,7 +131,7 @@ export async function confirmPropertyVerification(
   if (pv.attempts >= MAX_ATTEMPTS) return { ok: false, reason: 'locked' };
   if (pv.expiresAt.getTime() < Date.now())
     return { ok: false, reason: 'expired' };
-  if (!(await verifyCode(code, pv.codeHash))) {
+  if (!(await verifyCode(code, pv.codeHash, env.BETTER_AUTH_SECRET))) {
     await db
       .update(propertyVerifications)
       .set({ attempts: sql`${propertyVerifications.attempts} + 1` })

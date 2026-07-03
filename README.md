@@ -102,9 +102,14 @@ src/server/db/migrations/   D1 migration files
 ## How content is edited
 
 Board members go to `/admin`, sign in with their email + password (Better Auth), and
-manage announcements, documents, dues, and site text through on-screen forms. The
-`board` role is set directly in the database — it is never self-grantable through the
-app. See SETUP.md for how to seed the first board member.
+manage announcements, documents, dues, and site text through on-screen forms. Board
+membership itself is also managed in the admin app, under **Board members**: a board
+member can promote another account to `board` and demote a board member (the last
+remaining board member can't be demoted), which supports handing the site off to a new
+board over time. A board member can't escalate their own access beyond `board`, and
+the Better Auth admin plugin's impersonation/ban/set-role endpoints are not granted to
+board sessions. The *first* board account is still bootstrapped out-of-band — see
+SETUP.md for how to seed it via `scripts/seed-board.ts`.
 
 ## Contributing & support
 

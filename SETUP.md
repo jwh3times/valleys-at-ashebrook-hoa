@@ -213,6 +213,19 @@ Routes**, add your domain and follow the DNS steps (buy one from any registrar, 
 Cloudflare provides free SSL). Then update `BETTER_AUTH_URL` in `wrangler.toml` (`[vars]`)
 and `site` in `astro.config.mjs`, and redeploy.
 
+### Security headers
+
+The Worker sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy`, and a **Report-Only** Content-Security-Policy on every
+response. Two settings live at the Cloudflare **zone** level, not in code:
+
+- **HSTS:** enable in the dashboard → SSL/TLS → Edge Certificates → HTTP Strict
+  Transport Security (recommend `max-age=15552000`, includeSubDomains once you've
+  confirmed every subdomain is HTTPS).
+- After watching the browser console for CSP violations in Report-Only mode and
+  confirming nothing legitimate is blocked, flip `Content-Security-Policy-Report-Only`
+  to `Content-Security-Policy` in `src/middleware.ts`.
+
 ## Local development
 
 ```bash

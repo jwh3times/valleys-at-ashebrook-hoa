@@ -19,6 +19,19 @@ const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
   { value: 'board', label: 'Board only' },
 ];
 
+// Mirror the server-side allowlist in src/pages/api/admin/documents.ts.
+const ALLOWED_EXTENSIONS = [
+  'pdf',
+  'txt',
+  'md',
+  'csv',
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+];
+const ACCEPT_ATTR = ALLOWED_EXTENSIONS.map((e) => `.${e}`).join(',');
+
 export default function DocumentsManager() {
   const [items, setItems] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,11 +78,14 @@ export default function DocumentsManager() {
     e.preventDefault();
     setMsg('');
     if (!file) {
-      setMsg('Please choose a PDF file.');
+      setMsg('Please choose a file.');
       return;
     }
-    if (file.type !== 'application/pdf') {
-      setMsg('Only PDF files are allowed.');
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      setMsg(
+        'Unsupported file type. Allowed: PDF, Word, Excel, CSV, text, Markdown.',
+      );
       return;
     }
     setBusy(true);
@@ -116,7 +132,7 @@ export default function DocumentsManager() {
         <h1>Documents</h1>
       </div>
       <p className="admin-panel__intro">
-        Upload, organize, and remove the PDFs shown on the public Documents
+        Upload, organize, and remove the documents shown on the public Documents
         page.
       </p>
 
@@ -234,14 +250,18 @@ export default function DocumentsManager() {
             </select>
           </div>
           <div className="field">
-            <label>PDF file (max 25 MB)</label>
+            <label>File (max 25 MB)</label>
             <input
               ref={fileInput}
               type="file"
-              accept="application/pdf"
+              accept={ACCEPT_ATTR}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               required
             />
+            <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+              Allowed: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, text,
+              Markdown.
+            </p>
           </div>
           <div className="btn-row">
             <button className="btn btn--small" type="submit" disabled={busy}>
