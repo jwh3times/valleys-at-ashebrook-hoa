@@ -60,7 +60,10 @@ KV), `SESSION` (KV for Astro sessions), `DOCS` (R2 `ashebrook-hoa-docs`).
 - Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`
 - Gated document download (R2, tier-checked): `GET /api/files/[id]`
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
-  `/api/admin/{owners,roles,members}`
+  `/api/admin/{owners,members}`
+- Board handoff: `GET /api/admin/roles` (list current board) and
+  `POST /api/admin/roles` — `{ action: 'promote', email }` or
+  `{ action: 'demote', userId }` (409 if it's the last board member)
 - Homeowner verification: `/api/verify/{request,confirm}`
 - Better Auth handler: `/api/auth/[...all]`
 
@@ -80,8 +83,14 @@ KV), `SESSION` (KV for Astro sessions), `DOCS` (R2 `ashebrook-hoa-docs`).
 **Data model (D1 tables).** `announcements`, `documents` (metadata; files in R2 under
 `documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), plus Better
 Auth tables (`user`, `session`, `account`, `verification`, roster/owner tables). A
-user's role is a column on the user record; `board` is never self-grantable through the
-app.
+user's role is a column on the user record. Board membership is managed in the admin
+app's **Board members** panel: a board member can promote another account to `board`
+and demote a board member (the last remaining board member can't be demoted), which
+makes board handoff a supported workflow. A board member cannot escalate their own
+access beyond `board`, and the *first* board account is still bootstrapped out-of-band
+via `scripts/seed-board.ts` (see SETUP.md). These role changes are direct D1 writes,
+not the Better Auth admin API — the admin plugin's impersonation/ban/set-role
+endpoints are not granted to board sessions (see `src/server/auth/permissions.ts`).
 
 **Roles & access.** Roles `visitor | homeowner | board`; content visibility tiers
 `public | homeowner | board`. Access is enforced server-side and fail-closed (anonymous
