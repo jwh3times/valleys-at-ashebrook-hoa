@@ -2,7 +2,6 @@ import type { APIRoute } from 'astro';
 import { and, desc, eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
-import { createAuth } from '../../../server/auth';
 import { getDb } from '../../../server/db/client';
 import {
   manualApprovalQueue,
@@ -51,10 +50,19 @@ export const POST: APIRoute = async ({ request }) => {
   };
   if (body.action === 'revoke') {
     if (!body.userId) return new Response('Bad Request', { status: 400 });
-    await createAuth(env).api.setRole({
-      body: { userId: body.userId, role: 'visitor' },
-      headers: request.headers,
-    });
+    const [target] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, body.userId));
+    if (target?.role === 'board')
+      return new Response(
+        'Cannot demote a board member here; use Board members.',
+        { status: 409 },
+      );
+    await db
+      .update(users)
+      .set({ role: 'visitor' })
+      .where(eq(users.id, body.userId));
     await db
       .delete(userPropertyLinks)
       .where(eq(userPropertyLinks.userId, body.userId));
