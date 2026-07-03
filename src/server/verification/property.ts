@@ -19,13 +19,16 @@ import {
   userPropertyLinks,
   users,
 } from '../db/schema';
+import { checkPropertyRateLimit, recordVerificationSend } from './rate-limit';
 
 export async function requestPropertyVerification(
   env: Env,
   userId: string,
   address: string,
   channel: 'email' | 'sms',
-): Promise<{ ok: true } | { ok: false; queued: true }> {
+): Promise<
+  { ok: true } | { ok: false; queued: true } | { ok: false; rateLimited: true }
+> {
   const db = getDb(env);
   const property = await findActivePropertyByAddress(db, address);
   const now = new Date();
@@ -60,6 +63,9 @@ export async function requestPropertyVerification(
     });
     return { ok: false, queued: true };
   }
+
+  const prl = await checkPropertyRateLimit(env, property.id);
+  if (!prl.ok) return { ok: false, rateLimited: true };
 
   await db
     .delete(propertyVerifications)
@@ -101,6 +107,7 @@ export async function requestPropertyVerification(
     });
     return { ok: false, queued: true };
   }
+  await recordVerificationSend(env, userId, property.id);
   return { ok: true };
 }
 
