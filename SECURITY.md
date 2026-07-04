@@ -22,11 +22,27 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   content visibility tiers are `public | homeowner | board`. Anonymous users resolve to `visitor`
   and unknown states resolve to the most restrictive tier. Document downloads are tier-checked on
   the server before the R2 object is served.
-- **`board` is never self-grantable.** A user's role is a column on the user record, changed only
-  through the board-only admin API.
-- **Homeowner verification is possession-based.** Sign-up is verified against the owner roster via
-  a one-time code sent to the phone/email already on file (Resend / Twilio), gated by Cloudflare
-  Turnstile.
+- **`board` is never self-grantable, and board handoff is a supported workflow.** A user's role is
+  a column on the user record. A board member can promote another account to `board` and demote a
+  board member from the admin panel's **Board members** section (the last remaining board member
+  can't be demoted), but cannot escalate their own access beyond `board`. These are direct database
+  writes: the Better Auth admin plugin's impersonation, ban, and set-role endpoints are deliberately
+  not granted to board sessions. The first board account is bootstrapped out-of-band (see
+  `SETUP.md`).
+- **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
+  owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
+  by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in
+  constant time, so a leaked database backup can't be reversed with a precomputed table.
+  Verification requests are rate-limited in KV — a short per-user cooldown plus daily caps per user
+  and per property — to curb abuse of the SMS/email fan-out.
+- **Every response carries baseline security headers.** Middleware sets `X-Content-Type-Options:
+  nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and a
+  Content-Security-Policy (currently Report-Only while it is validated, then flipped to enforced).
+  HSTS is enabled at the Cloudflare zone level (see `SETUP.md`).
+- **Document files are constrained on upload and download.** Uploads are limited to an extension
+  allowlist with a server-derived canonical content type and a size cap (HTML and SVG are excluded
+  as stored-XSS vectors; disallowed types are rejected with `415`). Downloads are sent with
+  `nosniff`, forced to `attachment` for anything other than PDF, and given a sanitized filename.
 - **Secrets never live in the repo.** Runtime secrets (auth, Resend, Twilio, Turnstile) are set as
   Cloudflare Worker secrets via `wrangler secret put` (see `SETUP.md`); only `PUBLIC_*` build-time
   variables are non-secret. `.env` files are git-ignored.
@@ -36,8 +52,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
 ## Automated safeguards
 
 - **Dependabot** — dependency update PRs and security alerts (`.github/dependabot.yml`).
-- **CI** — every push and PR runs format, type-check, test, and build gates
-  (`.github/workflows/build.yml`).
+- **CI** — every push and PR runs format, type-check, unit tests, Worker/D1 integration tests
+  (`test:server`), and build gates (`.github/workflows/build.yml`).
 
 ## Responsible disclosure
 
