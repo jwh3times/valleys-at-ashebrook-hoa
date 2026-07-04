@@ -7,8 +7,8 @@ import { users } from '../../../server/db/schema';
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const GET: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const board = await getDb(env)
     .select({
@@ -24,10 +24,11 @@ export const GET: APIRoute = async ({ request }) => {
 
 // Board handoff is a deliberate, supported workflow: an outgoing board member
 // promotes the incoming one, then the incoming one demotes the outgoing one.
-// Role changes are direct DB writes (getAuthContext re-reads role every request,
-// so they take effect immediately) — no dependency on the Better Auth admin API.
-export const POST: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+// Role changes are direct DB writes; the middleware re-resolves the caller's role
+// every request (getAuthContext), so they take effect immediately — no dependency
+// on the Better Auth admin API.
+export const POST: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const body = (await request.json().catch(() => null)) as {
     action?: string;

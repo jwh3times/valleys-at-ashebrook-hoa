@@ -8,8 +8,8 @@ import { normalizeAddress } from '../../../server/roster/lookup';
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const GET: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const db = getDb(env);
   const props = await db.select().from(properties);
@@ -25,8 +25,8 @@ export const GET: APIRoute = async ({ request }) => {
   );
 };
 
-export const POST: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const body = (await request.json()) as {
     address: string;
@@ -50,8 +50,8 @@ export const POST: APIRoute = async ({ request }) => {
   return new Response(null, { status: 201 });
 };
 
-export const PATCH: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const PATCH: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const body = (await request.json()) as {
     id: string;

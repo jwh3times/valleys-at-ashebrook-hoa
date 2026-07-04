@@ -85,7 +85,8 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
 - `src/lib/auth-client.ts` — Better Auth browser client.
 
 **Server code (`src/server/`).** `auth/` (Better Auth config, Resend + Twilio senders),
-`authz/` (`getAuthContext`, `requireRole`, `requireBoard`, Turnstile check), `content/`
+`authz/` (`getAuthContext`, `resolveAuthContext` = middleware-first caller resolution with a
+fail-closed fallback, `requireRole`, `requireBoard`, Turnstile check), `content/`
 (`visibility.ts` = `tierAllows`/`visibleTiers`; `reads.ts`), `db/` (Drizzle
 `schema.ts` + `auth-schema.ts`, `client.ts` = `getDb(env)`, `migrations/`), `roster/`,
 `verification/`.
