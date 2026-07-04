@@ -53,7 +53,7 @@ The plan's four PR groups all **merged to `main`** via PR #28 (`c842fc9 Merge pu
 | Finding #14 — Turnstile widget reset on spent token | **Outstanding** | `src/components/react/AuthForms.tsx:104-105` reads `window.turnstileToken` once; no reset after a failed/rate-limited submit. |
 | Finding #10 — use `locals.authContext` instead of re-fetching | **Done** (§3.3, PR #36) | `resolveAuthContext(locals, request, env)` (`src/server/authz/api-guards.ts`) reads `locals.authContext` middleware-first with a fail-closed fallback; `requireBoard` now takes `locals`; all `/api/admin/*` and direct call sites resolve the caller once per request. |
 | Finding #8 — DB constraints/indexes | **Outstanding** | `src/server/db/schema.ts` has only primary keys (grep for `unique|index` matches nothing beyond PKs); e.g. no unique on `properties.addressNormalized`, no index on `owners.propertyId`, `user_property_links(userId)`, `property_verifications(userId)`, `documents(visibility)`. |
-| Finding #9 — broad input validation | **Outstanding** | Admin writes besides site/dues parse request JSON with type assertions and persist coerced-but-unvalidated strings (e.g. `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts`); no length caps. §3.8 — note #9 also spans the *public* read `limit` clamp + malformed-JSON→400 + `members.ts` approve check, added to §3.8's scope below. |
+| Finding #9 — broad input validation | **Done** (§3.8, PR #38) | Admin writes besides site/dues parse request JSON with type assertions and persist coerced-but-unvalidated strings (e.g. `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts`); no length caps. §3.8 — note #9 also spans the *public* read `limit` clamp + malformed-JSON→400 + `members.ts` approve check, added to §3.8's scope below. |
 | Finding #11 — trim the **public** documents read payload | **Done** (§3.9, PR #33) | `fetchDocumentsFor` (`src/server/content/reads.ts:7-22`) now projects only the `DocumentItem` columns (id, title, category, visibility, updatedAt); `r2Key`/`filename`/`sizeBytes`/`contentType` no longer reach `GET /api/content/documents`. |
 | Spec appendix — Google Docs/Sheets/Drive import | **Outstanding (backlog by design)** | Not implemented anywhere; explicitly deferred as a future stretch goal (`2026-07-03-p0-security-hardening-design.md` §PR C appendix). |
 
@@ -105,7 +105,7 @@ planned below. This table supersedes the earlier "cannot be enumerated" caveat.
 | 6 | Validate settings on write, normalize dues on read | **Done** | §1.1 A2 |
 | 7 | Run `test:server` in CI | **Done** | §1.1 follow-up (`build.yml:34`) |
 | 8 | DB constraints & indexes | Outstanding | §3.7 |
-| 9 | Tighten write-endpoint input handling | Outstanding | §3.8 (scope broadened) |
+| 9 | Tighten write-endpoint input handling | **Done** | §3.8 (PR #38) |
 | 10 | Use `locals.authContext` | **Done** | §3.3 |
 | 11 | Trim **public** documents read payload | **Done** | §3.9 |
 | 12 | Server-render public content (SSR/SEO) | Outstanding | **§3.10** |
@@ -138,7 +138,7 @@ Security-adjacent work first (finishing the P0 program), then correctness/robust
 | 6 | 3.2 Verification-flow polish — Turnstile reset + OTP requester line + post-confirm refresh (#14) | P1/P2 | S |
 | 7 | 3.3 `locals.authContext` plumbing — one auth read per request (#10) — **Done** | P1 | S–M |
 | 8 | 3.7 D1 constraints & indexes (#8) | P1 | M |
-| 9 | 3.8 Input validation on admin writes + public `limit` clamp + malformed-JSON guard (#9) | P1 | M |
+| 9 | 3.8 Input validation on admin writes + public `limit` clamp + malformed-JSON guard (#9) — **Done** | P1 | M |
 | 10 | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) (#21) | P1 (ops safety) | M |
 | 11 | 3.13 Custom 404 + robots.txt + sitemap (#16) | P2 (SEO) | S |
 | 12 | 3.10 Server-render public content (#12) | P2 (biggest UX/SEO win) | M |
@@ -382,6 +382,11 @@ model altitude.
 ---
 
 ### 3.8 Input validation on admin writes + public-read guards (#9)
+
+**Status: Done — shipped to `main` (PR #38).** Reject-loud `normalize{Announcement,Property,Owner}Input`
++ `INPUT_LIMITS` in `src/lib/types.ts`, `readJson` malformed-body guards (`src/server/http.ts`), the
+public `?limit` clamp, and the members-approve property check (404/409) all landed; the plan below is
+retained for context.
 
 **Objective & rationale.** Site/dues writes are normalized (P0 #6), but the other board-only writes (`announcements`, `properties`, `owners`, `documents` metadata fields) parse JSON/FormData with bare type assertions and persist whatever strings arrive — no length caps, no field allowlists, no trimming. Board-only reduces the threat, but a compromised/mistaken board session can bloat D1 rows, break rendering with megabyte strings, or store unexpected keys. (Payload *trimming* — finding #11 — was previously miscounted here; it's a public-read column-leak fix, now planned separately as §3.9.) Finding #9 also has **three public-facing bullets** the admin-write scope missed, folded in here:
 
