@@ -38,6 +38,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Enabled Workers Logs** — `[observability]` turned on in `wrangler.toml` so production
   invocation logs, console output, and errors are visible from the Cloudflare dashboard. Also
   removed a stray `console.log` from the site-settings read endpoint.
+- **Resolve the caller once per request** — API routes now read the auth context the middleware
+  already put on `locals` (via a new `resolveAuthContext` helper and a `requireBoard` that takes
+  `locals`), instead of each route re-running a full Better Auth session + D1 role/link lookup. A
+  fail-closed fallback preserves behavior when `locals` is absent (e.g. direct handler invocation
+  in tests).
 
 ### Removed
 

@@ -24,8 +24,8 @@ const EXT_TO_TYPE: Record<string, string> = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
-export const POST: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const form = await request.formData();
   const file = form.get('file');
@@ -64,8 +64,8 @@ export const POST: APIRoute = async ({ request }) => {
   return new Response(null, { status: 201 });
 };
 
-export const PATCH: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const PATCH: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const body = (await request.json()) as {
     id?: string;
@@ -89,8 +89,8 @@ export const PATCH: APIRoute = async ({ request }) => {
   return new Response(null, { status: 204 });
 };
 
-export const DELETE: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const DELETE: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const body = (await request.json()) as { id?: string };
   if (!body.id) return new Response('Bad Request', { status: 400 });
