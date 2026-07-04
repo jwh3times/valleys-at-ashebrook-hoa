@@ -33,4 +33,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Admin content management** — announcements, documents, dues, and site settings managed through
   the board-only admin panel.
 
+### Security
+
+- **Public documents read no longer leaks storage metadata** — `GET /api/content/documents` now
+  projects only the `DocumentItem` contract (id, title, category, visibility, updatedAt); the
+  internal R2 object key, filename, byte size, and content type are no longer sent to callers.
+
 [Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/commits/main
