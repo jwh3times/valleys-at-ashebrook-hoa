@@ -80,5 +80,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Public documents read no longer leaks storage metadata** — `GET /api/content/documents` now
   projects only the `DocumentItem` contract (id, title, category, visibility, updatedAt); the
   internal R2 object key, filename, byte size, and content type are no longer sent to callers.
+- **Admin write validation** — announcement, property, owner, and document writes now trim, cap
+  length, validate enums/dates, drop unknown keys, and reject empty required fields with a `400`
+  (instead of persisting coerced, unvalidated strings). Malformed JSON bodies return `400` rather
+  than an opaque `500`, the public announcements `limit` is clamped to a non-negative integer (a
+  negative value previously dropped items off the end), and the members "approve" action refuses a
+  `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
 [Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/commits/main

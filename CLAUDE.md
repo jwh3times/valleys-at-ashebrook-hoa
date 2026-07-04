@@ -78,7 +78,8 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
 - `src/lib/content.ts` — public reads (fetch `/api/content/*` endpoints).
 - `src/lib/admin.ts` — board writes (fetch `/api/admin/*` endpoints).
 - `src/lib/types.ts` — shared shapes + `DEFAULT_*` fallbacks + `DOCUMENT_CATEGORIES` +
-  the `Visibility` type.
+  the `Visibility` type + admin-write input normalizers (`normalize{Announcement,Property,Owner}Input`,
+  `INPUT_LIMITS`) that trim/cap/validate and reject on write.
 - `src/lib/site.ts` — branding constants + official-mode presentation logic (`navLinks`,
   `brandTag`, disclaimers). Pure module — usable in `.astro` files, islands, and unit tests.
 - `src/lib/format.ts` — shared formatting helpers (unit-tested in `format.test.ts`).
@@ -89,7 +90,7 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
 fail-closed fallback, `requireRole`, `requireBoard`, Turnstile check), `content/`
 (`visibility.ts` = `tierAllows`/`visibleTiers`; `reads.ts`), `db/` (Drizzle
 `schema.ts` + `auth-schema.ts`, `client.ts` = `getDb(env)`, `migrations/`), `roster/`,
-`verification/`.
+`verification/`, `http.ts` (`readJson`/`stringField` request-body helpers for the admin writes).
 
 **Data model (D1 tables, `src/server/db/schema.ts`).** `announcements`, `documents` (metadata;
 files in R2 under `documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), and the
