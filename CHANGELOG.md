@@ -39,4 +39,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   invocation logs, console output, and errors are visible from the Cloudflare dashboard. Also
   removed a stray `console.log` from the site-settings read endpoint.
 
+### Security
+
+- **Public documents read no longer leaks storage metadata** — `GET /api/content/documents` now
+  projects only the `DocumentItem` contract (id, title, category, visibility, updatedAt); the
+  internal R2 object key, filename, byte size, and content type are no longer sent to callers.
+
 [Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/commits/main
