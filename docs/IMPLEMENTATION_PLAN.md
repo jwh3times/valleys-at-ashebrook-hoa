@@ -51,10 +51,10 @@ The plan's four PR groups all **merged to `main`** via PR #28 (`c842fc9 Merge pu
 | Flip CSP from Report-Only to enforced (spec "Rollout"; `SETUP.md:225-227`) | **Outstanding** | `src/middleware.ts:35` still sets `Content-Security-Policy-Report-Only`. |
 | Finding #7 — `test:server` in CI | **Done** (landed after the spec) | `.github/workflows/build.yml:34` runs `npm run test:server`; commit `3adad10`. |
 | Finding #14 — Turnstile widget reset on spent token | **Outstanding** | `src/components/react/AuthForms.tsx:104-105` reads `window.turnstileToken` once; no reset after a failed/rate-limited submit. |
-| Finding #10 — use `locals.authContext` instead of re-fetching | **Outstanding** | `src/middleware.ts:40` sets `context.locals.authContext`, but no API route reads it: `getAuthContext(request, env)` is re-called in `src/pages/api/{content/announcements,content/documents,files/[id],verify/request,verify/confirm,admin/roles}.ts` and inside `requireBoard` (`src/server/authz/api-guards.ts`) used by every admin route — two session/DB lookups per request. |
+| Finding #10 — use `locals.authContext` instead of re-fetching | **Done** (§3.3, PR #36) | `resolveAuthContext(locals, request, env)` (`src/server/authz/api-guards.ts`) reads `locals.authContext` middleware-first with a fail-closed fallback; `requireBoard` now takes `locals`; all `/api/admin/*` and direct call sites resolve the caller once per request. |
 | Finding #8 — DB constraints/indexes | **Outstanding** | `src/server/db/schema.ts` has only primary keys (grep for `unique|index` matches nothing beyond PKs); e.g. no unique on `properties.addressNormalized`, no index on `owners.propertyId`, `user_property_links(userId)`, `property_verifications(userId)`, `documents(visibility)`. |
 | Finding #9 — broad input validation | **Outstanding** | Admin writes besides site/dues parse request JSON with type assertions and persist coerced-but-unvalidated strings (e.g. `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts`); no length caps. §3.8 — note #9 also spans the *public* read `limit` clamp + malformed-JSON→400 + `members.ts` approve check, added to §3.8's scope below. |
-| Finding #11 — trim the **public** documents read payload | **Outstanding — reclassified** | `fetchDocumentsFor` (`src/server/content/reads.ts:8`) is a bare `.select()` (= `SELECT *`), so `GET /api/content/documents` ships `r2Key`, `contentType`, `sizeBytes` to every visitor. This is a read-path info-leak, **not** the admin-write trimming §3.8 was scoped to. Planned as **§3.9**. |
+| Finding #11 — trim the **public** documents read payload | **Done** (§3.9, PR #33) | `fetchDocumentsFor` (`src/server/content/reads.ts:7-22`) now projects only the `DocumentItem` columns (id, title, category, visibility, updatedAt); `r2Key`/`filename`/`sizeBytes`/`contentType` no longer reach `GET /api/content/documents`. |
 | Spec appendix — Google Docs/Sheets/Drive import | **Outstanding (backlog by design)** | Not implemented anywhere; explicitly deferred as a future stretch goal (`2026-07-03-p0-security-hardening-design.md` §PR C appendix). |
 
 ### 1.2 Deferred items from the other five plan/spec pairs
@@ -85,7 +85,10 @@ The plan's four PR groups all **merged to `main`** via PR #28 (`c842fc9 Merge pu
 
 ### 1.4 CHANGELOG check
 
-`CHANGELOG.md` `[Unreleased]` covers the six shipped feature waves but has **no entries for the P0 security hardening or the board-handoff workflow** (both merged). That is docs drift, planned as item 3.6.
+`CHANGELOG.md` `[Unreleased]` previously covered the six shipped feature waves but had no entries for
+the P0 security hardening or the board-handoff workflow. **Resolved (§3.6):** `[Unreleased]` now
+carries `### Security` bullets for the P0 work and an `### Added` bullet for the Board members panel,
+and `SECURITY.md` records the same at model altitude.
 
 ### 1.5 Full cross-reference against `private/improvements.md` (findings #1–21)
 
@@ -103,16 +106,16 @@ planned below. This table supersedes the earlier "cannot be enumerated" caveat.
 | 7 | Run `test:server` in CI | **Done** | §1.1 follow-up (`build.yml:34`) |
 | 8 | DB constraints & indexes | Outstanding | §3.7 |
 | 9 | Tighten write-endpoint input handling | Outstanding | §3.8 (scope broadened) |
-| 10 | Use `locals.authContext` | Outstanding | §3.3 |
-| 11 | Trim **public** documents read payload | Outstanding — **reclassified from §3.8** | **§3.9** |
+| 10 | Use `locals.authContext` | **Done** | §3.3 |
+| 11 | Trim **public** documents read payload | **Done** | §3.9 |
 | 12 | Server-render public content (SSR/SEO) | Outstanding | **§3.10** |
 | 13 | Signed-in user presence in the chrome | Outstanding | **§3.11** |
 | 14 | Verification-flow polish (3 parts) | Partially planned (only Turnstile reset) | **§3.2 expanded** |
 | 15 | Consolidate duplicated UI logic | Outstanding | **§3.12** |
 | 16 | Custom 404 + robots/sitemap | Outstanding | **§3.13** |
 | 17 | CI/CD rounding-out | Partial — CodeQL claim already reframed (`README.md:75`); deploy workflow + coverage thresholds outstanding | **§4.7** |
-| 18 | Scheduled cleanup + observability + stray `console.log` | Outstanding | **§3.14** (console.log/observability) + **§4.7** (cron) |
-| 19 | Repo cruft | Partial — `firestore.indexes.json` already deleted; `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding remain | **§3.15** |
+| 18 | Scheduled cleanup + observability + stray `console.log` | Partial — **§3.14 done** (`console.log` removed, `[observability]` on); cron outstanding | **§3.14** (done) + **§4.7** (cron) |
+| 19 | Repo cruft | **Done** — §3.15: firebase `.gitignore` block dropped; `requirePropertyAccess` kept as reserved-and-documented; `SESSION` documented as adapter-required | **§3.15** |
 | 20 | PII stance note (process, not code) | Outstanding | **§4.8** |
 | 21 | Bootstrap ergonomics | Outstanding | §3.4 (plan reached this independently from SETUP.md) |
 
@@ -128,12 +131,12 @@ Security-adjacent work first (finishing the P0 program), then correctness/robust
 | Order | Item | Priority | Size |
 | --- | --- | --- | --- |
 | 1 | 3.1 Flip CSP to enforce mode | P0 follow-up | S |
-| 2 | 3.6 CHANGELOG + SECURITY.md sync for the shipped P0 work | P0 follow-up (docs) | S |
-| 3 | 3.9 Trim the public documents read payload (#11) | P1 (info-leak) | S |
-| 4 | 3.14 Remove stray `console.log` + add Workers observability (#18) | P3 (quick win) | S |
-| 5 | 3.15 Repo cruft — `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding (#19) | P3 (quick win) | S |
+| 2 | 3.6 CHANGELOG + SECURITY.md sync for the shipped P0 work — **Done** (this docs pass) | P0 follow-up (docs) | S |
+| 3 | 3.9 Trim the public documents read payload (#11) — **Done** | P1 (info-leak) | S |
+| 4 | 3.14 Remove stray `console.log` + add Workers observability (#18) — **Done** | P3 (quick win) | S |
+| 5 | 3.15 Repo cruft — `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding (#19) — **Done** | P3 (quick win) | S |
 | 6 | 3.2 Verification-flow polish — Turnstile reset + OTP requester line + post-confirm refresh (#14) | P1/P2 | S |
-| 7 | 3.3 `locals.authContext` plumbing — one auth read per request (#10) | P1 | S–M |
+| 7 | 3.3 `locals.authContext` plumbing — one auth read per request (#10) — **Done** | P1 | S–M |
 | 8 | 3.7 D1 constraints & indexes (#8) | P1 | M |
 | 9 | 3.8 Input validation on admin writes + public `limit` clamp + malformed-JSON guard (#9) | P1 | M |
 | 10 | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) (#21) | P1 (ops safety) | M |
@@ -219,6 +222,9 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 ---
 
 ### 3.3 Use `locals.authContext` in API routes — one auth read per request (#10)
+
+**Status: Done — shipped to `main` (PR #36).** `resolveAuthContext` and a `locals`-taking
+`requireBoard` landed in `src/server/authz/api-guards.ts`; the plan below is retained for context.
 
 **Objective & rationale.** The middleware already resolves the caller (`src/middleware.ts:40` sets `context.locals.authContext`), but every API route re-runs `getAuthContext(request, env)` — a second Better Auth session lookup + D1 user read per request. Plumbing the middleware's result through halves auth-path DB round-trips, removes a class of drift (two call sites deciding the caller), and keeps fail-closed semantics in exactly one place.
 
@@ -321,6 +327,10 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 
 ### 3.6 CHANGELOG + SECURITY.md sync for the shipped P0 work
 
+**Status: Done — completed in this docs pass.** `CHANGELOG.md` `[Unreleased]` gained the P0
+`### Security` bullets + the Board members `### Added` bullet, and `SECURITY.md` records the same at
+model altitude.
+
 **Objective & rationale.** The P0 hardening and board-handoff workflow are merged but invisible in `CHANGELOG.md` `[Unreleased]` (it ends at the roster/members admin UI). SECURITY.md's "Security model" also predates the hardening (no mention of rate limiting, upload/download constraints, security headers, or the closed impersonation/ban surface) and its "board is never self-grantable" phrasing should match the nuanced wording CLAUDE.md/README now carry. Keep the public record accurate before the next feature lands on top.
 
 **Current state.** `CHANGELOG.md` `[Unreleased]` has six `### Added` bullets, none security; `SECURITY.md` "Security model" (lines 19-34) and "Automated safeguards" (lines 36-40) are pre-P0.
@@ -406,6 +416,9 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 ---
 
 ### 3.9 Trim the public documents read payload (#11)
+
+**Status: Done — shipped to `main` (PR #33).** `fetchDocumentsFor` now projects only the
+`DocumentItem` columns; the plan below is retained for context.
 
 **Objective & rationale.** `GET /api/content/documents` returns internal storage metadata — `r2Key`, `contentType`, `sizeBytes` — to every anonymous visitor, beyond the `DocumentItem` contract. `r2Key` in particular discloses the internal R2 object layout (`documents/<id>/…`). Select only the contracted columns. (This is the *real* finding #11 — it was previously miscounted under §3.8's admin-write trimming.)
 
@@ -514,6 +527,10 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 
 ### 3.14 Remove the stray `console.log` + enable Workers observability (#18, quick-win parts)
 
+**Status: Done — shipped to `main` (PR #34).** The stray `console.log` is removed and
+`[observability]` is enabled in `wrangler.toml`; the scheduled-cleanup cron (#18's third bullet)
+remains in §4.7.
+
 **Objective & rationale.** Two of #18's three bullets are one-line quick wins (the third — a scheduled-cleanup cron — needs a trigger + handler and is §4.7). Drop the leftover debug log and turn on Workers Logs so production is observable.
 
 **Current state (verified).** `src/pages/api/content/site.ts:8` has `console.log('GET /api/content/site');`. `wrangler.toml` has no `[observability]` block (grep: no `observability`/`triggers`/`crons`).
@@ -529,6 +546,11 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 ---
 
 ### 3.15 Repo cruft — abandoned Firebase ignores, dead code, unused binding (#19)
+
+**Status: Done — shipped to `main` (PR #35).** The firebase `.gitignore` block was dropped;
+`requirePropertyAccess` and the `SESSION` binding proved load-bearing (reserved feature / adapter
+requirement) and were documented in place rather than removed. The plan below is retained for
+context.
 
 **Objective & rationale.** Housekeeping from #19. `firestore.indexes.json` is **already deleted**; the remaining items are a stale `.gitignore` block, dead exported code, and a possibly-unused Cloudflare binding.
 
