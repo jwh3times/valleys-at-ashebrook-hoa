@@ -57,4 +57,24 @@ describe('documents read endpoint', () => {
     const items = (await res.json()) as { id: string }[];
     expect(items.map((i) => i.id)).toEqual(['d-pub']);
   });
+
+  it('does not leak internal storage metadata (r2Key/contentType/sizeBytes/filename)', async () => {
+    const res = await documentsGet({
+      request: new Request('http://localhost/api/content/documents'),
+    } as never);
+    expect(res.status).toBe(200);
+    const [item] = (await res.json()) as Record<string, unknown>[];
+    // Exactly the DocumentItem contract — nothing more.
+    expect(Object.keys(item).sort()).toEqual([
+      'category',
+      'id',
+      'title',
+      'updatedAt',
+      'visibility',
+    ]);
+    expect(item).not.toHaveProperty('r2Key');
+    expect(item).not.toHaveProperty('filename');
+    expect(item).not.toHaveProperty('sizeBytes');
+    expect(item).not.toHaveProperty('contentType');
+  });
 });
