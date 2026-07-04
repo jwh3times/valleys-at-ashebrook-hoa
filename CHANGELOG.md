@@ -33,4 +33,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Admin content management** — announcements, documents, dues, and site settings managed through
   the board-only admin panel.
 
+### Removed
+
+- **Stale Firebase `.gitignore` entries** — the project no longer uses Firebase/Firestore, so the
+  `.firebase/` and `*firebase*-debug.log` ignore block was dropped. (The `SESSION` KV binding and
+  the `requirePropertyAccess` guard were investigated as possible cruft too but both are
+  load-bearing — the binding is required by the Cloudflare adapter and the guard backs a planned
+  feature — so they were documented in place rather than removed.)
+
 [Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/commits/main
