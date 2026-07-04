@@ -33,6 +33,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Admin content management** — announcements, documents, dues, and site settings managed through
   the board-only admin panel.
 
+### Changed
+
+- **Enabled Workers Logs** — `[observability]` turned on in `wrangler.toml` so production
+  invocation logs, console output, and errors are visible from the Cloudflare dashboard. Also
+  removed a stray `console.log` from the site-settings read endpoint.
+
 ### Removed
 
 - **Stale Firebase `.gitignore` entries** — the project no longer uses Firebase/Firestore, so the
@@ -40,5 +46,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   the `requirePropertyAccess` guard were investigated as possible cruft too but both are
   load-bearing — the binding is required by the Cloudflare adapter and the guard backs a planned
   feature — so they were documented in place rather than removed.)
+
+### Security
+
+- **Public documents read no longer leaks storage metadata** — `GET /api/content/documents` now
+  projects only the `DocumentItem` contract (id, title, category, visibility, updatedAt); the
+  internal R2 object key, filename, byte size, and content type are no longer sent to callers.
 
 [Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/commits/main
