@@ -1,14 +1,14 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
-import { getAuthContext } from '../../../server/authz/context';
+import { resolveAuthContext } from '../../../server/authz/api-guards';
 import { tierAllows } from '../../../server/content/visibility';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ params, request }) => {
+export const GET: APIRoute = async ({ params, request, locals }) => {
   const id = params.id!;
   const [doc] = await getDb(env)
     .select()
@@ -17,7 +17,7 @@ export const GET: APIRoute = async ({ params, request }) => {
   if (!doc) return new Response('Not Found', { status: 404 });
 
   if (doc.visibility !== 'public') {
-    const ctx = await getAuthContext(request, env);
+    const ctx = await resolveAuthContext(locals, request, env);
     const role = ctx?.role ?? 'visitor';
     if (!tierAllows(role, doc.visibility))
       return new Response('Forbidden', { status: 403 });

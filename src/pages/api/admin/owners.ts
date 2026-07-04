@@ -7,15 +7,15 @@ import { owners } from '../../../server/db/schema';
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const GET: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const rows = await getDb(env).select().from(owners);
   return Response.json(rows);
 };
 
-export const POST: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const body = (await request.json()) as {
     propertyId: string;
@@ -43,8 +43,8 @@ export const POST: APIRoute = async ({ request }) => {
   return new Response(null, { status: 201 });
 };
 
-export const PATCH: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const PATCH: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const body = (await request.json()) as {
     id: string;

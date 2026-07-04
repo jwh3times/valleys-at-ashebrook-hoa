@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
-import { getAuthContext } from '../../../server/authz/context';
+import { resolveAuthContext } from '../../../server/authz/api-guards';
 import { requestPropertyVerification } from '../../../server/verification/property';
 import { verifyTurnstile } from '../../../server/authz/turnstile';
 import {
@@ -10,8 +10,8 @@ import {
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request }) => {
-  const ctx = await getAuthContext(request, env);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const ctx = await resolveAuthContext(locals, request, env);
   if (!ctx) return new Response('Unauthorized', { status: 401 });
 
   const rl = await checkUserRateLimit(env, ctx.userId);
