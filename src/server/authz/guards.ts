@@ -15,6 +15,13 @@ export function requireRole(ctx: AuthContext, role: Role): void {
   if (ctxRank < RANK[role]) throw new Forbidden(`requires ${role}`);
 }
 
+/**
+ * Fail-closed check that a caller may act on a specific property: board can
+ * touch any, a homeowner only their own, everyone else denied. No API route
+ * calls this yet — it's the authorization primitive reserved for per-owner
+ * private data (dues balances / violations, IMPLEMENTATION_PLAN §4.2). Covered
+ * by test/unit/guards.test.ts; keep it until that feature lands.
+ */
 export function requirePropertyAccess(
   ctx: AuthContext,
   propertyId: string,

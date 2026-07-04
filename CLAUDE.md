@@ -59,7 +59,9 @@ build number on the package.json version (`v<x.y.z>.<n>`, e.g. `v0.1.0.4`).
 Astro from `.env`.
 
 **Cloudflare bindings (`wrangler.toml`).** `DATABASE` (D1 `ashebrook-hoa`), `KV` (app
-KV), `SESSION` (KV for Astro sessions), `DOCS` (R2 `ashebrook-hoa-docs`).
+KV), `SESSION` (KV for Astro sessions — required by the `@astrojs/cloudflare` adapter, which
+enables Astro sessions against a `SESSION` binding by default even though app auth uses Better
+Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`).
 
 **HTTP endpoints (all under `src/pages/api/`).**
 - Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`
