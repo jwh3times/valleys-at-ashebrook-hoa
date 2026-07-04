@@ -5,8 +5,18 @@ import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
 
 export async function fetchDocumentsFor(env: Env, role: Role) {
+  // Project only the DocumentItem contract columns. A bare .select() would ship
+  // internal storage metadata (r2Key, filename, sizeBytes, contentType) to every
+  // caller; the download path re-reads the row server-side, so the public list
+  // never needs them.
   return getDb(env)
-    .select()
+    .select({
+      id: documents.id,
+      title: documents.title,
+      category: documents.category,
+      visibility: documents.visibility,
+      updatedAt: documents.updatedAt,
+    })
     .from(documents)
     .where(inArray(documents.visibility, visibleTiers(role)));
 }
