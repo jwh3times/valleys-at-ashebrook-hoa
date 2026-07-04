@@ -2,13 +2,16 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
+import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
+import { DOCUMENT_CATEGORIES, INPUT_LIMITS } from '../../../lib/types';
 
 export const prerender = false;
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const VISIBILITIES = ['public', 'homeowner', 'board'] as const;
+const CATEGORIES: readonly string[] = DOCUMENT_CATEGORIES;
 
 // Server-side allowlist keyed by extension. Client MIME is unreliable for
 // .md/.csv, so derive the stored content type here. text/html and image/svg+xml
@@ -29,11 +32,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (denied) return denied;
   const form = await request.formData();
   const file = form.get('file');
-  const title = String(form.get('title') ?? '');
-  const category = String(form.get('category') ?? '');
+  const title = String(form.get('title') ?? '').trim();
+  const category = String(form.get('category') ?? '').trim();
   const visibility = String(form.get('visibility') ?? 'board');
-  if (!(file instanceof File) || !title || !category)
+  if (!(file instanceof File) || !title)
     return new Response('Bad Request', { status: 400 });
+  if (title.length > INPUT_LIMITS.title)
+    return new Response('title is too long', { status: 400 });
+  if (!CATEGORIES.includes(category))
+    return new Response('Invalid category', { status: 400 });
   if (!(VISIBILITIES as readonly string[]).includes(visibility))
     return new Response('Bad Request', { status: 400 });
   if (file.size > MAX_BYTES) return new Response('Too large', { status: 413 });
@@ -67,40 +74,52 @@ export const POST: APIRoute = async ({ request, locals }) => {
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
-  const body = (await request.json()) as {
-    id?: string;
-    title?: string;
-    category?: string;
-    visibility?: string;
-  };
-  if (!body.id) return new Response('Bad Request', { status: 400 });
-  if (
-    body.visibility !== undefined &&
-    !(VISIBILITIES as readonly string[]).includes(body.visibility)
-  )
-    return new Response('Bad Request', { status: 400 });
+  const parsed = await readJson(request);
+  if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
+  const id = stringField(parsed.value, 'id');
+  if (!id) return new Response('id is required', { status: 400 });
+  const body =
+    parsed.value && typeof parsed.value === 'object'
+      ? (parsed.value as Record<string, unknown>)
+      : {};
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  for (const k of ['title', 'category', 'visibility'] as const)
-    if (k in body) patch[k] = body[k];
-  await getDb(env)
-    .update(documents)
-    .set(patch)
-    .where(eq(documents.id, body.id));
+  if ('title' in body) {
+    const t = typeof body.title === 'string' ? body.title.trim() : '';
+    if (!t) return new Response('title is required', { status: 400 });
+    if (t.length > INPUT_LIMITS.title)
+      return new Response('title is too long', { status: 400 });
+    patch.title = t;
+  }
+  if ('category' in body) {
+    const c = typeof body.category === 'string' ? body.category.trim() : '';
+    if (!CATEGORIES.includes(c))
+      return new Response('Invalid category', { status: 400 });
+    patch.category = c;
+  }
+  if ('visibility' in body) {
+    const v = body.visibility;
+    if (v !== 'public' && v !== 'homeowner' && v !== 'board')
+      return new Response('Invalid visibility', { status: 400 });
+    patch.visibility = v;
+  }
+  await getDb(env).update(documents).set(patch).where(eq(documents.id, id));
   return new Response(null, { status: 204 });
 };
 
 export const DELETE: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
-  const body = (await request.json()) as { id?: string };
-  if (!body.id) return new Response('Bad Request', { status: 400 });
+  const parsed = await readJson(request);
+  if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
+  const id = stringField(parsed.value, 'id');
+  if (!id) return new Response('id is required', { status: 400 });
   const [doc] = await getDb(env)
     .select()
     .from(documents)
-    .where(eq(documents.id, body.id));
+    .where(eq(documents.id, id));
   if (doc) {
     await env.DOCS.delete(doc.r2Key);
-    await getDb(env).delete(documents).where(eq(documents.id, body.id));
+    await getDb(env).delete(documents).where(eq(documents.id, id));
   }
   return new Response(null, { status: 204 });
 };
