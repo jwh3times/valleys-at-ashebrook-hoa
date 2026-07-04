@@ -7,8 +7,8 @@ import { normalizeDuesSettings } from '../../../lib/types';
 
 export const prerender = false;
 
-export const PUT: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const PUT: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const value = JSON.stringify(normalizeDuesSettings(await request.json()));
   const now = new Date();

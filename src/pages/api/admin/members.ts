@@ -11,8 +11,8 @@ import {
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const GET: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const db = getDb(env);
   const recent = await db
@@ -38,8 +38,8 @@ export const GET: APIRoute = async ({ request }) => {
   return Response.json({ recent, queue });
 };
 
-export const POST: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env);
+export const POST: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const db = getDb(env);
   const body = (await request.json()) as {
