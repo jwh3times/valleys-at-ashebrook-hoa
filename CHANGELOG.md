@@ -33,4 +33,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Admin content management** — announcements, documents, dues, and site settings managed through
   the board-only admin panel.
 
+### Changed
+
+- **Enabled Workers Logs** — `[observability]` turned on in `wrangler.toml` so production
+  invocation logs, console output, and errors are visible from the Cloudflare dashboard. Also
+  removed a stray `console.log` from the site-settings read endpoint.
+
 [Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/commits/main
