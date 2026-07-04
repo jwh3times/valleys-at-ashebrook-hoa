@@ -11,7 +11,14 @@
 - `SETUP.md` / `README.md` operational steps that imply engineering work; `grep -rn "TODO|FIXME|XXX|HACK" src/ scripts/` (no actionable hits — the only match is a doc comment in `scripts/import-roster.ts:31`).
 - `CHANGELOG.md` `[Unreleased]` (to avoid re-planning shipped work).
 
-**Caveat:** the P0 spec derives from `private/improvements.md` (findings #1–21), and `private/` is gitignored and **absent in this checkout**. Findings #1–6 (P0) are fully covered by the spec; of P1–P3 (#7–21), only the findings the spec names in its Non-goals are plannable here: #7 (CI runs `test:server`), #8 (DB constraints/indexes), #9 (broad input validation), #10 (`locals.authContext` plumbing), #11 (payload trimming), #14 (Turnstile widget reset). The rest of #12–21 cannot be enumerated from this repo — see Open Questions (§5).
+**Caveat (resolved 2026-07-03):** the P0 spec derives from `private/improvements.md` (findings
+#1–21), and `private/` is gitignored. This revision **cross-references the plan directly against
+that file** (it was available in the working tree at revision time) and reconciles every finding —
+see the full 21-finding map in **§1.5**. Two things the earlier draft got wrong without that context
+are now corrected: **#11 is a public-read payload leak, not admin-write trimming** (new §3.9, split
+out of §3.8), and **#14 has three parts, not just the Turnstile reset** (§3.2 expanded). Findings
+#12, #13, #15–20 — which the earlier draft said "cannot be enumerated from this repo" — are now
+planned as new items (§3.9–§3.15, §4.7–§4.8).
 
 ---
 
@@ -46,7 +53,8 @@ The plan's four PR groups all **merged to `main`** via PR #28 (`c842fc9 Merge pu
 | Finding #14 — Turnstile widget reset on spent token | **Outstanding** | `src/components/react/AuthForms.tsx:104-105` reads `window.turnstileToken` once; no reset after a failed/rate-limited submit. |
 | Finding #10 — use `locals.authContext` instead of re-fetching | **Outstanding** | `src/middleware.ts:40` sets `context.locals.authContext`, but no API route reads it: `getAuthContext(request, env)` is re-called in `src/pages/api/{content/announcements,content/documents,files/[id],verify/request,verify/confirm,admin/roles}.ts` and inside `requireBoard` (`src/server/authz/api-guards.ts`) used by every admin route — two session/DB lookups per request. |
 | Finding #8 — DB constraints/indexes | **Outstanding** | `src/server/db/schema.ts` has only primary keys (grep for `unique|index` matches nothing beyond PKs); e.g. no unique on `properties.addressNormalized`, no index on `owners.propertyId`, `user_property_links(userId)`, `property_verifications(userId)`, `documents(visibility)`. |
-| Findings #9/#11 — broad input validation / payload trimming | **Outstanding** | Admin writes besides site/dues parse request JSON with type assertions and persist coerced-but-unvalidated strings (e.g. `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts`); no length caps. |
+| Finding #9 — broad input validation | **Outstanding** | Admin writes besides site/dues parse request JSON with type assertions and persist coerced-but-unvalidated strings (e.g. `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts`); no length caps. §3.8 — note #9 also spans the *public* read `limit` clamp + malformed-JSON→400 + `members.ts` approve check, added to §3.8's scope below. |
+| Finding #11 — trim the **public** documents read payload | **Outstanding — reclassified** | `fetchDocumentsFor` (`src/server/content/reads.ts:8`) is a bare `.select()` (= `SELECT *`), so `GET /api/content/documents` ships `r2Key`, `contentType`, `sizeBytes` to every visitor. This is a read-path info-leak, **not** the admin-write trimming §3.8 was scoped to. Planned as **§3.9**. |
 | Spec appendix — Google Docs/Sheets/Drive import | **Outstanding (backlog by design)** | Not implemented anywhere; explicitly deferred as a future stretch goal (`2026-07-03-p0-security-hardening-design.md` §PR C appendix). |
 
 ### 1.2 Deferred items from the other five plan/spec pairs
@@ -79,6 +87,38 @@ The plan's four PR groups all **merged to `main`** via PR #28 (`c842fc9 Merge pu
 
 `CHANGELOG.md` `[Unreleased]` covers the six shipped feature waves but has **no entries for the P0 security hardening or the board-handoff workflow** (both merged). That is docs drift, planned as item 3.6.
 
+### 1.5 Full cross-reference against `private/improvements.md` (findings #1–21)
+
+Every finding reconciled against code on 2026-07-03. "Done" rows were verified in §1.1; the rest are
+planned below. This table supersedes the earlier "cannot be enumerated" caveat.
+
+| # | Finding | Status | Covered by |
+| --- | --- | --- | --- |
+| 1 | Rate-limit `/api/verify/request` | **Done** | §1.1 B1–B3 |
+| 2 | Constrain document uploads/downloads | **Done** | §1.1 C1–C2 |
+| 3 | Baseline security headers | **Done** (CSP Report-Only) | §3.1 flips to enforce |
+| 4 | HMAC + constant-time OTP storage | **Done** | §1.1 A1 |
+| 5 | Board-granting story + `members.ts` revoke guard | **Done** | §1.1 D1–D5 |
+| 6 | Validate settings on write, normalize dues on read | **Done** | §1.1 A2 |
+| 7 | Run `test:server` in CI | **Done** | §1.1 follow-up (`build.yml:34`) |
+| 8 | DB constraints & indexes | Outstanding | §3.7 |
+| 9 | Tighten write-endpoint input handling | Outstanding | §3.8 (scope broadened) |
+| 10 | Use `locals.authContext` | Outstanding | §3.3 |
+| 11 | Trim **public** documents read payload | Outstanding — **reclassified from §3.8** | **§3.9** |
+| 12 | Server-render public content (SSR/SEO) | Outstanding | **§3.10** |
+| 13 | Signed-in user presence in the chrome | Outstanding | **§3.11** |
+| 14 | Verification-flow polish (3 parts) | Partially planned (only Turnstile reset) | **§3.2 expanded** |
+| 15 | Consolidate duplicated UI logic | Outstanding | **§3.12** |
+| 16 | Custom 404 + robots/sitemap | Outstanding | **§3.13** |
+| 17 | CI/CD rounding-out | Partial — CodeQL claim already reframed (`README.md:75`); deploy workflow + coverage thresholds outstanding | **§4.7** |
+| 18 | Scheduled cleanup + observability + stray `console.log` | Outstanding | **§3.14** (console.log/observability) + **§4.7** (cron) |
+| 19 | Repo cruft | Partial — `firestore.indexes.json` already deleted; `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding remain | **§3.15** |
+| 20 | PII stance note (process, not code) | Outstanding | **§4.8** |
+| 21 | Bootstrap ergonomics | Outstanding | §3.4 (plan reached this independently from SETUP.md) |
+
+**Bold section numbers are new in this revision.** The earlier draft covered #1–10 and #21 (as 3.4);
+#11 was mistargeted and #12–20 were absent.
+
 ---
 
 ## 2. Sequencing & priority
@@ -89,15 +129,27 @@ Security-adjacent work first (finishing the P0 program), then correctness/robust
 | --- | --- | --- | --- |
 | 1 | 3.1 Flip CSP to enforce mode | P0 follow-up | S |
 | 2 | 3.6 CHANGELOG + SECURITY.md sync for the shipped P0 work | P0 follow-up (docs) | S |
-| 3 | 3.2 Turnstile widget reset on failed/rate-limited verify (#14) | P1 | S |
-| 4 | 3.3 `locals.authContext` plumbing — one auth read per request (#10) | P1 | S–M |
-| 5 | 3.7 D1 constraints & indexes (#8) | P1 | M |
-| 6 | 3.8 Input validation + payload trimming on admin writes (#9, #11) | P1 | M |
-| 7 | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) | P1 (ops safety) | M |
-| 8 | 3.5 Admin-managed disclaimer / About copy | P2 | M |
-| 9+ | §4 Backlog: Google Drive import, per-owner data, bulk roster UI, tenants/payments, AI assistant | P3 / gated | M–XL |
+| 3 | 3.9 Trim the public documents read payload (#11) | P1 (info-leak) | S |
+| 4 | 3.14 Remove stray `console.log` + add Workers observability (#18) | P3 (quick win) | S |
+| 5 | 3.15 Repo cruft — `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding (#19) | P3 (quick win) | S |
+| 6 | 3.2 Verification-flow polish — Turnstile reset + OTP requester line + post-confirm refresh (#14) | P1/P2 | S |
+| 7 | 3.3 `locals.authContext` plumbing — one auth read per request (#10) | P1 | S–M |
+| 8 | 3.7 D1 constraints & indexes (#8) | P1 | M |
+| 9 | 3.8 Input validation on admin writes + public `limit` clamp + malformed-JSON guard (#9) | P1 | M |
+| 10 | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) (#21) | P1 (ops safety) | M |
+| 11 | 3.13 Custom 404 + robots.txt + sitemap (#16) | P2 (SEO) | S |
+| 12 | 3.10 Server-render public content (#12) | P2 (biggest UX/SEO win) | M |
+| 13 | 3.11 Signed-in user presence in the chrome (#13) | P2 | M |
+| 14 | 3.12 Consolidate duplicated UI logic (#15) | P2 | M |
+| 15 | 3.5 Admin-managed disclaimer / About copy | P2 | M |
+| 16+ | §4 Backlog: 4.7 deploy workflow + coverage thresholds + cleanup cron (#17, #18-cron), 4.8 PII stance note (#20), Google Drive import, per-owner data, bulk roster UI, tenants/payments, AI assistant | P3 / gated | S–XL |
 
-Rationale for the top slots: item 3.1 is the only unfinished step of the P0 rollout plan itself ("the CSP flips from Report-Only to enforced in a small follow-up"); 3.2–3.8 are the P1 findings that are already named and verifiable from this repo. Everything in §4 needs either a board decision or its own design spec before build.
+Rationale for the top slots: item 3.1 is the only unfinished step of the P0 rollout plan itself ("the
+CSP flips from Report-Only to enforced in a small follow-up"); 3.9/3.14/3.15 are same-day quick wins
+(improvements.md's own "quick wins, same day" list) with 3.9 first because it stops leaking storage
+metadata to anonymous visitors; 3.2/3.3/3.7/3.8/3.4 are the named P1 findings verifiable from this
+repo; 3.13/3.10/3.11/3.12/3.5 are the frontend batch ("when touching the frontend next"). Everything
+in §4 needs either a board decision, an operator/dashboard action, or its own design spec before build.
 
 ---
 
@@ -132,11 +184,15 @@ Rationale for the top slots: item 3.1 is the only unfinished step of the P0 roll
 
 ---
 
-### 3.2 Reset the Turnstile widget after a failed / rate-limited verify request (#14)
+### 3.2 Verification-flow polish — Turnstile reset, OTP requester line, post-confirm refresh (#14)
 
-**Objective & rationale.** Turnstile tokens are single-use. After a 429 (rate-limit) or 400 response from `/api/verify/request`, the form retains the spent token in `window.turnstileToken`; the user's retry then fails Turnstile validation ("Bad captcha") with no way to recover except reloading the page. Fixing this completes the UX edge the P0 spec explicitly noted and deferred ("Widget-reset on spent Turnstile is finding #14, P2 — out of scope, noted").
+**Objective & rationale.** Finding #14 has **three** sub-items; the earlier draft planned only (b). All three are small and touch the same flow:
 
-**Current state.** `src/components/react/AuthForms.tsx:104-105` reads `(window as ... ).turnstileToken` set by the Turnstile widget callback rendered on the page. There is no call to `window.turnstile.reset()` anywhere in `src/` (grep confirms). The server consumes the token in `src/server/authz/turnstile.ts` via Cloudflare's siteverify.
+- **(a) Post-confirm redirect + session refresh.** After a successful confirm the UI should land the now-verified homeowner on content that reflects their new role. *Partially present:* `src/components/react/AuthForms.tsx:55` already does `window.location.href = '/'` — a full navigation, so middleware re-resolves the role. Remaining gap: `/` is the generic home, not the homeowner-gated content, and there's no explicit "your account is now verified" confirmation. Decide whether to redirect to a homeowner surface (e.g. `/documents`) and/or show a success state before the redirect.
+- **(b) Reset the Turnstile widget on a spent token.** Turnstile tokens are single-use. After a 429 (rate-limit) or 400 from `/api/verify/request`, the form keeps the spent token in `window.turnstileToken`; the retry then fails Turnstile ("Bad captcha") with no recovery but a reload.
+- **(c) Name the requester in the OTP message.** The code that reaches an owner's phone/email today (`src/server/verification/property.ts:90`) is `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.` — it doesn't say *who* asked, so a recipient can't tell a legitimate request from an attacker probing their contact. Add the requesting account's (masked) email: e.g. `…requested by j***@gmail.com. If this wasn't you, ignore this.`
+
+**Current state.** (a) `AuthForms.tsx:55` redirects to `/` post-confirm; no homeowner-specific target or success state. (b) `AuthForms.tsx:104-105` reads `(window as …).turnstileToken`; no `window.turnstile.reset()` anywhere in `src/` (grep confirms); server consumes the token in `src/server/authz/turnstile.ts`. (c) `src/server/verification/property.ts:90-91` builds the SMS/email body/subject with no requester identity; the requesting user's email is available in that request's auth context (the caller must be signed in to request verification).
 
 **Design / approach.**
 
@@ -146,17 +202,19 @@ Rationale for the top slots: item 3.1 is the only unfinished step of the P0 roll
 
 **Step-by-step tasks.**
 
-1. `src/components/react/AuthForms.tsx` — in `VerifyPropertyForm.request`, wrap the fetch/response handling in `finally { window.turnstile?.reset(); window.turnstileToken = undefined; }`; add the global type declaration.
-2. `test/unit/verify-form-ratelimit.test.tsx` — extend: stub `window.turnstile = { reset: vi.fn() }`, assert `reset` is called after the 429 path; add one case asserting reset after a successful send.
-3. Gate + commit `fix(verification): reset the Turnstile widget after each verify request (#14)`.
+1. **(b)** `src/components/react/AuthForms.tsx` — in `VerifyPropertyForm.request`, wrap the fetch/response handling in `finally { window.turnstile?.reset(); window.turnstileToken = undefined; }`; add the global type declaration. Check the sibling signup form for the same spent-token bug and apply the same `finally` if present.
+2. **(c)** `src/server/verification/property.ts` — thread the requesting user's email into the message builder (it's already resolvable from the request's auth context at the call site) and add a masked-email helper (`j***@gmail.com`) — reuse or add alongside the existing string helpers; append the "requested by … / if this wasn't you, ignore this" line to both the SMS `message` and email body. Keep the code first so it's not truncated by SMS length limits.
+3. **(a)** `AuthForms.tsx` — after a successful confirm, show a brief success state and/or redirect to a homeowner surface instead of `/`; if a client-side session cache exists, refresh it so the header/nav reflect `homeowner` immediately (ties into §3.11).
+4. Tests: `test/unit/verify-form-ratelimit.test.tsx` — stub `window.turnstile = { reset: vi.fn() }`, assert `reset` after the 429 path and after a successful send; add a `test/server/verify-request-message.test.ts` (or extend the existing verify-request server test) asserting the OTP body contains the masked requester email and the code.
+5. Gate + commit `fix(verification): reset Turnstile, name the requester in OTP, refresh after confirm (#14)`.
 
-**Testing plan.** `npx vitest run test/unit/verify-form-ratelimit.test.tsx` plus the full jsdom suite (`npm test`); `npm run check`; `npm run format:check`. No server-tier change. Manual check in `npm run dev`: submit, get rate-limited, resubmit → new token, no "Bad captcha".
+**Testing plan.** `npx vitest run test/unit/verify-form-ratelimit.test.tsx` plus the full jsdom suite (`npm test`); the new/extended server test (`npm run test:server`); `npm run check`; `npm run format:check`. Manual check in `npm run dev`: submit → rate-limited → resubmit → new token, no "Bad captcha"; confirm a code → lands on homeowner content; inspect a sent code (dev logs) for the requester line.
 
 **Docs updates.** `CHANGELOG.md` `[Unreleased]` → `### Fixed`. No CLAUDE/README/SETUP change (behavioral detail below their altitude).
 
-**Risks & open questions.** Minimal; `turnstile.reset()` on an unmounted/absent widget is guarded by optional chaining. Open question: whether other Turnstile-gated forms (signup) share the same spent-token bug — inspect `AuthForms.tsx` siblings while in the file and apply the same `finally` if so.
+**Risks & open questions.** (b) is minimal — `turnstile.reset()` on an absent widget is guarded by optional chaining. (c) **mask** the requester email (never send it in full) — it's another person's PII arriving on a third party's device; masking gives the "was this you?" signal without disclosing the full address. Open question (product, low-stakes): the (a) redirect target — `/documents` vs. a dedicated "you're verified" page; default to a success state then `/documents`.
 
-**Size: S**.
+**Size: S–M** (three small changes across one island + one server module).
 
 ---
 
@@ -313,9 +371,13 @@ Rationale for the top slots: item 3.1 is the only unfinished step of the P0 roll
 
 ---
 
-### 3.8 Input validation + payload trimming on admin writes (#9, #11)
+### 3.8 Input validation on admin writes + public-read guards (#9)
 
-**Objective & rationale.** Site/dues writes are normalized (P0 #6), but the other board-only writes (`announcements`, `properties`, `owners`, `documents` metadata fields) parse JSON/FormData with bare type assertions and persist whatever strings arrive — no length caps, no field allowlists, no trimming. Board-only reduces the threat, but a compromised/mistaken board session can bloat D1 rows, break rendering with megabyte strings, or store unexpected keys. This is the P1 pair (#9 validation, #11 trimming) named in the P0 spec's non-goals.
+**Objective & rationale.** Site/dues writes are normalized (P0 #6), but the other board-only writes (`announcements`, `properties`, `owners`, `documents` metadata fields) parse JSON/FormData with bare type assertions and persist whatever strings arrive — no length caps, no field allowlists, no trimming. Board-only reduces the threat, but a compromised/mistaken board session can bloat D1 rows, break rendering with megabyte strings, or store unexpected keys. (Payload *trimming* — finding #11 — was previously miscounted here; it's a public-read column-leak fix, now planned separately as §3.9.) Finding #9 also has **three public-facing bullets** the admin-write scope missed, folded in here:
+
+- **Clamp `limit` on the public announcements read.** `GET /api/content/announcements` takes a `limit` query and a negative value drops items from the *end* via `slice(0, -n)` (`fetchAnnouncementsFor` in `src/server/content/reads.ts:24` does `rows.slice(0, limit)`; the endpoint parses the query). Clamp to a non-negative integer at the endpoint.
+- **Guard malformed JSON bodies.** `request.json()` on a malformed body throws → opaque 500 across the write endpoints; wrap and return 400.
+- **`members.ts` approve → validate `propertyId`.** The approve action links a user to a property without confirming the `propertyId` exists and is active — verify before linking (405/404 on a bad/inactive id).
 
 **Current state.** `src/pages/api/admin/announcements.ts` (POST/PUT bodies asserted to `Announcement`-ish shapes), `src/pages/api/admin/properties.ts` / `owners.ts` (roster CRUD from `RosterManager`), `src/pages/api/admin/documents.ts` (title/category/visibility fields from FormData; visibility already checked against `VISIBILITIES`). `src/lib/types.ts` has the normalize pattern to copy.
 
@@ -327,10 +389,11 @@ Rationale for the top slots: item 3.1 is the only unfinished step of the P0 roll
 **Step-by-step tasks.**
 
 1. `src/lib/types.ts` — add the three input normalizers + length constants (unit tests first: `test/unit/input-normalize.test.ts` covering trim, cap, unknown-key drop, enum reject, required-field reject).
-2. Wire into `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts` (and the FormData fields in `documents.ts`: trim/cap `title`, validate `category` against `DOCUMENT_CATEGORIES`).
-3. Server tests: extend `test/server/admin-announcements-board.test.ts`, `admin-properties.test.ts`, `admin-owners.test.ts`, `admin-documents-board.test.ts` with: over-length body → 400; unknown key not persisted; whitespace-only required field → 400; happy path trimmed.
-4. Client: `RosterManager.tsx` / `AnnouncementsManager.tsx` surface the 400 message (they already render error strings from failed fetches via `src/lib/admin.ts` — verify and extend if the helper swallows bodies).
-5. Gate + commit `fix(admin): validate and trim admin write payloads (#9, #11)`.
+2. Wire into `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts` (and the FormData fields in `documents.ts`: trim/cap `title`, validate `category` against `DOCUMENT_CATEGORIES`). Wrap each `request.json()` in a try/catch → 400.
+3. Public-read guards: clamp `limit` to a non-negative integer in `src/pages/api/content/announcements.ts` before calling `fetchAnnouncementsFor`; in `src/pages/api/admin/members.ts` approve, look up the `propertyId` and refuse if missing/inactive.
+4. Server tests: extend `test/server/admin-announcements-board.test.ts`, `admin-properties.test.ts`, `admin-owners.test.ts`, `admin-documents-board.test.ts` with over-length body → 400, unknown key not persisted, whitespace-only required field → 400, happy path trimmed; add cases for a malformed JSON body → 400, a negative `limit` on the public read (no items dropped), and `members.ts` approve with a bad `propertyId` → 4xx.
+5. Client: `RosterManager.tsx` / `AnnouncementsManager.tsx` surface the 400 message (they already render error strings from failed fetches via `src/lib/admin.ts` — verify and extend if the helper swallows bodies).
+6. Gate + commit `fix(admin): validate admin writes + clamp public limit + guard malformed bodies (#9)`.
 
 **Testing plan.** New unit file + extended server suites; full `npm test && npm run test:server && npm run check && npm run format:check && npm run build`.
 
@@ -339,6 +402,151 @@ Rationale for the top slots: item 3.1 is the only unfinished step of the P0 roll
 **Risks & open questions.** Risk: an existing admin UI flow sends a field the normalizer drops (mitigated by running the jsdom manager suites, which assert exact payloads). Open question: exact caps are judgment calls — the numbers above are stated defaults; being wrong costs a one-line constant change (low-stakes).
 
 **Size: M**.
+
+---
+
+### 3.9 Trim the public documents read payload (#11)
+
+**Objective & rationale.** `GET /api/content/documents` returns internal storage metadata — `r2Key`, `contentType`, `sizeBytes` — to every anonymous visitor, beyond the `DocumentItem` contract. `r2Key` in particular discloses the internal R2 object layout (`documents/<id>/…`). Select only the contracted columns. (This is the *real* finding #11 — it was previously miscounted under §3.8's admin-write trimming.)
+
+**Current state (verified).** `src/server/content/reads.ts:7-12` — `fetchDocumentsFor` is a bare `.select()` (= `SELECT *`) over `documents`; the public route ships the whole row. The download link goes through `GET /api/files/[id]`, which re-reads the row server-side, so the public list payload does **not** need `r2Key`/`contentType`/`sizeBytes`.
+
+**Approach.** Replace the bare select with an explicit projection: `.select({ id, title, category, visibility, updatedAt })` (Drizzle column refs). Confirm `DocumentItem` (`src/lib/types.ts`) and its consumers (`DocumentsList`, `groupDocumentsByCategory`) reference only those fields; admin reads go through `/api/admin/*`, not this path, so they're unaffected. Leave `fetchAnnouncementsFor` selecting all (all announcement columns are legitimately used).
+
+**Step-by-step tasks.**
+
+1. Narrow the select in `src/server/content/reads.ts`; adjust the return type / `DocumentItem` if it currently carries the dropped fields.
+2. Extend `test/server/content-reads-*.test.ts` (or the documents-read suite) to assert the response body has **no** `r2Key`/`contentType`/`sizeBytes`.
+3. Gate + commit `fix(content): stop leaking R2 storage metadata in the public documents read (#11)`.
+
+**Testing plan.** `npm run test:server` (content-read + files-download suites), `npm test`, `npm run check`, `npm run build`.
+
+**Docs updates.** CHANGELOG `### Security`. **Risks:** a consumer silently relied on a dropped field — the jsdom `DocumentsList` suite is the net. **Size: S.**
+
+---
+
+### 3.10 Server-render public content (#12) — biggest UX/SEO win
+
+**Objective & rationale.** Announcements, documents, and dues are public data rendered inside `client:only="react"` islands, so the server HTML is only "Loading…": bad for SEO, slower first paint, broken with JS disabled. The server read helpers already exist and middleware already resolves the role — this is plumbing, not new capability.
+
+**Current state (verified).** `src/pages/{announcements,documents,dues,index}.astro` all mount `client:only="react"` islands that fetch `/api/content/*` on the client via `src/lib/content.ts`. Server helpers `fetchAnnouncementsFor`/`fetchDocumentsFor` (+ the dues read) live in `src/server/content/`. Middleware sets `Astro.locals.authContext` and `Astro.locals.site`.
+
+**Approach.** In each page's frontmatter, call the server read for `Astro.locals.authContext`'s role and pass rows as props. Islands either seed from props (documents/dues keep hydration for grouping/links) or become plain Astro markup where there's no interactivity (`AnnouncementsList` has none — it can render server-side and drop the island). Keep the `/api/content/*` endpoints for the admin panel and any client refresh. Composes with §3.9 (narrowed columns land in the SSR payload too) and §3.11 (role-aware chrome). **Rejected:** client fetch with an SSR fallback — more complex than reading in frontmatter, which this stack already supports.
+
+**Step-by-step tasks.**
+
+1. `announcements.astro` + `index.astro` (limit 3, server-side — subsumes the home-page slice in §3.12) — fetch and render list markup (or seed the island).
+2. `documents.astro` — fetch + group server-side, pass to `DocumentsList` (keep hydration for interactivity).
+3. `dues.astro` — fetch + pass to `DuesInfo`.
+4. Remove the now-dead client fetches where an island became static.
+5. Tests: extend `test/server/**` page/middleware coverage to assert SSR HTML contains real content (not "Loading…") per tier; keep island unit tests for any that stay hydrated.
+6. Gate + commit `feat(content): server-render public announcements/documents/dues (#12)`.
+
+**Testing plan.** `npm run test:server`, `npm test`, `npm run check`, `npm run build`; manual `npm run dev` with JS disabled → content visible; view-source shows announcements.
+
+**Docs updates.** CLAUDE.md "Rendering model" note (public reads SSR'd in frontmatter); CHANGELOG `### Changed`. **Size: M.**
+
+---
+
+### 3.11 Signed-in user presence in the chrome (#13)
+
+**Objective & rationale.** The header's only auth affordance is "Admin sign in" → `/admin`. Homeowners have no nav path to `/login`, `/register`, or `/verify-property`, no indication they're signed in, and no sign-out outside the admin panel.
+
+**Current state (verified).** `src/components/Header.astro:50` hardcodes `<a class="nav-login" href="/admin">Admin sign in</a>`. Middleware already exposes `Astro.locals.authContext` (role + `propertyIds`). No account menu / sign-out in the public chrome.
+
+**Approach.** Drive a small account affordance in `Header.astro` from `Astro.locals.authContext`: anonymous → "Sign in" (`/login`) + "Register" (`/register`); signed-in homeowner with empty `propertyIds` → surface "Verify your property" (`/verify-property`); signed-in → an account menu with sign-out; board keeps the "Admin" link. Header is `.astro`, so read `locals` directly; sign-out is a tiny `client:idle` control (Better Auth client `signOut`, or a form posting to the auth route). Ties into §3.2(a) (post-confirm the header reflects the new role after navigation) and §3.10.
+
+**Step-by-step tasks.**
+
+1. `Header.astro` — branch on `authContext.role`/`propertyIds` for the affordances above.
+2. Add the sign-out control (small island or a POST form to the Better Auth sign-out route).
+3. Tests: `test/server/**` header/middleware render asserts each state's links; a jsdom test if the sign-out island has logic.
+4. Gate + commit `feat(nav): homeowner account presence + sign-out in the header (#13)`.
+
+**Testing plan.** `npm run test:server`, `npm test`, `npm run check`, `npm run build`; manual click-through per role.
+
+**Docs updates.** CHANGELOG `### Added`. **Size: M.**
+
+---
+
+### 3.12 Consolidate duplicated UI logic (#15)
+
+**Objective & rationale.** Three concrete duplications: (a) two login forms; (b) the admin managers repeat load/busy/msg/error scaffolding ~5×; (c) the home page fetches **all** announcements then slices 3 client-side.
+
+**Current state (verified).** (a) `src/components/admin/Login.tsx` **and** a `LoginForm` in `src/components/react/AuthForms.tsx` both exist. (b) No `useAdminResource`/`useAsyncAction` hook exists (grep: no matches). (c) `src/lib/content.ts:10` `fetchAnnouncements()` hits `/api/content/announcements` with **no** `limit`, and `index.astro:58` passes `limit={3}` to the island — so the client fetches every announcement and slices client-side (the API already accepts a `limit` query; see §3.8's clamp).
+
+**Approach.** (a) Keep the login form wired into the live routes; delete the other + its imports. (b) Extract `useAdminResource<T>()` encapsulating `load()/busy/error/message`; migrate the managers (`RosterManager`, `MembersManager`, `BoardMembersManager`, `AnnouncementsManager`, `DocumentsManager`, `SiteManager`) incrementally. (c) If §3.10 lands, `index.astro` fetches `limit=3` server-side and this bullet is **subsumed**; otherwise add a `limit?` param to `fetchAnnouncements` and pass 3. **Rejected:** a state-management library — a hook suffices at this size.
+
+**Step-by-step tasks.**
+
+1. De-dup the login form.
+2. Add `src/components/admin/useAdminResource.ts` (+ unit test); migrate managers onto it.
+3. Fold the home-page slice into §3.10, or add the `limit` param to `fetchAnnouncements`.
+4. Run the jsdom manager + auth-form suites (they assert payloads/behavior — the refactor's safety net).
+5. Gate + commit `refactor(ui): single login form + shared admin-resource hook (#15)`.
+
+**Testing plan.** `npm test`, `npm run check`, `npm run format:check`, `npm run build`.
+
+**Docs updates.** CHANGELOG `### Changed`. **Size: M.**
+
+---
+
+### 3.13 Custom 404 + robots.txt + sitemap (#16)
+
+**Objective & rationale.** No `src/pages/404.astro`, `public/robots.txt`, or sitemap — three quick wins for a public site; `site` is already configured, so `@astrojs/sitemap` works with minimal setup.
+
+**Current state (verified).** `src/pages/404.astro` — absent; `public/robots.txt` — absent; no `sitemap`/`@astrojs/sitemap` reference in `astro.config`/`package.json`.
+
+**Approach.** (1) `src/pages/404.astro` using the site layout (branding from `Astro.locals.site`, a "back home" link). (2) `public/robots.txt` — allow public content, `Disallow: /admin` and `/api`, plus a `Sitemap:` line. (3) `@astrojs/sitemap` integration, **excluding** `/admin` and `/api/*`. **Note (SSR caveat):** with `output: 'server'`, `@astrojs/sitemap` only emits for statically known routes — confirm it captures the public pages, or generate a small static sitemap of the known public URLs if the integration comes up empty under SSR.
+
+**Step-by-step tasks.**
+
+1. Add the 404 page.
+2. Add `public/robots.txt`.
+3. Add + configure the sitemap integration with exclusions; `npm run build` confirms `/sitemap-index.xml` (or the static file) is emitted.
+4. Gate + commit `feat(seo): custom 404, robots.txt, sitemap (#16)`.
+
+**Testing plan.** `npm run build` (sitemap emission), `npm run check`; manual 404 hit in `npm run dev`.
+
+**Docs updates.** CHANGELOG `### Added`. **Size: S.**
+
+---
+
+### 3.14 Remove the stray `console.log` + enable Workers observability (#18, quick-win parts)
+
+**Objective & rationale.** Two of #18's three bullets are one-line quick wins (the third — a scheduled-cleanup cron — needs a trigger + handler and is §4.7). Drop the leftover debug log and turn on Workers Logs so production is observable.
+
+**Current state (verified).** `src/pages/api/content/site.ts:8` has `console.log('GET /api/content/site');`. `wrangler.toml` has no `[observability]` block (grep: no `observability`/`triggers`/`crons`).
+
+**Step-by-step tasks.**
+
+1. Delete the `console.log` line in `site.ts`.
+2. Add `[observability]` `enabled = true` to `wrangler.toml` (Workers Logs; no code change).
+3. Gate + commit `chore(obs): enable Workers Logs; drop stray debug log (#18)`.
+
+**Testing plan.** `npm run check`, `npm run build` (validates wrangler config). **Docs:** CHANGELOG `### Changed`. **Size: S.**
+
+---
+
+### 3.15 Repo cruft — abandoned Firebase ignores, dead code, unused binding (#19)
+
+**Objective & rationale.** Housekeeping from #19. `firestore.indexes.json` is **already deleted**; the remaining items are a stale `.gitignore` block, dead exported code, and a possibly-unused Cloudflare binding.
+
+**Current state (verified).** (a) `.gitignore:17-21` still carries the Firebase block (`# firebase`, `.firebase/`, `firebase-debug*.log`, `firestore-debug.log`) though no Firebase remains. (b) `src/server/authz/guards.ts:18` exports `requirePropertyAccess` with **no callers** in `src/` (grep confirms only the definition). (c) `wrangler.toml:20-22` binds `SESSION` (Astro Sessions store) but nothing in `src/` reads it (grep: no `SESSION` usage).
+
+**Approach.** (a) Drop the Firebase lines from `.gitignore`. (b) Remove `requirePropertyAccess` (+ now-unused imports) — or, if it's meant to back the future homeowner-data feature (§4.2), keep it with a `// reserved for …` note; **default: remove**, re-add when used. (c) **Verify before removing `SESSION`:** the `@astrojs/cloudflare` adapter's session store may require the binding at build time — try removing it and run `npm run build`; if the adapter errors, keep it and instead document in CLAUDE.md that it's adapter-required, not dead.
+
+**Step-by-step tasks.**
+
+1. Trim the `.gitignore` Firebase block.
+2. Delete `requirePropertyAccess` from `guards.ts`.
+3. Attempt `SESSION` removal from `wrangler.toml`; `npm run build` — revert + document if the adapter needs it.
+4. `npm run check` (dead-code removal must not break types).
+5. Gate + commit `chore: drop firebase ignores, dead requirePropertyAccess, unused SESSION binding (#19)`.
+
+**Testing plan.** `npm run check`, `npm test`, `npm run test:server`, `npm run build`.
+
+**Docs updates.** CLAUDE.md only if `SESSION` stays (note why); CHANGELOG `### Removed`. **Size: S.**
 
 ---
 
@@ -377,11 +585,22 @@ All explicitly gated: tenants on a board request (owner-delegated invite model),
 - **HSTS** — Cloudflare zone dashboard toggle (`SETUP.md:221-224`), operator action.
 - **GitHub repo rename + Cloudflare D1/R2 resource rename** (rebrand spec §11) — maintainer dashboard actions; the resource rename carries migration risk and stays deliberately deferred. When done, update `wrangler.toml` bindings and SETUP.md in one PR.
 
+### 4.7 CI/CD rounding-out + scheduled cleanup (#17, #18-cron)
+
+- **Deploy workflow on `main` (#17).** Only `build.yml` + `version.yml` exist; `wrangler.toml` comments assume "Git auto-deploys," but no deploy workflow enforces it. Add a `wrangler-action` job gated on `main`, after the build gate, deploying `dist/server/wrangler.json` (`-c`). **Gated on operator action:** mint a scoped `CLOUDFLARE_API_TOKEN` repo secret first. **Size: S** + operator setup.
+- **CodeQL (#17) — already resolved.** `README.md:75` documents CodeQL via GitHub's default setup (no workflow by design). No action; listed so the finding is closed, not lost.
+- **Coverage thresholds (#17).** `vitest.config.ts:16-20` configures v8 coverage (include/exclude) but sets **no `thresholds`**. Optionally add `coverage.thresholds` (start with a low floor, ratchet up) so coverage regressions fail CI. Policy call (floor vs. advisory) — deferred. **Size: S.**
+- **Scheduled cleanup cron (#18).** A Workers Cron Trigger (`[triggers] crons = [...]` + a `scheduled()` handler) to purge consumed/expired `property_verifications` and resolved `manual_approval_queue` rows — or a board-visible "housekeeping" admin action. Needs its own small design round: where the scheduled handler lives in an Astro SSR Worker (the `@astrojs/cloudflare` adapter's handler wiring), idempotent delete queries, and a pool test. **Size: M.**
+
+### 4.8 PII stance note (#20) — process/docs, not code
+
+The roster puts the whole neighborhood's names, phones, and emails in one resident's personal Cloudflare account while the site is explicitly unofficial. Add a short note in `SETUP.md` and/or the `/about` page (`src/pages/about.astro` exists): where the data came from, that it's used **only** for owner verification, how a neighbor asks to be removed, and a backup/retention statement (D1 Time Travel for restore; occasional `wrangler d1 export` for backup). Cheap to write; a lot of goodwill if ever questioned. The removal/contact wording could live in the board-editable About block (§3.5). **Size: S (writing).**
+
 ---
 
 ## 5. Open questions
 
-1. **`private/improvements.md` is unavailable in this checkout** — findings #12, #13, #15–21 (P2/P3) cannot be enumerated or verified here. Before treating §3 as the complete outstanding set, the operator should diff this plan against that file (or paste the P1–P3 list into a follow-up issue). Items 3.2/3.3/3.7/3.8 cover every P1 finding the spec itself names.
+1. **`private/improvements.md` cross-reference — done (2026-07-03).** All 21 findings are reconciled in §1.5; #11 was corrected (it's a public-read metadata leak, §3.9, not admin-write trimming) and #12–20 are now planned (§3.9–3.15, §4.7–4.8). Nothing in improvements.md remains unaccounted for. Reminder: `private/improvements.md` stays gitignored because its P0 section is exploit-level detail; this **public** plan describes only the *outstanding* items at task altitude — keep it that way when editing (don't paste vulnerability write-ups here).
 2. **CSP production telemetry** (item 3.1): has anyone watched the deployed console for Report-Only violations since PR A shipped? If not, schedule a few days of observation before the flip.
 3. **Prod data audit for uniques** (item 3.7): run the duplicate-`addressNormalized` query against remote D1 before `db:migrate:remote`.
 4. **Product calls** flagged inline: About copy per-mode (3.5), bootstrap zero-users predicate (3.4), validation caps (3.8) — sensible defaults stated; cheap to change.
