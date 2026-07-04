@@ -30,6 +30,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   per-person spreadsheet import.
 - **Roster & members admin UI** — board-only Roster (properties/owners CRUD) and Members
   (approval queue / revoke) sections in the admin panel.
+- **Board members admin panel** — a board-only **Board members** section that promotes another
+  account to `board` and demotes a board member (the last remaining board member can't be demoted),
+  making board handoff a supported workflow via direct database writes rather than the Better Auth
+  admin API.
 - **Admin content management** — announcements, documents, dues, and site settings managed through
   the board-only admin panel.
 
@@ -54,6 +58,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Security
 
+- **Verify-request rate limiting** — `POST /api/verify/request` is throttled in KV with a per-user
+  cooldown plus daily caps per user and per property; the limit surfaces as a `429` in the verify
+  form, curbing abuse of the SMS/email fan-out.
+- **Document upload allowlist + canonical content type** — uploads are restricted to an extension
+  allowlist and stored with a server-derived content type (HTML and SVG excluded as stored-XSS
+  vectors); disallowed types are rejected with `415`.
+- **Hardened document downloads** — responses are sent with `nosniff`, forced to `attachment` for
+  anything other than PDF, and given a sanitized filename.
+- **Baseline security headers** — every response now carries `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and a Report-Only
+  Content-Security-Policy (to be flipped to enforced after validation).
+- **HMAC-keyed, constant-time one-time codes** — verification codes are stored only as keyed
+  HMAC-SHA-256 hashes and compared in constant time, so a leaked database backup can't be reversed
+  with a precomputed table.
+- **Settings validated on write, normalized on read** — dues and site settings are coerced and
+  validated so malformed values can't reach rendering.
+- **Impersonation/ban/set-role closed to board sessions** — the Better Auth admin-plugin
+  capabilities are intentionally not granted; all role changes are direct, board-only database
+  writes.
 - **Public documents read no longer leaks storage metadata** — `GET /api/content/documents` now
   projects only the `DocumentItem` contract (id, title, category, visibility, updatedAt); the
   internal R2 object key, filename, byte size, and content type are no longer sent to callers.
