@@ -2,9 +2,11 @@ import type { APIRoute } from 'astro';
 import { and, desc, eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
+import { readJson } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import {
   manualApprovalQueue,
+  properties,
   userPropertyLinks,
   users,
 } from '../../../server/db/schema';
@@ -42,8 +44,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const db = getDb(env);
-  const body = (await request.json()) as {
-    action: string;
+  const parsed = await readJson(request);
+  if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
+  const body = (parsed.value ?? {}) as {
+    action?: string;
     userId?: string;
     queueId?: string;
     propertyId?: string;
@@ -74,6 +78,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .from(manualApprovalQueue)
       .where(eq(manualApprovalQueue.id, body.queueId));
     if (!row) return new Response('Not Found', { status: 404 });
+    // Don't link a user to a property that doesn't exist or is inactive.
+    const [prop] = await db
+      .select({ status: properties.status })
+      .from(properties)
+      .where(eq(properties.id, body.propertyId));
+    if (!prop) return new Response('No such property', { status: 404 });
+    if (prop.status !== 'active')
+      return new Response('Property is inactive', { status: 409 });
     await db.insert(userPropertyLinks).values({
       id: crypto.randomUUID(),
       userId: row.userId,

@@ -19,14 +19,16 @@ export async function saveAnnouncement(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ id, ...data }),
     });
-    if (!res.ok) throw new Error(`Update failed: ${res.status}`);
+    if (!res.ok)
+      throw new Error((await res.text()) || `Update failed: ${res.status}`);
   } else {
     const res = await fetch('/api/admin/announcements', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(`Create failed: ${res.status}`);
+    if (!res.ok)
+      throw new Error((await res.text()) || `Create failed: ${res.status}`);
   }
 }
 
@@ -119,7 +121,8 @@ export async function saveProperty(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(id ? { id, ...data } : data),
   });
-  if (!res.ok) throw new Error(`Save home failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save home failed: ${res.status}`);
 }
 
 export async function saveOwner(
@@ -138,7 +141,8 @@ export async function saveOwner(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(id ? { id, ...data } : data),
   });
-  if (!res.ok) throw new Error(`Save owner failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save owner failed: ${res.status}`);
 }
 
 // ---------- Members / access ----------
