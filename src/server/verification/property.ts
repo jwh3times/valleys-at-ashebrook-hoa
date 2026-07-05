@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { sendEmail, sendSms } from '../auth/senders';
 import { SITE_NAME } from '../../lib/site';
+import { maskEmail } from '../../lib/format';
 import {
   findActivePropertyByAddress,
   getActiveOwnersForProperty,
@@ -87,7 +88,17 @@ export async function requestPropertyVerification(
     consumedAt: null,
     createdAt: now,
   });
-  const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
+  // Name the (masked) requester so a recipient can tell a legitimate request
+  // from an attacker probing their contact. Code first so SMS length limits
+  // never truncate it.
+  const [requester] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, userId));
+  const requestedBy = requester?.email
+    ? ` Requested by ${maskEmail(requester.email)}.`
+    : '';
+  const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.${requestedBy} If you didn't request this, you can ignore this message.`;
   const subject = `Your verification code — ${SITE_NAME}`;
   const results = await Promise.allSettled(
     recipients.map((to) =>

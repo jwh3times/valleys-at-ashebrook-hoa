@@ -18,3 +18,17 @@ export function todayIso(): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
+
+/**
+ * Mask an email for display to a third party: keep the first character of the
+ * local part and the full domain (`jerryholland00@gmail.com` → `j***@gmail.com`).
+ * The `***` is fixed-width so it never leaks the local-part length. Anything
+ * without a usable local part and domain masks entirely to `***`.
+ */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf('@');
+  if (at <= 0) return '***';
+  const domain = email.slice(at + 1);
+  if (!domain) return '***';
+  return `${email[0]}***@${domain}`;
+}

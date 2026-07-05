@@ -56,6 +56,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   load-bearing — the binding is required by the Cloudflare adapter and the guard backs a planned
   feature — so they were documented in place rather than removed.)
 
+### Fixed
+
+- **Property-verification flow polish** — the single-use Turnstile token is now reset after every
+  verification request, so retrying after a rate-limit or error no longer fails with "Bad captcha";
+  the one-time code message now names the (masked) requesting account (e.g. `Requested by
+  j***@gmail.com`) so a recipient can tell a real request from an attacker probing their contact;
+  and a successful confirmation shows a success state with a link to the resident documents (a full
+  navigation that re-resolves the now-homeowner role).
+
 ### Security
 
 - **Verify-request rate limiting** — `POST /api/verify/request` is throttled in KV with a per-user
