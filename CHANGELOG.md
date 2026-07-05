@@ -36,6 +36,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   admin API.
 - **Admin content management** — announcements, documents, dues, and site settings managed through
   the board-only admin panel.
+- **First-board bootstrap endpoint** — a permanent `POST /api/bootstrap/board` creates the very
+  first `board` account (which can't be made through the self-service flow), replacing the old
+  hand-written temporary-route procedure. It requires an `x-bootstrap-secret` header matched in
+  constant time plus `BOARD_EMAIL`/`BOARD_PASSWORD`/`BOARD_NAME` config.
 
 ### Changed
 
@@ -86,6 +90,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Impersonation/ban/set-role closed to board sessions** — the Better Auth admin-plugin
   capabilities are intentionally not granted; all role changes are direct, board-only database
   writes.
+- **Fail-closed first-board bootstrap** — the new `POST /api/bootstrap/board` self-disables the
+  moment any board account exists (`410`), so the bootstrap can no longer be a forgotten,
+  standing role-escalation route the way the previous hand-added temporary endpoint could. A
+  missing `BOOTSTRAP_SECRET` is treated as closed (`403`), never as "unset means open".
 - **Public documents read no longer leaks storage metadata** — `GET /api/content/documents` now
   projects only the `DocumentItem` contract (id, title, category, visibility, updatedAt); the
   internal R2 object key, filename, byte size, and content type are no longer sent to callers.

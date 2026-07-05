@@ -27,8 +27,9 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   board member from the admin panel's **Board members** section (the last remaining board member
   can't be demoted), but cannot escalate their own access beyond `board`. These are direct database
   writes: the Better Auth admin plugin's impersonation, ban, and set-role endpoints are deliberately
-  not granted to board sessions. The first board account is bootstrapped out-of-band (see
-  `SETUP.md`).
+  not granted to board sessions. The first board account is bootstrapped through a permanent,
+  fail-closed `POST /api/bootstrap/board` endpoint that is inert once any board account exists and
+  requires a constant-time secret match plus `BOARD_*` config (see `SETUP.md` §6).
 - **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
   owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
   by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in
