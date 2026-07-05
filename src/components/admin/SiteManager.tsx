@@ -1,33 +1,21 @@
-import { useEffect, useState } from 'react';
 import { fetchSiteSettings } from '../../lib/content';
 import { saveSite } from '../../lib/admin';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../lib/types';
+import { useAdminResource } from './useAdminResource';
 
 export default function SiteManager() {
-  const [site, setSite] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-
-  useEffect(() => {
-    fetchSiteSettings().then((s) => {
-      setSite(s);
-      setLoading(false);
-    });
-  }, []);
+  const {
+    data: site,
+    setData: setSite,
+    loading,
+    busy,
+    msg,
+    run,
+  } = useAdminResource<SiteSettings>(fetchSiteSettings, DEFAULT_SITE_SETTINGS);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setMsg('');
-    try {
-      await saveSite(site);
-      setMsg('Site settings saved.');
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'could not save.'));
-    } finally {
-      setBusy(false);
-    }
+    await run(() => saveSite(site), 'Site settings saved.');
   }
 
   if (loading)

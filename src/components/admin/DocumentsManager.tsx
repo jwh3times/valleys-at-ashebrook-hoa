@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { fetchDocuments } from '../../lib/content';
 import { deleteDocument, editDocument, uploadDocument } from '../../lib/admin';
 import {
@@ -6,6 +6,7 @@ import {
   type DocumentItem,
   type Visibility,
 } from '../../lib/types';
+import { useAdminResource } from './useAdminResource';
 
 type EditForm = {
   title: string;
@@ -33,14 +34,19 @@ const ALLOWED_EXTENSIONS = [
 const ACCEPT_ATTR = ALLOWED_EXTENSIONS.map((e) => `.${e}`).join(',');
 
 export default function DocumentsManager() {
-  const [items, setItems] = useState<DocumentItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: items,
+    loading,
+    reload,
+    busy,
+    msg,
+    setMsg,
+    run,
+  } = useAdminResource<DocumentItem[]>(fetchDocuments, []);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<string>(DOCUMENT_CATEGORIES[0]);
   const [visibility, setVisibility] = useState<Visibility>('board');
   const [file, setFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     title: '',
@@ -48,16 +54,6 @@ export default function DocumentsManager() {
     visibility: 'public',
   });
   const fileInput = useRef<HTMLInputElement>(null);
-
-  async function load() {
-    setLoading(true);
-    setItems(await fetchDocuments());
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
 
   function startEdit(d: DocumentItem) {
     setEditingId(d.id);
@@ -88,42 +84,29 @@ export default function DocumentsManager() {
       );
       return;
     }
-    setBusy(true);
-    try {
+    await run(async () => {
       await uploadDocument(file, title, category, visibility);
-      setMsg('Document uploaded.');
       setTitle('');
       setFile(null);
       if (fileInput.current) fileInput.current.value = '';
-      await load();
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'upload failed.'));
-    } finally {
-      setBusy(false);
-    }
+      await reload();
+    }, 'Document uploaded.');
   }
 
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editingId) return;
-    setBusy(true);
-    setMsg('');
-    try {
+    await run(async () => {
       await editDocument(editingId, editForm);
-      setMsg('Document updated.');
       resetEdit();
-      await load();
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'edit failed.'));
-    } finally {
-      setBusy(false);
-    }
+      await reload();
+    }, 'Document updated.');
   }
 
   async function handleDelete(item: DocumentItem) {
     if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
     await deleteDocument(item.id);
-    await load();
+    await reload();
   }
 
   return (
