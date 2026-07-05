@@ -20,11 +20,15 @@ export function createAuth(
     secret: env?.BETTER_AUTH_SECRET,
     // Origins allowed to make auth requests. baseURL is trusted automatically;
     // list the custom domain (apex + www) and the workers.dev fallback explicitly
-    // so sign-up/sign-in work no matter which host a visitor lands on.
+    // so sign-up/sign-in work no matter which host a visitor lands on. The
+    // localhost dev origin is included so sign-in works under `npm run dev`
+    // (baseURL is the production URL there); it's harmless in production since a
+    // browser only sends that Origin from a page actually served at localhost.
     trustedOrigins: [
       'https://ashebrookresidents.com',
       'https://www.ashebrookresidents.com',
       'https://valleys-at-ashebrook-hoa.jerryholland00.workers.dev',
+      'http://localhost:4321',
     ],
     ...withCloudflare(
       {

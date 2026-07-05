@@ -250,6 +250,11 @@ For local work against the D1/R2/KV bindings, run the app through Wrangler
 (`npx wrangler dev` after a build) so the bindings and `.dev.vars` secrets are
 available. Migrations against the local database use `npm run db:migrate:local`.
 
+`http://localhost:4321` is a trusted auth origin, so sign-in works locally even
+though `BETTER_AUTH_URL` points at the production URL. If you run the dev server
+on a different host/port, add that origin to `trustedOrigins` in
+`src/server/auth/index.ts`.
+
 ## Day-to-day: how board members update the site
 
 No setup needed — board members just:
