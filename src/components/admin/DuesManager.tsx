@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { fetchDuesSettings } from '../../lib/content';
 import { saveDues } from '../../lib/admin';
 import {
@@ -6,19 +5,17 @@ import {
   type DuesSettings,
   type PaymentOption,
 } from '../../lib/types';
+import { useAdminResource } from './useAdminResource';
 
 export default function DuesManager() {
-  const [dues, setDues] = useState<DuesSettings>(DEFAULT_DUES_SETTINGS);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-
-  useEffect(() => {
-    fetchDuesSettings().then((d) => {
-      setDues(d);
-      setLoading(false);
-    });
-  }, []);
+  const {
+    data: dues,
+    setData: setDues,
+    loading,
+    busy,
+    msg,
+    run,
+  } = useAdminResource<DuesSettings>(fetchDuesSettings, DEFAULT_DUES_SETTINGS);
 
   function updateOption(i: number, patch: Partial<PaymentOption>) {
     setDues((prev) => ({
@@ -48,23 +45,16 @@ export default function DuesManager() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setMsg('');
-    try {
-      const cleaned: DuesSettings = {
-        ...dues,
-        paymentOptions: dues.paymentOptions.filter(
-          (o) => o.label.trim() || o.details.trim(),
-        ),
-      };
+    const cleaned: DuesSettings = {
+      ...dues,
+      paymentOptions: dues.paymentOptions.filter(
+        (o) => o.label.trim() || o.details.trim(),
+      ),
+    };
+    await run(async () => {
       await saveDues(cleaned);
       setDues(cleaned);
-      setMsg('Dues information saved.');
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'could not save.'));
-    } finally {
-      setBusy(false);
-    }
+    }, 'Dues information saved.');
   }
 
   if (loading)
