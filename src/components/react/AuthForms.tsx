@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
 
+declare global {
+  interface Window {
+    // Set by the Turnstile widget callback on the page; single-use per solve.
+    turnstileToken?: string;
+    turnstile?: { reset: () => void };
+  }
+}
+
 export function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -91,39 +99,47 @@ export function VerifyPropertyForm() {
   const [address, setAddress] = useState('');
   const [channel, setChannel] = useState<'email' | 'sms'>('email');
   const [code, setCode] = useState('');
-  const [stage, setStage] = useState<'request' | 'confirm'>('request');
+  const [stage, setStage] = useState<'request' | 'confirm' | 'done'>('request');
   const [msg, setMsg] = useState('');
   async function request(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch('/api/verify/request', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        address,
-        channel,
-        turnstileToken: (window as unknown as { turnstileToken?: string })
-          .turnstileToken,
-      }),
-    });
-    const data = (await res.json()) as {
-      ok?: boolean;
-      queued?: boolean;
-      rateLimited?: boolean;
-      message?: string;
-    };
-    if (res.status === 429 || data.rateLimited) {
-      setMsg(data.message ?? 'Too many requests. Please wait and try again.');
-      return;
+    try {
+      const res = await fetch('/api/verify/request', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          address,
+          channel,
+          turnstileToken: window.turnstileToken,
+        }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        queued?: boolean;
+        rateLimited?: boolean;
+        message?: string;
+      };
+      if (res.status === 429 || data.rateLimited) {
+        setMsg(data.message ?? 'Too many requests. Please wait and try again.');
+        return;
+      }
+      if (data.queued)
+        setMsg(
+          "Sent for manual review — you'll get a confirmation once your account is approved.",
+        );
+      else if (data.ok) {
+        setMsg('Code sent — check your phone/email.');
+        setStage('confirm');
+      } else
+        setMsg(
+          'Could not start verification. Check the address and try again.',
+        );
+    } finally {
+      // The Turnstile token is single-use; reset the widget so a retry (after a
+      // rate-limit/error) gets a fresh token instead of failing "Bad captcha".
+      window.turnstile?.reset();
+      window.turnstileToken = undefined;
     }
-    if (data.queued)
-      setMsg(
-        "Sent for manual review — you'll get a confirmation once your account is approved.",
-      );
-    else if (data.ok) {
-      setMsg('Code sent — check your phone/email.');
-      setStage('confirm');
-    } else
-      setMsg('Could not start verification. Check the address and try again.');
   }
   async function confirm(e: React.FormEvent) {
     e.preventDefault();
@@ -132,12 +148,24 @@ export function VerifyPropertyForm() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ code }),
     });
-    setMsg(
-      res.ok
-        ? 'Verified! You now have homeowner access.'
-        : 'Code invalid or expired.',
-    );
+    if (res.ok) {
+      // A full navigation to the homeowner surface re-resolves the role in
+      // middleware, so the confirmation link doubles as the session refresh.
+      setStage('done');
+      setMsg('Verified! You now have homeowner access.');
+    } else {
+      setMsg('Code invalid or expired.');
+    }
   }
+  if (stage === 'done')
+    return (
+      <div>
+        <p>{msg}</p>
+        <p>
+          <a href="/documents">View resident documents →</a>
+        </p>
+      </div>
+    );
   return stage === 'request' ? (
     <form onSubmit={request}>
       <input
