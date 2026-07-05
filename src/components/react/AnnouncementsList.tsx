@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
-import { fetchAnnouncements } from '../../lib/content';
 import { formatDate } from '../../lib/format';
 import type { Announcement } from '../../lib/types';
 
 interface Props {
+  /** Announcements to render (read server-side and passed in). */
+  items: Announcement[];
   /** Optionally cap how many announcements to show (e.g. on the home page). */
   limit?: number;
   /** Link to the full announcements page when truncated. */
@@ -13,21 +13,11 @@ interface Props {
 }
 
 export default function AnnouncementsList({
+  items,
   limit,
   showMoreLink,
   variant = 'list',
 }: Props) {
-  const [items, setItems] = useState<Announcement[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchAnnouncements()
-      .then(setItems)
-      .catch((e) => setError(e.message ?? 'Could not load announcements.'));
-  }, []);
-
-  if (error) return <p className="form-message form-message--error">{error}</p>;
-  if (items === null) return <p className="loading">Loading announcements…</p>;
   if (items.length === 0)
     return <p className="muted">No announcements yet. Check back soon.</p>;
 

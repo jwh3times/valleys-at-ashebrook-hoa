@@ -2,6 +2,17 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import DocumentsList from '../components/react/DocumentsList.tsx';
 import { NEIGHBORHOOD } from '../lib/site';
+import { env } from 'cloudflare:workers';
+import { fetchDocumentsFor } from '../server/content/reads';
+
+// Read tier-filtered documents server-side (SEO / first paint / no-JS). The
+// D1 `updatedAt` comes back as a Date; the JSON API path serialized it to an
+// ISO string, so match that here to satisfy the DocumentItem contract.
+const role = Astro.locals.authContext?.role ?? 'visitor';
+const docs = (await fetchDocumentsFor(env, role)).map((d) => ({
+  ...d,
+  updatedAt: d.updatedAt.toISOString(),
+}));
 ---
 
 <BaseLayout
@@ -16,6 +27,6 @@ import { NEIGHBORHOOD } from '../lib/site';
       download the PDF.
     </p>
 
-    <DocumentsList client:only="react" />
+    <DocumentsList docs={docs} />
   </div>
 </BaseLayout>
