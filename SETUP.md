@@ -126,34 +126,42 @@ old owner inactive (revoking access) and add the new owner.
 ## 6. Seed the first board account (one-time bootstrap)
 
 Because no admin exists yet, the first board account can't be created through the normal
-self-service flow — `seedBoard` writes the `role`/`emailVerified` fields directly in the
-database. Run this once, right after the first deploy and the roster import.
+self-service flow — `role`/`emailVerified` are written directly. The site ships a permanent,
+fail-closed endpoint for exactly this: **`POST /api/bootstrap/board`**. It **self-disables the
+moment any board account exists**, so there is no temporary route to add and remember to remove
+(the previous procedure's biggest risk — a forgotten route is a standing role-escalation
+backdoor). Run this once, right after the first deploy and the roster import.
 
-Add a **short-lived** admin route to the Worker (remove it before the next deploy) that reads
-`BOARD_EMAIL` / `BOARD_PASSWORD` / `BOARD_NAME` and calls `seedBoard`, guarded by a secret:
+1. Set these Cloudflare secrets (in addition to the email secrets from step 3, since sign-up
+   sends a verification email):
 
-```ts
-import { seedBoard } from '../../scripts/seed-board'; // adjust to where you place this route
+   ```bash
+   npx wrangler secret put BOOTSTRAP_SECRET   # a long random string you choose
+   npx wrangler secret put BOARD_EMAIL
+   npx wrangler secret put BOARD_PASSWORD     # 10+ characters
+   npx wrangler secret put BOARD_NAME
+   ```
 
-// Temporary route — DELETE after first use.
-export const POST = async ({ request, locals }) => {
-  const env = locals.runtime?.env ?? /* or import { env } from 'cloudflare:workers' */ null;
-  if (request.headers.get('x-bootstrap-secret') !== env.BOOTSTRAP_SECRET) {
-    return new Response('Forbidden', { status: 403 });
-  }
-  const { BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME } = env;
-  if (!BOARD_EMAIL || !BOARD_PASSWORD || !BOARD_NAME) {
-    return new Response('Missing BOARD_EMAIL / BOARD_PASSWORD / BOARD_NAME', { status: 400 });
-  }
-  await seedBoard(env, BOARD_EMAIL, BOARD_PASSWORD, BOARD_NAME);
-  return new Response(null, { status: 204 });
-};
-```
+2. POST once with the matching secret header:
 
-Set `BOARD_EMAIL`, `BOARD_PASSWORD`, `BOARD_NAME`, and `BOOTSTRAP_SECRET` as Cloudflare secrets
-(and ensure the email secrets from step 3 are set, since sign-up sends a verification email),
-POST once with the matching `x-bootstrap-secret` header, then **remove the route and redeploy**.
+   ```bash
+   curl -X POST https://<your-site>/api/bootstrap/board \
+     -H "x-bootstrap-secret: <the BOOTSTRAP_SECRET you set>"
+   ```
+
+   `204` = the board account was created. `410` = a board account already exists (the endpoint
+   has self-disabled); `403` = the secret is missing or wrong; `400` = a `BOARD_*` secret is unset.
+
+3. (Recommended) Delete the now-unneeded bootstrap secrets so they aren't left lying around:
+
+   ```bash
+   npx wrangler secret delete BOOTSTRAP_SECRET
+   npx wrangler secret delete BOARD_PASSWORD
+   ```
+
 The board member can then sign in at `/login` and change their password via **Forgot password**.
+(The same logic is exported as `seedBoard` from `scripts/seed-board.ts` for CLI use, but the
+endpoint above is the supported path.)
 
 ## 7. Import the document archive
 
