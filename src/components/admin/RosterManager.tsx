@@ -1,16 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { fetchProperties, saveProperty, saveOwner } from '../../lib/admin';
 import type { PropertyWithOwners, Owner } from '../../lib/types';
+import { useAdminResource } from './useAdminResource';
 
 const emptyHome = { address: '', unit: '', notes: '' };
 const emptyOwner = { fullName: '', phone: '', email: '', notes: '' };
 type Status = 'active' | 'inactive';
 
 export default function RosterManager() {
-  const [homes, setHomes] = useState<PropertyWithOwners[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const {
+    data: homes,
+    loading,
+    reload,
+    busy,
+    msg,
+    setMsg,
+    run,
+  } = useAdminResource<PropertyWithOwners[]>(fetchProperties, []);
 
   const [homeForm, setHomeForm] = useState(emptyHome);
   const [homeStatus, setHomeStatus] = useState<Status>('active');
@@ -20,15 +26,6 @@ export default function RosterManager() {
   const [ownerStatus, setOwnerStatus] = useState<Status>('active');
   const [ownerPropertyId, setOwnerPropertyId] = useState<string | null>(null);
   const [editingOwnerId, setEditingOwnerId] = useState<string | null>(null);
-
-  async function load() {
-    setLoading(true);
-    setHomes(await fetchProperties());
-    setLoading(false);
-  }
-  useEffect(() => {
-    load();
-  }, []);
 
   function resetHome() {
     setEditingHomeId(null);
@@ -81,59 +78,51 @@ export default function RosterManager() {
 
   async function submitHome(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setMsg('');
-    try {
-      await saveProperty(
-        {
-          address: homeForm.address,
-          unit: homeForm.unit || null,
-          notes: homeForm.notes || null,
-          ...(editingHomeId ? { status: homeStatus } : {}),
-        },
-        editingHomeId ?? undefined,
-      );
-      setMsg(editingHomeId ? 'Home updated.' : 'Home added.');
-      resetHome();
-      await load();
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'could not save.'));
-    } finally {
-      setBusy(false);
-    }
+    await run(
+      async () => {
+        await saveProperty(
+          {
+            address: homeForm.address,
+            unit: homeForm.unit || null,
+            notes: homeForm.notes || null,
+            ...(editingHomeId ? { status: homeStatus } : {}),
+          },
+          editingHomeId ?? undefined,
+        );
+        resetHome();
+        await reload();
+      },
+      editingHomeId ? 'Home updated.' : 'Home added.',
+    );
   }
 
   async function submitOwner(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setMsg('');
-    try {
-      await saveOwner(
-        editingOwnerId
-          ? {
-              fullName: ownerForm.fullName,
-              phone: ownerForm.phone || null,
-              email: ownerForm.email || null,
-              notes: ownerForm.notes || null,
-              status: ownerStatus,
-            }
-          : {
-              propertyId: ownerPropertyId ?? undefined,
-              fullName: ownerForm.fullName,
-              phone: ownerForm.phone || null,
-              email: ownerForm.email || null,
-              notes: ownerForm.notes || null,
-            },
-        editingOwnerId ?? undefined,
-      );
-      setMsg(editingOwnerId ? 'Owner updated.' : 'Owner added.');
-      resetOwner();
-      await load();
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'could not save.'));
-    } finally {
-      setBusy(false);
-    }
+    await run(
+      async () => {
+        await saveOwner(
+          editingOwnerId
+            ? {
+                fullName: ownerForm.fullName,
+                phone: ownerForm.phone || null,
+                email: ownerForm.email || null,
+                notes: ownerForm.notes || null,
+                status: ownerStatus,
+              }
+            : {
+                propertyId: ownerPropertyId ?? undefined,
+                fullName: ownerForm.fullName,
+                phone: ownerForm.phone || null,
+                email: ownerForm.email || null,
+                notes: ownerForm.notes || null,
+              },
+          editingOwnerId ?? undefined,
+        );
+        resetOwner();
+        await reload();
+      },
+      editingOwnerId ? 'Owner updated.' : 'Owner added.',
+    );
   }
 
   async function toggleHome(h: PropertyWithOwners) {
@@ -141,14 +130,14 @@ export default function RosterManager() {
       { status: h.status === 'active' ? 'inactive' : 'active' },
       h.id,
     );
-    await load();
+    await reload();
   }
   async function toggleOwner(o: Owner) {
     await saveOwner(
       { status: o.status === 'active' ? 'inactive' : 'active' },
       o.id,
     );
-    await load();
+    await reload();
   }
 
   return (

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { fetchAnnouncements } from '../../lib/content';
 import { deleteAnnouncement, saveAnnouncement } from '../../lib/admin';
 import { formatDate, todayIso } from '../../lib/format';
 import type { Announcement, Visibility } from '../../lib/types';
+import { useAdminResource } from './useAdminResource';
 
 const empty: {
   title: string;
@@ -19,22 +20,17 @@ const empty: {
 };
 
 export default function AnnouncementsManager() {
-  const [items, setItems] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: items,
+    loading,
+    reload,
+    busy,
+    msg,
+    setMsg,
+    run,
+  } = useAdminResource<Announcement[]>(fetchAnnouncements, []);
   const [form, setForm] = useState<typeof empty>(empty);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-
-  async function load() {
-    setLoading(true);
-    setItems(await fetchAnnouncements());
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
 
   function startEdit(a: Announcement) {
     setEditingId(a.id);
@@ -56,33 +52,29 @@ export default function AnnouncementsManager() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setMsg('');
-    try {
-      await saveAnnouncement(
-        {
-          title: form.title,
-          body: form.body,
-          date: form.date,
-          pinned: form.pinned,
-          visibility: form.visibility,
-        },
-        editingId ?? undefined,
-      );
-      setMsg(editingId ? 'Announcement updated.' : 'Announcement posted.');
-      reset();
-      await load();
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'could not save.'));
-    } finally {
-      setBusy(false);
-    }
+    await run(
+      async () => {
+        await saveAnnouncement(
+          {
+            title: form.title,
+            body: form.body,
+            date: form.date,
+            pinned: form.pinned,
+            visibility: form.visibility,
+          },
+          editingId ?? undefined,
+        );
+        reset();
+        await reload();
+      },
+      editingId ? 'Announcement updated.' : 'Announcement posted.',
+    );
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this announcement? This cannot be undone.')) return;
     await deleteAnnouncement(id);
-    await load();
+    await reload();
   }
 
   return (
