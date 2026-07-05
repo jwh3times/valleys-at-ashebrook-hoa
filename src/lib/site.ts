@@ -50,6 +50,42 @@ export function brandTag(officialMode: boolean): string {
   return officialMode ? 'Homeowners Association' : 'Residents';
 }
 
+/** Minimal auth shape the header needs (structurally satisfied by AuthContext). */
+export interface AccountNavAuth {
+  role: 'visitor' | 'homeowner' | 'board';
+  propertyIds: string[];
+}
+
+export interface AccountNav {
+  signedIn: boolean;
+  links: NavLink[];
+}
+
+/**
+ * Account affordances for the public header, driven by the resolved caller:
+ * anonymous → sign in / register; a signed-in user without a verified home →
+ * verify property; a board member → the admin panel; a verified homeowner →
+ * nothing extra (the header still shows a sign-out control when `signedIn`).
+ */
+export function accountNav(auth: AccountNavAuth | null): AccountNav {
+  if (!auth)
+    return {
+      signedIn: false,
+      links: [
+        { href: '/login', label: 'Sign in' },
+        { href: '/register', label: 'Register' },
+      ],
+    };
+  if (auth.role === 'board')
+    return { signedIn: true, links: [{ href: '/admin', label: 'Admin' }] };
+  if (auth.propertyIds.length === 0)
+    return {
+      signedIn: true,
+      links: [{ href: '/verify-property', label: 'Verify your property' }],
+    };
+  return { signedIn: true, links: [] };
+}
+
 /** Name shown in titles + footer copyright: the org name in official mode, else the fixed resident brand. */
 export function displayName(s: ModeName): string {
   // Off-mode name is the fixed resident brand, NOT the stored siteName: a legacy

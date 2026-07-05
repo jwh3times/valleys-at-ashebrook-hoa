@@ -14,6 +14,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Added
 
+- **Signed-in presence in the header** — the public header now reflects the visitor: anonymous
+  users get **Sign in** / **Register** links, a signed-in user without a verified home gets a
+  **Verify your property** link, board members get an **Admin** link, and any signed-in user gets a
+  **Sign out** control — replacing the single hardcoded "Admin sign in" link. Homeowners no longer
+  have to guess the `/login`, `/register`, or `/verify-property` URLs.
 - **Tiered content + document library** — site content served from Cloudflare D1 with
   `public | homeowner | board` visibility tiers, document files in R2 behind a tier-checked
   download endpoint, and an import pipeline for the document archive (replacing the earlier

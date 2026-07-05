@@ -1,6 +1,7 @@
 ---
-import { navLinks, brandTag } from '../lib/site';
+import { navLinks, brandTag, accountNav } from '../lib/site';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import SignOutButton from './react/SignOutButton';
 
 const { pathname } = Astro.url;
 // Astro.locals.site is set by middleware on every real request; fall back to
@@ -8,6 +9,9 @@ const { pathname } = Astro.url;
 const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 const links = navLinks(site.officialMode);
 const tag = brandTag(site.officialMode);
+// Account affordances (sign in / register / verify / admin + sign out) driven
+// by the middleware-resolved caller.
+const account = accountNav(Astro.locals.authContext ?? null);
 
 const isCurrent = (href: string) =>
   href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -47,7 +51,16 @@ const isCurrent = (href: string) =>
         }
       </ul>
     </nav>
-    <a class="nav-login" href="/admin">Admin sign in</a>
+    <div class="nav-account">
+      {
+        account.links.map((l) => (
+          <a class="nav-login" href={l.href}>
+            {l.label}
+          </a>
+        ))
+      }
+      {account.signedIn && <SignOutButton client:idle />}
+    </div>
   </div>
 </header>
 
