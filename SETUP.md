@@ -232,7 +232,9 @@ response. Two settings live at the Cloudflare **zone** level, not in code:
   confirmed every subdomain is HTTPS).
 - **CSP is enforced.** The directive list in `src/middleware.ts` allows exactly the
   third-party resources the site uses (Google Fonts, the Google Calendar embed,
-  Turnstile, and Web3Forms). If you add a new external resource — an embed,
+  Turnstile, and Web3Forms) plus the Cloudflare Web Analytics beacon
+  (`static.cloudflareinsights.com`), which Cloudflare's edge injects into the deployed
+  HTML automatically. If you add a new external resource — an embed,
   analytics, a font host — add its host to the matching directive, or it will be
   blocked. To debug a blocked resource, temporarily swap the header name to
   `Content-Security-Policy-Report-Only`, reproduce it while watching the browser

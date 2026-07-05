@@ -7,19 +7,23 @@ import { getAuthContext } from './server/authz/context';
 import { getSiteSettings } from './server/content/settings';
 import { DEFAULT_SITE_SETTINGS } from './lib/types';
 
-// Enumerated from the code's external dependencies: Google Fonts, the Google
-// Calendar embed (frame), Turnstile (script+frame), Web3Forms (connect). Enforced
-// (not Report-Only) after auditing every resource against these directives; keep
-// 'unsafe-inline' because Astro injects inline styles + island hydration scripts.
-// To temporarily revert if a new third-party resource is added, swap the header
-// name back to `Content-Security-Policy-Report-Only` while updating the list.
+// Enumerated from the code's external dependencies plus what Cloudflare's edge
+// injects: Google Fonts, the Google Calendar embed (frame), Turnstile
+// (script+frame), Web3Forms (connect), and the Cloudflare Web Analytics beacon
+// (static.cloudflareinsights.com script; it reports same-origin to /cdn-cgi/rum
+// on the proxied domain, so 'self' covers the beacon, and cloudflareinsights.com
+// is allowed for the non-proxied/edge case). Enforced (not Report-Only) after
+// auditing every resource against these directives; keep 'unsafe-inline' because
+// Astro injects inline styles + island hydration scripts. To temporarily revert
+// if a new third-party resource is added, swap the header name back to
+// `Content-Security-Policy-Report-Only` while updating the list.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data:",
   "font-src 'self' https://fonts.gstatic.com",
-  "connect-src 'self' https://api.web3forms.com",
+  "connect-src 'self' https://api.web3forms.com https://cloudflareinsights.com",
   'frame-src https://calendar.google.com https://challenges.cloudflare.com',
   "frame-ancestors 'none'",
   "base-uri 'self'",

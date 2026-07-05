@@ -110,8 +110,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Baseline security headers** — every response now carries `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy. The policy allows exactly the third-party resources the site uses
-  (Google Fonts, the Google Calendar embed, Turnstile, Web3Forms) and was flipped from Report-Only
-  to enforced after auditing every resource against the directive list.
+  (Google Fonts, the Google Calendar embed, Turnstile, Web3Forms) plus the Cloudflare Web Analytics
+  beacon that Cloudflare's edge injects, and was flipped from Report-Only to enforced after auditing
+  every resource against the directive list.
 - **HMAC-keyed, constant-time one-time codes** — verification codes are stored only as keyed
   HMAC-SHA-256 hashes and compared in constant time, so a leaked database backup can't be reversed
   with a precomputed table.
