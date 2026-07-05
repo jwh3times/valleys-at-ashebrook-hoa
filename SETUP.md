@@ -123,6 +123,25 @@ npx wrangler d1 execute ashebrook-hoa --remote --file private/roster-import.sql
 The board maintains the roster afterward from the `/admin` panel; ownership transfers mark the
 old owner inactive (revoking access) and add the new owner.
 
+### Privacy — handling the owner roster
+
+The roster (names, and the phone/email on file for each home) comes from the HOA's owner records
+and is used for **one purpose only**: verifying that someone signing up actually lives at the home
+they claim, by sending a one-time code to the contact already on file. It is never shown publicly
+or used to message residents — the verification code is the only outbound message it drives.
+
+- **Where it lives:** in this deployment's Cloudflare **D1** database. While the site is unofficial
+  (see **Official mode** below), that database sits under the maintaining resident's own Cloudflare
+  account — worth being transparent about if a neighbor asks.
+- **Removal requests:** deactivate the person's owner record in `/admin` → **Roster** (this revokes
+  any access tied to it). The admin UI only deactivates; to erase the stored phone/email entirely,
+  delete the row directly, e.g.
+  `npx wrangler d1 execute ashebrook-hoa --remote --command "DELETE FROM owners WHERE id = '<ownerId>'"`.
+  A removed owner simply can't self-verify; the board can still grant access manually.
+- **Backup & retention:** D1 **Time Travel** covers point-in-time restore for the past 30 days; for
+  a durable backup run `npx wrangler d1 export ashebrook-hoa --remote --output backup.sql`
+  periodically and store it securely — it contains the same PII as the roster, so treat it that way.
+
 ## 6. Seed the first board account (one-time bootstrap)
 
 Because no admin exists yet, the first board account can't be created through the normal
