@@ -8,9 +8,11 @@ import { getSiteSettings } from './server/content/settings';
 import { DEFAULT_SITE_SETTINGS } from './lib/types';
 
 // Enumerated from the code's external dependencies: Google Fonts, the Google
-// Calendar embed (frame), Turnstile (script+frame), Web3Forms (connect).
-// Shipped Report-Only first: Astro injects inline styles + island hydration, so
-// enforce-mode is flipped in a follow-up once no legitimate resource is blocked.
+// Calendar embed (frame), Turnstile (script+frame), Web3Forms (connect). Enforced
+// (not Report-Only) after auditing every resource against these directives; keep
+// 'unsafe-inline' because Astro injects inline styles + island hydration scripts.
+// To temporarily revert if a new third-party resource is added, swap the header
+// name back to `Content-Security-Policy-Report-Only` while updating the list.
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
@@ -32,7 +34,7 @@ function applySecurityHeaders(headers: Headers): void {
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=(), payment=()',
   );
-  headers.set('Content-Security-Policy-Report-Only', CSP);
+  headers.set('Content-Security-Policy', CSP);
 }
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
