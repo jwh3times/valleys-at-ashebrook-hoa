@@ -34,9 +34,13 @@ describe('security headers', () => {
       'strict-origin-when-cross-origin',
     );
     expect(res.headers.get('permissions-policy')).toBeTruthy();
-    expect(res.headers.get('content-security-policy-report-only')).toContain(
-      'calendar.google.com',
-    );
+    // Enforced (not Report-Only) after the CSP audit confirmed no legitimate
+    // resource is blocked.
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain('calendar.google.com');
+    // Cloudflare Web Analytics beacon (injected by the edge) is allowed.
+    expect(csp).toContain('static.cloudflareinsights.com');
+    expect(res.headers.get('content-security-policy-report-only')).toBeNull();
   });
 
   it('sets headers on the /admin redirect too', async () => {
