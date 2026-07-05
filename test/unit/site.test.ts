@@ -4,6 +4,7 @@ import {
   brandTag,
   displayName,
   siteTitle,
+  accountNav,
   SITE_NAME,
   OFFICIAL_ORG_NAME,
 } from '../../src/lib/site';
@@ -35,6 +36,37 @@ describe('site branding helpers', () => {
     const s = { ...DEFAULT_SITE_SETTINGS, officialMode: false };
     expect(siteTitle('Home', s)).toBe(SITE_NAME);
     expect(siteTitle('Dues', s)).toBe(`Dues | ${SITE_NAME}`);
+  });
+});
+
+describe('accountNav', () => {
+  const hrefs = (auth: Parameters<typeof accountNav>[0]) =>
+    accountNav(auth).links.map((l) => l.href);
+
+  it('offers sign in + register to anonymous visitors', () => {
+    const nav = accountNav(null);
+    expect(nav.signedIn).toBe(false);
+    expect(hrefs(null)).toEqual(['/login', '/register']);
+  });
+
+  it('sends a signed-in user with no verified home to verify-property', () => {
+    const nav = accountNav({ role: 'visitor', propertyIds: [] });
+    expect(nav.signedIn).toBe(true);
+    expect(hrefs({ role: 'visitor', propertyIds: [] })).toEqual([
+      '/verify-property',
+    ]);
+  });
+
+  it('gives a verified homeowner just the signed-in state (sign out only)', () => {
+    const nav = accountNav({ role: 'homeowner', propertyIds: ['p1'] });
+    expect(nav.signedIn).toBe(true);
+    expect(nav.links).toEqual([]);
+  });
+
+  it('links a board member to the admin panel', () => {
+    const nav = accountNav({ role: 'board', propertyIds: [] });
+    expect(nav.signedIn).toBe(true);
+    expect(hrefs({ role: 'board', propertyIds: [] })).toEqual(['/admin']);
   });
 });
 
