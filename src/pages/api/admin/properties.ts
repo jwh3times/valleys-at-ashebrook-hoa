@@ -10,6 +10,14 @@ import { normalizePropertyInput } from '../../../lib/types';
 
 export const prerender = false;
 
+// Drizzle wraps the D1 error ("Failed query: …") and puts the SQLite message on
+// the cause chain, so walk it rather than checking the top-level message.
+function isUniqueViolation(err: unknown): boolean {
+  for (let e: unknown = err; e instanceof Error; e = e.cause)
+    if (/UNIQUE constraint failed/i.test(e.message)) return true;
+  return false;
+}
+
 export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
@@ -37,18 +45,27 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const input = result.value;
   const address = input.address!; // create mode guarantees address
   const now = new Date();
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id: crypto.randomUUID(),
-      address,
-      addressNormalized: normalizeAddress(address),
-      unit: input.unit ?? null,
-      status: input.status ?? 'active',
-      notes: input.notes ?? null,
-      createdAt: now,
-      updatedAt: now,
-    });
+  try {
+    await getDb(env)
+      .insert(properties)
+      .values({
+        id: crypto.randomUUID(),
+        address,
+        addressNormalized: normalizeAddress(address),
+        unit: input.unit ?? null,
+        status: input.status ?? 'active',
+        notes: input.notes ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+  } catch (err) {
+    // Unique on address_normalized: a home with this address already exists.
+    if (isUniqueViolation(err))
+      return new Response('A property with this address already exists', {
+        status: 409,
+      });
+    throw err;
+  }
   return new Response(null, { status: 201 });
 };
 
@@ -70,6 +87,14 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   if (input.unit !== undefined) patch.unit = input.unit;
   if (input.status !== undefined) patch.status = input.status;
   if (input.notes !== undefined) patch.notes = input.notes;
-  await getDb(env).update(properties).set(patch).where(eq(properties.id, id));
+  try {
+    await getDb(env).update(properties).set(patch).where(eq(properties.id, id));
+  } catch (err) {
+    if (isUniqueViolation(err))
+      return new Response('A property with this address already exists', {
+        status: 409,
+      });
+    throw err;
+  }
   return new Response(null, { status: 204 });
 };
