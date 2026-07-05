@@ -90,6 +90,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Fixed
 
+- **Local sign-in works under `npm run dev`** — `http://localhost:4321` is now a trusted Better Auth
+  origin, so signing in on the dev server no longer fails with an origin error (the dev server's
+  `BETTER_AUTH_URL` points at the production URL, which had left localhost untrusted). Production
+  auth is unaffected.
 - **Property-verification flow polish** — the single-use Turnstile token is now reset after every
   verification request, so retrying after a rate-limit or error no longer fails with "Bad captcha";
   the one-time code message now names the (masked) requesting account (e.g. `Requested by
