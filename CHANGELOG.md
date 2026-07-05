@@ -46,6 +46,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Changed
 
+- **Database uniqueness + hot-path indexes** — migration `0003` adds a `UNIQUE` index on
+  `properties.address_normalized` and on `user_property_links (user_id, property_id)`, plus indexes
+  on the roster/verification/content hot-read columns (`owners.property_id`,
+  `property_verifications.user_id`, `manual_approval_queue.status`, `documents.visibility`,
+  `announcements (visibility, date)`). Creating or renaming a property to a duplicate address now
+  returns `409` instead of an opaque `500`, and re-verifying (or re-approving) a home no longer
+  accumulates duplicate ownership links.
 - **Enabled Workers Logs** — `[observability]` turned on in `wrangler.toml` so production
   invocation logs, console output, and errors are visible from the Cloudflare dashboard. Also
   removed a stray `console.log` from the site-settings read endpoint.

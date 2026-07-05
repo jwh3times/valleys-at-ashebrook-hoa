@@ -86,13 +86,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (!prop) return new Response('No such property', { status: 404 });
     if (prop.status !== 'active')
       return new Response('Property is inactive', { status: 409 });
-    await db.insert(userPropertyLinks).values({
-      id: crypto.randomUUID(),
-      userId: row.userId,
-      propertyId: body.propertyId,
-      verifiedAt: new Date(),
-      method: 'board_manual',
-    });
+    // Approving a user for a home they're already linked to is harmless
+    // (the (user_id, property_id) unique would otherwise reject the insert).
+    await db
+      .insert(userPropertyLinks)
+      .values({
+        id: crypto.randomUUID(),
+        userId: row.userId,
+        propertyId: body.propertyId,
+        verifiedAt: new Date(),
+        method: 'board_manual',
+      })
+      .onConflictDoNothing();
     await db
       .update(users)
       .set({ role: 'homeowner' })

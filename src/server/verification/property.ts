@@ -153,13 +153,18 @@ export async function confirmPropertyVerification(
     .update(propertyVerifications)
     .set({ consumedAt: new Date() })
     .where(eq(propertyVerifications.id, pv.id));
-  await db.insert(userPropertyLinks).values({
-    id: crypto.randomUUID(),
-    userId,
-    propertyId: pv.propertyId,
-    verifiedAt: new Date(),
-    method: pv.channel === 'email' ? 'otp_email' : 'otp_sms',
-  });
+  // Re-verifying a home the user is already linked to is a no-op link-wise
+  // (the (user_id, property_id) unique would otherwise reject the insert).
+  await db
+    .insert(userPropertyLinks)
+    .values({
+      id: crypto.randomUUID(),
+      userId,
+      propertyId: pv.propertyId,
+      verifiedAt: new Date(),
+      method: pv.channel === 'email' ? 'otp_email' : 'otp_sms',
+    })
+    .onConflictDoNothing();
   // Promote to homeowner ONLY if currently a visitor — never downgrade board, never re-touch homeowner.
   await db
     .update(users)
