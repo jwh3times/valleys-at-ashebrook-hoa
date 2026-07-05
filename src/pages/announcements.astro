@@ -2,6 +2,13 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import AnnouncementsList from '../components/react/AnnouncementsList.tsx';
 import { NEIGHBORHOOD } from '../lib/site';
+import { env } from 'cloudflare:workers';
+import { fetchAnnouncementsFor } from '../server/content/reads';
+
+// Read tier-filtered content server-side so the HTML ships with real content
+// (SEO, fast first paint, works with JS disabled) instead of a client "Loading…".
+const role = Astro.locals.authContext?.role ?? 'visitor';
+const items = await fetchAnnouncementsFor(env, role);
 ---
 
 <BaseLayout
@@ -13,6 +20,6 @@ import { NEIGHBORHOOD } from '../lib/site';
     <h1 class="page-title">Announcements</h1>
     <p class="page-lead">Community news and reminders, newest first.</p>
 
-    <AnnouncementsList client:only="react" variant="page" />
+    <AnnouncementsList items={items} variant="page" />
   </div>
 </BaseLayout>

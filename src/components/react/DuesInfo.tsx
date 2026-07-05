@@ -1,19 +1,11 @@
-import { useEffect, useState } from 'react';
-import { fetchDuesSettings } from '../../lib/content';
-import { DEFAULT_DUES_SETTINGS, type DuesSettings } from '../../lib/types';
+import type { DuesSettings } from '../../lib/types';
 
-export default function DuesInfo() {
-  const [dues, setDues] = useState<DuesSettings | null>(null);
+interface Props {
+  /** Dues settings (read server-side and passed in). */
+  dues: DuesSettings;
+}
 
-  useEffect(() => {
-    fetchDuesSettings()
-      .then(setDues)
-      .catch(() => setDues(DEFAULT_DUES_SETTINGS));
-  }, []);
-
-  if (dues === null)
-    return <p className="loading">Loading dues information…</p>;
-
+export default function DuesInfo({ dues }: Props) {
   const hasOptions = dues.paymentOptions.length > 0;
 
   return (

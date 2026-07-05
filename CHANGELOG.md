@@ -46,6 +46,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Changed
 
+- **Public content is now server-rendered** — announcements, documents, and dues are read in each
+  page's Astro frontmatter (tier-filtered by the visitor's role) and rendered server-side instead of
+  fetched client-side into `client:only` islands. The HTML now ships with the real content — better
+  SEO, faster first paint, and it works with JavaScript disabled — rather than a "Loading…"
+  placeholder. The `/api/content/*` endpoints remain for the admin panel.
 - **Database uniqueness + hot-path indexes** — migration `0003` adds a `UNIQUE` index on
   `properties.address_normalized` and on `user_property_links (user_id, property_id)`, plus indexes
   on the roster/verification/content hot-read columns (`owners.property_id`,

@@ -1,20 +1,13 @@
-import { useEffect, useState } from 'react';
-import { fetchDocuments, groupDocumentsByCategory } from '../../lib/content';
+import { groupDocumentsByCategory } from '../../lib/content';
 import { formatDate } from '../../lib/format';
 import type { DocumentItem } from '../../lib/types';
 
-export default function DocumentsList() {
-  const [docs, setDocs] = useState<DocumentItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+interface Props {
+  /** Documents to render (read server-side and passed in). */
+  docs: DocumentItem[];
+}
 
-  useEffect(() => {
-    fetchDocuments()
-      .then(setDocs)
-      .catch((e) => setError(e.message ?? 'Could not load documents.'));
-  }, []);
-
-  if (error) return <p className="form-message form-message--error">{error}</p>;
-  if (docs === null) return <p className="loading">Loading documents…</p>;
+export default function DocumentsList({ docs }: Props) {
   if (docs.length === 0)
     return (
       <p className="muted">

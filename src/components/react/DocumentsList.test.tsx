@@ -1,14 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { DocumentItem } from '../../lib/types';
-
-vi.mock('../../lib/content', async (orig) => ({
-  ...(await orig<typeof import('../../lib/content')>()),
-  fetchDocuments: vi.fn(),
-}));
-
 import DocumentsList from './DocumentsList';
-import { fetchDocuments } from '../../lib/content';
 
 const docs: DocumentItem[] = [
   {
@@ -28,29 +21,23 @@ const docs: DocumentItem[] = [
 ];
 
 describe('DocumentsList', () => {
-  beforeEach(() => vi.mocked(fetchDocuments).mockReset());
-
-  it('groups documents by category with working download links', async () => {
-    vi.mocked(fetchDocuments).mockResolvedValue(docs);
-    render(<DocumentsList />);
-
+  it('groups documents by category with working download links', () => {
+    render(<DocumentsList docs={docs} />);
     expect(
-      await screen.findByRole('heading', { name: 'Governing Documents' }),
+      screen.getByRole('heading', { name: 'Governing Documents' }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Meeting Minutes' }),
     ).toBeInTheDocument();
-
     const links = screen.getAllByRole('link', { name: /download/i });
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute('href', '/api/files/a');
   });
 
-  it('shows an empty message when there are no documents', async () => {
-    vi.mocked(fetchDocuments).mockResolvedValue([]);
-    render(<DocumentsList />);
+  it('shows an empty message when there are no documents', () => {
+    render(<DocumentsList docs={[]} />);
     expect(
-      await screen.findByText(/No documents have been posted yet/i),
+      screen.getByText(/No documents have been posted yet/i),
     ).toBeInTheDocument();
   });
 });
