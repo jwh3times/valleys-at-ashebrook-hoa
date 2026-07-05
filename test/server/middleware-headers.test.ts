@@ -34,9 +34,12 @@ describe('security headers', () => {
       'strict-origin-when-cross-origin',
     );
     expect(res.headers.get('permissions-policy')).toBeTruthy();
-    expect(res.headers.get('content-security-policy-report-only')).toContain(
+    // Enforced (not Report-Only) after the CSP audit confirmed no legitimate
+    // resource is blocked.
+    expect(res.headers.get('content-security-policy')).toContain(
       'calendar.google.com',
     );
+    expect(res.headers.get('content-security-policy-report-only')).toBeNull();
   });
 
   it('sets headers on the /admin redirect too', async () => {

@@ -224,15 +224,19 @@ and `site` in `astro.config.mjs`, and redeploy.
 ### Security headers
 
 The Worker sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
-`Permissions-Policy`, and a **Report-Only** Content-Security-Policy on every
+`Permissions-Policy`, and an **enforced** Content-Security-Policy on every
 response. Two settings live at the Cloudflare **zone** level, not in code:
 
 - **HSTS:** enable in the dashboard → SSL/TLS → Edge Certificates → HTTP Strict
   Transport Security (recommend `max-age=15552000`, includeSubDomains once you've
   confirmed every subdomain is HTTPS).
-- After watching the browser console for CSP violations in Report-Only mode and
-  confirming nothing legitimate is blocked, flip `Content-Security-Policy-Report-Only`
-  to `Content-Security-Policy` in `src/middleware.ts`.
+- **CSP is enforced.** The directive list in `src/middleware.ts` allows exactly the
+  third-party resources the site uses (Google Fonts, the Google Calendar embed,
+  Turnstile, and Web3Forms). If you add a new external resource — an embed,
+  analytics, a font host — add its host to the matching directive, or it will be
+  blocked. To debug a blocked resource, temporarily swap the header name to
+  `Content-Security-Policy-Report-Only`, reproduce it while watching the browser
+  console, fix the directive, then swap the name back.
 
 ## Local development
 
