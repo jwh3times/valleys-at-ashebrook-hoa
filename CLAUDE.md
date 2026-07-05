@@ -53,10 +53,13 @@ build number on the package.json version (`v<x.y.z>.<n>`, e.g. `v0.1.0.4`).
 ## Architecture
 
 **Rendering model.** Pages are `.astro` files in `src/pages/`. The site is full SSR
-(`output: 'server'`); dynamic data is fetched from same-origin API endpoints under
-`src/pages/api/`. Runtime bindings and secrets are read via
-`import { env } from 'cloudflare:workers'`. Build-time `PUBLIC_*` vars are inlined by
-Astro from `.env`.
+(`output: 'server'`). Public content (announcements, documents, dues) is read **server-side in
+each page's frontmatter** — via `fetchAnnouncementsFor`/`fetchDocumentsFor`/`getDuesSettings` with
+the role from `Astro.locals.authContext` — and passed as props to the display components, which
+render server-side (no client directive) so the HTML ships with real content (SEO, first paint,
+no-JS). The same-origin API endpoints under `src/pages/api/` back the admin panel and any client
+refresh. Runtime bindings and secrets are read via `import { env } from 'cloudflare:workers'`.
+Build-time `PUBLIC_*` vars are inlined by Astro from `.env`.
 
 **Cloudflare bindings (`wrangler.toml`).** `DATABASE` (D1 `ashebrook-hoa`), `KV` (app
 KV), `SESSION` (KV for Astro sessions — required by the `@astrojs/cloudflare` adapter, which

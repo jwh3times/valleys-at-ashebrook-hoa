@@ -3,11 +3,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import DuesInfo from '../components/react/DuesInfo.tsx';
 import { OFFICIAL_ORG_NAME } from '../lib/site';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import { env } from 'cloudflare:workers';
+import { getDuesSettings } from '../server/content/settings';
 
 // Astro.locals.site is set by middleware on every real request; fall back to
 // the default so this page is renderable via the Astro Container API too.
 const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 const official = site.officialMode;
+// Dues are only surfaced in official mode; read them server-side only then.
+const dues = official ? await getDuesSettings(env) : null;
 const description = official
   ? `Annual dues amounts and payment options for the ${OFFICIAL_ORG_NAME}.`
   : 'Dues are handled by the HOA — how to reach the board with questions about your dues.';
@@ -21,8 +25,8 @@ const description = official
     </h1>
 
     {
-      official ? (
-        <DuesInfo client:only="react" />
+      official && dues ? (
+        <DuesInfo dues={dues} />
       ) : (
         <p class="page-lead">
           Dues are handled by the {OFFICIAL_ORG_NAME}. This resident-run site
