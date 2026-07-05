@@ -5,8 +5,12 @@ import {
   displayName,
   siteTitle,
   accountNav,
+  disclaimer,
+  aboutParagraphs,
   SITE_NAME,
   OFFICIAL_ORG_NAME,
+  DISCLAIMER_SHORT,
+  DISCLAIMER_LONG,
 } from '../../src/lib/site';
 import {
   normalizeSiteSettings,
@@ -70,6 +74,30 @@ describe('accountNav', () => {
   });
 });
 
+describe('editable disclaimer + about copy', () => {
+  it('disclaimer uses the built-in text when blank and the override when set', () => {
+    expect(disclaimer({ disclaimerText: '' })).toBe(DISCLAIMER_SHORT);
+    expect(disclaimer({ disclaimerText: '   ' })).toBe(DISCLAIMER_SHORT);
+    expect(disclaimer({ disclaimerText: 'Custom disclaimer.' })).toBe(
+      'Custom disclaimer.',
+    );
+  });
+
+  it('aboutParagraphs uses the built-in paragraphs when blank', () => {
+    expect(aboutParagraphs({ aboutBody: '' })).toEqual(DISCLAIMER_LONG);
+    expect(aboutParagraphs({ aboutBody: '  \n  ' })).toEqual(DISCLAIMER_LONG);
+  });
+
+  it('aboutParagraphs splits the override on blank lines, trimming each', () => {
+    const body = 'First para.\n\nSecond para.\n\n  Third.  ';
+    expect(aboutParagraphs({ aboutBody: body })).toEqual([
+      'First para.',
+      'Second para.',
+      'Third.',
+    ]);
+  });
+});
+
 describe('normalizeSiteSettings', () => {
   it('defaults officialMode to false and siteName to the resident name', () => {
     const s = normalizeSiteSettings({});
@@ -96,5 +124,17 @@ describe('normalizeSiteSettings', () => {
     expect(normalizeSiteSettings({ officialMode: true }).officialMode).toBe(
       true,
     );
+  });
+
+  it('defaults the editable copy fields to empty and passes them through when set', () => {
+    const blank = normalizeSiteSettings({});
+    expect(blank.disclaimerText).toBe('');
+    expect(blank.aboutBody).toBe('');
+    const set = normalizeSiteSettings({
+      disclaimerText: 'D',
+      aboutBody: 'A\n\nB',
+    });
+    expect(set.disclaimerText).toBe('D');
+    expect(set.aboutBody).toBe('A\n\nB');
   });
 });

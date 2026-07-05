@@ -1,6 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { DISCLAIMER_LONG, NEIGHBORHOOD } from '../lib/site';
+import { aboutParagraphs, NEIGHBORHOOD } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 ---
 
 <BaseLayout
@@ -11,7 +14,7 @@ import { DISCLAIMER_LONG, NEIGHBORHOOD } from '../lib/site';
     <p class="eyebrow">About</p>
     <h1 class="page-title">About this site</h1>
     <div class="prose">
-      {DISCLAIMER_LONG.map((para) => <p class="page-lead">{para}</p>)}
+      {aboutParagraphs(site).map((para) => <p class="page-lead">{para}</p>)}
     </div>
   </div>
 </BaseLayout>

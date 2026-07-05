@@ -42,6 +42,10 @@ export interface SiteSettings {
   welcomeBody: string;
   /** When true, the site presents as the official HOA site (dues/board surfaces on, disclaimer off). */
   officialMode: boolean;
+  /** Footer "not affiliated" disclaimer (unofficial mode only); blank ⇒ built-in copy. */
+  disclaimerText: string;
+  /** /about page body; blank lines separate paragraphs; blank ⇒ built-in copy. */
+  aboutBody: string;
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -52,6 +56,8 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   welcomeBody:
     'This is an independent, resident-run website for neighbors in The Valleys at Ashebrook. Here you can read the latest announcements, view the community calendar, and find documents.',
   officialMode: false,
+  disclaimerText: '',
+  aboutBody: '',
 };
 
 /**
@@ -77,6 +83,8 @@ export function normalizeSiteSettings(raw: unknown): SiteSettings {
     welcomeHeading: str(r.welcomeHeading, DEFAULT_SITE_SETTINGS.welcomeHeading),
     welcomeBody: str(r.welcomeBody, DEFAULT_SITE_SETTINGS.welcomeBody),
     officialMode: r.officialMode === true,
+    disclaimerText: str(r.disclaimerText, DEFAULT_SITE_SETTINGS.disclaimerText),
+    aboutBody: str(r.aboutBody, DEFAULT_SITE_SETTINGS.aboutBody),
   };
 }
 

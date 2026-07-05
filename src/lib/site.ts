@@ -50,6 +50,24 @@ export function brandTag(officialMode: boolean): string {
   return officialMode ? 'Homeowners Association' : 'Residents';
 }
 
+/** Footer disclaimer text: the board-editable override, or the built-in copy when blank. */
+export function disclaimer(s: Pick<SiteSettings, 'disclaimerText'>): string {
+  return s.disclaimerText.trim() || DISCLAIMER_SHORT;
+}
+
+/**
+ * /about page paragraphs: the board-editable override split on blank lines
+ * (trimmed, empties dropped), or the built-in paragraphs when blank.
+ */
+export function aboutParagraphs(s: Pick<SiteSettings, 'aboutBody'>): string[] {
+  const body = s.aboutBody.trim();
+  if (!body) return DISCLAIMER_LONG;
+  return body
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
 /** Minimal auth shape the header needs (structurally satisfied by AuthContext). */
 export interface AccountNavAuth {
   role: 'visitor' | 'homeowner' | 'board';
