@@ -1,5 +1,5 @@
 ---
-import { displayName, DISCLAIMER_SHORT } from '../lib/site';
+import { displayName, disclaimer } from '../lib/site';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 
 const year = new Date().getFullYear();
@@ -14,7 +14,7 @@ const name = displayName(site);
   {
     !site.officialMode && (
       <span class="site-footer__disclaimer">
-        {DISCLAIMER_SHORT} <a href="/about">About this site</a>
+        {disclaimer(site)} <a href="/about">About this site</a>
       </span>
     )
   }

@@ -14,6 +14,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Added
 
+- **Board-editable disclaimer and About copy** — the footer "not affiliated" disclaimer and the
+  `/about` page text are now editable from the admin **Site Settings** panel (two new fields on the
+  site settings blob — no migration). Left blank, both fall back to the built-in copy, so existing
+  deployments render unchanged; changing this text no longer needs a code deploy.
 - **Signed-in presence in the header** — the public header now reflects the visitor: anonymous
   users get **Sign in** / **Register** links, a signed-in user without a verified home gets a
   **Verify your property** link, board members get an **Admin** link, and any signed-in user gets a
