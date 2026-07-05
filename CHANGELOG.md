@@ -51,6 +51,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Changed
 
+- **Shared admin-manager scaffolding** — the board admin managers (announcements, documents, dues,
+  site settings, roster, board members) now share a `useAdminResource` hook for the load / busy /
+  status-message boilerplate each was repeating by hand, instead of duplicating the same
+  `try/catch/finally` save logic six times. No behavior change.
 - **Public content is now server-rendered** — announcements, documents, and dues are read in each
   page's Astro frontmatter (tier-filtered by the visitor's role) and rendered server-side instead of
   fetched client-side into `client:only` islands. The HTML now ships with the real content — better

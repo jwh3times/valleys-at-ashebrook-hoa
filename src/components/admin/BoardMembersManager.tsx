@@ -1,51 +1,45 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   fetchBoardMembers,
   promoteToBoard,
   demoteFromBoard,
 } from '../../lib/admin';
 import type { MemberUser } from '../../lib/types';
+import { useAdminResource } from './useAdminResource';
 
 export default function BoardMembersManager() {
-  const [board, setBoard] = useState<MemberUser[]>([]);
+  const {
+    data: board,
+    loading,
+    reload,
+    busy,
+    msg,
+    setMsg,
+    run,
+  } = useAdminResource<MemberUser[]>(fetchBoardMembers, []);
   const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
-
-  async function load() {
-    setLoading(true);
-    setBoard(await fetchBoardMembers());
-    setLoading(false);
-  }
-  useEffect(() => {
-    load();
-  }, []);
 
   async function promote(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setMsg('');
-    try {
+    await run(async () => {
       await promoteToBoard(email.trim());
       setEmail('');
-      setMsg('Promoted to board.');
-      await load();
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'could not promote.'));
-    } finally {
-      setBusy(false);
-    }
+      await reload();
+    }, 'Promoted to board.');
   }
 
+  // Not routed through `run`: demote intentionally leaves `busy` untouched (the
+  // promote button shouldn't disable while a demote is in flight).
   async function demote(u: MemberUser) {
     setMsg('');
     try {
       await demoteFromBoard(u.id);
       setMsg('Board member demoted.');
-      await load();
-    } catch (err: any) {
-      setMsg('Error: ' + (err?.message ?? 'could not demote.'));
+      await reload();
+    } catch (err: unknown) {
+      const message =
+        (err as { message?: string } | null)?.message ?? 'could not demote.';
+      setMsg('Error: ' + message);
     }
   }
 
