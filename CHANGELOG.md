@@ -40,6 +40,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   first `board` account (which can't be made through the self-service flow), replacing the old
   hand-written temporary-route procedure. It requires an `x-bootstrap-secret` header matched in
   constant time plus `BOARD_EMAIL`/`BOARD_PASSWORD`/`BOARD_NAME` config.
+- **SEO basics** — a branded custom 404 page, a `robots.txt` (allowing public content, disallowing
+  `/admin` and `/api`), and a `/sitemap.xml` of the public content pages. The sitemap is served by
+  a small SSR route rather than `@astrojs/sitemap`, which emits nothing under full-SSR output.
 
 ### Changed
 
