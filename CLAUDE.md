@@ -98,7 +98,10 @@ fail-closed fallback, `requireRole`, `requireBoard`, Turnstile check), `content/
 files in R2 under `documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), and the
 roster/verification tables — `properties` (homes) + `owners` (people, many per home; split in
 migration `0002`), `user_property_links`, `property_verifications`, `manual_approval_queue` — plus
-the Better Auth tables (`user`, `session`, `account`, `verification`). A user's role is a column on
+the Better Auth tables (`user`, `session`, `account`, `verification`). Migration `0003` adds the
+uniqueness constraints (`properties.address_normalized`, `user_property_links (user_id,
+property_id)`) and hot-path indexes; migrations under `src/server/db/migrations/` are hand-authored
+(drizzle-kit's snapshot diff is stale after `0002`) and applied with `npm run db:migrate:{local,remote}`. A user's role is a column on
 the user record. Board membership is managed in the admin app's **Board members** panel: a board
 member can promote another account to `board` and demote a board member (the last remaining board
 member can't be demoted), making board handoff a supported workflow. A board member cannot escalate
