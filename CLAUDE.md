@@ -86,7 +86,10 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
   the `Visibility` type + admin-write input normalizers (`normalize{Announcement,Property,Owner}Input`,
   `INPUT_LIMITS`) that trim/cap/validate and reject on write.
 - `src/lib/site.ts` — branding constants + official-mode presentation logic (`navLinks`,
-  `brandTag`, disclaimers). Pure module — usable in `.astro` files, islands, and unit tests.
+  `brandTag`, `accountNav`). The footer disclaimer and `/about` copy are board-editable via site
+  settings, with the hardcoded `DISCLAIMER_SHORT`/`DISCLAIMER_LONG` as fallbacks: `disclaimer(site)`
+  and `aboutParagraphs(site)` return the override or the built-in copy when blank. Pure module —
+  usable in `.astro` files, islands, and unit tests.
 - `src/lib/format.ts` — shared formatting helpers (unit-tested in `format.test.ts`).
 - `src/lib/auth-client.ts` — Better Auth browser client.
 

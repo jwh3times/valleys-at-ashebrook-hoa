@@ -34,6 +34,23 @@ describe('getSiteSettings', () => {
     expect(s.officialMode).toBe(false);
   });
 
+  it('round-trips the board-editable disclaimer and About copy', async () => {
+    const value = JSON.stringify({
+      disclaimerText: 'Our disclaimer.',
+      aboutBody: 'About para one.\n\nAbout para two.',
+    });
+    await getDb(env)
+      .insert(settings)
+      .values({ key: 'site', value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
+      });
+    const s = await getSiteSettings(env);
+    expect(s.disclaimerText).toBe('Our disclaimer.');
+    expect(s.aboutBody).toBe('About para one.\n\nAbout para two.');
+  });
+
   // Placed last: this seeds a malformed value that overwrites the row, so it
   // must not run before the earlier cases that depend on well-formed data.
   it('fails closed to defaults when the stored value is malformed JSON', async () => {

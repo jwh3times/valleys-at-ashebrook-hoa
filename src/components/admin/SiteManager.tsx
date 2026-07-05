@@ -88,6 +88,35 @@ export default function SiteManager() {
             placeholder="valleysatashebrook@gmail.com"
           />
         </div>
+        <div className="field">
+          <label htmlFor="site-disclaimer">Unofficial-site disclaimer</label>
+          <textarea
+            id="site-disclaimer"
+            value={site.disclaimerText}
+            onChange={(e) =>
+              setSite({ ...site, disclaimerText: e.target.value })
+            }
+            placeholder="Leave blank to use the built-in disclaimer."
+          />
+          <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+            Shown in the footer only when official mode is off. Leave blank to
+            use the built-in text.
+          </p>
+        </div>
+        <div className="field">
+          <label htmlFor="site-about">About page text</label>
+          <textarea
+            id="site-about"
+            rows={8}
+            value={site.aboutBody}
+            onChange={(e) => setSite({ ...site, aboutBody: e.target.value })}
+            placeholder="Leave blank to use the built-in About copy."
+          />
+          <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+            The public About page. Separate paragraphs with a blank line. Leave
+            blank to use the built-in text.
+          </p>
+        </div>
         <div className="btn-row">
           <button className="btn btn--small" type="submit" disabled={busy}>
             {busy ? 'Saving…' : 'Save settings'}

@@ -13,6 +13,8 @@ vi.mock('../../lib/content', () => ({
     welcomeHeading: '',
     welcomeBody: '',
     officialMode: false,
+    disclaimerText: '',
+    aboutBody: '',
   }),
 }));
 
@@ -33,5 +35,23 @@ describe('SiteManager official-mode toggle', () => {
 
     await waitFor(() => expect(saveSite).toHaveBeenCalledTimes(1));
     expect(saveSite.mock.calls[0][0]).toMatchObject({ officialMode: true });
+  });
+
+  it('saves the edited disclaimer and about copy', async () => {
+    render(<SiteManager />);
+    const disclaimer = await screen.findByLabelText(/disclaimer/i);
+    fireEvent.change(disclaimer, {
+      target: { value: 'Custom disclaimer.' },
+    });
+    fireEvent.change(screen.getByLabelText(/about page/i), {
+      target: { value: 'Para one.\n\nPara two.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => expect(saveSite).toHaveBeenCalledTimes(1));
+    expect(saveSite.mock.calls[0][0]).toMatchObject({
+      disclaimerText: 'Custom disclaimer.',
+      aboutBody: 'Para one.\n\nPara two.',
+    });
   });
 });
