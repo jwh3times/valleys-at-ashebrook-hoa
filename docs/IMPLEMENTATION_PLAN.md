@@ -99,25 +99,25 @@ planned below. This table supersedes the earlier "cannot be enumerated" caveat.
 | --- | --- | --- | --- |
 | 1 | Rate-limit `/api/verify/request` | **Done** | §1.1 B1–B3 |
 | 2 | Constrain document uploads/downloads | **Done** | §1.1 C1–C2 |
-| 3 | Baseline security headers | **Done** (CSP Report-Only) | §3.1 flips to enforce |
+| 3 | Baseline security headers | **Done** (CSP enforced, PR #49) | §3.1 |
 | 4 | HMAC + constant-time OTP storage | **Done** | §1.1 A1 |
 | 5 | Board-granting story + `members.ts` revoke guard | **Done** | §1.1 D1–D5 |
 | 6 | Validate settings on write, normalize dues on read | **Done** | §1.1 A2 |
 | 7 | Run `test:server` in CI | **Done** | §1.1 follow-up (`build.yml:34`) |
-| 8 | DB constraints & indexes | Outstanding | §3.7 |
+| 8 | DB constraints & indexes | **Done** (PR #43) | §3.7 |
 | 9 | Tighten write-endpoint input handling | **Done** | §3.8 (PR #38) |
 | 10 | Use `locals.authContext` | **Done** | §3.3 |
 | 11 | Trim **public** documents read payload | **Done** | §3.9 |
-| 12 | Server-render public content (SSR/SEO) | Outstanding | **§3.10** |
-| 13 | Signed-in user presence in the chrome | Outstanding | **§3.11** |
-| 14 | Verification-flow polish (3 parts) | Partially planned (only Turnstile reset) | **§3.2 expanded** |
-| 15 | Consolidate duplicated UI logic | Outstanding | **§3.12** |
-| 16 | Custom 404 + robots/sitemap | Outstanding | **§3.13** |
+| 12 | Server-render public content (SSR/SEO) | **Done** (PR #45) | **§3.10** |
+| 13 | Signed-in user presence in the chrome | **Done** (PR #46) | **§3.11** |
+| 14 | Verification-flow polish (3 parts) | **Done** (PR #40) | **§3.2 expanded** |
+| 15 | Consolidate duplicated UI logic | **Done** (PR #47) | **§3.12** |
+| 16 | Custom 404 + robots/sitemap | **Done** (PR #42) | **§3.13** |
 | 17 | CI/CD rounding-out | Partial — CodeQL claim already reframed (`README.md:75`); deploy workflow + coverage thresholds outstanding | **§4.7** |
 | 18 | Scheduled cleanup + observability + stray `console.log` | Partial — **§3.14 done** (`console.log` removed, `[observability]` on); cron outstanding | **§3.14** (done) + **§4.7** (cron) |
 | 19 | Repo cruft | **Done** — §3.15: firebase `.gitignore` block dropped; `requirePropertyAccess` kept as reserved-and-documented; `SESSION` documented as adapter-required | **§3.15** |
-| 20 | PII stance note (process, not code) | Outstanding | **§4.8** |
-| 21 | Bootstrap ergonomics | Outstanding | §3.4 (plan reached this independently from SETUP.md) |
+| 20 | PII stance note (process, not code) | **Done** | §4.8 (SETUP.md §5 + SECURITY.md) |
+| 21 | Bootstrap ergonomics | **Done** (PR #41) | §3.4 (plan reached this independently from SETUP.md) |
 
 **Bold section numbers are new in this revision.** The earlier draft covered #1–10 and #21 (as 3.4);
 #11 was mistargeted and #12–20 were absent.
@@ -130,21 +130,21 @@ Security-adjacent work first (finishing the P0 program), then correctness/robust
 
 | Order | Item | Priority | Size |
 | --- | --- | --- | --- |
-| 1 | 3.1 Flip CSP to enforce mode | P0 follow-up | S |
+| 1 | 3.1 Flip CSP to enforce mode — **Done** (PR #49) | P0 follow-up | S |
 | 2 | 3.6 CHANGELOG + SECURITY.md sync for the shipped P0 work — **Done** (this docs pass) | P0 follow-up (docs) | S |
 | 3 | 3.9 Trim the public documents read payload (#11) — **Done** | P1 (info-leak) | S |
 | 4 | 3.14 Remove stray `console.log` + add Workers observability (#18) — **Done** | P3 (quick win) | S |
 | 5 | 3.15 Repo cruft — `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding (#19) — **Done** | P3 (quick win) | S |
-| 6 | 3.2 Verification-flow polish — Turnstile reset + OTP requester line + post-confirm refresh (#14) | P1/P2 | S |
+| 6 | 3.2 Verification-flow polish — Turnstile reset + OTP requester line + post-confirm refresh (#14) — **Done** (PR #40) | P1/P2 | S |
 | 7 | 3.3 `locals.authContext` plumbing — one auth read per request (#10) — **Done** | P1 | S–M |
-| 8 | 3.7 D1 constraints & indexes (#8) | P1 | M |
+| 8 | 3.7 D1 constraints & indexes (#8) — **Done** (PR #43) | P1 | M |
 | 9 | 3.8 Input validation on admin writes + public `limit` clamp + malformed-JSON guard (#9) — **Done** | P1 | M |
-| 10 | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) (#21) | P1 (ops safety) | M |
-| 11 | 3.13 Custom 404 + robots.txt + sitemap (#16) | P2 (SEO) | S |
-| 12 | 3.10 Server-render public content (#12) | P2 (biggest UX/SEO win) | M |
-| 13 | 3.11 Signed-in user presence in the chrome (#13) | P2 | M |
-| 14 | 3.12 Consolidate duplicated UI logic (#15) | P2 | M |
-| 15 | 3.5 Admin-managed disclaimer / About copy | P2 | M |
+| 10 | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) (#21) — **Done** (PR #41) | P1 (ops safety) | M |
+| 11 | 3.13 Custom 404 + robots.txt + sitemap (#16) — **Done** (PR #42) | P2 (SEO) | S |
+| 12 | 3.10 Server-render public content (#12) — **Done** (PR #45) | P2 (biggest UX/SEO win) | M |
+| 13 | 3.11 Signed-in user presence in the chrome (#13) — **Done** (PR #46) | P2 | M |
+| 14 | 3.12 Consolidate duplicated UI logic (#15) — **Done** (PR #47) | P2 | M |
+| 15 | 3.5 Admin-managed disclaimer / About copy — **Done** (PR #48) | P2 | M |
 | 16+ | §4 Backlog: 4.7 deploy workflow + coverage thresholds + cleanup cron (#17, #18-cron), 4.8 PII stance note (#20), Google Drive import, per-owner data, bulk roster UI, tenants/payments, AI assistant | P3 / gated | S–XL |
 
 Rationale for the top slots: item 3.1 is the only unfinished step of the P0 rollout plan itself ("the
@@ -159,6 +159,10 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 ## 3. Detailed plans
 
 ### 3.1 Flip the Content-Security-Policy from Report-Only to enforced
+
+**Status: Done — shipped to `main` (PR #49).** The CSP is served enforced; a window of production
+Report-Only observation caught the Cloudflare Web Analytics beacon, now explicitly allowed in the
+policy. The plan below is retained for context.
 
 **Objective & rationale.** Complete the last step of P0 finding #3. A Report-Only CSP observes but does not block; until the header is enforced, inline-script injection and frame-based attacks are only logged by the browser, not stopped. The P0 spec's Rollout section explicitly schedules this flip "once report-only telemetry (or manual verification) confirms no legitimate resource is blocked."
 
@@ -188,6 +192,8 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 ---
 
 ### 3.2 Verification-flow polish — Turnstile reset, OTP requester line, post-confirm refresh (#14)
+
+**Status: Done — shipped to `main` (PR #40).** The plan below is retained for context.
 
 **Objective & rationale.** Finding #14 has **three** sub-items; the earlier draft planned only (b). All three are small and touch the same flow:
 
@@ -261,6 +267,8 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 
 ### 3.4 Seed-board bootstrap hardening — retire the temporary-route procedure
 
+**Status: Done — shipped to `main` (PR #41).** The plan below is retained for context.
+
 **Objective & rationale.** `SETUP.md` §6 (lines 126-155) instructs the operator to hand-write a temporary privileged Worker route calling `seedBoard`, deploy it, POST once with a shared secret header, then delete the route and redeploy. This is the riskiest documented procedure in the project: a forgotten route is a standing role-escalation backdoor, and hand-pasted code drifts. Replace it with a built-in, fail-closed bootstrap that is inert once any board account exists.
 
 **Current state.** `scripts/seed-board.ts` exports `seedBoard(env, email, password, name)` (direct `role`/`emailVerified` DB writes via Better Auth signup + Drizzle). No route imports it (grep: only SETUP.md references it). First-board bootstrap is otherwise impossible in-app — by design, `board` is only grantable by an existing board member (`src/pages/api/admin/roles.ts`).
@@ -295,6 +303,8 @@ in §4 needs either a board decision, an operator/dashboard action, or its own d
 ---
 
 ### 3.5 Admin-managed disclaimer / About copy (rebrand follow-up)
+
+**Status: Done — shipped to `main` (PR #48).** The plan below is retained for context.
 
 **Objective & rationale.** The resident-rebrand spec (§11) deferred making the unofficial-site disclaimer and the `/about` page copy board-editable. Today changing a sentence of legal-ish text requires a code deploy. Board self-service matches how every other content surface already works (announcements, dues, site settings).
 
@@ -349,6 +359,8 @@ model altitude.
 
 ### 3.7 D1 constraints & indexes (#8)
 
+**Status: Done — shipped to `main` (PR #43).** The plan below is retained for context.
+
 **Objective & rationale.** The schema has no secondary indexes or uniqueness constraints (`src/server/db/schema.ts` — PKs only), so integrity rules live only in application code and hot lookups scan. Named as P1 finding #8 by the P0 spec ("No D1 migration is required by any P0 item — constraints/indexes are #8, P1").
 
 **Current state.** Query paths that deserve indexes/constraints (from `src/server/` reads):
@@ -360,7 +372,7 @@ model altitude.
 - `documents (visibility)`, `announcements (visibility, date)` — tier-filtered public reads → index.
 - `manual_approval_queue (userId)` — members queue reads → index.
 
-**Design / approach.** Add Drizzle `uniqueIndex`/`index` definitions in `src/server/db/schema.ts` table callbacks, then `npm run db:generate` → migration `0003_*.sql`. **Decision:** uniques only where the app already guarantees uniqueness (verify with a pre-migration data audit query in the PR description; a duplicate `addressNormalized` in prod D1 would fail the migration — check with `wrangler d1 execute ... "SELECT addressNormalized, count(*) c FROM properties GROUP BY 1 HAVING c>1"` first). **Rejected:** CHECK constraints on role/visibility enums — Drizzle-D1 support is awkward and the fail-closed readers already treat unknown values as most-restrictive, so a CHECK adds migration risk for little gain (note as possible follow-up).
+**Design / approach.** Add Drizzle `uniqueIndex`/`index` definitions in `src/server/db/schema.ts` table callbacks, then `npm run db:generate` → migration `0003_*.sql`. **Decision:** uniques only where the app already guarantees uniqueness (verify with a pre-migration data audit query in the PR description; a duplicate `addressNormalized` in prod D1 would fail the migration — check with `wrangler d1 execute ... "SELECT address_normalized, count(*) c FROM properties GROUP BY 1 HAVING c>1"` first). **Rejected:** CHECK constraints on role/visibility enums — Drizzle-D1 support is awkward and the fail-closed readers already treat unknown values as most-restrictive, so a CHECK adds migration risk for little gain (note as possible follow-up).
 
 **Step-by-step tasks.**
 
@@ -445,6 +457,8 @@ retained for context.
 
 ### 3.10 Server-render public content (#12) — biggest UX/SEO win
 
+**Status: Done — shipped to `main` (PR #45).** The plan below is retained for context.
+
 **Objective & rationale.** Announcements, documents, and dues are public data rendered inside `client:only="react"` islands, so the server HTML is only "Loading…": bad for SEO, slower first paint, broken with JS disabled. The server read helpers already exist and middleware already resolves the role — this is plumbing, not new capability.
 
 **Current state (verified).** `src/pages/{announcements,documents,dues,index}.astro` all mount `client:only="react"` islands that fetch `/api/content/*` on the client via `src/lib/content.ts`. Server helpers `fetchAnnouncementsFor`/`fetchDocumentsFor` (+ the dues read) live in `src/server/content/`. Middleware sets `Astro.locals.authContext` and `Astro.locals.site`.
@@ -468,6 +482,8 @@ retained for context.
 
 ### 3.11 Signed-in user presence in the chrome (#13)
 
+**Status: Done — shipped to `main` (PR #46).** The plan below is retained for context.
+
 **Objective & rationale.** The header's only auth affordance is "Admin sign in" → `/admin`. Homeowners have no nav path to `/login`, `/register`, or `/verify-property`, no indication they're signed in, and no sign-out outside the admin panel.
 
 **Current state (verified).** `src/components/Header.astro:50` hardcodes `<a class="nav-login" href="/admin">Admin sign in</a>`. Middleware already exposes `Astro.locals.authContext` (role + `propertyIds`). No account menu / sign-out in the public chrome.
@@ -488,6 +504,8 @@ retained for context.
 ---
 
 ### 3.12 Consolidate duplicated UI logic (#15)
+
+**Status: Done — shipped to `main` (PR #47).** The plan below is retained for context.
 
 **Objective & rationale.** Three concrete duplications: (a) two login forms; (b) the admin managers repeat load/busy/msg/error scaffolding ~5×; (c) the home page fetches **all** announcements then slices 3 client-side.
 
@@ -510,6 +528,8 @@ retained for context.
 ---
 
 ### 3.13 Custom 404 + robots.txt + sitemap (#16)
+
+**Status: Done — shipped to `main` (PR #42).** The plan below is retained for context.
 
 **Objective & rationale.** No `src/pages/404.astro`, `public/robots.txt`, or sitemap — three quick wins for a public site; `site` is already configured, so `@astrojs/sitemap` works with minimal setup.
 
@@ -620,6 +640,11 @@ All explicitly gated: tenants on a board request (owner-delegated invite model),
 - **Scheduled cleanup cron (#18).** A Workers Cron Trigger (`[triggers] crons = [...]` + a `scheduled()` handler) to purge consumed/expired `property_verifications` and resolved `manual_approval_queue` rows — or a board-visible "housekeeping" admin action. Needs its own small design round: where the scheduled handler lives in an Astro SSR Worker (the `@astrojs/cloudflare` adapter's handler wiring), idempotent delete queries, and a pool test. **Size: M.**
 
 ### 4.8 PII stance note (#20) — process/docs, not code
+
+**Status: Done.** Written as a "Privacy — handling the owner roster" subsection in `SETUP.md` §5
+(data source, verification-only use, removal-request steps incl. full erasure via `wrangler d1
+execute`, and D1 Time Travel + `d1 export` backup/retention), with the roster bullet in `SECURITY.md`
+expanded to match. The original plan text is kept below for context.
 
 The roster puts the whole neighborhood's names, phones, and emails in one resident's personal Cloudflare account while the site is explicitly unofficial. Add a short note in `SETUP.md` and/or the `/about` page (`src/pages/about.astro` exists): where the data came from, that it's used **only** for owner verification, how a neighbor asks to be removed, and a backup/retention statement (D1 Time Travel for restore; occasional `wrangler d1 export` for backup). Cheap to write; a lot of goodwill if ever questioned. The removal/contact wording could live in the board-editable About block (§3.5). **Size: S (writing).**
 
