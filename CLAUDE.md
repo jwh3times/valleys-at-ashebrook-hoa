@@ -72,6 +72,8 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
   `POST /api/admin/roles` — `{ action: 'promote', email }` or
   `{ action: 'demote', userId }` (409 if it's the last board member)
 - Homeowner verification: `/api/verify/{request,confirm}`
+- First-board bootstrap: `POST /api/bootstrap/board` — fail-closed, self-disables once a
+  board account exists (410); requires the `x-bootstrap-secret` header + `BOARD_*` config
 - Better Auth handler: `/api/auth/[...all]`
 
 **Client helpers.**
@@ -100,8 +102,10 @@ the Better Auth tables (`user`, `session`, `account`, `verification`). A user's 
 the user record. Board membership is managed in the admin app's **Board members** panel: a board
 member can promote another account to `board` and demote a board member (the last remaining board
 member can't be demoted), making board handoff a supported workflow. A board member cannot escalate
-their own access beyond `board`, and the *first* board account is still bootstrapped out-of-band via
-`scripts/seed-board.ts` (see SETUP.md). These role changes are direct D1 writes, not the Better Auth
+their own access beyond `board`, and the *first* board account is bootstrapped through a permanent,
+fail-closed `POST /api/bootstrap/board` endpoint (self-disables once a board exists; guard logic in
+`src/server/auth/seed-board.ts`, also re-exported as `seedBoard` from `scripts/seed-board.ts` — see
+SETUP.md §6). These role changes are direct D1 writes, not the Better Auth
 admin API — the admin plugin's impersonation/ban/set-role endpoints are not granted to board
 sessions (see `src/server/auth/permissions.ts`).
 

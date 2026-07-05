@@ -108,8 +108,9 @@ member can promote another account to `board` and demote a board member (the las
 remaining board member can't be demoted), which supports handing the site off to a new
 board over time. A board member can't escalate their own access beyond `board`, and
 the Better Auth admin plugin's impersonation/ban/set-role endpoints are not granted to
-board sessions. The *first* board account is still bootstrapped out-of-band — see
-SETUP.md for how to seed it via `scripts/seed-board.ts`.
+board sessions. The *first* board account is bootstrapped through a permanent, fail-closed
+`POST /api/bootstrap/board` endpoint that self-disables once any board account exists — see
+SETUP.md §6.
 
 ## Contributing & support
 

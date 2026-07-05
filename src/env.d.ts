@@ -15,6 +15,15 @@ declare namespace Cloudflare {
     TWILIO_AUTH_TOKEN: string;
     TWILIO_FROM: string;
     TURNSTILE_SECRET_KEY: string;
+    /**
+     * First-board bootstrap secrets (see /api/bootstrap/board). Optional: set
+     * only during the one-time bootstrap, and safe to unset afterward — the
+     * endpoint self-disables once a board account exists.
+     */
+    BOOTSTRAP_SECRET?: string;
+    BOARD_EMAIL?: string;
+    BOARD_PASSWORD?: string;
+    BOARD_NAME?: string;
     /** Test-only binding: D1 migrations applied via applyD1Migrations in Workers tests. */
     MIGRATIONS?: import('@cloudflare/vitest-pool-workers').D1Migration[];
   }
