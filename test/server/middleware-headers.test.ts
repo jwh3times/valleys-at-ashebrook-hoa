@@ -36,9 +36,10 @@ describe('security headers', () => {
     expect(res.headers.get('permissions-policy')).toBeTruthy();
     // Enforced (not Report-Only) after the CSP audit confirmed no legitimate
     // resource is blocked.
-    expect(res.headers.get('content-security-policy')).toContain(
-      'calendar.google.com',
-    );
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain('calendar.google.com');
+    // Cloudflare Web Analytics beacon (injected by the edge) is allowed.
+    expect(csp).toContain('static.cloudflareinsights.com');
     expect(res.headers.get('content-security-policy-report-only')).toBeNull();
   });
 
