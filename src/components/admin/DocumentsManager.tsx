@@ -20,6 +20,14 @@ const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
   { value: 'board', label: 'Board only' },
 ];
 
+// Segmented filter for the document list. 'all' is the reset that shows every doc.
+const FILTER_TABS: { value: Visibility | 'all'; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'public', label: 'Public' },
+  { value: 'homeowner', label: 'Homeowners' },
+  { value: 'board', label: 'Board' },
+];
+
 // Mirror the server-side allowlist in src/pages/api/admin/documents.ts.
 const ALLOWED_EXTENSIONS = [
   'pdf',
@@ -47,6 +55,7 @@ export default function DocumentsManager() {
   const [category, setCategory] = useState<string>(DOCUMENT_CATEGORIES[0]);
   const [visibility, setVisibility] = useState<Visibility>('board');
   const [file, setFile] = useState<File | null>(null);
+  const [filter, setFilter] = useState<Visibility | 'all'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     title: '',
@@ -108,6 +117,13 @@ export default function DocumentsManager() {
     await deleteDocument(item.id);
     await reload();
   }
+
+  const shown =
+    filter === 'all' ? items : items.filter((d) => d.visibility === filter);
+  const countFor = (value: Visibility | 'all') =>
+    value === 'all'
+      ? items.length
+      : items.filter((d) => d.visibility === value).length;
 
   return (
     <div className="admin-panel">
@@ -254,13 +270,43 @@ export default function DocumentsManager() {
         </form>
       )}
 
+      {!loading && items.length > 0 && (
+        <div
+          className="doc-filter"
+          role="group"
+          aria-label="Filter documents by visibility"
+          style={{
+            display: 'flex',
+            gap: '8px',
+            flexWrap: 'wrap',
+            marginBottom: '14px',
+          }}
+        >
+          {FILTER_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              className={`btn btn--small${filter === tab.value ? '' : ' btn--outline'}`}
+              aria-pressed={filter === tab.value}
+              onClick={() => setFilter(tab.value)}
+            >
+              {tab.label} ({countFor(tab.value)})
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="panel-list">
         {loading ? (
           <p className="loading panel-pad">Loading…</p>
         ) : items.length === 0 ? (
           <p className="muted panel-pad">None yet.</p>
+        ) : shown.length === 0 ? (
+          <p className="muted panel-pad">
+            No documents are set to this visibility.
+          </p>
         ) : (
-          items.map((d) => (
+          shown.map((d) => (
             <div key={d.id} className="list-row">
               <div className="admin-row-main">
                 <div className="admin-row-title">{d.title}</div>
