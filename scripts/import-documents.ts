@@ -42,6 +42,17 @@ export function contentTypeFor(filename: string): string {
   return MIME[ext] ?? 'application/octet-stream';
 }
 
+/**
+ * Build a WAF-safe R2 object name from a filename: replace anything outside
+ * [word chars, dot, hyphen] with '_', then collapse runs of dots to a single
+ * dot. The collapse is load-bearing — Cloudflare's WAF rejects R2 API requests
+ * whose object key contains '..' (read as directory traversal) with a 403, so a
+ * filename like `Quote 620..pdf` must not become `Quote_620..pdf` in the key.
+ */
+export function safeObjectName(filename: string): string {
+  return filename.replace(/[^\w.\-]/g, '_').replace(/\.{2,}/g, '.');
+}
+
 function sqlStr(v: string): string {
   return `'${v.replace(/'/g, "''")}'`;
 }
@@ -113,7 +124,7 @@ async function main() {
     if (!stats.isFile()) continue;
 
     const filename = path.basename(relativePath);
-    const safeName = filename.replace(/[^\w.\-]/g, '_');
+    const safeName = safeObjectName(filename);
     const id = crypto.randomUUID();
     const r2Key = `documents/${id}/${safeName}`;
     const { visibility, category } = pathToDocMeta(relativePath);

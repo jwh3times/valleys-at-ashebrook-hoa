@@ -2,8 +2,26 @@ import { describe, it, expect } from 'vitest';
 import {
   contentTypeFor,
   buildInsertSql,
+  safeObjectName,
   type DocumentEntry,
 } from '../../scripts/import-documents';
+
+describe('safeObjectName', () => {
+  it('collapses runs of dots so the R2 key has no ".." (Cloudflare WAF blocks it as directory traversal)', () => {
+    expect(safeObjectName('requesting a....pdf')).toBe('requesting_a.pdf');
+    expect(safeObjectName('Quote 620..pdf')).toBe('Quote_620.pdf');
+    expect(safeObjectName('Homes Inc..doc')).toBe('Homes_Inc.doc');
+    expect(safeObjectName('requesting a....pdf')).not.toContain('..');
+  });
+
+  it('replaces spaces and unsafe characters with underscore', () => {
+    expect(safeObjectName("O'Brien Report.pdf")).toBe('O_Brien_Report.pdf');
+  });
+
+  it('leaves an already-safe name unchanged', () => {
+    expect(safeObjectName('minutes.pdf')).toBe('minutes.pdf');
+  });
+});
 
 describe('contentTypeFor', () => {
   it('returns application/pdf for .pdf', () => {
