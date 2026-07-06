@@ -3,8 +3,25 @@ import {
   contentTypeFor,
   buildInsertSql,
   safeObjectName,
+  previousIds,
   type DocumentEntry,
 } from '../../scripts/import-documents';
+
+describe('previousIds', () => {
+  it('maps relativePath to its id so re-runs reuse stable UUIDs', () => {
+    const m = previousIds([
+      { relativePath: 'a/x.pdf', id: 'id-1' },
+      { relativePath: 'b/y.pdf', id: 'id-2' },
+    ]);
+    expect(m.get('a/x.pdf')).toBe('id-1');
+    expect(m.get('b/y.pdf')).toBe('id-2');
+    expect(m.size).toBe(2);
+  });
+
+  it('returns an empty map for no previous entries', () => {
+    expect(previousIds([]).size).toBe(0);
+  });
+});
 
 describe('safeObjectName', () => {
   it('collapses runs of dots so the R2 key has no ".." (Cloudflare WAF blocks it as directory traversal)', () => {
@@ -78,9 +95,11 @@ describe('buildInsertSql', () => {
     contentType: 'application/pdf',
   };
 
-  it('targets the documents table with the correct column list', () => {
+  it('targets the documents table with the correct column list, idempotently', () => {
     const sql = buildInsertSql([entry1]);
-    expect(sql).toContain('INSERT INTO documents');
+    // INSERT OR REPLACE so re-running a partial/completed import doesn't hit a
+    // primary-key conflict on the (stable) document id.
+    expect(sql).toContain('INSERT OR REPLACE INTO documents');
     expect(sql).toContain(
       'id, title, category, visibility, r2_key, filename, size_bytes, content_type, uploaded_at, updated_at',
     );
@@ -105,12 +124,16 @@ describe('buildInsertSql', () => {
 
   it('keeps a small entry set in a single INSERT statement', () => {
     const sql = buildInsertSql([entry1, entry2]);
-    expect((sql.match(/INSERT INTO documents/g) ?? []).length).toBe(1);
+    expect((sql.match(/INSERT OR REPLACE INTO documents/g) ?? []).length).toBe(
+      1,
+    );
   });
 
   it('splits entries into multiple INSERT statements past the batch size', () => {
     const sql = buildInsertSql([entry1, entry2], 1);
-    expect((sql.match(/INSERT INTO documents/g) ?? []).length).toBe(2);
+    expect((sql.match(/INSERT OR REPLACE INTO documents/g) ?? []).length).toBe(
+      2,
+    );
     // both rows still present
     expect(sql).toContain("'homeowner'");
     expect(sql).toContain("'board'");
