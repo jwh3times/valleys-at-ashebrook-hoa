@@ -7,8 +7,9 @@ vi.mock('../../lib/admin', () => ({
   editDocument: vi.fn(),
   deleteDocument: vi.fn(),
 }));
+const fetchDocuments = vi.fn().mockResolvedValue([]);
 vi.mock('../../lib/content', () => ({
-  fetchDocuments: vi.fn().mockResolvedValue([]),
+  fetchDocuments: (...a: unknown[]) => fetchDocuments(...a),
 }));
 
 import DocumentsManager from './DocumentsManager';
@@ -78,5 +79,71 @@ describe('DocumentsManager upload types', () => {
       expect(screen.getByText(/unsupported file type/i)).toBeInTheDocument(),
     );
     expect(uploadDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe('DocumentsManager visibility filter', () => {
+  const docs = [
+    {
+      id: '1',
+      title: 'Alpha Doc',
+      category: 'Governing Documents',
+      visibility: 'board',
+      updatedAt: '2026-01-01',
+    },
+    {
+      id: '2',
+      title: 'Beta Doc',
+      category: 'Meeting Minutes',
+      visibility: 'board',
+      updatedAt: '2026-01-01',
+    },
+    {
+      id: '3',
+      title: 'Gamma Doc',
+      category: 'Forms',
+      visibility: 'public',
+      updatedAt: '2026-01-01',
+    },
+  ];
+
+  beforeEach(() => fetchDocuments.mockResolvedValue(docs));
+
+  it('shows every document by default with a per-tier count on each tab', async () => {
+    render(<DocumentsManager />);
+    expect(await screen.findByText('Alpha Doc')).toBeInTheDocument();
+    expect(screen.getByText('Beta Doc')).toBeInTheDocument();
+    expect(screen.getByText('Gamma Doc')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /All \(3\)/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Public \(1\)/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Homeowners \(0\)/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Board \(2\)/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows only the selected tier when a tab is clicked', async () => {
+    render(<DocumentsManager />);
+    await screen.findByText('Alpha Doc');
+    fireEvent.click(screen.getByRole('button', { name: /Board \(2\)/ }));
+    expect(screen.getByText('Alpha Doc')).toBeInTheDocument();
+    expect(screen.getByText('Beta Doc')).toBeInTheDocument();
+    expect(screen.queryByText('Gamma Doc')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty message when no documents match the selected tab', async () => {
+    render(<DocumentsManager />);
+    await screen.findByText('Alpha Doc');
+    fireEvent.click(screen.getByRole('button', { name: /Homeowners \(0\)/ }));
+    expect(screen.queryByText('Alpha Doc')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/no documents are set to this visibility/i),
+    ).toBeInTheDocument();
   });
 });
