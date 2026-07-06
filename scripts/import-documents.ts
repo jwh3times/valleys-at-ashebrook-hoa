@@ -76,9 +76,22 @@ export function buildInsertSql(
           `(${sqlStr(e.id)}, ${sqlStr(e.title)}, ${sqlStr(e.category)}, ${sqlStr(e.visibility)}, ${sqlStr(e.r2Key)}, ${sqlStr(e.filename)}, ${e.sizeBytes}, ${sqlStr(e.contentType)}, ${now}, ${now})`,
       )
       .join(',\n');
-    statements.push(`INSERT INTO documents (${cols}) VALUES\n${values};`);
+    statements.push(
+      `INSERT OR REPLACE INTO documents (${cols}) VALUES\n${values};`,
+    );
   }
   return statements.join('\n') + '\n';
+}
+
+/**
+ * Map each prior entry's source path to its id, so a re-run reuses the same
+ * UUIDs (and therefore the same R2 keys) instead of orphaning already-uploaded
+ * objects under fresh ids.
+ */
+export function previousIds(
+  entries: readonly Pick<DocumentEntry, 'relativePath' | 'id'>[],
+): Map<string, string> {
+  return new Map(entries.map((e) => [e.relativePath, e.id]));
 }
 
 async function walkDirectory(dir: string): Promise<string[]> {
@@ -116,6 +129,20 @@ async function main() {
   }
 
   const files = await walkDirectory(sourceDir);
+
+  // Reuse ids from a prior manifest so re-runs produce STABLE R2 keys — a fresh
+  // UUID per run would orphan every already-uploaded object. Keyed by the source
+  // relativePath, which uniquely identifies a file.
+  const manifestPath = 'private/documents-manifest.json';
+  let previous = new Map<string, string>();
+  if (fs.existsSync(manifestPath)) {
+    try {
+      previous = previousIds(JSON.parse(fs.readFileSync(manifestPath, 'utf8')));
+    } catch {
+      previous = new Map();
+    }
+  }
+
   const entries: DocumentEntry[] = [];
 
   for (const relativePath of files) {
@@ -125,7 +152,7 @@ async function main() {
 
     const filename = path.basename(relativePath);
     const safeName = safeObjectName(filename);
-    const id = crypto.randomUUID();
+    const id = previous.get(relativePath) ?? crypto.randomUUID();
     const r2Key = `documents/${id}/${safeName}`;
     const { visibility, category } = pathToDocMeta(relativePath);
     const title = filename.replace(/\.[^.]+$/, '');
@@ -146,7 +173,6 @@ async function main() {
   }
 
   // Always write the manifest and SQL regardless of mode.
-  const manifestPath = 'private/documents-manifest.json';
   fs.writeFileSync(manifestPath, JSON.stringify(entries, null, 2));
 
   const sqlPath = 'private/documents-import.sql';
@@ -183,8 +209,24 @@ async function main() {
     });
   const total = entries.length;
 
+  // Resume support: record every uploaded key so a re-run skips what's already
+  // done instead of re-uploading all ~500 files. Combined with the stable ids
+  // above, a re-run picks up exactly where a failed run stopped.
+  const uploadedPath = 'private/documents-uploaded.json';
+  const uploaded = new Set<string>(
+    fs.existsSync(uploadedPath)
+      ? (JSON.parse(fs.readFileSync(uploadedPath, 'utf8')) as string[])
+      : [],
+  );
+
   for (let i = 0; i < total; i++) {
     const entry = entries[i];
+    if (uploaded.has(entry.r2Key)) {
+      console.log(
+        `[${i + 1}/${total}] Skipping ${entry.filename} (already uploaded)`,
+      );
+      continue;
+    }
     const fullPath = path.resolve(sourceDir, entry.relativePath);
     console.log(
       `[${i + 1}/${total}] Uploading ${entry.filename} → ${entry.r2Key}`,
@@ -200,6 +242,8 @@ async function main() {
       '--content-type',
       entry.contentType,
     ]);
+    uploaded.add(entry.r2Key);
+    fs.writeFileSync(uploadedPath, JSON.stringify([...uploaded], null, 2));
   }
 
   console.log(`\nAll ${total} files uploaded. Running D1 insert...`);
