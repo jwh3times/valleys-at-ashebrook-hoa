@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { pathToDocMeta } from './doc-tiers.ts';
 
 export interface DocumentEntry {
@@ -152,7 +153,23 @@ async function main() {
   }
 
   // Commit phase: upload each file to R2, then run the D1 insert.
-  const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  //
+  // Run wrangler's JS entry with the current Node binary instead of spawning the
+  // npx/`.cmd` shim: modern Node (>=18.20 / >=20.12, including 26.x) refuses to
+  // spawn `.cmd`/`.bat` files without `shell: true` and throws EINVAL, while
+  // `shell: true` would mis-split our file paths that contain spaces. Invoking
+  // `node <wrangler.js>` avoids both — no shell, so each arg (paths included) is
+  // passed through verbatim.
+  const nodeRequire = createRequire(import.meta.url);
+  const wranglerBin = path.join(
+    path.dirname(nodeRequire.resolve('wrangler/package.json')),
+    'bin',
+    'wrangler.js',
+  );
+  const runWrangler = (args: string[]) =>
+    execFileSync(process.execPath, [wranglerBin, ...args], {
+      stdio: 'inherit',
+    });
   const total = entries.length;
 
   for (let i = 0; i < total; i++) {
@@ -161,38 +178,28 @@ async function main() {
     console.log(
       `[${i + 1}/${total}] Uploading ${entry.filename} → ${entry.r2Key}`,
     );
-    execFileSync(
-      npx,
-      [
-        'wrangler',
-        'r2',
-        'object',
-        'put',
-        `ashebrook-hoa-docs/${entry.r2Key}`,
-        '--file',
-        fullPath,
-        '--remote',
-        '--content-type',
-        entry.contentType,
-      ],
-      { stdio: 'inherit' },
-    );
+    runWrangler([
+      'r2',
+      'object',
+      'put',
+      `ashebrook-hoa-docs/${entry.r2Key}`,
+      '--file',
+      fullPath,
+      '--remote',
+      '--content-type',
+      entry.contentType,
+    ]);
   }
 
   console.log(`\nAll ${total} files uploaded. Running D1 insert...`);
-  execFileSync(
-    npx,
-    [
-      'wrangler',
-      'd1',
-      'execute',
-      'ashebrook-hoa',
-      '--remote',
-      '--file',
-      sqlPath,
-    ],
-    { stdio: 'inherit' },
-  );
+  runWrangler([
+    'd1',
+    'execute',
+    'ashebrook-hoa',
+    '--remote',
+    '--file',
+    sqlPath,
+  ]);
 
   console.log(`\nDone. ${total} documents imported.`);
 }
