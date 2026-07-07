@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import Login from './Login';
 import AnnouncementsManager from './AnnouncementsManager';
 import DocumentsManager from './DocumentsManager';
+import DuplicatesManager from './DuplicatesManager';
 import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
 import RosterManager from './RosterManager';
@@ -17,6 +18,11 @@ const SECTIONS = [
     render: () => <AnnouncementsManager />,
   },
   { key: 'documents', label: 'Documents', render: () => <DocumentsManager /> },
+  {
+    key: 'duplicates',
+    label: 'Duplicates',
+    render: () => <DuplicatesManager />,
+  },
   { key: 'roster', label: 'Roster', render: () => <RosterManager /> },
   { key: 'members', label: 'Members', render: () => <MembersManager /> },
   {
