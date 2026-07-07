@@ -29,12 +29,19 @@ export interface DupeMember {
   visibility: Visibility;
   sizeBytes: number;
   uploadedAt: string; // ISO
+  contentHash?: string | null;
 }
 
 export interface DupeGroupView {
   members: DupeMember[];
   suggestedKeepId: string;
   reason?: string;
+  matchKind?: 'exact' | 'near';
+  contentHash?: string | null;
+  sameTier?: boolean;
+  autoResolvable?: boolean;
+  deleteIds?: string[];
+  recommendation?: string;
 }
 
 export interface DuplicatesView {
