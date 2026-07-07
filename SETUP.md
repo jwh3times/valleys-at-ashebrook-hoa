@@ -178,7 +178,8 @@ backdoor). Run this once, right after the first deploy and the roster import.
    npx wrangler secret delete BOARD_PASSWORD
    ```
 
-The board member can then sign in at `/login` and change their password via **Forgot password**.
+The board member can then sign in at `/login`. To change the bootstrap password, use
+**Forgot password** and complete the emailed reset link on `/reset-password`.
 (The same logic is exported as `seedBoard` from `scripts/seed-board.ts` for CLI use, but the
 endpoint above is the supported path.)
 
