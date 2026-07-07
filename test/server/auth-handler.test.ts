@@ -8,6 +8,7 @@ vi.mock('../../src/server/auth/senders', () => ({
 }));
 
 import { createAuth } from '../../src/server/auth';
+import { sendEmail } from '../../src/server/auth/senders';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
@@ -72,5 +73,65 @@ describe('auth config', () => {
       .from(users)
       .where(eq(users.email, 'newuser@example.com'));
     expect(rows.length).toBe(1);
+  });
+
+  it('redirects a valid reset email callback to the reset-password page with a token', async () => {
+    const auth = createAuth(env, undefined, env.BETTER_AUTH_URL);
+    await auth.handler(
+      new Request('http://localhost/api/auth/sign-up/email', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'reset-callback@example.com',
+          password: 'a-valid-password-123',
+          name: 'Reset Callback',
+        }),
+      }),
+    );
+
+    vi.mocked(sendEmail).mockClear();
+    const requestRes = await auth.handler(
+      new Request('http://localhost/api/auth/request-password-reset', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'reset-callback@example.com',
+          redirectTo: '/reset-password',
+        }),
+      }),
+    );
+
+    expect(requestRes.status).toBe(200);
+    const resetEmail = vi
+      .mocked(sendEmail)
+      .mock.calls.find(([, , subject]) =>
+        String(subject).startsWith('Reset your password'),
+      );
+    expect(resetEmail).toBeDefined();
+    const resetUrl = String(resetEmail![3]).replace('Reset link: ', '');
+
+    const callbackRes = await auth.handler(
+      new Request(resetUrl, { redirect: 'manual' }),
+    );
+
+    expect(callbackRes.status).toBe(302);
+    const location = new URL(callbackRes.headers.get('location')!);
+    expect(location.pathname).toBe('/reset-password');
+    expect(location.searchParams.get('token')).toBeTruthy();
+  });
+
+  it('redirects an invalid reset email callback to the reset-password error state', async () => {
+    const auth = createAuth(env, undefined, env.BETTER_AUTH_URL);
+    const callbackRes = await auth.handler(
+      new Request(
+        'http://localhost/api/auth/reset-password/not-a-token?callbackURL=%2Freset-password',
+        { redirect: 'manual' },
+      ),
+    );
+
+    expect(callbackRes.status).toBe(302);
+    const location = new URL(callbackRes.headers.get('location')!);
+    expect(location.pathname).toBe('/reset-password');
+    expect(location.searchParams.get('error')).toBe('INVALID_TOKEN');
   });
 });
