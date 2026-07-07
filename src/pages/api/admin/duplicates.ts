@@ -17,6 +17,11 @@ import {
 export const prerender = false;
 
 const BACKFILL_CAP = 25;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+function validContentHash(value: string | null): value is string {
+  return typeof value === 'string' && SHA256_HEX.test(value);
+}
 
 function serialize(group: DupeGroup, matchKind: 'exact' | 'near') {
   const visibilityTiers = new Set(group.members.map((m) => m.visibility));
@@ -77,7 +82,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
   let hashed = 0;
   let remaining = 0;
   for (const row of rows) {
-    if (row.contentHash) continue;
+    if (validContentHash(row.contentHash)) continue;
+    row.contentHash = null;
     if (hashed >= BACKFILL_CAP) {
       remaining++;
       continue;

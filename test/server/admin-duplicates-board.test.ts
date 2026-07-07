@@ -129,6 +129,33 @@ describe('admin duplicates - board', () => {
     expect(group!.recommendation).toMatch(/visibility tiers/i);
   });
 
+  it('repairs invalid stored hashes instead of grouping them as exact matches', async () => {
+    await seed('bad-hash-a', 'different-a', 'bad-a.pdf', 'content_hash');
+    await seed('bad-hash-b', 'different-b', 'bad-b.pdf', 'content_hash');
+    const res = await call(GET, 'GET');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      exact: { members: { id: string; contentHash: string }[] }[];
+    };
+    const badGroup = body.exact.find(
+      (g) =>
+        g.members.some((m) => m.id === 'bad-hash-a') &&
+        g.members.some((m) => m.id === 'bad-hash-b'),
+    );
+    expect(badGroup).toBeUndefined();
+
+    const rows = await getDb(env).select().from(documents);
+    const repaired = rows.filter((r) =>
+      ['bad-hash-a', 'bad-hash-b'].includes(r.id),
+    );
+    expect(repaired.map((r) => r.contentHash)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^[0-9a-f]{64}$/),
+        expect.stringMatching(/^[0-9a-f]{64}$/),
+      ]),
+    );
+  });
+
   it('resolves a group by deleting the extras from D1 and R2', async () => {
     await seed('keep', 'keep-bytes', 'keep.pdf', 'kh');
     await seed('drop', 'drop-bytes', 'drop.pdf', 'dh');
