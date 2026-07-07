@@ -16,7 +16,8 @@ import {
 
 export const prerender = false;
 
-const BACKFILL_CAP = 25;
+const BACKFILL_ATTEMPT_CAP = 5;
+const BACKFILL_BYTE_CAP = 8 * 1024 * 1024;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 function validContentHash(value: string | null): value is string {
@@ -79,24 +80,42 @@ export const GET: APIRoute = async ({ request, locals }) => {
     })
     .from(documents);
 
-  let hashed = 0;
+  let attempted = 0;
+  let attemptedBytes = 0;
   let remaining = 0;
   for (const row of rows) {
     if (validContentHash(row.contentHash)) continue;
     row.contentHash = null;
-    if (hashed >= BACKFILL_CAP) {
+    const rowBytes = Math.max(0, row.sizeBytes);
+    if (
+      attempted >= BACKFILL_ATTEMPT_CAP ||
+      (attempted > 0 && attemptedBytes + rowBytes > BACKFILL_BYTE_CAP)
+    ) {
       remaining++;
       continue;
     }
-    const obj = await env.DOCS.get(row.r2Key);
-    if (!obj) continue;
-    const hash = await sha256Hex(await obj.arrayBuffer());
-    await db
-      .update(documents)
-      .set({ contentHash: hash })
-      .where(eq(documents.id, row.id));
-    row.contentHash = hash;
-    hashed++;
+    attempted++;
+    attemptedBytes += rowBytes;
+    try {
+      const obj = await env.DOCS.get(row.r2Key);
+      if (!obj) {
+        remaining++;
+        continue;
+      }
+      const hash = await sha256Hex(await obj.arrayBuffer());
+      await db
+        .update(documents)
+        .set({ contentHash: hash })
+        .where(eq(documents.id, row.id));
+      row.contentHash = hash;
+    } catch (error) {
+      remaining++;
+      console.warn('Duplicate hash backfill failed', {
+        id: row.id,
+        r2Key: row.r2Key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   const docs: DocLike[] = rows.map((r) => ({
