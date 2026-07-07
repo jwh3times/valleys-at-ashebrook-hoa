@@ -32,6 +32,7 @@ npm run db:migrate:remote # apply migrations to the live D1 database
 npm run auth:generate     # regenerate Better Auth schema from config
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json (see SETUP.md)
+npm run docs:dedupe       # dry-run document duplicate report (see SETUP.md)
 npm run deploy            # astro build && deploy the Worker
 ```
 
@@ -71,6 +72,11 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
 - Gated document download (R2, tier-checked): `GET /api/files/[id]`
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
   `/api/admin/{properties,owners,members}`
+  (`POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
+  and stores `content_hash` on success)
+- Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document
+  hashes from R2 and returns exact/near groups; `POST /api/admin/duplicates` resolves
+  selected duplicates by deleting their D1 rows and R2 objects
 - Board handoff: `GET /api/admin/roles` (list current board) and
   `POST /api/admin/roles` — `{ action: 'promote', email }` or
   `{ action: 'demote', userId }` (409 if it's the last board member)
@@ -81,7 +87,8 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
 
 **Client helpers.**
 - `src/lib/content.ts` — public reads (fetch `/api/content/*` endpoints).
-- `src/lib/admin.ts` — board writes (fetch `/api/admin/*` endpoints).
+- `src/lib/admin.ts` — board writes (fetch `/api/admin/*` endpoints), including typed
+  document duplicate errors and duplicate-resolution helpers.
 - `src/lib/types.ts` — shared shapes + `DEFAULT_*` fallbacks + `DOCUMENT_CATEGORIES` +
   the `Visibility` type + admin-write input normalizers (`normalize{Announcement,Property,Owner}Input`,
   `INPUT_LIMITS`) that trim/cap/validate and reject on write.
@@ -96,16 +103,18 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
 **Server code (`src/server/`).** `auth/` (Better Auth config, Resend + Twilio senders),
 `authz/` (`getAuthContext`, `resolveAuthContext` = middleware-first caller resolution with a
 fail-closed fallback, `requireRole`, `requireBoard`, Turnstile check), `content/`
-(`visibility.ts` = `tierAllows`/`visibleTiers`; `reads.ts`), `db/` (Drizzle
+(`visibility.ts` = `tierAllows`/`visibleTiers`; `reads.ts`; `dedupe.ts` = SHA-256 exact
+matching and metadata-only near-duplicate scoring), `db/` (Drizzle
 `schema.ts` + `auth-schema.ts`, `client.ts` = `getDb(env)`, `migrations/`), `roster/`,
 `verification/`, `http.ts` (`readJson`/`stringField` request-body helpers for the admin writes).
 
-**Data model (D1 tables, `src/server/db/schema.ts`).** `announcements`, `documents` (metadata;
-files in R2 under `documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), and the
+**Data model (D1 tables, `src/server/db/schema.ts`).** `announcements`, `documents` (metadata,
+including nullable indexed `content_hash`; files in R2 under `documents/<id>/…`), `settings` (key/value singletons `dues` + `site`), and the
 roster/verification tables — `properties` (homes) + `owners` (people, many per home; split in
 migration `0002`), `user_property_links`, `property_verifications`, `manual_approval_queue` — plus
-the Better Auth tables (`user`, `session`, `account`, `verification`). Migration `0003` adds the
-uniqueness constraints (`properties.address_normalized`, `user_property_links (user_id,
+the Better Auth tables (`user`, `session`, `account`, `verification`). Migration `0004` adds
+`documents.content_hash` and `documents_content_hash_idx` for duplicate detection. Migration
+`0003` adds the uniqueness constraints (`properties.address_normalized`, `user_property_links (user_id,
 property_id)`) and hot-path indexes. Migrations are applied with `npm run db:migrate:{local,remote}`
 (via `wrangler`, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots).
 `0002`/`0003` were hand-authored SQL, but the Drizzle snapshot history has since been reconciled

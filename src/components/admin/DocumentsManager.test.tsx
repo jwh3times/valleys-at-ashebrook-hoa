@@ -1,11 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-const uploadDocument = vi.fn().mockResolvedValue(undefined);
+const { uploadDocument, DuplicateError } = vi.hoisted(() => {
+  const uploadDocument = vi.fn().mockResolvedValue(undefined);
+  class DuplicateError extends Error {
+    kind: 'exact' | 'near';
+    existing?: {
+      id: string;
+      title: string;
+      category: string;
+      visibility: string;
+    };
+    similar?: { id: string; title: string; filename: string }[];
+
+    constructor(kind: 'exact' | 'near', payload: Record<string, unknown>) {
+      super(kind);
+      this.name = 'DuplicateError';
+      this.kind = kind;
+      Object.assign(this, payload);
+    }
+  }
+  return { uploadDocument, DuplicateError };
+});
 vi.mock('../../lib/admin', () => ({
   uploadDocument: (...a: unknown[]) => uploadDocument(...a),
   editDocument: vi.fn(),
   deleteDocument: vi.fn(),
+  DuplicateError,
 }));
 const fetchDocuments = vi.fn().mockResolvedValue([]);
 vi.mock('../../lib/content', () => ({
@@ -145,5 +166,62 @@ describe('DocumentsManager visibility filter', () => {
     expect(
       screen.getByText(/no documents are set to this visibility/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe('DocumentsManager duplicate handling', () => {
+  beforeEach(() => uploadDocument.mockReset());
+
+  function fillAndSubmit() {
+    fireEvent.change(screen.getByPlaceholderText(/bylaws/i), {
+      target: { value: 'Minutes' },
+    });
+    fireEvent.change(fileInput(), {
+      target: {
+        files: [new File(['x'], 'minutes.pdf', { type: 'application/pdf' })],
+      },
+    });
+    submitForm();
+  }
+
+  it('shows a blocking message on an exact duplicate and offers no override', async () => {
+    uploadDocument.mockRejectedValueOnce(
+      new DuplicateError('exact', {
+        existing: {
+          id: '1',
+          title: 'Existing Minutes',
+          category: 'Other',
+          visibility: 'board',
+        },
+      }),
+    );
+    render(<DocumentsManager />);
+    await screen.findByText(/upload a document/i);
+    fillAndSubmit();
+    await waitFor(() =>
+      expect(screen.getByText(/already on the site/i)).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole('button', { name: /upload anyway/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows an "Upload anyway" action on a near duplicate and re-submits confirmed', async () => {
+    uploadDocument
+      .mockRejectedValueOnce(
+        new DuplicateError('near', {
+          similar: [{ id: '2', title: 'Close Minutes', filename: 'close.pdf' }],
+        }),
+      )
+      .mockResolvedValueOnce(undefined);
+    render(<DocumentsManager />);
+    await screen.findByText(/upload a document/i);
+    fillAndSubmit();
+    const anyway = await screen.findByRole('button', {
+      name: /upload anyway/i,
+    });
+    fireEvent.click(anyway);
+    await waitFor(() => expect(uploadDocument).toHaveBeenCalledTimes(2));
+    expect(uploadDocument.mock.calls[1][4]).toBe(true);
   });
 });
