@@ -21,6 +21,28 @@ export interface DocumentItem {
   visibility: Visibility;
 }
 
+export interface DupeMember {
+  id: string;
+  title: string;
+  filename: string;
+  category: string;
+  visibility: Visibility;
+  sizeBytes: number;
+  uploadedAt: string; // ISO
+}
+
+export interface DupeGroupView {
+  members: DupeMember[];
+  suggestedKeepId: string;
+  reason?: string;
+}
+
+export interface DuplicatesView {
+  exact: DupeGroupView[];
+  near: DupeGroupView[];
+  remaining: number;
+}
+
 export interface PaymentOption {
   label: string; // e.g. "PayPal", "Venmo", "Zelle", "Mail a check"
   details: string; // instructions / handle / address
