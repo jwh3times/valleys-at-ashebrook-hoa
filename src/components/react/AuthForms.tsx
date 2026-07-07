@@ -67,8 +67,15 @@ export function LoginForm() {
       setMsg('Enter your email first, then click reset.');
       return;
     }
-    await authClient.requestPasswordReset({ email, redirectTo: '/login' });
-    setMsg('If that email exists, a reset link is on its way.');
+    const { error } = await authClient.requestPasswordReset({
+      email,
+      redirectTo: '/reset-password',
+    });
+    setMsg(
+      error
+        ? (error.message ?? 'Could not send reset email.')
+        : 'If that email exists, a reset link is on its way.',
+    );
   }
   return (
     <form onSubmit={onSubmit}>
@@ -91,6 +98,143 @@ export function LoginForm() {
         Forgot password?
       </button>
       {msg && <p>{msg}</p>}
+    </form>
+  );
+}
+
+function getResetParams() {
+  if (typeof window === 'undefined') return { token: '', error: '' };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    token: params.get('token') ?? '',
+    error: params.get('error') ?? '',
+  };
+}
+
+export function ResetPasswordForm() {
+  const [{ token, error: linkError }] = useState(getResetParams);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [msg, setMsg] = useState('');
+  const [status, setStatus] = useState<'idle' | 'error' | 'success'>('idle');
+  const [busy, setBusy] = useState(false);
+
+  const invalidLink = !token || linkError === 'INVALID_TOKEN';
+  const invalidMessage =
+    linkError === 'INVALID_TOKEN'
+      ? 'This reset link is invalid or has expired. Request a new one from the sign-in page.'
+      : 'This reset link is missing its token. Request a new password reset from the sign-in page.';
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus('idle');
+    setMsg('');
+
+    if (invalidLink) {
+      setStatus('error');
+      setMsg(invalidMessage);
+      return;
+    }
+    if (password.length < 10) {
+      setStatus('error');
+      setMsg('Password must be at least 10 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setStatus('error');
+      setMsg('Passwords do not match.');
+      return;
+    }
+
+    const resetFailed = () => {
+      setStatus('error');
+      setMsg(
+        'Could not reset your password. Request a new link and try again.',
+      );
+    };
+
+    setBusy(true);
+    try {
+      const { error } = await authClient.resetPassword({
+        newPassword: password,
+        token,
+      });
+
+      if (error) {
+        resetFailed();
+        return;
+      }
+    } catch {
+      resetFailed();
+      return;
+    } finally {
+      setBusy(false);
+    }
+
+    setStatus('success');
+    setMsg('Password updated. You can now sign in with your new password.');
+  }
+
+  if (invalidLink) {
+    return (
+      <div>
+        <div className="form-message form-message--error">{invalidMessage}</div>
+        <p>
+          <a href="/login">Request a new reset link</a>
+        </p>
+      </div>
+    );
+  }
+
+  if (status === 'success') {
+    return (
+      <div>
+        <div className="form-message form-message--success">{msg}</div>
+        <p>
+          <a href="/login">Sign in</a>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="form-stack">
+      {msg && (
+        <div
+          className={`form-message form-message--${
+            status === 'error' ? 'error' : 'success'
+          }`}
+        >
+          {msg}
+        </div>
+      )}
+      <div className="field">
+        <label htmlFor="new-password">New password</label>
+        <input
+          id="new-password"
+          type="password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          minLength={10}
+          required
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="confirm-password">Confirm new password</label>
+        <input
+          id="confirm-password"
+          type="password"
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          minLength={10}
+          required
+        />
+      </div>
+      <button type="submit" className="btn" disabled={busy}>
+        {busy ? 'Updating...' : 'Set password'}
+      </button>
     </form>
   );
 }

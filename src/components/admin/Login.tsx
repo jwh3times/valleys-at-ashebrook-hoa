@@ -29,7 +29,7 @@ export default function Login() {
     }
     const result = await authClient.requestPasswordReset({
       email,
-      redirectTo: '/login',
+      redirectTo: '/reset-password',
     });
     if (result.error) {
       setError('Could not send reset email. Check the address and try again.');

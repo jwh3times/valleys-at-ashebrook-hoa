@@ -3,10 +3,10 @@ import type { APIRoute } from 'astro';
 export const prerender = false;
 
 // The public, indexable content pages. Auth-utility pages (/login, /register,
-// /verify-property), the officialMode-conditional /dues, and everything under
-// /admin and /api are deliberately omitted. Generated per request because the
-// site is full SSR — @astrojs/sitemap only emits for statically built routes,
-// so it comes up empty here.
+// /verify-property, /reset-password), the officialMode-conditional /dues, and
+// everything under /admin and /api are deliberately omitted. Generated per
+// request because the site is full SSR — @astrojs/sitemap only emits for
+// statically built routes, so it comes up empty here.
 const PUBLIC_PATHS = [
   '/',
   '/about',
