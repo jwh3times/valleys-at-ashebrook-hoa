@@ -156,6 +156,47 @@ describe('admin duplicates - board', () => {
     );
   });
 
+  it('keeps reporting duplicates when one pending hash cannot be read from R2', async () => {
+    const now = new Date();
+    await getDb(env).insert(documents).values({
+      id: 'missing-r2',
+      title: 'missing',
+      category: 'Other',
+      visibility: 'board',
+      r2Key: 'documents/missing-r2/missing.pdf',
+      filename: 'missing.pdf',
+      sizeBytes: 123,
+      contentType: 'application/pdf',
+      contentHash: null,
+      uploadedAt: now,
+      updatedAt: now,
+    });
+    await seed('after-missing-a', 'still-identical', 'after.pdf', null);
+    await seed('after-missing-b', 'still-identical', 'after(1).pdf', null);
+
+    const res = await call(GET, 'GET');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      exact: { members: { id: string; contentHash: string | null }[] }[];
+      remaining: number;
+    };
+    const group = body.exact.find((g) =>
+      g.members.some((m) => m.id === 'after-missing-a'),
+    );
+    expect(group).toBeTruthy();
+    expect(group!.members.map((m) => m.id).sort()).toEqual([
+      'after-missing-a',
+      'after-missing-b',
+    ]);
+    expect(body.remaining).toBeGreaterThanOrEqual(1);
+
+    const [missing] = await getDb(env)
+      .select()
+      .from(documents)
+      .where(eq(documents.id, 'missing-r2'));
+    expect(missing.contentHash).toBeNull();
+  });
+
   it('resolves a group by deleting the extras from D1 and R2', async () => {
     await seed('keep', 'keep-bytes', 'keep.pdf', 'kh');
     await seed('drop', 'drop-bytes', 'drop.pdf', 'dh');
