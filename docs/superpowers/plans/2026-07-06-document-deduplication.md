@@ -1226,7 +1226,8 @@ git commit -m "feat(dedupe): near-warn/exact-block upload UX in DocumentsManager
 
 **Files:**
 - Create: `src/pages/api/admin/duplicates.ts`
-- Test: `test/server/admin-duplicates.test.ts`
+- Test: `test/server/admin-duplicates.test.ts` (unauthenticated gate)
+- Test: `test/server/admin-duplicates-board.test.ts` (board: backfill/report/resolve)
 
 **Interfaces:**
 - Consumes: `requireBoard`; `getDb`; `documents`; `sha256Hex`, `groupExact`, `groupNear`, `DocLike`, `DupeGroup` from the engine.
@@ -1234,9 +1235,40 @@ git commit -m "feat(dedupe): near-warn/exact-block upload UX in DocumentsManager
   - `GET /api/admin/duplicates` → `{ exact: GroupView[], near: GroupView[], remaining: number }` where `GroupView = { members: {id,title,filename,category,visibility,sizeBytes,uploadedAt}[], suggestedKeepId, reason? }`.
   - `POST /api/admin/duplicates` with `{ action:'resolve', keepId, deleteIds }` → `204`; deletes each `deleteId` from R2 + D1.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
-Create `test/server/admin-duplicates.test.ts`:
+Create the unauthenticated gate test `test/server/admin-duplicates.test.ts` (no context mock — the guard must fail closed), mirroring `test/server/admin-documents.test.ts`:
+
+```ts
+import { env, applyD1Migrations } from 'cloudflare:test';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { GET, POST } from '../../src/pages/api/admin/duplicates';
+
+beforeAll(async () => {
+  await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+});
+
+describe('admin duplicates — gate', () => {
+  it('rejects an unauthenticated GET with 401', async () => {
+    const res = await GET({
+      request: new Request('http://localhost/api/admin/duplicates'),
+    } as never);
+    expect(res.status).toBe(401);
+  });
+  it('rejects an unauthenticated resolve with 401', async () => {
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/duplicates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'resolve', keepId: 'x', deleteIds: ['y'] }),
+      }),
+    } as never);
+    expect(res.status).toBe(401);
+  });
+});
+```
+
+Then create the board-session test `test/server/admin-duplicates-board.test.ts` (mocks the auth context to a board member, mirroring `test/server/admin-documents-board.test.ts`):
 
 ```ts
 import { env, applyD1Migrations } from 'cloudflare:test';
@@ -1290,28 +1322,20 @@ const call = (fn: typeof GET, method: string, body?: unknown) =>
     }),
   } as never);
 
-describe('admin duplicates', () => {
-  it('rejects unauthenticated GET when no board session', async () => {
-    // context mock forces board here; assert the guard is wired by checking a 200 shape instead.
-    const res = await call(GET, 'GET');
-    expect(res.status).toBe(200);
-  });
-
+describe('admin duplicates — board', () => {
   it('lazy-backfills hashes and reports an exact group', async () => {
     await seed('d1', 'identical-bytes', 'a.pdf', null);
     await seed('d2', 'identical-bytes', 'a(1).pdf', null);
     const res = await call(GET, 'GET');
+    expect(res.status).toBe(200);
     const body = (await res.json()) as {
       exact: { members: { id: string }[]; suggestedKeepId: string }[];
       remaining: number;
     };
-    const group = body.exact.find((g) =>
-      g.members.some((m) => m.id === 'd1'),
-    );
+    const group = body.exact.find((g) => g.members.some((m) => m.id === 'd1'));
     expect(group).toBeTruthy();
     expect(group!.members.map((m) => m.id).sort()).toEqual(['d1', 'd2']);
     expect(group!.suggestedKeepId).toBe('d1'); // clean filename wins
-    // Hashes were persisted.
     const [row] = await getDb(env)
       .select()
       .from(documents)
@@ -1334,7 +1358,6 @@ describe('admin duplicates', () => {
       .where(eq(documents.id, 'drop'));
     expect(rows.length).toBe(0);
     expect(await env.DOCS.get('documents/drop/drop.pdf')).toBeNull();
-    // Keep survives.
     const keepRows = await getDb(env)
       .select()
       .from(documents)
@@ -1349,9 +1372,9 @@ describe('admin duplicates', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx vitest run --config vitest.workers.config.ts test/server/admin-duplicates.test.ts`
+Run: `npx vitest run --config vitest.workers.config.ts test/server/admin-duplicates.test.ts test/server/admin-duplicates-board.test.ts`
 Expected: FAIL — cannot resolve `../../src/pages/api/admin/duplicates`.
 
 - [ ] **Step 3: Write the endpoint**
@@ -1360,7 +1383,7 @@ Create `src/pages/api/admin/duplicates.ts`:
 
 ```ts
 import type { APIRoute } from 'astro';
-import { eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
@@ -1490,18 +1513,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
 };
 ```
 
-Note: `isNull` is imported for parity with other endpoints but the loop filters in JS; remove the import if `npm run check` flags it as unused.
+- [ ] **Step 4: Run tests to verify they pass**
 
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `npx vitest run --config vitest.workers.config.ts test/server/admin-duplicates.test.ts`
+Run: `npx vitest run --config vitest.workers.config.ts test/server/admin-duplicates.test.ts test/server/admin-duplicates-board.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 npm run format
-git add src/pages/api/admin/duplicates.ts test/server/admin-duplicates.test.ts
+git add src/pages/api/admin/duplicates.ts test/server/admin-duplicates.test.ts test/server/admin-duplicates-board.test.ts
 git commit -m "feat(dedupe): admin duplicates endpoint (lazy-backfill report + resolve)"
 ```
 
@@ -1548,6 +1569,9 @@ describe('DuplicatesManager', () => {
   beforeEach(() => {
     fetchDuplicates.mockReset();
     resolveDuplicates.mockClear();
+    // jsdom's window.confirm returns false by default, which would block the
+    // resolve path — force it true so the click actually calls resolveDuplicates.
+    vi.stubGlobal('confirm', () => true);
   });
 
   it('shows a friendly empty state when there are no duplicates', async () => {
