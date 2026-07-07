@@ -49,7 +49,7 @@ Node version is pinned in `.nvmrc` (run `nvm use`). CI (`.github/workflows/build
 runs `format:check`, `check`, `test`, `test:server`, then `build` on every PR and push to
 `main` — run these locally before pushing. On every merge (push) to `main`, the `Version`
 workflow (`.github/workflows/version.yml`) tags the merge commit with an auto-incrementing
-build number on the package.json version (`v<x.y.z>.<n>`, e.g. `v0.1.0.4`).
+build number on the package.json major/minor release line (`v<x.y>.<n>`, e.g. `v0.1.4`).
 
 ## Architecture
 
