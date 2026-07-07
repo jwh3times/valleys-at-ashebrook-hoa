@@ -14,6 +14,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Added
 
+- **Document deduplication** — documents now store a nullable SHA-256 `content_hash`; board uploads
+  block exact duplicates, warn on metadata-only near duplicates with an explicit override, and a new
+  admin **Duplicates** panel plus `npm run docs:dedupe` dry-run/commit script help clean up the
+  imported archive.
 - **Board-editable disclaimer and About copy** — the footer "not affiliated" disclaimer and the
   `/about` page text are now editable from the admin **Site Settings** panel (two new fields on the
   site settings blob — no migration). Left blank, both fall back to the built-in copy, so existing

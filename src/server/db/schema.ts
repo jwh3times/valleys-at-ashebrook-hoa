@@ -117,11 +117,15 @@ export const documents = sqliteTable(
     filename: text('filename').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     contentType: text('content_type').notNull(),
+    contentHash: text('content_hash'),
     uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   },
-  // Public/tier reads filter by visibility.
-  (t) => [index('documents_visibility_idx').on(t.visibility)],
+  // Public/tier reads filter by visibility; dedup looks up by content hash.
+  (t) => [
+    index('documents_visibility_idx').on(t.visibility),
+    index('documents_content_hash_idx').on(t.contentHash),
+  ],
 );
 
 export const announcements = sqliteTable(

@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react';
 import { fetchDocuments } from '../../lib/content';
-import { deleteDocument, editDocument, uploadDocument } from '../../lib/admin';
+import {
+  deleteDocument,
+  editDocument,
+  uploadDocument,
+  DuplicateError,
+} from '../../lib/admin';
 import {
   DOCUMENT_CATEGORIES,
   type DocumentItem,
@@ -55,6 +60,10 @@ export default function DocumentsManager() {
   const [category, setCategory] = useState<string>(DOCUMENT_CATEGORIES[0]);
   const [visibility, setVisibility] = useState<Visibility>('board');
   const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dupWarning, setDupWarning] = useState<{
+    similar: { id: string; title?: string; filename?: string }[];
+  } | null>(null);
   const [filter, setFilter] = useState<Visibility | 'all'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
@@ -79,9 +88,45 @@ export default function DocumentsManager() {
     setEditingId(null);
   }
 
+  async function submitUpload(confirmDuplicate: boolean) {
+    setMsg('');
+    if (!file) {
+      setMsg('Please choose a file.');
+      return;
+    }
+    setUploading(true);
+    try {
+      await uploadDocument(file, title, category, visibility, confirmDuplicate);
+      setDupWarning(null);
+      setTitle('');
+      setFile(null);
+      if (fileInput.current) fileInput.current.value = '';
+      await reload();
+      setMsg('Document uploaded.');
+    } catch (err: unknown) {
+      if (err instanceof DuplicateError && err.kind === 'exact') {
+        setDupWarning(null);
+        setMsg(
+          `Error: This exact file is already on the site as "${err.existing?.title ?? 'an existing document'}". Nothing was uploaded.`,
+        );
+      } else if (err instanceof DuplicateError && err.kind === 'near') {
+        setMsg('');
+        setDupWarning({ similar: err.similar ?? [] });
+      } else {
+        setDupWarning(null);
+        setMsg(
+          'Error: ' +
+            ((err as { message?: string } | null)?.message ??
+              'could not upload.'),
+        );
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
-    setMsg('');
     if (!file) {
       setMsg('Please choose a file.');
       return;
@@ -93,13 +138,8 @@ export default function DocumentsManager() {
       );
       return;
     }
-    await run(async () => {
-      await uploadDocument(file, title, category, visibility);
-      setTitle('');
-      setFile(null);
-      if (fileInput.current) fileInput.current.value = '';
-      await reload();
-    }, 'Document uploaded.');
+    setDupWarning(null);
+    await submitUpload(false);
   }
 
   async function handleEdit(e: React.FormEvent) {
@@ -263,10 +303,52 @@ export default function DocumentsManager() {
             </p>
           </div>
           <div className="btn-row">
-            <button className="btn btn--small" type="submit" disabled={busy}>
-              {busy ? 'Uploading…' : 'Upload document'}
+            <button
+              className="btn btn--small"
+              type="submit"
+              disabled={uploading}
+            >
+              {uploading ? 'Uploading…' : 'Upload document'}
             </button>
           </div>
+          {dupWarning && (
+            <div
+              className="form-message"
+              style={{ marginTop: '12px' }}
+              role="alert"
+            >
+              <p style={{ margin: '0 0 8px' }}>
+                A similar document is already on the site:
+              </p>
+              <ul style={{ margin: '0 0 10px 18px' }}>
+                {dupWarning.similar.map((s) => (
+                  <li key={s.id}>
+                    {s.title ?? 'Untitled'}{' '}
+                    <span className="muted">
+                      ({s.filename ?? 'unknown filename'})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="btn-row">
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  disabled={uploading}
+                  onClick={() => submitUpload(true)}
+                >
+                  Upload anyway
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--outline btn--small"
+                  onClick={() => setDupWarning(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       )}
 
