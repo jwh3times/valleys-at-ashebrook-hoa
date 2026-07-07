@@ -12,7 +12,8 @@ It provides:
 - 📣 **Announcements** — community news
 - 📅 **Community calendar** — meetings and events via Google Calendar,
   with Google Meet links for virtual meetings
-- 📄 **Governing documents** — bylaws, CC&Rs, minutes, and forms (PDF downloads)
+- 📄 **Governing documents** — bylaws, CC&Rs, minutes, and forms, with board-side
+  duplicate detection and cleanup tools
 - 💳 **Dues & payments** — annual dues amount and payment options (shown in official
   mode)
 - ✉️ **Contact form** — reaches the resident who maintains the site (or the board, in
@@ -60,6 +61,7 @@ npm run build      # build the SSR Worker to dist/
 npm test           # run the Vitest spec suite
 npm run check      # Astro + TypeScript type check
 npm run format     # format all files with Prettier
+npm run docs:dedupe # dry-run document duplicate report
 npm run deploy     # build + deploy to Cloudflare Workers
 ```
 
@@ -102,7 +104,7 @@ src/server/db/migrations/   D1 migration files
 ## How content is edited
 
 Board members go to `/admin`, sign in with their email + password (Better Auth), and
-manage announcements, documents, dues, and site text through on-screen forms. Board
+manage announcements, documents, duplicate document cleanup, dues, and site text through on-screen forms. Board
 membership itself is also managed in the admin app, under **Board members**: a board
 member can promote another account to `board` and demote a board member (the last
 remaining board member can't be demoted), which supports handing the site off to a new

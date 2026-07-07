@@ -195,6 +195,25 @@ npm run docs:import -- --commit  # uploads the files to R2 and inserts the docum
 
 The board can re-tier any document later from `/admin`.
 
+### Deduplicating documents
+
+After importing the archive, run a dry duplicate scan:
+
+```bash
+npm run docs:dedupe
+```
+
+Review `private/dedupe-report.json`. If the same-tier exact duplicate plan looks correct, commit the
+cleanup:
+
+```bash
+npm run docs:dedupe -- --commit
+```
+
+The commit step writes `content_hash` values to D1 and deletes only same-tier exact duplicate
+extras from R2 + D1. Cross-tier exact groups and near-duplicate groups are left for board review in
+`/admin` -> **Duplicates**.
+
 ## 8. Connect the community calendar (Google Calendar)
 
 1. Open [Google Calendar](https://calendar.google.com) with your Google account (or
