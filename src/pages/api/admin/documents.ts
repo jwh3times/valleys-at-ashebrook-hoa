@@ -6,6 +6,12 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
 import { DOCUMENT_CATEGORIES, INPUT_LIMITS } from '../../../lib/types';
+import {
+  sha256Hex,
+  nearScore,
+  NEAR_THRESHOLD,
+  type DocLike,
+} from '../../../server/content/dedupe';
 
 export const prerender = false;
 
@@ -48,26 +54,85 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const contentType = EXT_TO_TYPE[ext];
   if (!contentType)
     return new Response('Unsupported file type', { status: 415 });
-  const id = crypto.randomUUID();
-  const r2Key = `documents/${id}/${file.name.replace(/[^\w.\-]/g, '_')}`;
-  await env.DOCS.put(r2Key, await file.arrayBuffer(), {
-    httpMetadata: { contentType },
-  });
-  const now = new Date();
-  await getDb(env)
-    .insert(documents)
-    .values({
-      id,
+
+  const bytes = await file.arrayBuffer();
+  const contentHash = await sha256Hex(bytes);
+  const db = getDb(env);
+
+  const [exact] = await db
+    .select({
+      id: documents.id,
+      title: documents.title,
+      category: documents.category,
+      visibility: documents.visibility,
+    })
+    .from(documents)
+    .where(eq(documents.contentHash, contentHash));
+  if (exact) {
+    return Response.json(
+      { error: 'exact-duplicate', existing: exact },
+      { status: 409 },
+    );
+  }
+
+  const confirmDuplicate =
+    String(form.get('confirmDuplicate') ?? '') === 'true';
+  if (!confirmDuplicate) {
+    const existing = await db
+      .select({
+        id: documents.id,
+        title: documents.title,
+        filename: documents.filename,
+        sizeBytes: documents.sizeBytes,
+        contentType: documents.contentType,
+        category: documents.category,
+        visibility: documents.visibility,
+      })
+      .from(documents);
+    const candidate: DocLike = {
+      id: 'new',
       title,
-      category,
-      visibility: visibility as 'public' | 'homeowner' | 'board',
-      r2Key,
       filename: file.name,
       sizeBytes: file.size,
       contentType,
-      uploadedAt: now,
-      updatedAt: now,
-    });
+      visibility: visibility as DocLike['visibility'],
+    };
+    const similar = existing
+      .filter((e) => nearScore(candidate, e as DocLike) >= NEAR_THRESHOLD)
+      .map((e) => ({
+        id: e.id,
+        title: e.title,
+        filename: e.filename,
+        category: e.category,
+        visibility: e.visibility,
+      }));
+    if (similar.length > 0) {
+      return Response.json(
+        { warning: 'near-duplicate', similar },
+        { status: 409 },
+      );
+    }
+  }
+
+  const id = crypto.randomUUID();
+  const r2Key = `documents/${id}/${file.name.replace(/[^\w.\-]/g, '_')}`;
+  await env.DOCS.put(r2Key, bytes, {
+    httpMetadata: { contentType },
+  });
+  const now = new Date();
+  await db.insert(documents).values({
+    id,
+    title,
+    category,
+    visibility: visibility as 'public' | 'homeowner' | 'board',
+    r2Key,
+    filename: file.name,
+    sizeBytes: file.size,
+    contentType,
+    contentHash,
+    uploadedAt: now,
+    updatedAt: now,
+  });
   return new Response(null, { status: 201 });
 };
 
