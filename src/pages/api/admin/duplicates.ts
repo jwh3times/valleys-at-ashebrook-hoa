@@ -9,6 +9,7 @@ import {
   sha256Hex,
   groupExact,
   groupNear,
+  autoResolvableExact,
   type DocLike,
   type DupeGroup,
 } from '../../../server/content/dedupe';
@@ -17,10 +18,26 @@ export const prerender = false;
 
 const BACKFILL_CAP = 25;
 
-function serialize(group: DupeGroup) {
+function serialize(group: DupeGroup, matchKind: 'exact' | 'near') {
+  const visibilityTiers = new Set(group.members.map((m) => m.visibility));
+  const auto = matchKind === 'exact' ? autoResolvableExact(group) : null;
+  const sameTier = visibilityTiers.size === 1;
+  const contentHash =
+    matchKind === 'exact' ? (group.members[0].contentHash ?? null) : null;
   return {
+    matchKind,
     suggestedKeepId: group.suggestedKeepId,
     reason: group.reason,
+    contentHash,
+    sameTier,
+    autoResolvable: auto !== null,
+    deleteIds: auto?.deleteIds ?? [],
+    recommendation:
+      matchKind === 'exact'
+        ? auto
+          ? 'Same-tier exact duplicate: keep the suggested file and delete the byte-identical copies.'
+          : 'Exact duplicate across visibility tiers: bytes match, but choose the surviving visibility intentionally.'
+        : 'Near duplicate: metadata is similar, but bytes differ or are not yet proven identical. Review manually before deleting.',
     members: group.members.map((m) => ({
       id: m.id,
       title: m.title,
@@ -28,6 +45,7 @@ function serialize(group: DupeGroup) {
       category: m.category,
       visibility: m.visibility,
       sizeBytes: m.sizeBytes,
+      contentHash: m.contentHash ?? null,
       uploadedAt:
         m.uploadedAt instanceof Date
           ? m.uploadedAt.toISOString()
@@ -88,8 +106,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
   }));
 
   return Response.json({
-    exact: groupExact(docs).map(serialize),
-    near: groupNear(docs).map(serialize),
+    exact: groupExact(docs).map((g) => serialize(g, 'exact')),
+    near: groupNear(docs).map((g) => serialize(g, 'near')),
     remaining,
   });
 };

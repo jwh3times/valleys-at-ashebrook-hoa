@@ -17,6 +17,7 @@ const member = (id: string, filename: string) => ({
   category: 'Other',
   visibility: 'board',
   sizeBytes: 100,
+  contentHash: `${id}${'0'.repeat(63)}`.slice(0, 64),
   uploadedAt: '2026-01-01T00:00:00.000Z',
 });
 
@@ -37,7 +38,14 @@ describe('DuplicatesManager', () => {
     fetchDuplicates.mockResolvedValue({
       exact: [
         {
+          matchKind: 'exact',
           suggestedKeepId: 'keep',
+          contentHash: 'f'.repeat(64),
+          sameTier: true,
+          autoResolvable: true,
+          deleteIds: ['drop'],
+          recommendation:
+            'Same-tier exact duplicate: keep the suggested file and delete the byte-identical copies.',
           members: [member('keep', 'a.pdf'), member('drop', 'a(1).pdf')],
         },
       ],
@@ -48,6 +56,8 @@ describe('DuplicatesManager', () => {
     const btn = await screen.findByRole('button', {
       name: /keep suggested/i,
     });
+    expect(screen.getAllByText(/same-tier exact/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('f'.repeat(64))).toBeInTheDocument();
     fireEvent.click(btn);
     await waitFor(() =>
       expect(resolveDuplicates).toHaveBeenCalledWith('keep', ['drop']),
@@ -59,8 +69,12 @@ describe('DuplicatesManager', () => {
       exact: [],
       near: [
         {
+          matchKind: 'near',
           suggestedKeepId: 'x',
           reason: 'similar filename/size',
+          autoResolvable: false,
+          recommendation:
+            'Near duplicate: metadata is similar, but bytes differ or are not yet proven identical. Review manually before deleting.',
           members: [member('x', 'Report.pdf'), member('y', 'Report copy.pdf')],
         },
       ],
@@ -68,6 +82,10 @@ describe('DuplicatesManager', () => {
     });
     render(<DuplicatesManager />);
     expect(await screen.findByText(/Report\.pdf/)).toBeInTheDocument();
+    expect(screen.getAllByText(/near match/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/similar filename\/size/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(member('x', 'Report.pdf').contentHash),
+    ).toBeInTheDocument();
   });
 });
