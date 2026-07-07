@@ -5,6 +5,17 @@ import { useAdminResource } from './useAdminResource';
 
 const EMPTY: DuplicatesView = { exact: [], near: [], remaining: 0 };
 
+function HashLine({ hash }: { hash?: string | null }) {
+  return (
+    <div
+      className="admin-row-sub"
+      style={{ wordBreak: 'break-all', marginTop: '4px' }}
+    >
+      SHA-256: <code>{hash && hash.length > 0 ? hash : 'not hashed yet'}</code>
+    </div>
+  );
+}
+
 function GroupCard({
   group,
   kind,
@@ -20,11 +31,34 @@ function GroupCard({
   const deleteIds = group.members
     .filter((m) => m.id !== keepId)
     .map((m) => m.id);
+  const label =
+    kind === 'near'
+      ? 'Near match'
+      : group.autoResolvable
+        ? 'Same-tier exact'
+        : group.sameTier === false
+          ? 'Cross-tier exact'
+          : 'Exact match';
+  const recommendation =
+    group.recommendation ??
+    (kind === 'exact'
+      ? 'These files have identical bytes.'
+      : 'These files have similar metadata and should be reviewed manually.');
+  const buttonText =
+    kind === 'exact' && group.autoResolvable && keepId === group.suggestedKeepId
+      ? 'Keep suggested, delete same-tier copies'
+      : 'Keep selected, delete the others';
   return (
     <div className="panel-card" style={{ marginBottom: '16px' }}>
       <div className="panel-editor__title">
         {kind === 'exact' ? 'Identical files' : 'Possibly the same document'}
         {group.reason ? ` - ${group.reason}` : ''}
+      </div>
+      <div className="form-message" style={{ marginBottom: '12px' }}>
+        <strong>{label}.</strong> {recommendation}
+        {kind === 'exact' && group.contentHash && (
+          <HashLine hash={group.contentHash} />
+        )}
       </div>
       <div className="panel-list">
         {group.members.map((m) => (
@@ -41,6 +75,7 @@ function GroupCard({
               <div className="admin-row-sub">
                 {m.filename} &middot; {m.category} &middot; {m.visibility}
               </div>
+              {kind === 'near' && <HashLine hash={m.contentHash} />}
             </div>
           </label>
         ))}
@@ -51,9 +86,7 @@ function GroupCard({
           disabled={busy || deleteIds.length === 0}
           onClick={() => onResolve(keepId, deleteIds)}
         >
-          {kind === 'exact'
-            ? 'Keep suggested, delete the rest'
-            : 'Keep selected, delete the others'}
+          {buttonText}
         </button>
       </div>
     </div>
@@ -85,8 +118,9 @@ export default function DuplicatesManager() {
         <h1>Duplicates</h1>
       </div>
       <p className="admin-panel__intro">
-        Identical files can be collapsed with one click. Possibly similar
-        documents should be reviewed before deleting.
+        Identical files share a SHA-256 hash. Same-tier exact groups are safe to
+        collapse; cross-tier exact groups and near matches need a deliberate
+        board decision.
       </p>
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
