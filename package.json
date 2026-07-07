@@ -24,7 +24,8 @@
     "auth:generate": "npx @better-auth/cli generate --output src/server/db/auth-schema.ts",
     "test:server": "vitest run --config vitest.workers.config.ts",
     "roster:import": "node --experimental-strip-types scripts/import-roster.ts",
-    "docs:import": "node --experimental-strip-types scripts/import-documents.ts"
+    "docs:import": "node --experimental-strip-types scripts/import-documents.ts",
+    "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.1.1",
