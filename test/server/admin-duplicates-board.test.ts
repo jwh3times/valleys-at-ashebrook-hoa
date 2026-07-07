@@ -19,6 +19,7 @@ async function seed(
   content: string,
   filename: string,
   hash: string | null,
+  visibility: 'public' | 'homeowner' | 'board' = 'board',
 ) {
   const key = `documents/${id}/${filename}`;
   await env.DOCS.put(key, content);
@@ -29,7 +30,7 @@ async function seed(
       id,
       title: filename.replace(/\.[^.]+$/, ''),
       category: 'Other',
-      visibility: 'board',
+      visibility,
       r2Key: key,
       filename,
       sizeBytes: content.length,
@@ -56,18 +57,76 @@ describe('admin duplicates - board', () => {
     const res = await call(GET, 'GET');
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      exact: { members: { id: string }[]; suggestedKeepId: string }[];
+      exact: {
+        members: { id: string; contentHash: string }[];
+        suggestedKeepId: string;
+        matchKind: string;
+        contentHash: string;
+        sameTier: boolean;
+        autoResolvable: boolean;
+        deleteIds: string[];
+        recommendation: string;
+      }[];
       remaining: number;
     };
     const group = body.exact.find((g) => g.members.some((m) => m.id === 'd1'));
     expect(group).toBeTruthy();
     expect(group!.members.map((m) => m.id).sort()).toEqual(['d1', 'd2']);
     expect(group!.suggestedKeepId).toBe('d1');
+    expect(group!.matchKind).toBe('exact');
+    expect(group!.contentHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(
+      group!.members.every((m) => m.contentHash === group!.contentHash),
+    ).toBe(true);
+    expect(group!.sameTier).toBe(true);
+    expect(group!.autoResolvable).toBe(true);
+    expect(group!.deleteIds).toEqual(['d2']);
+    expect(group!.recommendation).toMatch(/same-tier exact/i);
     const [row] = await getDb(env)
       .select()
       .from(documents)
       .where(eq(documents.id, 'd1'));
     expect(row.contentHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('reports cross-tier exact groups as manual-review, not auto-resolvable', async () => {
+    await seed(
+      'cx-public',
+      'cross-tier-bytes',
+      'cross-public.pdf',
+      null,
+      'public',
+    );
+    await seed(
+      'cx-board',
+      'cross-tier-bytes',
+      'cross-board.pdf',
+      null,
+      'board',
+    );
+    const res = await call(GET, 'GET');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      exact: {
+        members: { id: string }[];
+        sameTier: boolean;
+        autoResolvable: boolean;
+        deleteIds: string[];
+        recommendation: string;
+      }[];
+    };
+    const group = body.exact.find((g) =>
+      g.members.some((m) => m.id === 'cx-public'),
+    );
+    expect(group).toBeTruthy();
+    expect(group!.members.map((m) => m.id).sort()).toEqual([
+      'cx-board',
+      'cx-public',
+    ]);
+    expect(group!.sameTier).toBe(false);
+    expect(group!.autoResolvable).toBe(false);
+    expect(group!.deleteIds).toEqual([]);
+    expect(group!.recommendation).toMatch(/visibility tiers/i);
   });
 
   it('resolves a group by deleting the extras from D1 and R2', async () => {
