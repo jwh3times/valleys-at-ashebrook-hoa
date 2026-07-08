@@ -14,8 +14,9 @@ declare namespace Cloudflare {
     TWILIO_ACCOUNT_SID: string;
     TWILIO_AUTH_TOKEN: string;
     TWILIO_FROM: string;
-    PUBLIC_TURNSTILE_SITE_KEY?: string;
+    TURNSTILE_SITE_KEY?: string;
     TURNSTILE_SECRET_KEY: string;
+    WEB3FORMS_KEY?: string;
     /**
      * First-board bootstrap secrets (see /api/bootstrap/board). Optional: set
      * only during the one-time bootstrap, and safe to unset afterward — the
