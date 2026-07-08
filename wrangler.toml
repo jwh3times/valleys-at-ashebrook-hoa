@@ -11,6 +11,8 @@ enabled = true
 # the source of truth and Git auto-deploys stay in sync. Secrets stay out of this file.
 [vars]
 BETTER_AUTH_URL = "https://ashebrookresidents.com"
+TURNSTILE_SITE_KEY = "0x4AAAAAADt_bUgYAEN03njN"
+WEB3FORMS_KEY = "ad82b2e5-ff8c-49dd-82fb-50bf90272b55"
 
 [[d1_databases]]
 binding = "DATABASE"
