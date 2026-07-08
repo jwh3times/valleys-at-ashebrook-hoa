@@ -31,3 +31,5 @@ Recent commits use short, imperative summaries, often lowercase, such as `fix fo
 ## Security & Configuration Tips
 
 Do not commit real roster data, secrets, or production credentials. Keep environment examples in `.env.example` and `.dev.vars.example`. Schema changes should go through Drizzle migrations, and access control must stay server-side and fail closed.
+
+Do not commit implementation scratchpads, security reviews, import artifacts, resident-data-derived files, or detailed operational runbooks. Keep those under `private/`; public docs should describe supported architecture and workflows, not exploit analysis, private execution notes, or resident-data handling details.

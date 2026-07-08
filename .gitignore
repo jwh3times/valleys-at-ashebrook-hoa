@@ -29,6 +29,7 @@ private/
 
 # subagent-driven-development scratch
 .superpowers/
+docs/superpowers/
 
 # cloudflare
 .dev.vars

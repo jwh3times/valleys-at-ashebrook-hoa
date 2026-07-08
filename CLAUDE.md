@@ -48,8 +48,9 @@ npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 Node version is pinned in `.nvmrc` (run `nvm use`). CI (`.github/workflows/build.yml`)
 runs `format:check`, `check`, `test`, `test:server`, then `build` on every PR and push to
 `main` — run these locally before pushing. On every merge (push) to `main`, the `Version`
-workflow (`.github/workflows/version.yml`) tags the merge commit with an auto-incrementing
-build number on the package.json major/minor release line (`v<x.y>.<n>`, e.g. `v0.1.4`).
+workflow (`.github/workflows/version.yml`) tags the merge commit on the package.json major/minor
+release line. The first tag uses the package patch value (`0.2.0` -> `v0.2.0`); later merges on
+the same line increment the patch tag (`v0.2.1`, `v0.2.2`, ...).
 
 ## Architecture
 
@@ -62,10 +63,10 @@ no-JS). The same-origin API endpoints under `src/pages/api/` back the admin pane
 refresh. Runtime bindings and secrets are read via `import { env } from 'cloudflare:workers'`.
 Build-time `PUBLIC_*` vars are inlined by Astro from `.env`.
 
-**Cloudflare bindings (`wrangler.toml`).** `DATABASE` (D1 `ashebrook-hoa`), `KV` (app
-KV), `SESSION` (KV for Astro sessions — required by the `@astrojs/cloudflare` adapter, which
-enables Astro sessions against a `SESSION` binding by default even though app auth uses Better
-Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`).
+**Cloudflare bindings (`wrangler.toml`).** `DATABASE` (D1), `KV` (app KV), `SESSION`
+(KV for Astro sessions — required by the `@astrojs/cloudflare` adapter, which enables Astro
+sessions against a `SESSION` binding by default even though app auth uses Better Auth's D1
+sessions rather than `Astro.session`), `DOCS` (R2 document storage).
 
 **HTTP endpoints (all under `src/pages/api/`).**
 
@@ -83,7 +84,7 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
   `{ action: 'demote', userId }` (409 if it's the last board member)
 - Homeowner verification: `/api/verify/{request,confirm}`
 - First-board bootstrap: `POST /api/bootstrap/board` — fail-closed, self-disables once a
-  board account exists (410); requires the `x-bootstrap-secret` header + `BOARD_*` config
+  board account exists (410); requires bootstrap secret/config values
 - Better Auth handler: `/api/auth/[...all]`
 
 **Client helpers.**
@@ -151,13 +152,13 @@ npm run build                                      # astro build → dist/
 npx wrangler deploy -c dist/server/wrangler.json   # deploy the Worker
 ```
 
-The root `wrangler.toml` intentionally has no `main` field — the adapter emits
-`dist/server/wrangler.json` with `main`, `assets`, and bindings, which is what you
-deploy with `-c`.
+The root `wrangler.toml` uses `main = "src/worker.ts"` so the Worker can expose both
+Astro SSR handling and the scheduled cleanup trigger. Manual deploys still use the
+adapter-emitted `dist/server/wrangler.json`.
 
 **Reference assets.** `design/Ashebrook HOA.dc.html` is a static design mockup kept as a visual
-reference — it is not built or imported; don't edit it. Implementation plans and design specs live
-in `docs/superpowers/{plans,specs}/`.
+reference — it is not built or imported; don't edit it. Current roadmap items live in
+`ROADMAP.md`; durable architecture decisions live in `docs/adr/`.
 
 ## Agents & docs automation
 

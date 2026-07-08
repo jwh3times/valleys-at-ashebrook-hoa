@@ -47,8 +47,8 @@ text; a custom domain is optional, ~$10–15/yr).
 
 ## Getting started
 
-See **[SETUP.md](./SETUP.md)** for the complete, step-by-step setup and
-deployment guide.
+See **[SETUP.md](./SETUP.md)** for setup and deployment guidance. The public architecture overview
+lives in [docs/architecture.md](./docs/architecture.md).
 
 This project targets the Node version in [`.nvmrc`](./.nvmrc) (run `nvm use`).
 
@@ -118,7 +118,9 @@ SETUP.md §6.
 ## Contributing & support
 
 Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow and local
-checks, and [CLAUDE.md](./CLAUDE.md) for the architecture and conventions. By participating you
-agree to the [Code of Conduct](./CODE_OF_CONDUCT.md). For help and bug reports, see
-[SUPPORT.md](./SUPPORT.md); report vulnerabilities privately per [SECURITY.md](./SECURITY.md).
-Shipped changes are tracked in the [changelog](./CHANGELOG.md).
+checks, and [CLAUDE.md](./CLAUDE.md) for the architecture and conventions. Future work is tracked
+in [ROADMAP.md](./ROADMAP.md), and durable architecture decisions live in
+[docs/adr](./docs/adr/README.md).
+By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md). For help and bug
+reports, see [SUPPORT.md](./SUPPORT.md); report vulnerabilities privately per
+[SECURITY.md](./SECURITY.md). Shipped changes are tracked in the [changelog](./CHANGELOG.md).
