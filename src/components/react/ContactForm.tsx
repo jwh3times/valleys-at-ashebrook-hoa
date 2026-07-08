@@ -1,23 +1,26 @@
 import { useState, type FormEvent } from 'react';
 import { SITE_NAME } from '../../lib/site';
 
-const ACCESS_KEY = import.meta.env.PUBLIC_WEB3FORMS_KEY as string | undefined;
-
 type Status = 'idle' | 'submitting' | 'success' | 'error';
 
-export default function ContactForm() {
+type ContactFormProps = {
+  accessKey?: string;
+};
+
+export default function ContactForm({ accessKey }: ContactFormProps) {
   const [status, setStatus] = useState<Status>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  if (!ACCESS_KEY) {
+  if (!accessKey) {
     return (
       <div className="notice">
         <strong>Setup needed:</strong> the contact form isn’t connected yet. Add
-        a free Web3Forms access key as <code>PUBLIC_WEB3FORMS_KEY</code> in your{' '}
-        <code>.env</code> file (see <code>SETUP.md</code>).
+        a free Web3Forms access key as <code>WEB3FORMS_KEY</code> in{' '}
+        <code>wrangler.toml</code> (see <code>SETUP.md</code>).
       </div>
     );
   }
+  const configuredAccessKey = accessKey;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -25,7 +28,7 @@ export default function ContactForm() {
     setErrorMsg('');
     const form = e.currentTarget;
     const data = new FormData(form);
-    data.append('access_key', ACCESS_KEY!);
+    data.append('access_key', configuredAccessKey);
     if (!data.get('subject')) {
       data.set('subject', `New message from the ${SITE_NAME} website`);
     }

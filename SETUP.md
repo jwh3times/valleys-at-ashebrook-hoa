@@ -78,25 +78,26 @@ development, and set the same values as Cloudflare secrets for production
 inlines them into the client at build):
 
 ```ini
-PUBLIC_TURNSTILE_SITE_KEY=...              # Turnstile site key (widget)
 PUBLIC_GOOGLE_CALENDAR_ID=xxxx@group.calendar.google.com
 PUBLIC_GOOGLE_CALENDAR_TIMEZONE=America/New_York
-PUBLIC_WEB3FORMS_KEY=...                   # contact form (see step 8)
 ```
 
 > **Git auto-deploy note:** `PUBLIC_*` values are inlined **at build time**. If you deploy
 > by connecting the repo to Cloudflare (Workers Builds), the build runs on Cloudflare where
 > `.env` is not present, so set these as **build variables** in the Worker's Build settings —
-> otherwise they ship empty (e.g. the Turnstile widget breaks).
+> otherwise they ship empty.
 
-**c) Non-secret runtime vars** — `BETTER_AUTH_URL` (your site's URL) is not sensitive, so it
-lives in `wrangler.toml` under `[vars]` rather than as a secret. Keeping it in the repo makes
-it the source of truth, so Git auto-deploys stay in sync (a dashboard-only value would be
-overwritten on the next deploy):
+**c) Non-secret runtime vars** — `BETTER_AUTH_URL` (your site's URL), `TURNSTILE_SITE_KEY`
+(the public widget site key), and `WEB3FORMS_KEY` (the public contact form access key) are not
+sensitive, so they live in `wrangler.toml` under `[vars]` rather than as secrets. Keeping
+them in the repo makes it the source of truth, so Git
+auto-deploys stay in sync (a dashboard-only value would be overwritten on the next deploy):
 
 ```toml
 [vars]
 BETTER_AUTH_URL = "https://ashebrookresidents.com"
+TURNSTILE_SITE_KEY = "0x..."
+WEB3FORMS_KEY = "..."
 ```
 
 It must exactly match the hostname visitors use (protocol, apex vs `www`, no trailing slash) —
@@ -232,7 +233,7 @@ click to join. No extra setup.
 
 1. Go to <https://web3forms.com>, enter your contact email address, and get a free
    **Access Key** (emailed to you). Submissions are delivered to that inbox.
-2. Put it in `PUBLIC_WEB3FORMS_KEY` (step 3b).
+2. Put it in `WEB3FORMS_KEY` in `wrangler.toml` (step 3c).
 
 ## 10. Deploy
 
