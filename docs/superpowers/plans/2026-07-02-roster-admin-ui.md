@@ -847,18 +847,16 @@ beforeEach(() => {
       },
     ],
   });
-  fetchProperties
-    .mockReset()
-    .mockResolvedValue([
-      {
-        id: 'p9',
-        address: '9 Elm St',
-        unit: null,
-        status: 'active',
-        notes: null,
-        owners: [],
-      },
-    ]);
+  fetchProperties.mockReset().mockResolvedValue([
+    {
+      id: 'p9',
+      address: '9 Elm St',
+      unit: null,
+      status: 'active',
+      notes: null,
+      owners: [],
+    },
+  ]);
   memberAction.mockClear();
 });
 
