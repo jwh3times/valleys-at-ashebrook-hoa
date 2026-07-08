@@ -5,15 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **No official releases yet.** The site is continuously deployed from `main`; no versioned tags
-> have been published. Everything below is unreleased and may change before the first tagged
-> release. When that release is cut, the items under **Unreleased** will move into a dated,
-> versioned section.
-
 ## [Unreleased]
+
+No changes yet.
+
+## [0.2.0] - 2026-07-08
+
+Initial public release for the resident-run Valleys at Ashebrook site. This release establishes the
+Cloudflare Workers/D1/R2 foundation, homeowner verification, board admin workflows, document
+library, security hardening, public documentation cleanup, and the remaining roadmap.
 
 ### Added
 
+- **Roadmap, architecture, and ADR docs** — remaining roadmap work now lives in `ROADMAP.md`,
+  public architecture is summarized in `docs/architecture.md`, and architecture decision records
+  live under `docs/adr/` for durable choices that future roadmap work should preserve.
+- **Scheduled verification cleanup** — the Worker now exposes a daily scheduled handler that purges
+  old consumed/expired property-verification rows and resolved manual-approval rows through the
+  shared cleanup routine.
 - **Document deduplication** — documents now store a nullable SHA-256 `content_hash`; board uploads
   block exact duplicates, warn on metadata-only near duplicates with an explicit override, and a new
   admin **Duplicates** panel plus `npm run docs:dedupe` dry-run/commit script help clean up the
@@ -51,14 +60,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   the board-only admin panel.
 - **First-board bootstrap endpoint** — a permanent `POST /api/bootstrap/board` creates the very
   first `board` account (which can't be made through the self-service flow), replacing the old
-  hand-written temporary-route procedure. It requires an `x-bootstrap-secret` header matched in
-  constant time plus `BOARD_EMAIL`/`BOARD_PASSWORD`/`BOARD_NAME` config.
+  hand-written temporary-route procedure. It requires a bootstrap secret matched in constant time
+  plus first-board account config.
 - **SEO basics** — a branded custom 404 page, a `robots.txt` (allowing public content, disallowing
   `/admin` and `/api`), and a `/sitemap.xml` of the public content pages. The sitemap is served by
   a small SSR route rather than `@astrojs/sitemap`, which emits nothing under full-SSR output.
 
 ### Changed
 
+- **Public setup vs. private operations docs** — public `SETUP.md` now stays generic and
+  resident-run-site focused, while deployment-specific runbooks, roster erasure commands,
+  bootstrap details, and backup notes belong under gitignored private operations docs.
+- **Release-line tag workflow** — the version workflow now allows the first tag on a release line
+  to use the package patch value, so this initial release can be tagged `v0.2.0`; later merges on
+  the same line continue as `v0.2.1`, `v0.2.2`, and so on.
+- **CI and deployment posture** — the build workflow runs the Worker/D1 integration suite, Vitest
+  coverage thresholds are set from the current baseline, CodeQL stays in GitHub default setup, and
+  production deploys intentionally remain with Cloudflare Workers Builds rather than a duplicate
+  GitHub deploy workflow.
 - **Shared admin-manager scaffolding** — the board admin managers (announcements, documents, dues,
   site settings, roster, board members) now share a `useAdminResource` hook for the load / busy /
   status-message boilerplate each was repeating by hand, instead of duplicating the same
@@ -86,6 +105,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Removed
 
+- **Stale public execution docs** — old implementation handoff files and the
+  `docs/superpowers/` scratch/spec tree were removed from the public documentation surface after
+  preserving durable decisions in ADRs.
 - **Stale Firebase `.gitignore` entries** — the project no longer uses Firebase/Firestore, so the
   `.firebase/` and `*firebase*-debug.log` ignore block was dropped. (The `SESSION` KV binding and
   the `requirePropertyAccess` guard were investigated as possible cruft too but both are
@@ -107,6 +129,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
 
 ### Security
 
+- **Roster PII operating stance** — setup/security docs now state where roster data comes from, that
+  it is used for owner verification, how removal requests are handled, and how D1 restore/export
+  retention works.
 - **Verify-request rate limiting** — `POST /api/verify/request` is throttled in KV with a per-user
   cooldown plus daily caps per user and per property; the limit surfaces as a `429` in the verify
   form, curbing abuse of the SMS/email fan-out.
@@ -143,4 +168,5 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/commits/main
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/releases/tag/v0.2.0
