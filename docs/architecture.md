@@ -1,0 +1,71 @@
+# Architecture
+
+The Valleys at Ashebrook Residents site is an independent, resident-run Astro SSR app on
+Cloudflare Workers. It defaults to unofficial resident mode and can switch to official HOA
+presentation only through the board-admin official-mode setting.
+
+## Runtime Shape
+
+- **Astro SSR on Cloudflare Workers** renders pages and hosts API routes.
+- **React islands** power interactive forms and the board admin panel.
+- **D1** stores content metadata, settings, accounts, roles, roster records, and verification state.
+- **R2** stores document file bytes.
+- **KV** backs adapter/session needs and lightweight verification rate limits.
+- **Better Auth** provides email/password accounts and role-aware sessions.
+
+The custom Worker entrypoint handles normal `fetch` requests and the scheduled cleanup trigger.
+
+## Roles and Visibility
+
+Roles are `visitor`, `homeowner`, and `board`. Content visibility tiers are `public`,
+`homeowner`, and `board`.
+
+Authorization is enforced server-side. Public pages and APIs receive only content allowed for the
+resolved role, and document downloads check the document tier before streaming from R2.
+
+## Homeowner Verification
+
+Homeowners create accounts through Better Auth, then verify a property by requesting a one-time
+code sent to the phone or email already on the owner roster. Successful verification links the user
+to the property and grants homeowner access.
+
+The roster contains personal data and is used only for verification. Roster source files, import
+artifacts, and deployment-specific handling procedures belong under `private/`.
+
+## Content and Documents
+
+Announcements, dues, site settings, and document metadata live in D1. Document bytes live in R2
+and are served only through the gated `/api/files/[id]` route.
+
+Document uploads use a server-side extension allowlist, canonical content types, SHA-256 content
+hashes, and duplicate detection. Exact duplicate uploads are blocked; near duplicates require board
+confirmation.
+
+## Admin Surface
+
+Board members manage content, documents, duplicates, dues, site settings, roster records, homeowner
+access, and board membership through `/admin`.
+
+The first board account is created through a fail-closed bootstrap endpoint. Later board handoff is
+managed through the Board members admin section. Board sessions are not granted Better Auth
+impersonation, ban, or generic set-role capabilities.
+
+## Operations
+
+Deploys from `main` are handled by Cloudflare Workers Builds. GitHub Actions verifies formatting,
+types, unit/component tests, Worker/D1 integration tests, and production builds.
+
+The Worker has a daily scheduled cleanup that removes old consumed/expired verification rows and
+resolved manual-approval rows. HSTS is a pending Cloudflare zone-level operator action, not an app
+header controlled by this repo.
+
+## Tests
+
+- `npm test` runs Vitest unit and component tests.
+- `npm run test:server` runs Worker/D1 integration tests through the Cloudflare Vitest pool.
+- `npm run check` runs Astro and TypeScript checks.
+- `npm run build` verifies the production SSR build.
+
+## Related Decisions
+
+See [ADR index](./adr/README.md) for durable architecture and operating decisions.

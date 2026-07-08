@@ -40,7 +40,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
 nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy that allowlists only the third-party resources the site uses (Google
   Fonts, the Google Calendar embed, Turnstile, Web3Forms, and the Cloudflare Web Analytics beacon).
-  HSTS is enabled at the Cloudflare zone level (see `SETUP.md`).
+  HSTS is not enabled by the Worker or repository yet; it remains a Cloudflare zone-level operator
+  action.
 - **Document files are constrained on upload and download.** Uploads are limited to an extension
   allowlist with a server-derived canonical content type and a size cap (HTML and SVG are excluded
   as stored-XSS vectors; disallowed types are rejected with `415`). Downloads are sent with
@@ -50,8 +51,9 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   variables are non-secret. `.env` files are git-ignored.
 - **The roster is personal data, used only for verification.** Owner names, emails, and phone
   numbers live only in the D1 database — never in committed files — and drive nothing but the
-  one-time verification code sent to the contact already on file. Where the data comes from, how a
-  neighbor requests removal, and backup/retention are documented in `SETUP.md` (§5).
+  one-time verification code sent to the contact already on file. Public docs describe the purpose
+  and high-level handling; deployment-specific removal, erasure, backup, and retention runbooks
+  belong under `private/`.
 
 ## Automated safeguards
 
