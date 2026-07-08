@@ -1,14 +1,6 @@
 import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
 
-declare global {
-  interface Window {
-    // Set by the Turnstile widget callback on the page; single-use per solve.
-    turnstileToken?: string;
-    turnstile?: { reset: () => void };
-  }
-}
-
 export function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -247,6 +239,12 @@ export function VerifyPropertyForm() {
   const [msg, setMsg] = useState('');
   async function request(e: React.FormEvent) {
     e.preventDefault();
+    const turnstileToken = window.turnstileToken;
+    if (!turnstileToken) {
+      setMsg('Complete the captcha before requesting a code.');
+      return;
+    }
+
     try {
       const res = await fetch('/api/verify/request', {
         method: 'POST',
@@ -254,10 +252,10 @@ export function VerifyPropertyForm() {
         body: JSON.stringify({
           address,
           channel,
-          turnstileToken: window.turnstileToken,
+          turnstileToken,
         }),
       });
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         queued?: boolean;
         rateLimited?: boolean;
@@ -274,14 +272,19 @@ export function VerifyPropertyForm() {
       else if (data.ok) {
         setMsg('Code sent — check your phone/email.');
         setStage('confirm');
-      } else
+      } else if (res.status === 400)
+        setMsg(
+          data.message ??
+            'Could not validate the captcha. Complete it again and retry.',
+        );
+      else
         setMsg(
           'Could not start verification. Check the address and try again.',
         );
     } finally {
       // The Turnstile token is single-use; reset the widget so a retry (after a
       // rate-limit/error) gets a fresh token instead of failing "Bad captcha".
-      window.turnstile?.reset();
+      if (window.turnstile) window.turnstile.reset();
       window.turnstileToken = undefined;
     }
   }
