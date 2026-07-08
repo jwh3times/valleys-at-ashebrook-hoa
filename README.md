@@ -118,7 +118,7 @@ SETUP.md §6.
 ## Contributing & support
 
 Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow and local
-checks, and [CLAUDE.md](./CLAUDE.md) for the architecture and conventions. Future work is tracked
+checks, and [AGENTS.md](./AGENTS.md) for the architecture and conventions. Future work is tracked
 in [ROADMAP.md](./ROADMAP.md), and durable architecture decisions live in
 [docs/adr](./docs/adr/README.md).
 By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md). For help and bug
