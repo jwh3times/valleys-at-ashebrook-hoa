@@ -5,6 +5,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+import { users } from './auth-schema';
 
 // Re-export the Better-Auth-generated tables so one schema covers everything.
 export * from './auth-schema';
@@ -34,7 +35,9 @@ export const owners = sqliteTable(
   'owners',
   {
     id: text('id').primaryKey(),
-    propertyId: text('property_id').notNull(),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
     fullName: text('full_name').notNull(),
     phone: text('phone'),
     email: text('email'),
@@ -53,8 +56,12 @@ export const userPropertyLinks = sqliteTable(
   'user_property_links',
   {
     id: text('id').primaryKey(),
-    userId: text('user_id').notNull(),
-    propertyId: text('property_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'cascade' }),
     verifiedAt: integer('verified_at', { mode: 'timestamp' }).notNull(),
     method: text('method', {
       enum: ['otp_email', 'otp_sms', 'board_manual'],
@@ -75,8 +82,12 @@ export const propertyVerifications = sqliteTable(
   'property_verifications',
   {
     id: text('id').primaryKey(),
-    userId: text('user_id').notNull(),
-    propertyId: text('property_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'cascade' }),
     channel: text('channel', { enum: ['email', 'sms'] }).notNull(),
     codeHash: text('code_hash').notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
@@ -92,7 +103,9 @@ export const manualApprovalQueue = sqliteTable(
   'manual_approval_queue',
   {
     id: text('id').primaryKey(),
-    userId: text('user_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     claimedAddress: text('claimed_address').notNull(),
     reason: text('reason').notNull(),
     status: text('status', { enum: ['pending', 'approved', 'denied'] })

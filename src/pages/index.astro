@@ -11,10 +11,10 @@ import { fetchAnnouncementsFor } from '../server/content/reads';
 const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 const official = site.officialMode;
 
-// Read announcements server-side; the list slices to 3 for the home page and
-// links to /announcements when there are more.
+// Read one extra row so the home page can render 3 while preserving "View all"
+// when more announcements exist.
 const role = Astro.locals.authContext?.role ?? 'visitor';
-const announcements = await fetchAnnouncementsFor(env, role);
+const announcements = await fetchAnnouncementsFor(env, role, 4);
 const description = official
   ? 'Official website for the Valleys at Ashebrook Homeowners Association — announcements, community calendar, governing documents, dues, and board contact.'
   : `An independent, resident-run hub for ${NEIGHBORHOOD} — announcements, the community calendar, and documents in one place.`;

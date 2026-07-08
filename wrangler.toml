@@ -1,4 +1,5 @@
 name = "valleys-at-ashebrook-hoa"
+main = "src/worker.ts"
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
 
@@ -6,6 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 # errors) from the Cloudflare dashboard. No code change; sampling defaults to 100%.
 [observability]
 enabled = true
+
+[triggers]
+crons = ["0 7 * * *"]
 
 # Non-secret runtime vars. Kept here (not as dashboard-only values) so the repo is
 # the source of truth and Git auto-deploys stay in sync. Secrets stay out of this file.

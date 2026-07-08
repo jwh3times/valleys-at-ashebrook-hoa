@@ -105,6 +105,13 @@ Better Auth uses it for cookies and for the links in verification / reset emails
 
 ## 4. Apply the database migrations
 
+Before applying a migration that adds referential integrity constraints to an existing
+remote database, run the orphan audit and confirm every `orphan_count` is `0`:
+
+```bash
+npx wrangler d1 execute ashebrook-hoa --remote --file scripts/audit-orphans.sql
+```
+
 ```bash
 npm run db:migrate:local     # local SQLite emulation for development
 npm run db:migrate:remote    # the live Cloudflare D1 database
@@ -237,6 +244,10 @@ click to join. No extra setup.
 
 ## 10. Deploy
 
+Production deploys from `main` are intentionally handled by **Cloudflare Workers Builds**.
+GitHub Actions is the verification gate (format, types, tests, build), while Cloudflare
+performs the deploy from this repo using the checked-in `wrangler.toml`.
+
 ```bash
 npm run build                                      # builds to dist/ with the Cloudflare adapter
 npx wrangler deploy -c dist/server/wrangler.json   # deploy the Worker
@@ -247,10 +258,16 @@ The live Worker URL for this project is
 attached later — see Optional below). Set that URL as `BETTER_AUTH_URL` in `wrangler.toml`
 (step 3c) and as `site` in `astro.config.mjs`, then redeploy.
 
-> **Note:** the root `wrangler.toml` intentionally has no `main` field — the
-> `@astrojs/cloudflare` adapter emits `dist/server/wrangler.json` with `main`, `assets`,
-> and the bindings at build time, which is what you deploy with `-c`. Adding `main` to
-> the root `wrangler.toml` breaks the build.
+The root `wrangler.toml` uses `main = "src/worker.ts"` so the custom Worker entrypoint
+can handle both Astro SSR `fetch` requests and the scheduled cleanup trigger. The
+`@astrojs/cloudflare` adapter still emits `dist/server/wrangler.json` with the bundled
+entrypoint, assets, and bindings for manual `wrangler deploy -c ...` runs.
+
+## Scheduled maintenance
+
+Wrangler config includes a daily cron trigger (`0 7 * * *`, UTC). It runs
+`cleanupVerificationState`, which keeps 30 days of consumed/expired property verification
+rows and resolved manual approval queue rows. Pending manual approvals are retained.
 
 ---
 

@@ -17,6 +17,12 @@ const baseConfig = getViteConfig({
       provider: 'v8',
       include: ['src/**/*.{ts,tsx,astro}'],
       exclude: ['src/**/*.{test,spec}.{ts,tsx}', 'src/test/**'],
+      thresholds: {
+        statements: 55,
+        branches: 50,
+        functions: 40,
+        lines: 55,
+      },
     },
   },
 });

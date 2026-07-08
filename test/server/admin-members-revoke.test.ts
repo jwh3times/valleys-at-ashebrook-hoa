@@ -7,7 +7,11 @@ vi.mock('../../src/server/authz/context', () => ({
 
 import { POST } from '../../src/pages/api/admin/members';
 import { getDb } from '../../src/server/db/client';
-import { users, userPropertyLinks } from '../../src/server/db/schema';
+import {
+  properties,
+  users,
+  userPropertyLinks,
+} from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
 beforeAll(async () => {
@@ -42,6 +46,13 @@ function revoke(userId: string) {
 describe('members revoke', () => {
   it('revokes a homeowner to visitor and deletes their links', async () => {
     await mkUser('mr-home', 'homeowner');
+    await getDb(env).insert(properties).values({
+      id: 'p',
+      address: '1 Member St',
+      addressNormalized: '1 member st',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     await getDb(env).insert(userPropertyLinks).values({
       id: 'link-1',
       userId: 'mr-home',

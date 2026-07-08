@@ -16,6 +16,7 @@ import {
   properties,
   propertyVerifications,
   userPropertyLinks,
+  users,
 } from '../../src/server/db/schema';
 import { hashCode } from '../../src/server/verification/codes';
 
@@ -25,9 +26,10 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   const db = getDb(env);
-  await db.delete(properties);
   await db.delete(propertyVerifications);
   await db.delete(userPropertyLinks);
+  await db.delete(properties);
+  await db.delete(users);
 });
 
 function postProperty(body: unknown) {
@@ -90,6 +92,15 @@ describe('verification confirm — re-verifying the same home', () => {
   it('is idempotent: still ok, exactly one link, no duplicate-key error', async () => {
     const db = getDb(env);
     const now = new Date();
+    await db.insert(users).values({
+      id: 'rv-user',
+      name: 'Repeat Verify',
+      email: 'rv-user@example.com',
+      emailVerified: true,
+      role: 'homeowner',
+      createdAt: now,
+      updatedAt: now,
+    });
     await db.insert(properties).values({
       id: 'rv-prop',
       address: '7 Repeat Ave',
