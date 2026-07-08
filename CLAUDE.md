@@ -68,6 +68,7 @@ enables Astro sessions against a `SESSION` binding by default even though app au
 Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`).
 
 **HTTP endpoints (all under `src/pages/api/`).**
+
 - Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`
 - Gated document download (R2, tier-checked): `GET /api/files/[id]`
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
@@ -86,6 +87,7 @@ Auth's D1 sessions rather than `Astro.session`), `DOCS` (R2 `ashebrook-hoa-docs`
 - Better Auth handler: `/api/auth/[...all]`
 
 **Client helpers.**
+
 - `src/lib/content.ts` — public reads (fetch `/api/content/*` endpoints).
 - `src/lib/admin.ts` — board writes (fetch `/api/admin/*` endpoints), including typed
   document duplicate errors and duplicate-resolution helpers.
@@ -134,6 +136,7 @@ sessions (see `src/server/auth/permissions.ts`).
 → visitor; unknown → most restrictive).
 
 **Testing.**
+
 - `npm test` — jsdom component/unit specs (`vitest.config.ts`); files under
   `test/unit/**` and component `*.test.tsx` files.
 - `npm run test:server` — Worker/D1 integration tests via

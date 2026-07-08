@@ -1,6 +1,9 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { VerifyPropertyForm } from '../components/react/AuthForms';
+import { env } from 'cloudflare:workers';
+
+const turnstileSiteKey = env.PUBLIC_TURNSTILE_SITE_KEY;
 ---
 
 <BaseLayout
@@ -15,22 +18,34 @@ import { VerifyPropertyForm } from '../components/react/AuthForms';
       you will have full homeowner access to the site.
     </p>
 
-    <script
-      src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-      async
-      defer></script>
-    <div
-      class="cf-turnstile"
-      data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY}
-      data-callback="onTurnstile"
-    >
-    </div>
     <script is:inline>
-      function onTurnstile(token) {
+      window.onTurnstile = function (token) {
         window.turnstileToken = token;
-      }
+      };
     </script>
 
-    <VerifyPropertyForm client:only="react" />
+    {
+      turnstileSiteKey ? (
+        <>
+          <script
+            src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+            is:inline
+            async
+            defer
+          />
+          <div
+            class="cf-turnstile"
+            data-sitekey={turnstileSiteKey}
+            data-callback="onTurnstile"
+          />
+          <VerifyPropertyForm client:only="react" />
+        </>
+      ) : (
+        <div class="form-message form-message--error">
+          Property verification is temporarily unavailable. Please try again
+          later.
+        </div>
+      )
+    }
   </div>
 </BaseLayout>
