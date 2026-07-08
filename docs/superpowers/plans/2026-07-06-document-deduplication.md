@@ -25,11 +25,13 @@
 ### Task 1: Add `content_hash` column + migration
 
 **Files:**
+
 - Modify: `src/server/db/schema.ts:107-125` (the `documents` table)
 - Create: `src/server/db/migrations/0004_<generated-name>.sql` (via `npm run db:generate`)
 - Test: `test/server/documents-content-hash.test.ts`
 
 **Interfaces:**
+
 - Produces: `documents.contentHash` (Drizzle column, `content_hash` in SQL) — nullable `string | null`; SQL index `documents_content_hash_idx`.
 
 - [ ] **Step 1: Write the failing test**
@@ -50,21 +52,19 @@ beforeAll(async () => {
 describe('documents.content_hash column', () => {
   it('stores and reads back a content hash', async () => {
     const now = new Date();
-    await getDb(env)
-      .insert(documents)
-      .values({
-        id: 'doc-hash-1',
-        title: 'Hashed',
-        category: 'Other',
-        visibility: 'board',
-        r2Key: 'documents/doc-hash-1/x.pdf',
-        filename: 'x.pdf',
-        sizeBytes: 3,
-        contentType: 'application/pdf',
-        contentHash: 'abc123',
-        uploadedAt: now,
-        updatedAt: now,
-      });
+    await getDb(env).insert(documents).values({
+      id: 'doc-hash-1',
+      title: 'Hashed',
+      category: 'Other',
+      visibility: 'board',
+      r2Key: 'documents/doc-hash-1/x.pdf',
+      filename: 'x.pdf',
+      sizeBytes: 3,
+      contentType: 'application/pdf',
+      contentHash: 'abc123',
+      uploadedAt: now,
+      updatedAt: now,
+    });
     const [row] = await getDb(env)
       .select()
       .from(documents)
@@ -112,10 +112,12 @@ If `db:generate` emits any unrelated statements, stop and reconcile — this tas
 - [ ] **Step 5: Apply locally and run the test to verify it passes**
 
 Run:
+
 ```bash
 npm run db:migrate:local
 npx vitest run --config vitest.workers.config.ts test/server/documents-content-hash.test.ts
 ```
+
 Expected: migration applies; test PASSES.
 
 - [ ] **Step 6: Confirm the wider server suite still applies migrations cleanly**
@@ -136,10 +138,12 @@ git commit -m "feat(dedupe): add nullable content_hash column + index to documen
 ### Task 2: Dedup engine (`src/server/content/dedupe.ts`)
 
 **Files:**
+
 - Create: `src/server/content/dedupe.ts`
 - Test: `test/unit/dedupe.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing (pure module; uses global `crypto.subtle`).
 - Produces:
   - `interface DocLike { id: string; title: string; filename: string; sizeBytes: number; contentType: string; visibility: 'public' | 'homeowner' | 'board'; category?: string; uploadedAt?: number | Date; contentHash?: string | null }`
@@ -279,9 +283,24 @@ describe('groupExact', () => {
 describe('groupNear', () => {
   it('groups near-duplicates but excludes exact-hash pairs', () => {
     const docs = [
-      doc({ id: 'a', title: 'ARC Form', filename: 'ARC Form.pdf', contentHash: 'h1' }),
-      doc({ id: 'b', title: 'ARC Form', filename: 'ARC Form.pdf', contentHash: 'h1' }),
-      doc({ id: 'c', title: 'ARC Form', filename: 'ARC Form(1).pdf', contentHash: 'h2' }),
+      doc({
+        id: 'a',
+        title: 'ARC Form',
+        filename: 'ARC Form.pdf',
+        contentHash: 'h1',
+      }),
+      doc({
+        id: 'b',
+        title: 'ARC Form',
+        filename: 'ARC Form.pdf',
+        contentHash: 'h1',
+      }),
+      doc({
+        id: 'c',
+        title: 'ARC Form',
+        filename: 'ARC Form(1).pdf',
+        contentHash: 'h2',
+      }),
     ];
     const groups = groupNear(docs);
     // a & b are an exact pair (skipped here); c is near a/b by name -> one near group forms
@@ -299,7 +318,10 @@ describe('autoResolvableExact', () => {
       ],
       suggestedKeepId: 'keep',
     };
-    expect(autoResolvableExact(g)).toEqual({ keepId: 'keep', deleteIds: ['drop'] });
+    expect(autoResolvableExact(g)).toEqual({
+      keepId: 'keep',
+      deleteIds: ['drop'],
+    });
   });
   it('refuses to auto-resolve an exact group spanning tiers', () => {
     const g = {
@@ -348,7 +370,9 @@ export interface DupeGroup {
 export const NEAR_THRESHOLD = 0.6;
 
 /** Lowercase-hex SHA-256 of the given bytes. Works in Workers and Node. */
-export async function sha256Hex(bytes: ArrayBuffer | Uint8Array): Promise<string> {
+export async function sha256Hex(
+  bytes: ArrayBuffer | Uint8Array,
+): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)]
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -409,7 +433,8 @@ export function nearScore(a: DocLike, b: DocLike): number {
 /** Cleanest filename wins: no copy/timestamp marker, then shortest, then oldest. */
 export function suggestedKeepId(members: DocLike[]): string {
   const rank = (d: DocLike) => ({
-    marked: /\(\d+\)/.test(d.filename) || /\d{8}-\d{4}/.test(d.filename) ? 1 : 0,
+    marked:
+      /\(\d+\)/.test(d.filename) || /\d{8}-\d{4}/.test(d.filename) ? 1 : 0,
     len: d.filename.length,
     when:
       typeof d.uploadedAt === 'number'
@@ -517,10 +542,12 @@ git commit -m "feat(dedupe): add pure duplicate-detection engine"
 ### Task 3: Upload guard — block exact, warn near
 
 **Files:**
+
 - Modify: `src/pages/api/admin/documents.ts` (the `POST` handler, lines 30-72)
 - Test: `test/server/admin-documents-dedupe.test.ts`
 
 **Interfaces:**
+
 - Consumes: `sha256Hex`, `nearScore`, `NEAR_THRESHOLD`, `DocLike` from `src/server/content/dedupe`; `documents.contentHash` (Task 1).
 - Produces (HTTP contract for the client in Task 4):
   - Exact match → `409` JSON `{ error: 'exact-duplicate', existing: { id, title, category, visibility } }`, nothing written.
@@ -583,7 +610,10 @@ describe('upload guard', () => {
     await upload('same-bytes-here', 'first.pdf', 'First');
     const res = await upload('same-bytes-here', 'second.pdf', 'Second');
     expect(res.status).toBe(409);
-    const body = (await res.json()) as { error: string; existing: { title: string } };
+    const body = (await res.json()) as {
+      error: string;
+      existing: { title: string };
+    };
     expect(body.error).toBe('exact-duplicate');
     expect(body.existing.title).toBe('First');
     // Nothing inserted for the blocked upload.
@@ -595,14 +625,21 @@ describe('upload guard', () => {
   });
 
   it('warns on a near-duplicate, then accepts with confirmDuplicate=true', async () => {
-    await upload('body-one', 'Meeting Minutes 2024.pdf', 'Meeting Minutes 2024');
+    await upload(
+      'body-one',
+      'Meeting Minutes 2024.pdf',
+      'Meeting Minutes 2024',
+    );
     const warn = await upload(
       'body-two-different',
       'Meeting Minutes 2024.pdf',
       'Meeting Minutes 2024',
     );
     expect(warn.status).toBe(409);
-    const wbody = (await warn.json()) as { warning: string; similar: unknown[] };
+    const wbody = (await warn.json()) as {
+      warning: string;
+      similar: unknown[];
+    };
     expect(wbody.warning).toBe('near-duplicate');
     expect(wbody.similar.length).toBeGreaterThan(0);
 
@@ -750,11 +787,13 @@ git commit -m "feat(dedupe): block exact + warn near on document upload"
 ### Task 4: Client helpers — `DuplicateError`, `confirmDuplicate`, duplicates API
 
 **Files:**
+
 - Modify: `src/lib/admin.ts` (documents section, lines 44-61; add duplicates helpers)
 - Modify: `src/lib/types.ts` (add duplicate view types near `DocumentItem`, after line 22)
 - Test: `test/unit/dedupe-client.test.ts`
 
 **Interfaces:**
+
 - Consumes: the HTTP contracts from Tasks 3 and 6.
 - Produces:
   - `class DuplicateError extends Error` with `kind: 'exact' | 'near'`, `existing?`, `similar?`.
@@ -794,7 +833,12 @@ describe('uploadDocument duplicate handling', () => {
   it('throws a DuplicateError(kind=exact) on a 409 exact-duplicate', async () => {
     mockFetch(409, {
       error: 'exact-duplicate',
-      existing: { id: '1', title: 'Existing', category: 'Other', visibility: 'board' },
+      existing: {
+        id: '1',
+        title: 'Existing',
+        category: 'Other',
+        visibility: 'board',
+      },
     });
     await expect(
       uploadDocument(file(), 'T', 'Other', 'board'),
@@ -802,7 +846,10 @@ describe('uploadDocument duplicate handling', () => {
   });
 
   it('throws a DuplicateError(kind=near) on a 409 near-duplicate', async () => {
-    mockFetch(409, { warning: 'near-duplicate', similar: [{ id: '2', title: 'Close' }] });
+    mockFetch(409, {
+      warning: 'near-duplicate',
+      similar: [{ id: '2', title: 'Close' }],
+    });
     await expect(
       uploadDocument(file(), 'T', 'Other', 'board'),
     ).rejects.toMatchObject({ kind: 'near' });
@@ -894,7 +941,12 @@ Replace `uploadDocument` (lines 45-61) and add the duplicates helpers + error cl
 ```ts
 export class DuplicateError extends Error {
   kind: 'exact' | 'near';
-  existing?: { id: string; title: string; category: string; visibility: string };
+  existing?: {
+    id: string;
+    title: string;
+    category: string;
+    visibility: string;
+  };
   similar?: {
     id: string;
     title: string;
@@ -986,11 +1038,13 @@ git commit -m "feat(dedupe): client DuplicateError, confirmDuplicate, duplicates
 ### Task 5: DocumentsManager — near-warn / exact-block upload UX
 
 **Files:**
+
 - Modify: `src/components/admin/DocumentsManager.tsx` (imports; upload state/handlers lines 44-103; upload form button line 266; add warning banner)
 - Modify: `src/components/admin/DocumentsManager.test.tsx` (mock must export `DuplicateError`)
 - Test: `src/components/admin/DocumentsManager.test.tsx` (add near/exact cases)
 
 **Interfaces:**
+
 - Consumes: `uploadDocument`, `DuplicateError` from `../../lib/admin`.
 
 - [ ] **Step 1: Update the mock and add failing tests**
@@ -1001,7 +1055,12 @@ In `src/components/admin/DocumentsManager.test.tsx`, replace the `vi.mock('../..
 const uploadDocument = vi.fn().mockResolvedValue(undefined);
 class DuplicateError extends Error {
   kind: 'exact' | 'near';
-  existing?: { id: string; title: string; category: string; visibility: string };
+  existing?: {
+    id: string;
+    title: string;
+    category: string;
+    visibility: string;
+  };
   similar?: { id: string; title: string; filename: string }[];
   constructor(kind: 'exact' | 'near', payload: Record<string, unknown>) {
     super(kind);
@@ -1095,116 +1154,115 @@ import {
 Add near-warning state alongside the other upload state (after line 57, `const [file, setFile] = …`):
 
 ```ts
-  const [uploading, setUploading] = useState(false);
-  const [dupWarning, setDupWarning] = useState<
-    { similar: { id: string; title: string; filename: string }[] } | null
-  >(null);
+const [uploading, setUploading] = useState(false);
+const [dupWarning, setDupWarning] = useState<{
+  similar: { id: string; title: string; filename: string }[];
+} | null>(null);
 ```
 
 Replace `handleUpload` (lines 82-103) with a shared submit routine:
 
 ```ts
-  async function submitUpload(confirmDuplicate: boolean) {
-    if (!file) {
-      setMsg('Please choose a file.');
-      return;
-    }
-    setMsg('');
-    setUploading(true);
-    try {
-      await uploadDocument(file, title, category, visibility, confirmDuplicate);
-      setDupWarning(null);
-      setTitle('');
-      setFile(null);
-      if (fileInput.current) fileInput.current.value = '';
-      await reload();
-      setMsg('Document uploaded.');
-    } catch (err: unknown) {
-      if (err instanceof DuplicateError && err.kind === 'exact') {
-        setDupWarning(null);
-        setMsg(
-          `Error: This exact file is already on the site as “${err.existing?.title ?? 'an existing document'}”. Nothing was uploaded.`,
-        );
-      } else if (err instanceof DuplicateError && err.kind === 'near') {
-        setDupWarning({ similar: err.similar ?? [] });
-      } else {
-        setDupWarning(null);
-        setMsg(
-          'Error: ' +
-            ((err as { message?: string } | null)?.message ?? 'could not upload.'),
-        );
-      }
-    } finally {
-      setUploading(false);
-    }
+async function submitUpload(confirmDuplicate: boolean) {
+  if (!file) {
+    setMsg('Please choose a file.');
+    return;
   }
-
-  async function handleUpload(e: React.FormEvent) {
-    e.preventDefault();
-    if (!file) {
-      setMsg('Please choose a file.');
-      return;
-    }
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      setMsg(
-        'Unsupported file type. Allowed: PDF, Word, Excel, CSV, text, Markdown.',
-      );
-      return;
-    }
+  setMsg('');
+  setUploading(true);
+  try {
+    await uploadDocument(file, title, category, visibility, confirmDuplicate);
     setDupWarning(null);
-    await submitUpload(false);
+    setTitle('');
+    setFile(null);
+    if (fileInput.current) fileInput.current.value = '';
+    await reload();
+    setMsg('Document uploaded.');
+  } catch (err: unknown) {
+    if (err instanceof DuplicateError && err.kind === 'exact') {
+      setDupWarning(null);
+      setMsg(
+        `Error: This exact file is already on the site as “${err.existing?.title ?? 'an existing document'}”. Nothing was uploaded.`,
+      );
+    } else if (err instanceof DuplicateError && err.kind === 'near') {
+      setDupWarning({ similar: err.similar ?? [] });
+    } else {
+      setDupWarning(null);
+      setMsg(
+        'Error: ' +
+          ((err as { message?: string } | null)?.message ??
+            'could not upload.'),
+      );
+    }
+  } finally {
+    setUploading(false);
   }
+}
+
+async function handleUpload(e: React.FormEvent) {
+  e.preventDefault();
+  if (!file) {
+    setMsg('Please choose a file.');
+    return;
+  }
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    setMsg(
+      'Unsupported file type. Allowed: PDF, Word, Excel, CSV, text, Markdown.',
+    );
+    return;
+  }
+  setDupWarning(null);
+  await submitUpload(false);
+}
 ```
 
 Change the upload button to use `uploading` (line 266) inside the upload `<form>`:
 
 ```tsx
-          <div className="btn-row">
-            <button className="btn btn--small" type="submit" disabled={uploading}>
-              {uploading ? 'Uploading…' : 'Upload document'}
-            </button>
-          </div>
+<div className="btn-row">
+  <button className="btn btn--small" type="submit" disabled={uploading}>
+    {uploading ? 'Uploading…' : 'Upload document'}
+  </button>
+</div>
 ```
 
 Add the warning banner immediately after that `<div className="btn-row">…</div>`, before the form closes (before line 270 `</form>`):
 
 ```tsx
-          {dupWarning && (
-            <div
-              className="form-message"
-              style={{ marginTop: '12px' }}
-              role="alert"
-            >
-              <p style={{ margin: '0 0 8px' }}>
-                A similar document is already on the site:
-              </p>
-              <ul style={{ margin: '0 0 10px 18px' }}>
-                {dupWarning.similar.map((s) => (
-                  <li key={s.id}>
-                    {s.title} <span className="muted">({s.filename})</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="btn-row">
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  disabled={uploading}
-                  onClick={() => submitUpload(true)}
-                >
-                  Upload anyway
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--outline btn--small"
-                  onClick={() => setDupWarning(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+{
+  dupWarning && (
+    <div className="form-message" style={{ marginTop: '12px' }} role="alert">
+      <p style={{ margin: '0 0 8px' }}>
+        A similar document is already on the site:
+      </p>
+      <ul style={{ margin: '0 0 10px 18px' }}>
+        {dupWarning.similar.map((s) => (
+          <li key={s.id}>
+            {s.title} <span className="muted">({s.filename})</span>
+          </li>
+        ))}
+      </ul>
+      <div className="btn-row">
+        <button
+          type="button"
+          className="btn btn--small"
+          disabled={uploading}
+          onClick={() => submitUpload(true)}
+        >
+          Upload anyway
+        </button>
+        <button
+          type="button"
+          className="btn btn--outline btn--small"
+          onClick={() => setDupWarning(null)}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1225,11 +1283,13 @@ git commit -m "feat(dedupe): near-warn/exact-block upload UX in DocumentsManager
 ### Task 6: Duplicates endpoint — `GET` (backfill + report) and `POST` (resolve)
 
 **Files:**
+
 - Create: `src/pages/api/admin/duplicates.ts`
 - Test: `test/server/admin-duplicates.test.ts` (unauthenticated gate)
 - Test: `test/server/admin-duplicates-board.test.ts` (board: backfill/report/resolve)
 
 **Interfaces:**
+
 - Consumes: `requireBoard`; `getDb`; `documents`; `sha256Hex`, `groupExact`, `groupNear`, `DocLike`, `DupeGroup` from the engine.
 - Produces:
   - `GET /api/admin/duplicates` → `{ exact: GroupView[], near: GroupView[], remaining: number }` where `GroupView = { members: {id,title,filename,category,visibility,sizeBytes,uploadedAt}[], suggestedKeepId, reason? }`.
@@ -1260,7 +1320,11 @@ describe('admin duplicates — gate', () => {
       request: new Request('http://localhost/api/admin/duplicates', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'resolve', keepId: 'x', deleteIds: ['y'] }),
+        body: JSON.stringify({
+          action: 'resolve',
+          keepId: 'x',
+          deleteIds: ['y'],
+        }),
       }),
     } as never);
     expect(res.status).toBe(401);
@@ -1366,7 +1430,10 @@ describe('admin duplicates — board', () => {
   });
 
   it('rejects a resolve missing keepId', async () => {
-    const res = await call(POST, 'POST', { action: 'resolve', deleteIds: ['x'] });
+    const res = await call(POST, 'POST', {
+      action: 'resolve',
+      deleteIds: ['x'],
+    });
     expect(res.status).toBe(400);
   });
 });
@@ -1531,11 +1598,13 @@ git commit -m "feat(dedupe): admin duplicates endpoint (lazy-backfill report + r
 ### Task 7: Duplicates admin panel + nav wiring
 
 **Files:**
+
 - Create: `src/components/admin/DuplicatesManager.tsx`
 - Create: `src/components/admin/DuplicatesManager.test.tsx`
 - Modify: `src/components/admin/AdminApp.tsx` (import + `SECTIONS`, lines 5-29)
 
 **Interfaces:**
+
 - Consumes: `fetchDuplicates`, `resolveDuplicates` from `../../lib/admin`; `useAdminResource`; `DuplicatesView` type.
 
 - [ ] **Step 1: Write the failing test**
@@ -1649,7 +1718,9 @@ function GroupCard({
   busy: boolean;
 }) {
   const [keepId, setKeepId] = useState(group.suggestedKeepId);
-  const deleteIds = group.members.filter((m) => m.id !== keepId).map((m) => m.id);
+  const deleteIds = group.members
+    .filter((m) => m.id !== keepId)
+    .map((m) => m.id);
   return (
     <div className="panel-card" style={{ marginBottom: '16px' }}>
       <div className="panel-editor__title">
@@ -1691,14 +1762,8 @@ function GroupCard({
 }
 
 export default function DuplicatesManager() {
-  const {
-    data,
-    loading,
-    reload,
-    busy,
-    msg,
-    run,
-  } = useAdminResource<DuplicatesView>(fetchDuplicates, EMPTY);
+  const { data, loading, reload, busy, msg, run } =
+    useAdminResource<DuplicatesView>(fetchDuplicates, EMPTY);
 
   async function handleResolve(keepId: string, deleteIds: string[]) {
     if (
@@ -1803,11 +1868,13 @@ git commit -m "feat(dedupe): admin Duplicates panel + nav section"
 ### Task 8: Bulk cleanup script — `npm run docs:dedupe`
 
 **Files:**
+
 - Create: `scripts/dedupe-documents.ts`
 - Modify: `package.json` (scripts, after `docs:import` on line 27)
 - Test: `test/unit/dedupe-documents.test.ts`
 
 **Interfaces:**
+
 - Consumes: `sha256Hex`, `groupExact`, `groupNear`, `autoResolvableExact`, `DocLike`, `DupeGroup` from the engine; `DocumentEntry` type from `scripts/import-documents.ts`.
 - Produces (pure, unit-tested exports):
   - `buildHashUpdateSql(rows: { id: string; contentHash: string }[]): string`
@@ -1841,7 +1908,9 @@ describe('buildHashUpdateSql', () => {
       { id: 'a', contentHash: 'h1' },
       { id: "o'brien", contentHash: 'h2' },
     ]);
-    expect(sql).toContain("UPDATE documents SET content_hash = 'h1' WHERE id = 'a';");
+    expect(sql).toContain(
+      "UPDATE documents SET content_hash = 'h1' WHERE id = 'a';",
+    );
     expect(sql).toContain("id = 'o''brien'");
   });
 });
@@ -2006,12 +2075,21 @@ async function main() {
     'wrangler.js',
   );
   const runWrangler = (args: string[]) =>
-    execFileSync(process.execPath, [wranglerBin, ...args], { stdio: 'inherit' });
+    execFileSync(process.execPath, [wranglerBin, ...args], {
+      stdio: 'inherit',
+    });
 
   const hashSqlPath = 'private/dedupe-hashes.sql';
   fs.writeFileSync(hashSqlPath, buildHashUpdateSql(hashRows));
   console.log('Writing content hashes to D1...');
-  runWrangler(['d1', 'execute', 'ashebrook-hoa', '--remote', '--file', hashSqlPath]);
+  runWrangler([
+    'd1',
+    'execute',
+    'ashebrook-hoa',
+    '--remote',
+    '--file',
+    hashSqlPath,
+  ]);
 
   const byId = new Map(entries.map((e) => [e.id, e]));
   for (const id of deletedIds) {
@@ -2030,9 +2108,19 @@ async function main() {
   if (deletedIds.size > 0) {
     const ids = [...deletedIds].map((id) => sqlStr(id)).join(', ');
     const delSqlPath = 'private/dedupe-delete.sql';
-    fs.writeFileSync(delSqlPath, `DELETE FROM documents WHERE id IN (${ids});\n`);
+    fs.writeFileSync(
+      delSqlPath,
+      `DELETE FROM documents WHERE id IN (${ids});\n`,
+    );
     console.log('Deleting duplicate rows from D1...');
-    runWrangler(['d1', 'execute', 'ashebrook-hoa', '--remote', '--file', delSqlPath]);
+    runWrangler([
+      'd1',
+      'execute',
+      'ashebrook-hoa',
+      '--remote',
+      '--file',
+      delSqlPath,
+    ]);
   }
 
   console.log(
@@ -2077,6 +2165,7 @@ git commit -m "feat(dedupe): docs:dedupe bulk cleanup script (dry-run + --commit
 ### Task 9: Full verification + docs sync
 
 **Files:**
+
 - Modify: `CLAUDE.md`, `SETUP.md`, `README.md`, `CHANGELOG.md` (via docs-updater)
 - Confirm: `.gitignore` covers the script's outputs
 
@@ -2095,6 +2184,7 @@ Run: `git status --porcelain` and confirm none of those three files appear as un
 - [ ] **Step 2: Run the full local CI gate**
 
 Run:
+
 ```bash
 npm run format:check
 npm run check
@@ -2102,11 +2192,13 @@ npm test
 npm run test:server
 npm run build
 ```
+
 Expected: all PASS. Fix any failures before proceeding.
 
 - [ ] **Step 3: Sync documentation**
 
 Invoke the `docs-updater` subagent to update, at minimum:
+
 - `CLAUDE.md` — the new `content_hash` column (data model), the `duplicates` endpoint under HTTP endpoints, the `docs:dedupe` command, and the near/exact upload-guard behavior.
 - `SETUP.md` — a short "Deduplicating documents" subsection: run `npm run docs:dedupe`, review `private/dedupe-report.json`, then `-- --commit`; and note the admin Duplicates panel for ongoing use.
 - `CHANGELOG.md` — a feature entry.
@@ -2131,6 +2223,7 @@ gh pr create --fill --base main
 ## Self-Review
 
 **Spec coverage:**
+
 - §4 data model (`content_hash` nullable, non-unique, indexed) → Task 1. ✓
 - §5 shared engine (all functions) → Task 2. ✓
 - §6 upload guard (block exact / warn near / persist hash) → Task 3 (server) + Tasks 4–5 (client/UI). ✓

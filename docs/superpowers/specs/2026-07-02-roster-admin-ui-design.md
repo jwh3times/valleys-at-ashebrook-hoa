@@ -35,8 +35,10 @@ requests from the browser rather than via SQL.
 ## Components
 
 ### `RosterManager` (`src/components/admin/RosterManager.tsx`)
+
 Home-centric. Reads `GET /api/admin/properties` (each home carries its `owners`
 nested). Layout:
+
 - A top form to **add / edit a home** (address, unit, notes; when editing, also
   status).
 - A `panel-list` of homes; each home is a `panel-card` showing address (+ unit),
@@ -46,6 +48,7 @@ nested). Layout:
   notes) that posts with that home's `propertyId`.
 
 Operations → endpoints:
+
 - Add home: `POST /api/admin/properties` `{address, unit?, notes?}`
 - Edit home: `PATCH /api/admin/properties` `{id, address?, unit?, status?, notes?}`
 - Add owner: `POST /api/admin/owners` `{propertyId, fullName, phone?, email?, notes?}`
@@ -56,7 +59,9 @@ Owner-form guidance copy: phone should be E.164-ish (`+1XXXXXXXXXX`); the field
 accepts what the board types (no client reformatting in v1).
 
 ### `MembersManager` (`src/components/admin/MembersManager.tsx`)
+
 Reads `GET /api/admin/members` → `{ recent, queue }`.
+
 - **Pending queue** (`queue`): each row shows the requester's email, the
   `claimedAddress`, the `reason`, and the date. **Approve** must link the person
   to a home, so it renders a **property picker** — a `<select>` of active homes,
@@ -84,6 +89,7 @@ server change.
 
 Add board-only helpers (reads live here too, since these endpoints are
 board-gated, unlike the public reads in `content.ts`):
+
 - `fetchProperties(): Promise<PropertyWithOwners[]>` — `GET /api/admin/properties`
 - `saveProperty(data, id?)` — POST (create) / PATCH (update)
 - `saveOwner(data, id?)` — POST (create, requires `propertyId`) / PATCH (update)
@@ -95,6 +101,7 @@ Each throws on non-ok, matching the existing helpers.
 ## Types — `src/lib/types.ts`
 
 `Property` and `Owner` already exist. Add:
+
 - `PropertyWithOwners = Property & { owners: Owner[] }`
 - `ManualApprovalItem { id; userId; email: string | null; claimedAddress; reason; status; createdAt }`
 - `MemberUser { id; name; email; createdAt }`

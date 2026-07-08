@@ -124,7 +124,7 @@ through `0003`, so `npm run db:generate` diffs cleanly again for future changes.
 the user record. Board membership is managed in the admin app's **Board members** panel: a board
 member can promote another account to `board` and demote a board member (the last remaining board
 member can't be demoted), making board handoff a supported workflow. A board member cannot escalate
-their own access beyond `board`, and the *first* board account is bootstrapped through a permanent,
+their own access beyond `board`, and the _first_ board account is bootstrapped through a permanent,
 fail-closed `POST /api/bootstrap/board` endpoint (self-disables once a board exists; guard logic in
 `src/server/auth/seed-board.ts`, also re-exported as `seedBoard` from `scripts/seed-board.ts` — see
 SETUP.md §6). These role changes are direct D1 writes, not the Better Auth

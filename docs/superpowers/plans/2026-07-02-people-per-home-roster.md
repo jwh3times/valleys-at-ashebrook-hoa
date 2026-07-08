@@ -16,7 +16,7 @@
 - Link/FK columns are plain `text` (logical FK, no enforced constraint) — match the existing schema style.
 - Access is board-only for admin endpoints via `requireBoard(request, env)`; fail-closed.
 - Design source of truth: `docs/superpowers/specs/2026-07-02-people-per-home-roster-design.md`.
-- **Out of scope (follow-up):** roster admin UI (a Properties→owners editor in `AdminApp.tsx`). This plan updates the admin *API* only. Also out of scope: ownership-transfer workflow, `Account #` capture, tenant modeling.
+- **Out of scope (follow-up):** roster admin UI (a Properties→owners editor in `AdminApp.tsx`). This plan updates the admin _API_ only. Also out of scope: ownership-transfer workflow, `Account #` capture, tenant modeling.
 
 ---
 
@@ -25,6 +25,7 @@
 Establishes the new data model and gets the whole tree back to green with existing (single-contact) send behavior. Fan-out and the second owner are added in Tasks 2–3.
 
 **Files:**
+
 - Modify: `src/lib/types.ts` (add `Property`, `Owner`)
 - Modify: `src/server/db/schema.ts` (add `properties`; reshape `owners`; repoint link tables)
 - Modify: `src/server/roster/lookup.ts` (property lookup helpers)
@@ -36,6 +37,7 @@ Establishes the new data model and gets the whole tree back to green with existi
 - Test: `test/server/verification.test.ts`, `test/server/admin-owners.test.ts` (update), `test/server/admin-properties.test.ts` (create), `test/unit/roster-import.test.ts` (update), `test/unit/roster-lookup.test.ts` (unchanged — still passes)
 
 **Interfaces:**
+
 - Produces:
   - `properties` table: `{ id, address, addressNormalized, unit, status, notes, createdAt, updatedAt }`
   - `owners` table: `{ id, propertyId, fullName, phone, email, status, notes, createdAt, updatedAt }`
@@ -662,7 +664,11 @@ describe('property verification', () => {
       createdAt: now,
     });
 
-    const wrong = await confirmPropertyVerification(env, 'user-confirm', '999999');
+    const wrong = await confirmPropertyVerification(
+      env,
+      'user-confirm',
+      '999999',
+    );
     expect(wrong).toEqual({ ok: false, reason: 'mismatch' });
     const [afterWrong] = await db
       .select()
@@ -670,7 +676,11 @@ describe('property verification', () => {
       .where(eq(propertyVerifications.id, 'pv-1'));
     expect(afterWrong.attempts).toBe(1);
 
-    const right = await confirmPropertyVerification(env, 'user-confirm', '123456');
+    const right = await confirmPropertyVerification(
+      env,
+      'user-confirm',
+      '123456',
+    );
     expect(right.ok).toBe(true);
     const links = await db
       .select()
@@ -763,10 +773,12 @@ Expected: all pass. (`test/unit/roster-lookup.test.ts` still passes — `normali
 - [ ] **Step 15: Format and commit**
 
 Run: `npm run format`
+
 ```bash
 git add src/lib/types.ts src/server/db/schema.ts src/server/db/migrations src/server/roster/lookup.ts src/server/verification/property.ts src/pages/api/admin/owners.ts src/pages/api/admin/properties.ts scripts/import-roster.ts scripts/import-documents.ts src/server/roster/normalize.ts test/
 git commit -m "feat: split roster into properties + owners (people); verify by home"
 ```
+
 (Includes the earlier import-script bug fixes — `import-documents.ts`, `normalize.ts` — which are still uncommitted.)
 
 ---
@@ -774,10 +786,12 @@ git commit -m "feat: split roster into properties + owners (people); verify by h
 ### Task 2: Fan verification codes out to every contact on the home
 
 **Files:**
+
 - Modify: `src/server/verification/property.ts` (send to all recipients)
 - Test: `test/server/verification.test.ts` (add fan-out cases)
 
 **Interfaces:**
+
 - Consumes: `requestPropertyVerification` from Task 1.
 - Produces: same signature; behavior now sends to every distinct channel contact.
 
@@ -884,37 +898,38 @@ Expected: PASS. (Single-send already returns `{ok:true}` and writes one row — 
 Replace the single-send block (the `if (channel === 'email') … else …` at the end of `requestPropertyVerification`) with a fan-out that succeeds if at least one send resolves:
 
 ```ts
-  const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
-  const subject = `Your verification code — ${SITE_NAME}`;
-  const results = await Promise.allSettled(
-    recipients.map((to) =>
-      channel === 'email'
-        ? sendEmail(env, to, subject, message)
-        : sendSms(env, to, message),
-    ),
-  );
-  if (!results.some((r) => r.status === 'fulfilled')) {
-    await db.insert(manualApprovalQueue).values({
-      id: crypto.randomUUID(),
-      userId,
-      claimedAddress: address,
-      reason: 'all sends failed',
-      status: 'pending',
-      createdAt: now,
-    });
-    return { ok: false, queued: true };
-  }
-  return { ok: true };
+const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
+const subject = `Your verification code — ${SITE_NAME}`;
+const results = await Promise.allSettled(
+  recipients.map((to) =>
+    channel === 'email'
+      ? sendEmail(env, to, subject, message)
+      : sendSms(env, to, message),
+  ),
+);
+if (!results.some((r) => r.status === 'fulfilled')) {
+  await db.insert(manualApprovalQueue).values({
+    id: crypto.randomUUID(),
+    userId,
+    claimedAddress: address,
+    reason: 'all sends failed',
+    status: 'pending',
+    createdAt: now,
+  });
+  return { ok: false, queued: true };
+}
+return { ok: true };
 ```
 
 - [ ] **Step 4: Run the server tests**
 
 Run: `npx vitest run --config vitest.workers.config.ts test/server/verification.test.ts`
-Expected: PASS. (In the test env sends reject → the row is written, and the fan-out returns `{ok:false, queued:true}` only when *all* fail. Adjust the "creates one verification row" assertion to `expect(res).toEqual({ ok: false, queued: true })` if the harness has no fetch mock — confirm actual behavior when running and pin the assertion to it.)
+Expected: PASS. (In the test env sends reject → the row is written, and the fan-out returns `{ok:false, queued:true}` only when _all_ fail. Adjust the "creates one verification row" assertion to `expect(res).toEqual({ ok: false, queued: true })` if the harness has no fetch mock — confirm actual behavior when running and pin the assertion to it.)
 
 - [ ] **Step 5: Full gate + commit**
 
 Run: `npm run check && npm run test:server && npm run build && npm run format`
+
 ```bash
 git add src/server/verification/property.ts test/server/verification.test.ts
 git commit -m "feat: fan verification codes out to every contact on the home"
@@ -925,10 +940,12 @@ git commit -m "feat: fan verification codes out to every contact on the home"
 ### Task 3: Import both homeowners per home
 
 **Files:**
+
 - Modify: `scripts/import-roster.ts` (emit Homeowner 2 when present)
 - Test: `test/unit/roster-import.test.ts` (two-owner + single-owner cases)
 
 **Interfaces:**
+
 - Consumes: `rowsToRoster` from Task 1.
 - Produces: `rowsToRoster` now emits up to two owners per property.
 
@@ -978,16 +995,16 @@ Expected: FAIL — first new test expects 2 owners, gets 1.
 After the Homeowner 1 `if (name1) {…}` block, before the loop's closing brace:
 
 ```ts
-    const name2 = String(r['Homeowner 2'] ?? '').trim();
-    if (name2) {
-      owners.push({
-        id: crypto.randomUUID(),
-        propertyId,
-        fullName: name2,
-        phone: firstPhoneE164(r['Homeowner 2 Phone']),
-        email: firstEmail(r['Homeowner 2 Email']),
-      });
-    }
+const name2 = String(r['Homeowner 2'] ?? '').trim();
+if (name2) {
+  owners.push({
+    id: crypto.randomUUID(),
+    propertyId,
+    fullName: name2,
+    phone: firstPhoneE164(r['Homeowner 2 Phone']),
+    email: firstEmail(r['Homeowner 2 Email']),
+  });
+}
 ```
 
 - [ ] **Step 4: Run to verify it passes**
@@ -1009,6 +1026,7 @@ git commit -m "feat: import both homeowners per home"
 No code; produces the artifact and documents the production steps (the remote applies are the operator's to run — they touch prod).
 
 **Files:**
+
 - Produces: `private/roster-import.sql` (gitignored)
 
 - [ ] **Step 1: Regenerate the SQL from the current spreadsheet**
@@ -1028,6 +1046,7 @@ npm run db:migrate:remote
 # 2. Load the roster (run ONCE — inserts are not idempotent):
 npx wrangler d1 execute ashebrook-hoa --remote --file private/roster-import.sql
 ```
+
 Then a homeowner can verify at `/verify-property`; the code is sent to every contact on their home for the chosen channel.
 
 ---
@@ -1035,6 +1054,7 @@ Then a homeowner can verify at `/verify-property`; the code is sent to every con
 ## Self-Review
 
 **Spec coverage:**
+
 - Data model (properties + owners/people, links → propertyId) → Task 1 Steps 2–4. ✔
 - Verification fan-out (distinct contacts, ≥1 success, manual fallback) → Task 1 Step 6 (property match) + Task 2. ✔
 - Import (per-person, first phone/email, skip blank Homeowner 2, shared phones) → Task 1 Step 9 + Task 3. ✔

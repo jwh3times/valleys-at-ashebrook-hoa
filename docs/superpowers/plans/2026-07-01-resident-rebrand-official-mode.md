@@ -26,11 +26,13 @@
 ### Task 1: Branding module + settings type/normalizer
 
 **Files:**
+
 - Modify: `src/lib/types.ts` (rename `hoaName`→`siteName`, add `officialMode`, add `normalizeSiteSettings`)
 - Create: `src/lib/site.ts` (brand constants + pure presentation helpers)
 - Test: `test/unit/site.test.ts`
 
 **Interfaces:**
+
 - Produces: `SiteSettings` (now `{ siteName, tagline, contactEmail, welcomeHeading, welcomeBody, officialMode }`); `DEFAULT_SITE_SETTINGS`; `normalizeSiteSettings(raw: unknown): SiteSettings`.
 - Produces (`src/lib/site.ts`): `SITE_NAME`, `NEIGHBORHOOD`, `OFFICIAL_ORG_NAME`, `DISCLAIMER_SHORT: string`, `DISCLAIMER_LONG: string[]`, `navLinks(officialMode: boolean): {href,label}[]`, `brandTag(officialMode: boolean): string`, `displayName(s: Pick<SiteSettings,'officialMode'|'siteName'>): string`, `siteTitle(pageTitle: string, s: Pick<SiteSettings,'officialMode'|'siteName'>): string`.
 
@@ -48,7 +50,10 @@ import {
   SITE_NAME,
   OFFICIAL_ORG_NAME,
 } from '../../src/lib/site';
-import { normalizeSiteSettings, DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
+import {
+  normalizeSiteSettings,
+  DEFAULT_SITE_SETTINGS,
+} from '../../src/lib/types';
 
 describe('site branding helpers', () => {
   it('hides the Dues nav link when official mode is off, shows it when on', () => {
@@ -64,7 +69,9 @@ describe('site branding helpers', () => {
   it('displayName uses the resident name when off and the org name when on', () => {
     const base = { ...DEFAULT_SITE_SETTINGS };
     expect(displayName({ ...base, officialMode: false })).toBe(SITE_NAME);
-    expect(displayName({ ...base, officialMode: true })).toBe(OFFICIAL_ORG_NAME);
+    expect(displayName({ ...base, officialMode: true })).toBe(
+      OFFICIAL_ORG_NAME,
+    );
   });
 
   it('siteTitle drops the suffix for Home and adds it otherwise', () => {
@@ -88,12 +95,18 @@ describe('normalizeSiteSettings', () => {
   });
 
   it('prefers an explicit siteName over a legacy hoaName', () => {
-    expect(normalizeSiteSettings({ siteName: 'New', hoaName: 'Old' }).siteName).toBe('New');
+    expect(
+      normalizeSiteSettings({ siteName: 'New', hoaName: 'Old' }).siteName,
+    ).toBe('New');
   });
 
   it('coerces officialMode to a strict boolean', () => {
-    expect(normalizeSiteSettings({ officialMode: 'yes' }).officialMode).toBe(false);
-    expect(normalizeSiteSettings({ officialMode: true }).officialMode).toBe(true);
+    expect(normalizeSiteSettings({ officialMode: 'yes' }).officialMode).toBe(
+      false,
+    );
+    expect(normalizeSiteSettings({ officialMode: true }).officialMode).toBe(
+      true,
+    );
   });
 });
 ```
@@ -133,8 +146,12 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
  * Applies the legacy `hoaName` -> `siteName` fallback and a strict boolean for officialMode.
  */
 export function normalizeSiteSettings(raw: unknown): SiteSettings {
-  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const str = (v: unknown, fallback: string) => (typeof v === 'string' ? v : fallback);
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const str = (v: unknown, fallback: string) =>
+    typeof v === 'string' ? v : fallback;
   const legacyName = typeof r.hoaName === 'string' ? r.hoaName : undefined;
   const name =
     typeof r.siteName === 'string' && r.siteName.trim()
@@ -242,12 +259,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2: Server settings read + API + client read
 
 **Files:**
+
 - Create: `src/server/content/settings.ts`
 - Modify: `src/pages/api/content/site.ts`
 - Modify: `src/lib/content.ts` (normalize on client read)
 - Test: `test/server/site-settings.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getDb` from `src/server/db/client`, `settings` from `src/server/db/schema`, `normalizeSiteSettings`/`DEFAULT_SITE_SETTINGS` from `src/lib/types`.
 - Produces: `getSiteSettings(env: Env): Promise<SiteSettings>`.
 
@@ -275,11 +294,17 @@ describe('getSiteSettings', () => {
   });
 
   it('normalizes a stored legacy hoaName into siteName', async () => {
-    const value = JSON.stringify({ hoaName: 'Legacy HOA', welcomeHeading: 'Hi' });
+    const value = JSON.stringify({
+      hoaName: 'Legacy HOA',
+      welcomeHeading: 'Hi',
+    });
     await getDb(env)
       .insert(settings)
       .values({ key: 'site', value, updatedAt: new Date() })
-      .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
+      });
     const s = await getSiteSettings(env);
     expect(s.siteName).toBe('Legacy HOA');
     expect(s.welcomeHeading).toBe('Hi');
@@ -379,11 +404,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3: Middleware populates `Astro.locals.site`
 
 **Files:**
+
 - Modify: `src/env.d.ts` (extend `App.Locals`)
 - Modify: `src/middleware.ts`
 - Test: `test/server/middleware-site.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getSiteSettings` (Task 2), `DEFAULT_SITE_SETTINGS`.
 - Produces: `context.locals.site: SiteSettings` on every request (real settings for page requests; defaults for `/api/*`).
 
@@ -503,11 +530,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4: Mode-aware site chrome (BaseLayout, Header, Footer)
 
 **Files:**
+
 - Modify: `src/layouts/BaseLayout.astro`
 - Modify: `src/components/Header.astro`
 - Modify: `src/components/Footer.astro`
 
 **Interfaces:**
+
 - Consumes: `Astro.locals.site` (Task 3); `siteTitle`, `navLinks`, `brandTag`, `displayName`, `DISCLAIMER_SHORT` from `src/lib/site` (Task 1).
 
 _No unit test — `.astro` components are outside the Vitest harness. The mode logic they call is unit-tested in Task 1; this task is verified by `npm run check` + `npm run build` + a manual toggle check._
@@ -556,13 +585,13 @@ const isCurrent = (href: string) =>
 In the markup, change the brand tag line (was `<span class="brand__tag">Homeowners Association</span>`) to:
 
 ```astro
-      <span class="brand__tag">{tag}</span>
+<span class="brand__tag">{tag}</span>
 ```
 
 And change the login link (was `<a class="nav-login" href="/admin">Board Login</a>`) to:
 
 ```astro
-    <a class="nav-login" href="/admin">Admin sign in</a>
+<a class="nav-login" href="/admin">Admin sign in</a>
 ```
 
 - [ ] **Step 3: Update `src/components/Footer.astro`**
@@ -632,9 +661,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 5: About / disclaimer page
 
 **Files:**
+
 - Create: `src/pages/about.astro`
 
 **Interfaces:**
+
 - Consumes: `DISCLAIMER_LONG`, `NEIGHBORHOOD` from `src/lib/site`.
 
 _No unit test — static page verified by `npm run build` + manual view._
@@ -681,12 +712,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 6: Public copy sweep (home, dues, contact, page meta, emails)
 
 **Files:**
+
 - Modify: `src/pages/index.astro`, `src/pages/dues.astro`, `src/pages/contact.astro`
 - Modify: `src/components/react/ContactForm.tsx`
 - Modify: `src/pages/announcements.astro`, `src/pages/documents.astro`, `src/pages/login.astro`, `src/pages/register.astro`, `src/pages/calendar.astro`
 - Modify: `src/server/auth/index.ts`, `src/server/verification/property.ts`
 
 **Interfaces:**
+
 - Consumes: `Astro.locals.site` (for `index.astro`, `dues.astro`, `contact.astro`); `SITE_NAME`, `OFFICIAL_ORG_NAME`, `NEIGHBORHOOD` from `src/lib/site`.
 
 _Mostly copy edits. Verified by `npm run check` + `npm run build`; `ContactForm` change is covered by running the existing jsdom suite. Any test asserting old copy is fixed in this task's Step._
@@ -715,18 +748,24 @@ const description = official
       {
         official ? (
           <p>
-            Announcements, the community calendar, governing documents, and dues —
-            all in one place for every Ashebrook homeowner.
+            Announcements, the community calendar, governing documents, and dues
+            — all in one place for every Ashebrook homeowner.
           </p>
         ) : (
           <p>
-            Announcements, the community calendar, and documents — gathered in one
-            place for neighbors in {NEIGHBORHOOD}.
+            Announcements, the community calendar, and documents — gathered in
+            one place for neighbors in {NEIGHBORHOOD}.
           </p>
         )
       }
       <div class="hero__cta">
-        {official && <a class="btn btn--light" href="/dues">Pay Dues</a>}
+        {
+          official && (
+            <a class="btn btn--light" href="/dues">
+              Pay Dues
+            </a>
+          )
+        }
         <a
           class={official ? 'btn btn--ghost-light' : 'btn btn--light'}
           href="/documents">View Documents</a
@@ -748,8 +787,8 @@ const description = official
       <h2>Upcoming</h2>
       <div class="cal-note">
         <div class="cal-note__title">Meetings &amp; events</div>
-        Community events are posted on our shared Google Calendar. Open any event for
-        details and a Google Meet link.
+        Community events are posted on our shared Google Calendar. Open any event
+        for details and a Google Meet link.
       </div>
       <a class="subscribe-box" href="/calendar"
         >+ Subscribe to the community calendar</a
@@ -776,7 +815,9 @@ const description = official
         official ? (
           <div class="tile__desc">Questions go straight to our inbox.</div>
         ) : (
-          <div class="tile__desc">Reach the resident who maintains this site.</div>
+          <div class="tile__desc">
+            Reach the resident who maintains this site.
+          </div>
         )
       }
     </a>
@@ -801,16 +842,18 @@ const description = official
 <BaseLayout title="Dues" description={description}>
   <div class="page-section">
     <p class="eyebrow">Payments</p>
-    <h1 class="page-title" style="margin-bottom: 36px;">Dues &amp; Assessments</h1>
+    <h1 class="page-title" style="margin-bottom: 36px;">
+      Dues &amp; Assessments
+    </h1>
 
     {
       official ? (
         <DuesInfo client:only="react" />
       ) : (
         <p class="page-lead">
-          Dues are handled by the {OFFICIAL_ORG_NAME}. This resident-run site does not
-          collect payments and is not involved in dues. For questions about your dues
-          or a payment, please contact the HOA board directly.
+          Dues are handled by the {OFFICIAL_ORG_NAME}. This resident-run site
+          does not collect payments and is not involved in dues. For questions
+          about your dues or a payment, please contact the HOA board directly.
         </p>
       )
     }
@@ -831,11 +874,9 @@ const official = Astro.locals.site.officialMode;
 
 <BaseLayout
   title="Contact"
-  description={
-    official
-      ? 'Contact the Valleys at Ashebrook HOA board.'
-      : `Contact the resident who maintains this independent ${NEIGHBORHOOD} site.`
-  }
+  description={official
+    ? 'Contact the Valleys at Ashebrook HOA board.'
+    : `Contact the resident who maintains this independent ${NEIGHBORHOOD} site.`}
 >
   <div class="page-section">
     <p class="eyebrow">Get in touch</p>
@@ -843,14 +884,14 @@ const official = Astro.locals.site.officialMode;
     {
       official ? (
         <p class="page-lead">
-          Send a message and it goes straight to the board’s inbox. We typically reply
-          within a few days.
+          Send a message and it goes straight to the board’s inbox. We typically
+          reply within a few days.
         </p>
       ) : (
         <p class="page-lead">
-          Send a message and it reaches the resident who maintains this site. Note this
-          site is not affiliated with the HOA — for official HOA business, contact the
-          HOA or its management company directly.
+          Send a message and it reaches the resident who maintains this site.
+          Note this site is not affiliated with the HOA — for official HOA
+          business, contact the HOA or its management company directly.
         </p>
       )
     }
@@ -878,7 +919,8 @@ const official = Astro.locals.site.officialMode;
               <div>
                 <div class="contact-aside__label">Board meetings</div>
                 <div class="contact-aside__val">
-                  Quarterly and open to all owners. See the Calendar for the next date.
+                  Quarterly and open to all owners. See the Calendar for the
+                  next date.
                 </div>
               </div>
             )
@@ -901,18 +943,18 @@ import { SITE_NAME } from '../../lib/site';
 Change the subject/from lines (were lines 28–31):
 
 ```tsx
-    if (!data.get('subject')) {
-      data.set('subject', `New message from the ${SITE_NAME} website`);
-    }
-    data.append('from_name', `${SITE_NAME} website`);
+if (!data.get('subject')) {
+  data.set('subject', `New message from the ${SITE_NAME} website`);
+}
+data.append('from_name', `${SITE_NAME} website`);
 ```
 
 Change the success paragraph (was "Thank you — the board has received your note and will be in touch soon.") to a mode-agnostic line:
 
 ```tsx
-        <p className="contact-success__p">
-          Thanks — your message has been sent. You’ll hear back soon.
-        </p>
+<p className="contact-success__p">
+  Thanks — your message has been sent. You’ll hear back soon.
+</p>
 ```
 
 - [ ] **Step 5: Update the remaining page meta / calendar copy**
@@ -920,28 +962,31 @@ Change the success paragraph (was "Thank you — the board has received your not
 `src/pages/announcements.astro` line 8 description →
 
 ```astro
-  description="Community announcements and news for The Valleys at Ashebrook."
+description="Community announcements and news for The Valleys at Ashebrook."
 ```
 
 `src/pages/documents.astro` line 8 description →
 
 ```astro
-  description="Governing documents, meeting minutes, financials, and forms for The Valleys at Ashebrook."
+description="Governing documents, meeting minutes, financials, and forms for The
+Valleys at Ashebrook."
 ```
 
 `src/pages/login.astro` line 8 description →
 
 ```astro
-  description="Sign in to your resident account for The Valleys at Ashebrook."
+description="Sign in to your resident account for The Valleys at Ashebrook."
 ```
 
 `src/pages/register.astro` line 8 description →
 
 ```astro
-  description="Create an account to access resident resources for The Valleys at Ashebrook."
+description="Create an account to access resident resources for The Valleys at
+Ashebrook."
 ```
 
 `src/pages/calendar.astro` — three edits:
+
 - line 24 description → `description="Community calendar for The Valleys at Ashebrook — events and virtual meeting links."`
 - line 57 `title="Valleys at Ashebrook HOA community calendar"` → `title="The Valleys at Ashebrook community calendar"`
 - line 74 text `Make the HOA Google Calendar public and add its Calendar ID as` → `Make the community Google Calendar public and add its Calendar ID as`
@@ -959,6 +1004,7 @@ Change the two subjects (were lines 45 and 56):
 ```ts
               `Reset your password — ${SITE_NAME}`,
 ```
+
 ```ts
               `Verify your account — ${SITE_NAME}`,
 ```
@@ -972,7 +1018,12 @@ import { SITE_NAME } from '../../lib/site';
 Change the subject (was line 65 `'Your HOA verification code'`):
 
 ```ts
-    await sendEmail(env, owner.email!, `Your verification code — ${SITE_NAME}`, message);
+await sendEmail(
+  env,
+  owner.email!,
+  `Your verification code — ${SITE_NAME}`,
+  message,
+);
 ```
 
 - [ ] **Step 7: Run the full jsdom suite + type check + build**
@@ -994,6 +1045,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 7: Admin — official-mode toggle + chrome relabel
 
 **Files:**
+
 - Modify: `src/components/admin/SiteManager.tsx`
 - Modify: `src/components/admin/AdminApp.tsx`
 - Modify: `src/pages/admin/index.astro`
@@ -1001,6 +1053,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Test: `src/components/admin/SiteManager.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `fetchSiteSettings`/`saveSite` (unchanged signatures), `SiteSettings` with `officialMode`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1012,7 +1065,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const saveSite = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../lib/admin', () => ({ saveSite: (...a: unknown[]) => saveSite(...a) }));
+vi.mock('../../lib/admin', () => ({
+  saveSite: (...a: unknown[]) => saveSite(...a),
+}));
 vi.mock('../../lib/content', () => ({
   fetchSiteSettings: vi.fn().mockResolvedValue({
     siteName: 'The Valleys at Ashebrook Residents',
@@ -1031,7 +1086,9 @@ describe('SiteManager official-mode toggle', () => {
 
   it('renders the toggle off and saves officialMode: true after enabling it', async () => {
     render(<SiteManager />);
-    const toggle = await screen.findByRole('checkbox', { name: /official mode/i });
+    const toggle = await screen.findByRole('checkbox', {
+      name: /official mode/i,
+    });
     expect(toggle).not.toBeChecked();
 
     fireEvent.click(toggle);
@@ -1053,25 +1110,23 @@ Expected: FAIL — no checkbox named "official mode".
 Immediately after the opening `<form … onSubmit={handleSave}>` `<div className="admin-bar">…</div>` block and the intro `<p>`, insert an official-mode card **above** the existing `panel-card`. Concretely, insert this block right after the `{msg && …}` line and before the existing `<div className="panel-card" …>`:
 
 ```tsx
-      <div className="panel-card" style={{ maxWidth: '620px', marginBottom: '18px' }}>
-        <div className="field" style={{ margin: 0 }}>
-          <label style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={site.officialMode}
-              onChange={(e) =>
-                setSite({ ...site, officialMode: e.target.checked })
-              }
-            />
-            <span>Official mode</span>
-          </label>
-          <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
-            When off, the site presents as an unofficial resident-run hub: it shows a
-            “not affiliated with the HOA” disclaimer and hides the dues and board
-            features. Turn this on only if the HOA board formally adopts this site.
-          </p>
-        </div>
-      </div>
+<div className="panel-card" style={{ maxWidth: '620px', marginBottom: '18px' }}>
+  <div className="field" style={{ margin: 0 }}>
+    <label style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+      <input
+        type="checkbox"
+        checked={site.officialMode}
+        onChange={(e) => setSite({ ...site, officialMode: e.target.checked })}
+      />
+      <span>Official mode</span>
+    </label>
+    <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+      When off, the site presents as an unofficial resident-run hub: it shows a
+      “not affiliated with the HOA” disclaimer and hides the dues and board
+      features. Turn this on only if the HOA board formally adopts this site.
+    </p>
+  </div>
+</div>
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1084,13 +1139,13 @@ Expected: PASS.
 `src/pages/admin/index.astro` line 6 →
 
 ```astro
-<BaseLayout title="Site Admin" description="Site administration." bare>
+<BaseLayout title="Site Admin" description="Site administration." bare />
 ```
 
 `src/components/admin/AdminApp.tsx` line 81 (the `sr-only` heading) →
 
 ```tsx
-      <h1 className="sr-only">Site Admin</h1>
+<h1 className="sr-only">Site Admin</h1>
 ```
 
 - [ ] **Step 6: Update the `AdminApp.test.tsx` assertion**
@@ -1098,9 +1153,9 @@ Expected: PASS.
 In `src/components/admin/AdminApp.test.tsx`, the "renders the admin dashboard" test asserts `name: /board admin/i` — change it to match the new heading:
 
 ```tsx
-    expect(
-      screen.getByRole('heading', { name: /site admin/i }),
-    ).toBeInTheDocument();
+expect(
+  screen.getByRole('heading', { name: /site admin/i }),
+).toBeInTheDocument();
 ```
 
 (Leave the `/board login/i` assertion untouched — the admin login screen heading is out of scope this round.)
@@ -1124,6 +1179,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 8: Docs sweep + full verification
 
 **Files:**
+
 - Modify: `.env.example`, `SETUP.md`, `README.md` (drop/soften HOA framing where user-facing; document the officialMode toggle)
 
 **Interfaces:** none (docs + final gate).
@@ -1147,6 +1203,7 @@ Expected: all pass.
 - [ ] **Step 3: Final manual smoke (both modes)**
 
 `npm run dev`:
+
 - Default (official mode off): no Dues nav, "Residents" tag, footer disclaimer + `/about`, `/dues` shows the "contact the HOA board" message, `/contact` says it reaches the site maintainer.
 - Sign in to `/admin` → Site Settings → turn **Official mode** on → save → reload the public site: Dues nav returns, "Homeowners Association" tag, "Pay Dues"/"Contact the Board" copy returns, footer disclaimer disappears. Turn it back off.
 

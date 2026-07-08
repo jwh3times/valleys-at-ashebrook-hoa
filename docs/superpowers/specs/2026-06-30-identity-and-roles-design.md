@@ -11,13 +11,13 @@
 The Valleys at Ashebrook HOA site is expanding from a public brochure site into a
 homeowner service. The full program decomposes into loosely-coupled sub-projects:
 
-| # | Sub-project | Depends on |
-| --- | --- | --- |
-| P0 | Finish & ship the current public site | — |
-| **A** | **Identity & roles (this spec)** | — |
-| Ingest | Drive → OCR → text → tier-tag → index | — |
-| B | Tiered document library (public / homeowner / board) | A, Ingest |
-| C | AI assistant (role-scoped RAG over the docs) | Ingest (+ A for gated tiers) |
+| #      | Sub-project                                          | Depends on                   |
+| ------ | ---------------------------------------------------- | ---------------------------- |
+| P0     | Finish & ship the current public site                | —                            |
+| **A**  | **Identity & roles (this spec)**                     | —                            |
+| Ingest | Drive → OCR → text → tier-tag → index                | —                            |
+| B      | Tiered document library (public / homeowner / board) | A, Ingest                    |
+| C      | AI assistant (role-scoped RAG over the docs)         | Ingest (+ A for gated tiers) |
 
 A is the shared spine: the same role model governs both who can open a document (B)
 and what the assistant may retrieve when talking to a given user (C).
@@ -68,11 +68,11 @@ data move to the Cloudflare stack as part of the program.
 
 ## 3. Roles & access model
 
-| Role | Can access | How obtained |
-| --- | --- | --- |
-| `visitor` (unauthenticated, or registered-but-unverified) | Public content only | Default |
-| `homeowner` | Public + shared homeowner content + **their own** property's private data | Self-signup, then possession-verified against the roster |
-| `board` | Everything + the admin surface | **Granted by an existing board member. Never self-claimed.** |
+| Role                                                      | Can access                                                                | How obtained                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `visitor` (unauthenticated, or registered-but-unverified) | Public content only                                                       | Default                                                      |
+| `homeowner`                                               | Public + shared homeowner content + **their own** property's private data | Self-signup, then possession-verified against the roster     |
+| `board`                                                   | Everything + the admin surface                                            | **Granted by an existing board member. Never self-claimed.** |
 
 - A registered user who has not completed property verification has `visitor`-level
   access until they do.
@@ -169,12 +169,12 @@ All authorization is enforced **server-side in Workers** (API endpoints and any 
 data fetch). The client is never trusted; the `role` and property links are
 re-checked on every protected request against the validated session.
 
-| Content class | Rule |
-| --- | --- |
-| Public | No auth required |
-| Shared homeowner content | `role ∈ {homeowner, board}` |
+| Content class                    | Rule                                                                                         |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| Public                           | No auth required                                                                             |
+| Shared homeowner content         | `role ∈ {homeowner, board}`                                                                  |
 | Per-owner private data (owner X) | `role == board`, **or** (`role == homeowner` **and** owner X ∈ the user's linked properties) |
-| Board content + admin surface | `role == board` |
+| Board content + admin surface    | `role == board`                                                                              |
 
 Implementation note: a small authorization helper runs at the top of each protected
 Worker route — resolve session → load role + linked owner_ids → apply the rule for
@@ -201,15 +201,15 @@ Bootstrapping: the first board account is created during deployment setup.
 
 ## 9. Edge cases
 
-| Case | Handling |
-| --- | --- |
-| Co-owners (two people, one property) | Both register and link to the same owner record |
-| One owner, multiple properties | Multiple `user_property_links` rows |
-| Ownership transfer | Board marks old owner `inactive` → linked accounts lose that property's access → new owner self-verifies |
-| Lost access to on-file phone/email | Falls back to the board manual-approval queue |
-| Roster mismatch / address typo | Falls back to the board manual-approval queue |
-| Brute-forcing the one-time code | Expiry + attempt limit + lockout + Turnstile + rate limiting |
-| Attempt to self-claim board | Impossible — no self-service path grants `board` |
+| Case                                 | Handling                                                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Co-owners (two people, one property) | Both register and link to the same owner record                                                          |
+| One owner, multiple properties       | Multiple `user_property_links` rows                                                                      |
+| Ownership transfer                   | Board marks old owner `inactive` → linked accounts lose that property's access → new owner self-verifies |
+| Lost access to on-file phone/email   | Falls back to the board manual-approval queue                                                            |
+| Roster mismatch / address typo       | Falls back to the board manual-approval queue                                                            |
+| Brute-forcing the one-time code      | Expiry + attempt limit + lockout + Turnstile + rate limiting                                             |
+| Attempt to self-claim board          | Impossible — no self-service path grants `board`                                                         |
 
 ---
 
