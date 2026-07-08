@@ -31,7 +31,7 @@ export default defineConfig(async () => {
             TURNSTILE_SECRET_KEY: 'test',
           },
         },
-        wrangler: { configPath: './wrangler.toml' },
+        wrangler: { configPath: './wrangler.test.toml' },
       }),
     ],
     test: {

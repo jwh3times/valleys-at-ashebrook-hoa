@@ -36,6 +36,13 @@
       "when": 1783399251096,
       "tag": "0004_hot_cargill",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1783511331351,
+      "tag": "0005_secret_pixie",
+      "breakpoints": true
     }
   ]
 }

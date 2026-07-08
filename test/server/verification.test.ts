@@ -18,6 +18,7 @@ import {
   propertyVerifications,
   userPropertyLinks,
   manualApprovalQueue,
+  users,
 } from '../../src/server/db/schema';
 import { hashCode } from '../../src/server/verification/codes';
 import { eq } from 'drizzle-orm';
@@ -35,8 +36,24 @@ beforeEach(() => {
   vi.mocked(sendSms).mockResolvedValue(undefined);
 });
 
+async function seedUser(id: string) {
+  const now = new Date();
+  await getDb(env)
+    .insert(users)
+    .values({
+      id,
+      name: id,
+      email: `${id}@example.com`,
+      emailVerified: true,
+      role: 'homeowner',
+      createdAt: now,
+      updatedAt: now,
+    });
+}
+
 describe('property verification', () => {
   it('queues for manual approval when the address is not on the roster', async () => {
+    await seedUser('user-x');
     const result = await requestPropertyVerification(
       env,
       'user-x',
@@ -49,6 +66,7 @@ describe('property verification', () => {
   it('confirm: wrong code increments attempts; correct code links the property and consumes', async () => {
     const db = getDb(env);
     const now = new Date();
+    await seedUser('user-confirm');
     await db.insert(properties).values({
       id: 'prop-1',
       address: '1 Test St',
@@ -116,6 +134,7 @@ describe('property verification', () => {
   it('confirm selects the newest pending code when multiple exist', async () => {
     const db = getDb(env);
     const base = new Date();
+    await seedUser('user-multi');
     await db.insert(propertyVerifications).values({
       id: 'pv-old',
       userId: 'user-multi',
@@ -145,6 +164,7 @@ describe('property verification', () => {
   it('fans a verification code out to every distinct sms contact on the home, deduped', async () => {
     const db = getDb(env);
     const now = new Date();
+    await seedUser('user-fan');
     await db.insert(properties).values({
       id: 'prop-fan',
       address: '9 Fan St',
@@ -215,6 +235,7 @@ describe('property verification', () => {
   it('queues manual approval when the chosen channel has no contacts', async () => {
     const db = getDb(env);
     const now = new Date();
+    await seedUser('user-noemail');
     await db.insert(properties).values({
       id: 'prop-noemail',
       address: '10 NoEmail St',
@@ -254,6 +275,7 @@ describe('property verification', () => {
   it('queues manual approval when every send fails', async () => {
     const db = getDb(env);
     const now = new Date();
+    await seedUser('user-allfail');
     vi.mocked(sendSms).mockRejectedValue(new Error('boom'));
     await db.insert(properties).values({
       id: 'prop-allfail',

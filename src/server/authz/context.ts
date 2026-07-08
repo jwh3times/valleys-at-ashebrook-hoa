@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { createAuth } from '../auth';
 import { getDb } from '../db/client';
-import { properties, userPropertyLinks, users } from '../db/schema';
+import { properties, userPropertyLinks } from '../db/schema';
 import type { AuthContext, Role } from './guards';
 
 const VALID_ROLES = new Set<string>(['visitor', 'homeowner', 'board']);
@@ -14,25 +14,21 @@ export async function getAuthContext(
   const result = await auth.api.getSession({ headers: request.headers });
   if (!result) return null;
   const db = getDb(env);
-  const [roleRows, links] = await Promise.all([
-    db
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, result.user.id)),
-    db
-      .select({ propertyId: userPropertyLinks.propertyId })
-      .from(userPropertyLinks)
-      .innerJoin(properties, eq(userPropertyLinks.propertyId, properties.id))
-      .where(
-        and(
-          eq(userPropertyLinks.userId, result.user.id),
-          eq(properties.status, 'active'),
-        ),
+  const links = await db
+    .select({ propertyId: userPropertyLinks.propertyId })
+    .from(userPropertyLinks)
+    .innerJoin(properties, eq(userPropertyLinks.propertyId, properties.id))
+    .where(
+      and(
+        eq(userPropertyLinks.userId, result.user.id),
+        eq(properties.status, 'active'),
       ),
-  ]);
-  const rawRole = roleRows[0]?.role ?? null;
+    );
+  const rawRole = (result.user as { role?: unknown }).role;
   const role: Role =
-    rawRole && VALID_ROLES.has(rawRole) ? (rawRole as Role) : 'visitor';
+    typeof rawRole === 'string' && VALID_ROLES.has(rawRole)
+      ? (rawRole as Role)
+      : 'visitor';
   return {
     userId: result.user.id,
     role,
