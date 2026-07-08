@@ -74,10 +74,12 @@ test/
 ## Task 1: Cloudflare + Wrangler + D1 scaffolding
 
 **Files:**
+
 - Create: `wrangler.toml`, `.dev.vars`, `.dev.vars.example`
 - Modify: `package.json` (deps + scripts), `astro.config.mjs`, `.gitignore`
 
 **Interfaces:**
+
 - Produces: a deployable Astro-on-Cloudflare app with a `DATABASE` (D1) and `KV` binding reachable in API routes via `locals.runtime.env`.
 
 - [ ] **Step 1: Install dependencies**
@@ -191,10 +193,12 @@ git commit -m "chore: add Cloudflare adapter, Wrangler, D1, and KV scaffolding"
 ## Task 2: Drizzle schema (auth + app tables) and D1 migrations
 
 **Files:**
+
 - Create: `drizzle.config.ts`, `src/server/db/schema.ts`, `src/server/db/client.ts`
 - Generated: `src/server/db/auth-schema.ts`, `src/server/db/migrations/*`
 
 **Interfaces:**
+
 - Produces: Drizzle tables `owners`, `userPropertyLinks`, `propertyVerifications`, `manualApprovalQueue` (plus Better-Auth-generated `users`/`sessions`/`accounts`/`verifications`), and `getDb(env)` returning a Drizzle client.
 
 - [ ] **Step 1: Create `drizzle.config.ts`**
@@ -262,7 +266,9 @@ export const owners = sqliteTable('owners', {
   unit: text('unit'),
   phone: text('phone'),
   email: text('email'),
-  status: text('status', { enum: ['active', 'inactive'] }).notNull().default('active'),
+  status: text('status', { enum: ['active', 'inactive'] })
+    .notNull()
+    .default('active'),
   notes: text('notes'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
@@ -273,7 +279,9 @@ export const userPropertyLinks = sqliteTable('user_property_links', {
   userId: text('user_id').notNull(),
   ownerId: text('owner_id').notNull(),
   verifiedAt: integer('verified_at', { mode: 'timestamp' }).notNull(),
-  method: text('method', { enum: ['otp_email', 'otp_sms', 'board_manual'] }).notNull(),
+  method: text('method', {
+    enum: ['otp_email', 'otp_sms', 'board_manual'],
+  }).notNull(),
 });
 
 export const propertyVerifications = sqliteTable('property_verifications', {
@@ -293,7 +301,9 @@ export const manualApprovalQueue = sqliteTable('manual_approval_queue', {
   userId: text('user_id').notNull(),
   claimedAddress: text('claimed_address').notNull(),
   reason: text('reason').notNull(),
-  status: text('status', { enum: ['pending', 'approved', 'denied'] }).notNull().default('pending'),
+  status: text('status', { enum: ['pending', 'approved', 'denied'] })
+    .notNull()
+    .default('pending'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 ```
@@ -319,11 +329,13 @@ git commit -m "feat: add Drizzle schema for auth and roster tables with D1 migra
 ## Task 3: Better Auth configuration (Cloudflare + roles + email verification)
 
 **Files:**
+
 - Modify: `src/server/auth/index.ts`
 - Create: `src/server/auth/permissions.ts`, `src/lib/auth-client.ts`, `src/pages/api/auth/[...all].ts`
 - Test: `test/server/auth-handler.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getDb(env)` (Task 2), `sendEmail` (Task 4 — stubbed here, real in Task 4).
 - Produces: `createAuth(env, cf?, baseURL?)` returning a Better Auth instance; `auth` static export for the CLI; an `/api/auth/*` handler; `authClient` for the browser.
 
@@ -362,7 +374,11 @@ import * as schema from '../db/schema';
 import { ac, visitor, homeowner, board } from './permissions';
 import { sendEmail } from './senders';
 
-export function createAuth(env?: Env, cf?: IncomingRequestCfProperties, baseURL?: string) {
+export function createAuth(
+  env?: Env,
+  cf?: IncomingRequestCfProperties,
+  baseURL?: string,
+) {
   const db = env ? getDb(env) : ({} as ReturnType<typeof getDb>);
 
   return betterAuth({
@@ -382,23 +398,44 @@ export function createAuth(env?: Env, cf?: IncomingRequestCfProperties, baseURL?
           requireEmailVerification: true,
           minPasswordLength: 10,
           sendResetPassword: async ({ user, url }) => {
-            await sendEmail(env!, user.email, 'Reset your HOA password', `Reset link: ${url}`);
+            await sendEmail(
+              env!,
+              user.email,
+              'Reset your HOA password',
+              `Reset link: ${url}`,
+            );
           },
         },
         emailVerification: {
           sendVerificationEmail: async ({ user, url }) => {
-            await sendEmail(env!, user.email, 'Verify your HOA account', `Verify link: ${url}`);
+            await sendEmail(
+              env!,
+              user.email,
+              'Verify your HOA account',
+              `Verify link: ${url}`,
+            );
           },
         },
         plugins: [
-          admin({ ac, roles: { visitor, homeowner, board }, defaultRole: 'visitor', adminRoles: ['board'] }),
+          admin({
+            ac,
+            roles: { visitor, homeowner, board },
+            defaultRole: 'visitor',
+            adminRoles: ['board'],
+          }),
         ],
         rateLimit: { enabled: true, window: 60, max: 100 },
       },
     ),
-    ...(env ? {} : {
-      database: drizzleAdapter({} as Env['DATABASE'], { provider: 'sqlite', usePlural: true, schema }),
-    }),
+    ...(env
+      ? {}
+      : {
+          database: drizzleAdapter({} as Env['DATABASE'], {
+            provider: 'sqlite',
+            usePlural: true,
+            schema,
+          }),
+        }),
   });
 }
 
@@ -454,7 +491,10 @@ describe('auth handler', () => {
 - [ ] **Step 6: Configure the workers test pool `vitest.workers.config.ts`**
 
 ```ts
-import { defineWorkersConfig, readD1Migrations } from '@cloudflare/vitest-pool-workers/config';
+import {
+  defineWorkersConfig,
+  readD1Migrations,
+} from '@cloudflare/vitest-pool-workers/config';
 
 export default defineWorkersConfig(async () => {
   const migrations = await readD1Migrations('./src/server/db/migrations');
@@ -496,10 +536,12 @@ git commit -m "feat: configure Better Auth on Cloudflare with roles and email ve
 ## Task 4: Email and SMS senders
 
 **Files:**
+
 - Create: `src/server/auth/senders.ts`
 - Test: `test/unit/senders.test.ts`
 
 **Interfaces:**
+
 - Produces: `sendEmail(env, to, subject, text)` and `sendSms(env, to, text)`, both returning `Promise<void>` and throwing on non-2xx provider responses.
 
 - [ ] **Step 1: Write the failing test `test/unit/senders.test.ts`**
@@ -510,8 +552,14 @@ import { sendSms } from '../../src/server/auth/senders';
 
 describe('sendSms', () => {
   it('posts to the Twilio API and throws on failure', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('err', { status: 401 }));
-    const env = { TWILIO_ACCOUNT_SID: 'AC', TWILIO_AUTH_TOKEN: 't', TWILIO_FROM: '+1' } as unknown as Env;
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('err', { status: 401 }));
+    const env = {
+      TWILIO_ACCOUNT_SID: 'AC',
+      TWILIO_AUTH_TOKEN: 't',
+      TWILIO_FROM: '+1',
+    } as unknown as Env;
     await expect(sendSms(env, '+15551234567', 'hi')).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledOnce();
   });
@@ -526,19 +574,35 @@ Expected: FAIL ("sendSms is not a function" / module not found).
 - [ ] **Step 3: Implement `src/server/auth/senders.ts`**
 
 ```ts
-export async function sendEmail(env: Env, to: string, subject: string, text: string): Promise<void> {
+export async function sendEmail(
+  env: Env,
+  to: string,
+  subject: string,
+  text: string,
+): Promise<void> {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { authorization: `Bearer ${env.EMAIL_API_KEY}`, 'content-type': 'application/json' },
+    headers: {
+      authorization: `Bearer ${env.EMAIL_API_KEY}`,
+      'content-type': 'application/json',
+    },
     body: JSON.stringify({ from: env.EMAIL_FROM, to, subject, text }),
   });
   if (!res.ok) throw new Error(`email send failed: ${res.status}`);
 }
 
-export async function sendSms(env: Env, to: string, text: string): Promise<void> {
+export async function sendSms(
+  env: Env,
+  to: string,
+  text: string,
+): Promise<void> {
   const sid = env.TWILIO_ACCOUNT_SID;
   const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
-  const body = new URLSearchParams({ To: to, From: env.TWILIO_FROM, Body: text });
+  const body = new URLSearchParams({
+    To: to,
+    From: env.TWILIO_FROM,
+    Body: text,
+  });
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -587,10 +651,12 @@ git commit -m "feat: add email (Resend) and SMS (Twilio) senders"
 ## Task 5: Authorization context and guards
 
 **Files:**
+
 - Create: `src/server/authz/context.ts`, `src/server/authz/guards.ts`
 - Test: `test/unit/guards.test.ts`
 
 **Interfaces:**
+
 - Consumes: `createAuth(env)` (Task 3), `getDb(env)` (Task 2).
 - Produces:
   - `getAuthContext(request, env): Promise<{ userId: string; role: 'visitor'|'homeowner'|'board'; ownerIds: string[] } | null>`
@@ -602,9 +668,17 @@ git commit -m "feat: add email (Resend) and SMS (Twilio) senders"
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { requireRole, requireOwnerAccess, Forbidden } from '../../src/server/authz/guards';
+import {
+  requireRole,
+  requireOwnerAccess,
+  Forbidden,
+} from '../../src/server/authz/guards';
 
-const homeownerCtx = { userId: 'u1', role: 'homeowner' as const, ownerIds: ['o1'] };
+const homeownerCtx = {
+  userId: 'u1',
+  role: 'homeowner' as const,
+  ownerIds: ['o1'],
+};
 const boardCtx = { userId: 'u2', role: 'board' as const, ownerIds: [] };
 
 describe('guards', () => {
@@ -638,7 +712,11 @@ export class Unauthorized extends Error {}
 export class Forbidden extends Error {}
 
 export type Role = 'visitor' | 'homeowner' | 'board';
-export interface AuthContext { userId: string; role: Role; ownerIds: string[] }
+export interface AuthContext {
+  userId: string;
+  role: Role;
+  ownerIds: string[];
+}
 
 const RANK: Record<Role, number> = { visitor: 0, homeowner: 1, board: 2 };
 
@@ -667,18 +745,28 @@ import { getDb } from '../db/client';
 import { userPropertyLinks, users } from '../db/schema';
 import type { AuthContext, Role } from './guards';
 
-export async function getAuthContext(request: Request, env: Env): Promise<AuthContext | null> {
+export async function getAuthContext(
+  request: Request,
+  env: Env,
+): Promise<AuthContext | null> {
   const auth = createAuth(env);
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return null;
   const db = getDb(env);
-  const [row] = await db.select({ role: users.role }).from(users).where(eq(users.id, session.user.id));
-  const role = ((row?.role as Role) ?? 'visitor');
+  const [row] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.user.id));
+  const role = (row?.role as Role) ?? 'visitor';
   const links = await db
     .select({ ownerId: userPropertyLinks.ownerId })
     .from(userPropertyLinks)
     .where(eq(userPropertyLinks.userId, session.user.id));
-  return { userId: session.user.id, role, ownerIds: links.map((l) => l.ownerId) };
+  return {
+    userId: session.user.id,
+    role,
+    ownerIds: links.map((l) => l.ownerId),
+  };
 }
 ```
 
@@ -694,10 +782,12 @@ git commit -m "feat: add server-side authorization context and role/owner guards
 ## Task 6: One-time code generation, hashing, and attempt limiting
 
 **Files:**
+
 - Create: `src/server/verification/codes.ts`
 - Test: `test/unit/codes.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `generateCode(): string` — 6-digit numeric string
   - `hashCode(code: string): Promise<string>` — SHA-256 hex
@@ -708,7 +798,12 @@ git commit -m "feat: add server-side authorization context and role/owner guards
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { generateCode, hashCode, verifyCode, MAX_ATTEMPTS } from '../../src/server/verification/codes';
+import {
+  generateCode,
+  hashCode,
+  verifyCode,
+  MAX_ATTEMPTS,
+} from '../../src/server/verification/codes';
 
 describe('codes', () => {
   it('generates a 6-digit numeric code', () => {
@@ -745,7 +840,9 @@ export function generateCode(): string {
 export async function hashCode(code: string): Promise<string> {
   const data = new TextEncoder().encode(code);
   const digest = await crypto.subtle.digest('SHA-256', data);
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 export async function verifyCode(code: string, hash: string): Promise<boolean> {
@@ -770,10 +867,12 @@ git commit -m "feat: add one-time verification code utilities"
 ## Task 7: Roster lookup
 
 **Files:**
+
 - Create: `src/server/roster/lookup.ts`
 - Test: `test/unit/roster-lookup.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `normalizeAddress(raw: string): string` — lowercased, trimmed, collapsed whitespace, punctuation stripped
   - `findActiveOwnerByAddress(db, address): Promise<Owner | null>` where `Owner` is the inferred `owners` row type
@@ -786,8 +885,12 @@ import { normalizeAddress } from '../../src/server/roster/lookup';
 
 describe('normalizeAddress', () => {
   it('canonicalizes case, spacing, and punctuation', () => {
-    expect(normalizeAddress('  9904   Wishing Willow Dr. ')).toBe('9904 wishing willow dr');
-    expect(normalizeAddress('9904 WISHING WILLOW DR')).toBe('9904 wishing willow dr');
+    expect(normalizeAddress('  9904   Wishing Willow Dr. ')).toBe(
+      '9904 wishing willow dr',
+    );
+    expect(normalizeAddress('9904 WISHING WILLOW DR')).toBe(
+      '9904 wishing willow dr',
+    );
   });
 });
 ```
@@ -813,7 +916,9 @@ export async function findActiveOwnerByAddress(db: Db, address: string) {
   const [owner] = await db
     .select()
     .from(owners)
-    .where(and(eq(owners.addressNormalized, norm), eq(owners.status, 'active')));
+    .where(
+      and(eq(owners.addressNormalized, norm), eq(owners.status, 'active')),
+    );
   return owner ?? null;
 }
 ```
@@ -835,10 +940,12 @@ git commit -m "feat: add roster address normalization and lookup"
 ## Task 8: Property verification flow (request + confirm)
 
 **Files:**
+
 - Create: `src/server/verification/property.ts`, `src/pages/api/verify/request.ts`, `src/pages/api/verify/confirm.ts`
 - Test: `test/server/verification.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getAuthContext` (Task 5), `findActiveOwnerByAddress` (Task 7), codes (Task 6), senders (Task 4), `getDb` (Task 2), `createAuth` (Task 3).
 - Produces:
   - `requestPropertyVerification(env, userId, address, channel): Promise<{ ok: true } | { ok: false; queued: true }>`
@@ -858,8 +965,14 @@ beforeAll(async () => {
 
 describe('property verification', () => {
   it('queues for manual approval when the address is not on the roster', async () => {
-    const { requestPropertyVerification } = await import('../../src/server/verification/property');
-    const result = await requestPropertyVerification(env, 'user-x', '0000 Nonexistent St', 'email');
+    const { requestPropertyVerification } =
+      await import('../../src/server/verification/property');
+    const result = await requestPropertyVerification(
+      env,
+      'user-x',
+      '0000 Nonexistent St',
+      'email',
+    );
     expect(result).toEqual({ ok: false, queued: true });
   });
 });
@@ -878,56 +991,105 @@ import { getDb } from '../db/client';
 import { createAuth } from '../auth';
 import { sendEmail, sendSms } from '../auth/senders';
 import { findActiveOwnerByAddress } from '../roster/lookup';
-import { generateCode, hashCode, verifyCode, MAX_ATTEMPTS, CODE_TTL_MS } from './codes';
-import { manualApprovalQueue, propertyVerifications, userPropertyLinks } from '../db/schema';
+import {
+  generateCode,
+  hashCode,
+  verifyCode,
+  MAX_ATTEMPTS,
+  CODE_TTL_MS,
+} from './codes';
+import {
+  manualApprovalQueue,
+  propertyVerifications,
+  userPropertyLinks,
+} from '../db/schema';
 
 export async function requestPropertyVerification(
-  env: Env, userId: string, address: string, channel: 'email' | 'sms',
+  env: Env,
+  userId: string,
+  address: string,
+  channel: 'email' | 'sms',
 ): Promise<{ ok: true } | { ok: false; queued: true }> {
   const db = getDb(env);
   const owner = await findActiveOwnerByAddress(db, address);
   const now = new Date();
-  if (!owner || (channel === 'email' && !owner.email) || (channel === 'sms' && !owner.phone)) {
+  if (
+    !owner ||
+    (channel === 'email' && !owner.email) ||
+    (channel === 'sms' && !owner.phone)
+  ) {
     await db.insert(manualApprovalQueue).values({
-      id: crypto.randomUUID(), userId, claimedAddress: address,
-      reason: owner ? 'no contact on file for channel' : 'address not found', status: 'pending', createdAt: now,
+      id: crypto.randomUUID(),
+      userId,
+      claimedAddress: address,
+      reason: owner ? 'no contact on file for channel' : 'address not found',
+      status: 'pending',
+      createdAt: now,
     });
     return { ok: false, queued: true };
   }
   const code = generateCode();
   await db.insert(propertyVerifications).values({
-    id: crypto.randomUUID(), userId, ownerId: owner.id, channel,
-    codeHash: await hashCode(code), expiresAt: new Date(now.getTime() + CODE_TTL_MS),
-    attempts: 0, consumedAt: null, createdAt: now,
+    id: crypto.randomUUID(),
+    userId,
+    ownerId: owner.id,
+    channel,
+    codeHash: await hashCode(code),
+    expiresAt: new Date(now.getTime() + CODE_TTL_MS),
+    attempts: 0,
+    consumedAt: null,
+    createdAt: now,
   });
   const message = `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.`;
-  if (channel === 'email') await sendEmail(env, owner.email!, 'Your HOA verification code', message);
+  if (channel === 'email')
+    await sendEmail(env, owner.email!, 'Your HOA verification code', message);
   else await sendSms(env, owner.phone!, message);
   return { ok: true };
 }
 
 export async function confirmPropertyVerification(
-  env: Env, userId: string, code: string,
+  env: Env,
+  userId: string,
+  code: string,
 ): Promise<{ ok: boolean; reason?: 'expired' | 'locked' | 'mismatch' }> {
   const db = getDb(env);
   const [pv] = await db
-    .select().from(propertyVerifications)
-    .where(and(eq(propertyVerifications.userId, userId), isNull(propertyVerifications.consumedAt)))
+    .select()
+    .from(propertyVerifications)
+    .where(
+      and(
+        eq(propertyVerifications.userId, userId),
+        isNull(propertyVerifications.consumedAt),
+      ),
+    )
     .orderBy(propertyVerifications.createdAt);
   if (!pv) return { ok: false, reason: 'mismatch' };
   if (pv.attempts >= MAX_ATTEMPTS) return { ok: false, reason: 'locked' };
-  if (pv.expiresAt.getTime() < Date.now()) return { ok: false, reason: 'expired' };
+  if (pv.expiresAt.getTime() < Date.now())
+    return { ok: false, reason: 'expired' };
   if (!(await verifyCode(code, pv.codeHash))) {
-    await db.update(propertyVerifications).set({ attempts: pv.attempts + 1 }).where(eq(propertyVerifications.id, pv.id));
+    await db
+      .update(propertyVerifications)
+      .set({ attempts: pv.attempts + 1 })
+      .where(eq(propertyVerifications.id, pv.id));
     return { ok: false, reason: 'mismatch' };
   }
-  await db.update(propertyVerifications).set({ consumedAt: new Date() }).where(eq(propertyVerifications.id, pv.id));
+  await db
+    .update(propertyVerifications)
+    .set({ consumedAt: new Date() })
+    .where(eq(propertyVerifications.id, pv.id));
   await db.insert(userPropertyLinks).values({
-    id: crypto.randomUUID(), userId, ownerId: pv.ownerId, verifiedAt: new Date(),
+    id: crypto.randomUUID(),
+    userId,
+    ownerId: pv.ownerId,
+    verifiedAt: new Date(),
     method: pv.channel === 'email' ? 'otp_email' : 'otp_sms',
   });
   const auth = createAuth(env);
-  await auth.api.setRole({ body: { userId, role: 'homeowner' }, headers: new Headers() });
+  await auth.api.setRole({
+    body: { userId, role: 'homeowner' },
+    headers: new Headers(),
+  });
   return { ok: true };
 }
 ```
@@ -950,8 +1112,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const ctx = await getAuthContext(request, env);
   if (!ctx) return new Response('Unauthorized', { status: 401 });
   const { address, channel, turnstileToken } = await request.json();
-  if (!(await verifyTurnstile(env, turnstileToken, request))) return new Response('Bad captcha', { status: 400 });
-  const result = await requestPropertyVerification(env, ctx.userId, address, channel);
+  if (!(await verifyTurnstile(env, turnstileToken, request)))
+    return new Response('Bad captcha', { status: 400 });
+  const result = await requestPropertyVerification(
+    env,
+    ctx.userId,
+    address,
+    channel,
+  );
   return Response.json(result);
 };
 ```
@@ -976,12 +1144,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
 - [ ] **Step 7: Add Turnstile verification `src/server/authz/turnstile.ts`**
 
 ```ts
-export async function verifyTurnstile(env: Env, token: string, request: Request): Promise<boolean> {
+export async function verifyTurnstile(
+  env: Env,
+  token: string,
+  request: Request,
+): Promise<boolean> {
   const body = new URLSearchParams({
-    secret: env.TURNSTILE_SECRET_KEY, response: token,
+    secret: env.TURNSTILE_SECRET_KEY,
+    response: token,
     remoteip: request.headers.get('cf-connecting-ip') ?? '',
   });
-  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body });
+  const res = await fetch(
+    'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    { method: 'POST', body },
+  );
   const data = (await res.json()) as { success: boolean };
   return data.success;
 }
@@ -999,10 +1175,12 @@ git commit -m "feat: add possession-based property verification flow and endpoin
 ## Task 9: Admin roster endpoints (board only)
 
 **Files:**
+
 - Create: `src/pages/api/admin/owners.ts`
 - Test: `test/server/admin-owners.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getAuthContext` + `requireRole` (Task 5), `getDb` (Task 2).
 - Produces: `GET /api/admin/owners` (list), `POST` (create), `PATCH` (update incl. status). All require `board`.
 
@@ -1013,7 +1191,9 @@ git commit -m "feat: add possession-based property verification flow and endpoin
 import { env, applyD1Migrations, SELF } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 
-beforeAll(async () => { await applyD1Migrations(env.DATABASE, env.MIGRATIONS); });
+beforeAll(async () => {
+  await applyD1Migrations(env.DATABASE, env.MIGRATIONS);
+});
 
 describe('admin owners', () => {
   it('rejects an unauthenticated request with 401', async () => {
@@ -1048,9 +1228,12 @@ async function guard(request: Request, env: Env) {
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const { env } = locals.runtime;
-  try { await guard(request, env); } catch (e) {
+  try {
+    await guard(request, env);
+  } catch (e) {
     if (e instanceof Response) return e;
-    if (e instanceof Forbidden) return new Response('Forbidden', { status: 403 });
+    if (e instanceof Forbidden)
+      return new Response('Forbidden', { status: 403 });
     throw e;
   }
   const rows = await getDb(env).select().from(owners);
@@ -1059,35 +1242,59 @@ export const GET: APIRoute = async ({ request, locals }) => {
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { env } = locals.runtime;
-  try { await guard(request, env); } catch (e) {
+  try {
+    await guard(request, env);
+  } catch (e) {
     if (e instanceof Response) return e;
-    if (e instanceof Forbidden) return new Response('Forbidden', { status: 403 });
+    if (e instanceof Forbidden)
+      return new Response('Forbidden', { status: 403 });
     throw e;
   }
   const body = await request.json();
   const now = new Date();
-  await getDb(env).insert(owners).values({
-    id: crypto.randomUUID(), fullName: body.fullName, address: body.address,
-    addressNormalized: normalizeAddress(body.address), unit: body.unit ?? null,
-    phone: body.phone ?? null, email: body.email ?? null, status: 'active',
-    notes: body.notes ?? null, createdAt: now, updatedAt: now,
-  });
+  await getDb(env)
+    .insert(owners)
+    .values({
+      id: crypto.randomUUID(),
+      fullName: body.fullName,
+      address: body.address,
+      addressNormalized: normalizeAddress(body.address),
+      unit: body.unit ?? null,
+      phone: body.phone ?? null,
+      email: body.email ?? null,
+      status: 'active',
+      notes: body.notes ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
   return new Response(null, { status: 201 });
 };
 
 export const PATCH: APIRoute = async ({ request, locals }) => {
   const { env } = locals.runtime;
-  try { await guard(request, env); } catch (e) {
+  try {
+    await guard(request, env);
+  } catch (e) {
     if (e instanceof Response) return e;
-    if (e instanceof Forbidden) return new Response('Forbidden', { status: 403 });
+    if (e instanceof Forbidden)
+      return new Response('Forbidden', { status: 403 });
     throw e;
   }
   const body = await request.json();
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  for (const k of ['fullName', 'address', 'unit', 'phone', 'email', 'status', 'notes']) {
+  for (const k of [
+    'fullName',
+    'address',
+    'unit',
+    'phone',
+    'email',
+    'status',
+    'notes',
+  ]) {
     if (k in body) patch[k] = body[k];
   }
-  if ('address' in body) patch.addressNormalized = normalizeAddress(body.address);
+  if ('address' in body)
+    patch.addressNormalized = normalizeAddress(body.address);
   await getDb(env).update(owners).set(patch).where(eq(owners.id, body.id));
   return new Response(null, { status: 204 });
 };
@@ -1110,10 +1317,12 @@ git commit -m "feat: add board-only roster management endpoints"
 ## Task 10: Admin member-review, revoke, and role-grant endpoints (board only)
 
 **Files:**
+
 - Create: `src/pages/api/admin/members.ts`, `src/pages/api/admin/roles.ts`
 - Test: `test/server/admin-roles.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getAuthContext` + `requireRole` (Task 5), `createAuth` (Task 3), `getDb` (Task 2).
 - Produces:
   - `GET /api/admin/members` — recent homeowner signups + the manual-approval queue
@@ -1127,12 +1336,15 @@ git commit -m "feat: add board-only roster management endpoints"
 import { env, applyD1Migrations, SELF } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 
-beforeAll(async () => { await applyD1Migrations(env.DATABASE, env.MIGRATIONS); });
+beforeAll(async () => {
+  await applyD1Migrations(env.DATABASE, env.MIGRATIONS);
+});
 
 describe('admin roles', () => {
   it('rejects unauthenticated role grant with 401', async () => {
     const res = await SELF.fetch('http://localhost/api/admin/roles', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ userId: 'u', role: 'board', action: 'grant' }),
     });
     expect(res.status).toBe(401);
@@ -1157,15 +1369,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const { env } = locals.runtime;
   const ctx = await getAuthContext(request, env);
   if (!ctx) return new Response('Unauthorized', { status: 401 });
-  try { requireRole(ctx, 'board'); } catch (e) {
-    if (e instanceof Forbidden) return new Response('Forbidden', { status: 403 });
+  try {
+    requireRole(ctx, 'board');
+  } catch (e) {
+    if (e instanceof Forbidden)
+      return new Response('Forbidden', { status: 403 });
     throw e;
   }
   const { userId, role, action } = await request.json();
-  if (!['homeowner', 'board'].includes(role)) return new Response('Bad role', { status: 400 });
+  if (!['homeowner', 'board'].includes(role))
+    return new Response('Bad role', { status: 400 });
   const auth = createAuth(env);
   const target = action === 'revoke' ? 'visitor' : role;
-  await auth.api.setRole({ body: { userId, role: target }, headers: request.headers });
+  await auth.api.setRole({
+    body: { userId, role: target },
+    headers: request.headers,
+  });
   return new Response(null, { status: 204 });
 };
 ```
@@ -1178,12 +1397,21 @@ import { desc, eq } from 'drizzle-orm';
 import { getAuthContext } from '../../../server/authz/context';
 import { requireRole, Forbidden } from '../../../server/authz/guards';
 import { getDb } from '../../../server/db/client';
-import { manualApprovalQueue, userPropertyLinks, users } from '../../../server/db/schema';
+import {
+  manualApprovalQueue,
+  userPropertyLinks,
+  users,
+} from '../../../server/db/schema';
 
-function guard(ctx: Awaited<ReturnType<typeof getAuthContext>>): Response | null {
+function guard(
+  ctx: Awaited<ReturnType<typeof getAuthContext>>,
+): Response | null {
   if (!ctx) return new Response('Unauthorized', { status: 401 });
-  try { requireRole(ctx, 'board'); } catch (e) {
-    if (e instanceof Forbidden) return new Response('Forbidden', { status: 403 });
+  try {
+    requireRole(ctx, 'board');
+  } catch (e) {
+    if (e instanceof Forbidden)
+      return new Response('Forbidden', { status: 403 });
     throw e;
   }
   return null;
@@ -1192,26 +1420,41 @@ function guard(ctx: Awaited<ReturnType<typeof getAuthContext>>): Response | null
 export const GET: APIRoute = async ({ request, locals }) => {
   const { env } = locals.runtime;
   const ctx = await getAuthContext(request, env);
-  const denied = guard(ctx); if (denied) return denied;
+  const denied = guard(ctx);
+  if (denied) return denied;
   const db = getDb(env);
-  const recent = await db.select().from(users).where(eq(users.role, 'homeowner')).limit(50);
-  const queue = await db.select().from(manualApprovalQueue)
-    .where(eq(manualApprovalQueue.status, 'pending')).orderBy(desc(manualApprovalQueue.createdAt));
+  const recent = await db
+    .select()
+    .from(users)
+    .where(eq(users.role, 'homeowner'))
+    .limit(50);
+  const queue = await db
+    .select()
+    .from(manualApprovalQueue)
+    .where(eq(manualApprovalQueue.status, 'pending'))
+    .orderBy(desc(manualApprovalQueue.createdAt));
   return Response.json({ recent, queue });
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const { env } = locals.runtime;
   const ctx = await getAuthContext(request, env);
-  const denied = guard(ctx); if (denied) return denied;
+  const denied = guard(ctx);
+  if (denied) return denied;
   const db = getDb(env);
   const body = await request.json();
   if (body.action === 'revoke') {
-    await db.delete(userPropertyLinks).where(eq(userPropertyLinks.userId, body.userId));
+    await db
+      .delete(userPropertyLinks)
+      .where(eq(userPropertyLinks.userId, body.userId));
     const { createAuth } = await import('../../../server/auth');
-    await createAuth(env).api.setRole({ body: { userId: body.userId, role: 'visitor' }, headers: request.headers });
+    await createAuth(env).api.setRole({
+      body: { userId: body.userId, role: 'visitor' },
+      headers: request.headers,
+    });
   } else if (body.action === 'approve' || body.action === 'deny') {
-    await db.update(manualApprovalQueue)
+    await db
+      .update(manualApprovalQueue)
       .set({ status: body.action === 'approve' ? 'approved' : 'denied' })
       .where(eq(manualApprovalQueue.id, body.queueId));
   }
@@ -1236,11 +1479,13 @@ git commit -m "feat: add board-only member review, revoke, and role-grant endpoi
 ## Task 11: Roster import script
 
 **Files:**
+
 - Create: `scripts/import-roster.ts`
 - Modify: `package.json` (script + `xlsx` dev dep)
 - Test: `test/unit/roster-import.test.ts`
 
 **Interfaces:**
+
 - Consumes: `normalizeAddress` (Task 7).
 - Produces: `rowsToOwners(rows: Record<string, string>[]): NewOwner[]` (pure mapping, unit-tested) and a CLI that reads `private/HOA_files/Ashebrook HOA Contact List.xlsx` and bulk-inserts via `wrangler d1 execute`.
 
@@ -1258,10 +1503,21 @@ import { rowsToOwners } from '../../scripts/import-roster';
 
 describe('rowsToOwners', () => {
   it('maps spreadsheet rows to owner records with normalized addresses', () => {
-    const out = rowsToOwners([{ Name: 'Jane Doe', Address: '9904 Wishing Willow Dr.', Phone: '5551234567', Email: 'jane@x.com' }]);
+    const out = rowsToOwners([
+      {
+        Name: 'Jane Doe',
+        Address: '9904 Wishing Willow Dr.',
+        Phone: '5551234567',
+        Email: 'jane@x.com',
+      },
+    ]);
     expect(out[0]).toMatchObject({
-      fullName: 'Jane Doe', address: '9904 Wishing Willow Dr.',
-      addressNormalized: '9904 wishing willow dr', phone: '5551234567', email: 'jane@x.com', status: 'active',
+      fullName: 'Jane Doe',
+      address: '9904 Wishing Willow Dr.',
+      addressNormalized: '9904 wishing willow dr',
+      phone: '5551234567',
+      email: 'jane@x.com',
+      status: 'active',
     });
   });
 });
@@ -1278,8 +1534,13 @@ Expected: FAIL (module not found).
 import { normalizeAddress } from '../src/server/roster/lookup';
 
 export interface NewOwner {
-  fullName: string; address: string; addressNormalized: string;
-  unit: string | null; phone: string | null; email: string | null; status: 'active';
+  fullName: string;
+  address: string;
+  addressNormalized: string;
+  unit: string | null;
+  phone: string | null;
+  email: string | null;
+  status: 'active';
 }
 
 export function rowsToOwners(rows: Record<string, string>[]): NewOwner[] {
@@ -1298,14 +1559,23 @@ export function rowsToOwners(rows: Record<string, string>[]): NewOwner[] {
 async function main() {
   const XLSX = await import('xlsx');
   const wb = XLSX.readFile('private/HOA_files/Ashebrook HOA Contact List.xlsx');
-  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(wb.Sheets[wb.SheetNames[0]]);
+  const rows = XLSX.utils.sheet_to_json<Record<string, string>>(
+    wb.Sheets[wb.SheetNames[0]],
+  );
   const owners = rowsToOwners(rows);
-  const values = owners.map((o) =>
-    `('${crypto.randomUUID()}', ${sql(o.fullName)}, ${sql(o.address)}, ${sql(o.addressNormalized)}, ${sql(o.unit)}, ${sql(o.phone)}, ${sql(o.email)}, 'active', NULL, unixepoch(), unixepoch())`,
-  ).join(',\n');
+  const values = owners
+    .map(
+      (o) =>
+        `('${crypto.randomUUID()}', ${sql(o.fullName)}, ${sql(o.address)}, ${sql(o.addressNormalized)}, ${sql(o.unit)}, ${sql(o.phone)}, ${sql(o.email)}, 'active', NULL, unixepoch(), unixepoch())`,
+    )
+    .join(',\n');
   const stmt = `INSERT INTO owners (id, full_name, address, address_normalized, unit, phone, email, status, notes, created_at, updated_at) VALUES\n${values};`;
-  await import('node:fs').then((fs) => fs.writeFileSync('private/roster-import.sql', stmt));
-  console.log('Wrote private/roster-import.sql — apply with: wrangler d1 execute ashebrook-hoa --remote --file private/roster-import.sql');
+  await import('node:fs').then((fs) =>
+    fs.writeFileSync('private/roster-import.sql', stmt),
+  );
+  console.log(
+    'Wrote private/roster-import.sql — apply with: wrangler d1 execute ashebrook-hoa --remote --file private/roster-import.sql',
+  );
 }
 
 function sql(v: string | null): string {
@@ -1338,10 +1608,12 @@ git commit -m "feat: add owner roster import from the HOA contact list"
 ## Task 12: Seed the first board account (bootstrap)
 
 **Files:**
+
 - Create: `scripts/seed-board.ts`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: `createAuth` (Task 3).
 - Produces: a one-off script that creates a user and sets role `board`, run once after deploy.
 
@@ -1352,10 +1624,20 @@ git commit -m "feat: add owner roster import from the HOA contact list"
 // Usage: provide BOARD_EMAIL and BOARD_PASSWORD env vars.
 import { createAuth } from '../src/server/auth';
 
-export async function seedBoard(env: Env, email: string, password: string, name: string) {
+export async function seedBoard(
+  env: Env,
+  email: string,
+  password: string,
+  name: string,
+) {
   const auth = createAuth(env);
-  const created = await auth.api.signUpEmail({ body: { email, password, name } });
-  await auth.api.setRole({ body: { userId: created.user.id, role: 'board' }, headers: new Headers() });
+  const created = await auth.api.signUpEmail({
+    body: { email, password, name },
+  });
+  await auth.api.setRole({
+    body: { userId: created.user.id, role: 'board' },
+    headers: new Headers(),
+  });
   return created.user.id;
 }
 ```
@@ -1376,10 +1658,12 @@ git commit -m "feat: add board bootstrap seed script"
 ## Task 13: Astro auth UI and protected-route gating
 
 **Files:**
+
 - Create: `src/pages/login.astro`, `src/pages/register.astro`, `src/pages/verify-property.astro`, `src/components/react/AuthForms.tsx`, `src/middleware.ts`
 - Test: `test/server/middleware.test.ts`
 
 **Interfaces:**
+
 - Consumes: `authClient` (Task 3), `getAuthContext` (Task 5).
 - Produces: login/register/verify pages; middleware that attaches `locals.authContext` and blocks `/admin/*` for non-board and homeowner-only pages for visitors.
 
@@ -1390,11 +1674,15 @@ git commit -m "feat: add board bootstrap seed script"
 import { env, applyD1Migrations, SELF } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 
-beforeAll(async () => { await applyD1Migrations(env.DATABASE, env.MIGRATIONS); });
+beforeAll(async () => {
+  await applyD1Migrations(env.DATABASE, env.MIGRATIONS);
+});
 
 describe('route protection', () => {
   it('redirects an anonymous visitor away from /admin', async () => {
-    const res = await SELF.fetch('http://localhost/admin', { redirect: 'manual' });
+    const res = await SELF.fetch('http://localhost/admin', {
+      redirect: 'manual',
+    });
     expect([302, 401]).toContain(res.status);
   });
 });
@@ -1431,7 +1719,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
 ```ts
 declare namespace App {
   interface Locals {
-    runtime: { env: Env; cf: import('@cloudflare/workers-types').IncomingRequestCfProperties };
+    runtime: {
+      env: Env;
+      cf: import('@cloudflare/workers-types').IncomingRequestCfProperties;
+    };
     authContext: import('./server/authz/guards').AuthContext | null;
   }
 }
@@ -1451,13 +1742,35 @@ export function RegisterForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const { error } = await authClient.signUp.email({ email, password, name });
-    setMsg(error ? error.message ?? 'Error' : 'Check your email to verify your account.');
+    setMsg(
+      error
+        ? (error.message ?? 'Error')
+        : 'Check your email to verify your account.',
+    );
   }
   return (
     <form onSubmit={onSubmit}>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" required />
-      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" required />
-      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (10+ chars)" required minLength={10} />
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Full name"
+        required
+      />
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+        required
+      />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password (10+ chars)"
+        required
+        minLength={10}
+      />
       <button type="submit">Create account</button>
       {msg && <p>{msg}</p>}
     </form>
@@ -1473,24 +1786,47 @@ export function VerifyPropertyForm() {
   async function request(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch('/api/verify/request', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ address, channel, turnstileToken: (window as any).turnstileToken }),
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        address,
+        channel,
+        turnstileToken: (window as any).turnstileToken,
+      }),
     });
     const data = await res.json();
-    setMsg(data.queued ? 'Sent to the board for manual review.' : 'Code sent — check your phone/email.');
+    setMsg(
+      data.queued
+        ? 'Sent to the board for manual review.'
+        : 'Code sent — check your phone/email.',
+    );
     if (data.ok) setStage('confirm');
   }
   async function confirm(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch('/api/verify/confirm', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }),
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code }),
     });
-    setMsg(res.ok ? 'Verified! You now have homeowner access.' : 'Code invalid or expired.');
+    setMsg(
+      res.ok
+        ? 'Verified! You now have homeowner access.'
+        : 'Code invalid or expired.',
+    );
   }
   return stage === 'request' ? (
     <form onSubmit={request}>
-      <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Your property address" required />
-      <select value={channel} onChange={(e) => setChannel(e.target.value as 'email' | 'sms')}>
+      <input
+        value={address}
+        onChange={(e) => setAddress(e.target.value)}
+        placeholder="Your property address"
+        required
+      />
+      <select
+        value={channel}
+        onChange={(e) => setChannel(e.target.value as 'email' | 'sms')}
+      >
         <option value="email">Email me the code</option>
         <option value="sms">Text me the code</option>
       </select>
@@ -1499,7 +1835,12 @@ export function VerifyPropertyForm() {
     </form>
   ) : (
     <form onSubmit={confirm}>
-      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="6-digit code" required />
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        placeholder="6-digit code"
+        required
+      />
       <button type="submit">Verify</button>
       {msg && <p>{msg}</p>}
     </form>
@@ -1528,11 +1869,13 @@ git commit -m "feat: add auth UI, property verification UI, and route protection
 ## Task 14: Retire Firebase Auth from the board admin app
 
 **Files:**
+
 - Modify: `src/components/admin/useAuth.ts`, `src/components/admin/AdminApp.tsx`, `src/components/admin/Login.tsx`
 - Remove (later sub-projects): `src/lib/firebase.ts` usage — out of scope here beyond auth
 - Test: `test/server/admin-gate.test.ts`
 
 **Interfaces:**
+
 - Consumes: `authClient` (Task 3), middleware role gate (Task 13).
 - Produces: the `/admin` app authenticates via Better Auth sessions and shows content only to `board`.
 
@@ -1543,11 +1886,15 @@ git commit -m "feat: add auth UI, property verification UI, and route protection
 import { env, applyD1Migrations, SELF } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 
-beforeAll(async () => { await applyD1Migrations(env.DATABASE, env.MIGRATIONS); });
+beforeAll(async () => {
+  await applyD1Migrations(env.DATABASE, env.MIGRATIONS);
+});
 
 describe('admin gate', () => {
   it('does not serve admin content to an anonymous request', async () => {
-    const res = await SELF.fetch('http://localhost/admin', { redirect: 'manual' });
+    const res = await SELF.fetch('http://localhost/admin', {
+      redirect: 'manual',
+    });
     expect(res.status).not.toBe(200);
   });
 });
@@ -1566,7 +1913,11 @@ import { authClient } from '../../lib/auth-client';
 export function useAuth() {
   const { data, isPending } = authClient.useSession();
   const role = (data?.user as { role?: string } | undefined)?.role ?? 'visitor';
-  return { loading: isPending, user: data?.user ?? null, isAdmin: role === 'board' };
+  return {
+    loading: isPending,
+    user: data?.user ?? null,
+    isAdmin: role === 'board',
+  };
 }
 ```
 

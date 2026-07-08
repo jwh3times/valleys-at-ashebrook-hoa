@@ -36,6 +36,7 @@ D1, R2, KV, Better Auth. `env` is accessed via `import { env } from
 ## 2. Goals and non-goals
 
 ### Goals
+
 1. All content (announcements, documents, dues, site settings) lives in D1; all
    document files live in R2. No Firestore, no Firebase dependency remains.
 2. A shared `visibility` tier (`public`/`homeowner`/`board`) governs documents and
@@ -49,6 +50,7 @@ D1, R2, KV, Better Auth. `env` is accessed via `import { env } from
    auto-proposed from folder paths, board-reviewable.
 
 ### Non-goals (this sub-project)
+
 - OCR / text extraction / embeddings / vector search — those belong to sub-project
   C (the AI assistant). The library serves files as-is.
 - Per-owner private data (dues balances, individual violation status) — A's
@@ -158,7 +160,7 @@ A script (`scripts/import-documents.ts`) that:
    - homeowner: `Meetings`/minutes, `Budgets`, `Financials` (summaries),
      `Insurance`, `Assessments`, `Collections` (policy)
    - board: `Legal & Collections`, `Covenant Enforcement`/violations, `Member
-     Correspondence`, `Bank Statements`, `Check Images`, `Invoice Images`,
+Correspondence`, `Bank Statements`, `Check Images`, `Invoice Images`,
      `Financials-Board`, `Contracts`, `Tax return`, `Owner Transaction History`
    - default when unmatched: **board** (fail-safe to most-restricted).
 3. Uploads the file to R2 and inserts a `documents` row.
@@ -174,6 +176,7 @@ cloud steps). `pathToDocMeta` is unit-tested independently.
 ## 9. Firebase removal
 
 After the read/write paths are on D1/R2:
+
 - Delete `src/lib/firebase.ts`; remove the `firebase` dependency from
   `package.json`; delete `firestore.rules`, `storage.rules`, and their
   `firebase.json` references (keep hosting config only if still relevant, else
@@ -200,6 +203,7 @@ After the read/write paths are on D1/R2:
 ---
 
 ## 11. Open items (resolved defaults; flag at planning)
+
 - **Upload transport:** default is the admin Worker receiving the file and putting
   it to R2 (simple; fits typical HOA file sizes). If large uploads become an issue,
   a signed-PUT flow can be added later.
@@ -209,6 +213,7 @@ After the read/write paths are on D1/R2:
 ---
 
 ## 12. Testing strategy
+
 - **Unit:** `pathToDocMeta` (folder→visibility/category incl. board default);
   `tierAllows(role, visibility)`.
 - **Worker/D1 integration:** file serving — public served to anon; a homeowner-tier
@@ -223,6 +228,7 @@ After the read/write paths are on D1/R2:
 ---
 
 ## 13. Out of scope
+
 OCR/embeddings/vector search and the AI assistant (sub-project C); per-owner private
 data UI; homeowner-facing uploads. These consume B's storage/visibility model but
 are specified separately.
