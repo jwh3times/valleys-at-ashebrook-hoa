@@ -3,4 +3,3 @@ node_modules/
 .astro/
 coverage/
 package-lock.json
-*.md

@@ -37,7 +37,7 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   Verification requests are rate-limited in KV — a short per-user cooldown plus daily caps per user
   and per property — to curb abuse of the SMS/email fan-out.
 - **Every response carries baseline security headers.** Middleware sets `X-Content-Type-Options:
-  nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
+nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy that allowlists only the third-party resources the site uses (Google
   Fonts, the Google Calendar embed, Turnstile, Web3Forms, and the Cloudflare Web Analytics beacon).
   HSTS is enabled at the Cloudflare zone level (see `SETUP.md`).

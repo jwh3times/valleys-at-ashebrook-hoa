@@ -28,19 +28,19 @@ and board.
 
 ## Tech stack
 
-| Concern | Choice | Cost |
-| --- | --- | --- |
-| Framework | [Astro](https://astro.build) (SSR) + React | Free |
-| Hosting / runtime | [Cloudflare Workers](https://workers.cloudflare.com) | Free tier |
-| Database | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite, Drizzle ORM) | Free tier |
-| File storage | [Cloudflare R2](https://developers.cloudflare.com/r2/) | Free tier |
-| Sessions | [Cloudflare KV](https://developers.cloudflare.com/kv/) | Free tier |
-| Auth | [Better Auth](https://www.better-auth.com) (email/password) | Free |
-| Verification email | [Resend](https://resend.com) | Free tier |
-| Verification SMS | [Twilio](https://twilio.com) | ~1¢/text |
-| Bot protection | [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) | Free |
-| Calendar / Meet | Public Google Calendar | Free |
-| Contact email | [Web3Forms](https://web3forms.com) → Gmail | Free |
+| Concern            | Choice                                                                       | Cost      |
+| ------------------ | ---------------------------------------------------------------------------- | --------- |
+| Framework          | [Astro](https://astro.build) (SSR) + React                                   | Free      |
+| Hosting / runtime  | [Cloudflare Workers](https://workers.cloudflare.com)                         | Free tier |
+| Database           | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite, Drizzle ORM) | Free tier |
+| File storage       | [Cloudflare R2](https://developers.cloudflare.com/r2/)                       | Free tier |
+| Sessions           | [Cloudflare KV](https://developers.cloudflare.com/kv/)                       | Free tier |
+| Auth               | [Better Auth](https://www.better-auth.com) (email/password)                  | Free      |
+| Verification email | [Resend](https://resend.com)                                                 | Free tier |
+| Verification SMS   | [Twilio](https://twilio.com)                                                 | ~1¢/text  |
+| Bot protection     | [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)         | Free      |
+| Calendar / Meet    | Public Google Calendar                                                       | Free      |
+| Contact email      | [Web3Forms](https://web3forms.com) → Gmail                                   | Free      |
 
 The whole site runs on free tiers with **no recurring cost** (Twilio SMS is ~1¢ per
 text; a custom domain is optional, ~$10–15/yr).
@@ -111,7 +111,7 @@ member can promote another account to `board` and demote a board member (the las
 remaining board member can't be demoted), which supports handing the site off to a new
 board over time. A board member can't escalate their own access beyond `board`, and
 the Better Auth admin plugin's impersonation/ban/set-role endpoints are not granted to
-board sessions. The *first* board account is bootstrapped through a permanent, fail-closed
+board sessions. The _first_ board account is bootstrapped through a permanent, fail-closed
 `POST /api/bootstrap/board` endpoint that self-disables once any board account exists — see
 SETUP.md §6.
 
