@@ -20,7 +20,7 @@ vi.mock('../../src/server/auth/senders', () => ({
 
 import { POST } from '../../src/pages/api/verify/request';
 import { getDb } from '../../src/server/db/client';
-import { properties, owners } from '../../src/server/db/schema';
+import { properties, owners, users } from '../../src/server/db/schema';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -32,6 +32,15 @@ beforeAll(async () => {
     unit: null,
     status: 'active',
     notes: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await getDb(env).insert(users).values({
+    id: 'rluser',
+    name: 'Rate User',
+    email: 'rate-user@example.com',
+    emailVerified: true,
+    role: 'homeowner',
     createdAt: now,
     updatedAt: now,
   });

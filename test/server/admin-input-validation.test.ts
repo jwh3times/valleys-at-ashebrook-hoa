@@ -17,6 +17,7 @@ import {
   manualApprovalQueue,
   owners,
   properties,
+  users,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { INPUT_LIMITS } from '../../src/lib/types';
@@ -54,6 +55,15 @@ beforeAll(async () => {
       updatedAt: now,
     },
   ]);
+  await db.insert(users).values({
+    id: 'u-approve',
+    name: 'Approval User',
+    email: 'approval@example.com',
+    emailVerified: true,
+    role: 'visitor',
+    createdAt: now,
+    updatedAt: now,
+  });
   await db.insert(manualApprovalQueue).values({
     id: 'q1',
     userId: 'u-approve',

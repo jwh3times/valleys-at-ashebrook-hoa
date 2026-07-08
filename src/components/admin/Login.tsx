@@ -1,42 +1,26 @@
-import { useState, type FormEvent } from 'react';
-import { authClient } from '../../lib/auth-client';
+import { useLoginForm } from '../react/useLoginForm';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError('');
-    setInfo('');
-    setBusy(true);
-    const result = await authClient.signIn.email({ email, password });
-    if (result.error) {
-      setError('Incorrect email or password. Please try again.');
-    }
-    setBusy(false);
-  }
-
-  async function handleReset() {
-    setError('');
-    setInfo('');
-    if (!email) {
-      setError('Enter your email above first, then click "Forgot password".');
-      return;
-    }
-    const result = await authClient.requestPasswordReset({
-      email,
-      redirectTo: '/reset-password',
-    });
-    if (result.error) {
-      setError('Could not send reset email. Check the address and try again.');
-    } else {
-      setInfo('Password reset email sent. Check your inbox.');
-    }
-  }
+  const {
+    email,
+    setEmail,
+    password,
+    setPassword,
+    error,
+    info,
+    busy,
+    handleSubmit,
+    handleReset,
+  } = useLoginForm({
+    copy: {
+      signInFailed: 'Incorrect email or password. Please try again.',
+      resetNeedsEmail:
+        'Enter your email above first, then click "Forgot password".',
+      resetFailed:
+        'Could not send reset email. Check the address and try again.',
+      resetSent: 'Password reset email sent. Check your inbox.',
+    },
+  });
 
   return (
     <div className="admin-login">

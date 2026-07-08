@@ -1,6 +1,6 @@
 # Roadmap Status & Handoff
 
-**Updated:** 2026-07-05
+**Updated:** 2026-07-08
 
 This is the **resume point** for executing [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md)
 (the outstanding-roadmap plan). Read this first, then the plan for per-item detail. The plan itself
@@ -38,6 +38,7 @@ short "where are we, what's next, what to watch out for" overview.
 | §3.4 | #21 | #41 | Fail-closed first-board bootstrap endpoint `POST /api/bootstrap/board` (self-disabling once a board exists); retires the temp-route runbook. |
 | §3.13 | #16 | #42 | Custom 404 page + `public/robots.txt` + an SSR `/sitemap.xml` route. |
 | §3.7 | #8 | #43 | D1 uniqueness + hot-path indexes (migration `0003`) across the roster/verification/content tables. |
+| §3.7 follow-up | #8 | — | App-owned D1 foreign keys added for owners, property links, verification rows, and manual approvals; pre-migration orphan audit documented in `scripts/audit-orphans.sql`. |
 | — | — | #44 | Follow-up: reconciled the Drizzle meta snapshots so `npm run db:generate` works again. |
 | §3.10 | #12 | #45 | Server-render public announcements/documents/dues in Astro frontmatter (SSR/SEO win). |
 | §3.11 | #13 | #46 | Signed-in account presence in the header + `SignOutButton`. |
@@ -62,7 +63,7 @@ own spec under `docs/superpowers/specs/` or a board/operator decision before bui
 - **§4.4 Homeowner uploads / signed-PUT large files** — dormant until the 25 MB body cap bites.
 - **§4.5 Tenants/renters accounts; online payments; OCR/AI assistant** — each board-decision- or spec-gated.
 - **§4.6 Operational (non-code)** — HSTS zone toggle; GitHub repo + Cloudflare D1/R2 resource renames.
-- **§4.7 CI/CD rounding-out + scheduled cleanup cron** — coverage thresholds and a `property_verifications`/`manual_approval_queue` purge. (Deploy-on-merge is already handled by Cloudflare Workers Builds, so the deploy-workflow item #17 is effectively covered.)
+- **§4.7 CI/CD rounding-out + scheduled cleanup cron — DONE in this close-out.** Coverage thresholds are set from the measured baseline, daily verification/manual-approval cleanup runs through the custom Worker `scheduled()` handler, and deploy-on-main remains intentionally handled by Cloudflare Workers Builds while GitHub Actions stays the verification gate.
 - **§4.8 PII stance note — DONE** in this close-out: roster data handling, neighbor removal requests, and backup/retention are documented in `SETUP.md` §5 and `SECURITY.md`.
 
 ## Gotchas for a resuming agent
@@ -78,6 +79,9 @@ own spec under `docs/superpowers/specs/` or a board/operator decision before bui
   the directive list *and* re-verifying nothing is blocked before deploy (one-line revert to Report-Only if it is).
 - **`npm run db:generate` works again** — PR #44 reconciled the drifted Drizzle meta snapshots; the
   roster/verification/content indexes shipped as migration `0003` (§3.7), so regenerate from a clean baseline.
+- **Before remote FK migration:** run
+  `npx wrangler d1 execute ashebrook-hoa --remote --file scripts/audit-orphans.sql` and confirm every
+  `orphan_count` is `0`, then apply the D1 migrations.
 - **Dependabot #26** (`@cloudflare/workers-types` 4→5, a **major** bump) is open and unreviewed — verify
   the build/types before merging; not part of this roadmap.
 - The `docs-updater` project subagent is **not** invokable via the Agent tool's `subagent_type`; use a
