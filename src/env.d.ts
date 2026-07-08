@@ -14,6 +14,7 @@ declare namespace Cloudflare {
     TWILIO_ACCOUNT_SID: string;
     TWILIO_AUTH_TOKEN: string;
     TWILIO_FROM: string;
+    PUBLIC_TURNSTILE_SITE_KEY?: string;
     TURNSTILE_SECRET_KEY: string;
     /**
      * First-board bootstrap secrets (see /api/bootstrap/board). Optional: set
@@ -30,6 +31,12 @@ declare namespace Cloudflare {
 }
 
 interface Env extends Cloudflare.Env {}
+
+interface Window {
+  onTurnstile?: (token: string) => void;
+  turnstileToken?: string;
+  turnstile?: { reset: () => void };
+}
 
 type Runtime = import('@astrojs/cloudflare').Runtime;
 declare namespace App {

@@ -32,9 +32,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
     turnstileToken: string;
   };
   if (channel !== 'email' && channel !== 'sms')
-    return new Response('Bad channel', { status: 400 });
+    return Response.json(
+      { ok: false, message: 'Choose email or text message delivery.' },
+      { status: 400 },
+    );
   if (!(await verifyTurnstile(env, turnstileToken, request)))
-    return new Response('Bad captcha', { status: 400 });
+    return Response.json(
+      {
+        ok: false,
+        message: 'Could not validate the captcha. Complete it again and retry.',
+      },
+      { status: 400 },
+    );
 
   // Throttle re-submits regardless of outcome (incl. queued/not-found).
   await setCooldown(env, ctx.userId);

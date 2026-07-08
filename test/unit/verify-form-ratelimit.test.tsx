@@ -2,7 +2,16 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { VerifyPropertyForm } from '../../src/components/react/AuthForms';
 
-afterEach(() => vi.restoreAllMocks());
+type Win = typeof window & {
+  turnstileToken?: string;
+  turnstile?: { reset: () => void };
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete (window as Win).turnstile;
+  delete (window as Win).turnstileToken;
+});
 
 describe('VerifyPropertyForm rate-limit message', () => {
   it('shows the server message on a 429', async () => {
@@ -15,6 +24,9 @@ describe('VerifyPropertyForm rate-limit message', () => {
         { status: 429, headers: { 'content-type': 'application/json' } },
       ),
     );
+    (window as Win).turnstile = { reset: vi.fn() };
+    (window as Win).turnstileToken = 'spent-token';
+
     render(<VerifyPropertyForm />);
     fireEvent.change(screen.getByPlaceholderText(/property address/i), {
       target: { value: '1 Test St' },

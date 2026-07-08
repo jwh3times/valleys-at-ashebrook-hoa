@@ -26,6 +26,23 @@ afterEach(() => {
 });
 
 describe('VerifyPropertyForm Turnstile handling', () => {
+  it('blocks submit and does not reset when no Turnstile token exists', async () => {
+    const fetch = vi.spyOn(global, 'fetch');
+    delete (window as Win).turnstileToken;
+
+    render(<VerifyPropertyForm />);
+    fireEvent.change(screen.getByPlaceholderText(/property address/i), {
+      target: { value: '1 Test St' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+
+    expect(fetch).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByText(/complete the captcha/i)).toBeInTheDocument(),
+    );
+    expect((window as Win).turnstile!.reset).not.toHaveBeenCalled();
+  });
+
   it('resets the widget and clears the spent token after a 429', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(
       jsonResponse({ rateLimited: true, message: 'Slow down.' }, 429),
@@ -55,6 +72,31 @@ describe('VerifyPropertyForm Turnstile handling', () => {
       expect(screen.getByPlaceholderText(/6-digit code/i)).toBeInTheDocument(),
     );
     // ...and the spent token was reset for any future request.
+    expect((window as Win).turnstile!.reset).toHaveBeenCalled();
+    expect((window as Win).turnstileToken).toBeUndefined();
+  });
+
+  it('shows a JSON 400 message and resets the spent token', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(
+        {
+          ok: false,
+          message: 'Could not validate the captcha. Complete it again.',
+        },
+        400,
+      ),
+    );
+    render(<VerifyPropertyForm />);
+    fireEvent.change(screen.getByPlaceholderText(/property address/i), {
+      target: { value: '1 Test St' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send code/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/could not validate the captcha/i),
+      ).toBeInTheDocument(),
+    );
     expect((window as Win).turnstile!.reset).toHaveBeenCalled();
     expect((window as Win).turnstileToken).toBeUndefined();
   });
