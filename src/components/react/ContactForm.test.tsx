@@ -1,33 +1,25 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import ContactForm from './ContactForm';
 
-// ContactForm reads the Web3Forms key from import.meta.env at module load, so
-// each test resets modules and stubs the env before importing the component.
 describe('ContactForm', () => {
   afterEach(() => {
-    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
-    vi.resetModules();
   });
 
-  it('shows a setup notice when no Web3Forms key is configured', async () => {
-    vi.resetModules();
-    const { default: ContactForm } = await import('./ContactForm');
+  it('shows a setup notice when no Web3Forms key is configured', () => {
     render(<ContactForm />);
     expect(screen.getByText(/Setup needed/i)).toBeInTheDocument();
   });
 
   it('submits the form and shows a success message', async () => {
-    vi.resetModules();
-    vi.stubEnv('PUBLIC_WEB3FORMS_KEY', 'test-key');
     const fetchMock = vi
       .fn()
       .mockResolvedValue({ json: async () => ({ success: true }) });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { default: ContactForm } = await import('./ContactForm');
-    render(<ContactForm />);
+    render(<ContactForm accessKey="test-key" />);
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText(/your name/i), 'Jane Doe');
@@ -45,15 +37,12 @@ describe('ContactForm', () => {
   });
 
   it('shows an error message when submission fails', async () => {
-    vi.resetModules();
-    vi.stubEnv('PUBLIC_WEB3FORMS_KEY', 'test-key');
     const fetchMock = vi.fn().mockResolvedValue({
       json: async () => ({ success: false, message: 'Rejected' }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const { default: ContactForm } = await import('./ContactForm');
-    render(<ContactForm />);
+    render(<ContactForm accessKey="test-key" />);
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText(/your name/i), 'Jane');

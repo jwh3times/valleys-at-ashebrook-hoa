@@ -3,11 +3,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import ContactForm from '../components/react/ContactForm.tsx';
 import { OFFICIAL_ORG_NAME, NEIGHBORHOOD } from '../lib/site';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import { env } from 'cloudflare:workers';
 
 // Astro.locals.site is set by middleware on every real request; fall back to
 // the default so this page is renderable via the Astro Container API too.
 const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 const official = site.officialMode;
+const web3FormsKey = env.WEB3FORMS_KEY;
 ---
 
 <BaseLayout
@@ -35,7 +37,7 @@ const official = site.officialMode;
     }
 
     <div class="contact-grid">
-      <ContactForm client:only="react" />
+      <ContactForm accessKey={web3FormsKey} client:only="react" />
 
       <aside>
         <div class="contact-aside__h">Other ways to reach us</div>
