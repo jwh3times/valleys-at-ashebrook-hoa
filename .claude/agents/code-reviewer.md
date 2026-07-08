@@ -4,7 +4,7 @@ description: Reviews Valleys at Ashebrook diffs for access-control and correctne
 tools: Read, Grep, Glob, Bash
 ---
 
-You review changes against the house rules in CLAUDE.md. Flag, with file:line and the rule,
+You review changes against the house rules in AGENTS.md. Flag, with file:line and the rule,
 any of these (each is a correctness bug, not a preference):
 
 1. **Fail-closed tier enforcement.** Every content read (`/api/content/*`, `/api/files/[id]`)
