@@ -14,8 +14,8 @@ Plus a few external services: a public **Google Calendar** (community events), *
 verification), and **Cloudflare Turnstile** (bot protection).
 
 **Cost:** the Cloudflare free tier comfortably covers this site (D1, KV, R2 with no egress
-fees, Workers). The only usage-based costs are Twilio SMS (~1¢ per text) and a small email
-allowance; a custom domain is optional (~$10–15/yr). Follow the steps in order — you only do
+fees, Workers). The only usage-based costs are Twilio SMS (~~1¢ per text) and a small email
+allowance; a custom domain is optional (~~$10–15/yr). Follow the steps in order — you only do
 this once.
 
 ---
@@ -67,12 +67,12 @@ Three kinds of configuration:
 development, and set the same values as Cloudflare secrets for production
 (`npx wrangler secret put NAME`, or the Cloudflare dashboard → Workers → your Worker → Settings → Variables).
 
-| Secret | What it is |
-| --- | --- |
-| `BETTER_AUTH_SECRET` | A strong random string — generate with `openssl rand -base64 32` |
-| `EMAIL_API_KEY`, `EMAIL_FROM` | Resend API key + the "from" address (verification / reset emails) |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Twilio credentials + sending number (SMS codes) |
-| `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile secret (server-side verification) |
+| Secret                                                   | What it is                                                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                                     | A strong random string — generate with `openssl rand -base64 32`  |
+| `EMAIL_API_KEY`, `EMAIL_FROM`                            | Resend API key + the "from" address (verification / reset emails) |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | Twilio credentials + sending number (SMS codes)                   |
+| `TURNSTILE_SECRET_KEY`                                   | Cloudflare Turnstile secret (server-side verification)            |
 
 **b) Public build-time values** — set these `PUBLIC_*` values (they are safe to expose; Astro
 inlines them into the client at build):
@@ -338,13 +338,13 @@ as quickly.
 
 ## Where things live (quick reference)
 
-| Thing | Where |
-| --- | --- |
-| Announcements, dues, site text | Cloudflare D1 (`announcements`, `settings`) |
-| Documents (files) | Cloudflare R2 (`ashebrook-hoa-docs`) + metadata in D1 (`documents`) |
+| Thing                                 | Where                                                                |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| Announcements, dues, site text        | Cloudflare D1 (`announcements`, `settings`)                          |
+| Documents (files)                     | Cloudflare R2 (`ashebrook-hoa-docs`) + metadata in D1 (`documents`)  |
 | Accounts, roles, roster, verification | Cloudflare D1 (Better Auth tables + `owners`, `user_property_links`) |
-| Auth sessions / rate limits | Cloudflare KV |
-| Calendar & Meet links | The site's public Google Calendar |
-| Contact-form emails | Web3Forms → your inbox |
-| Verification codes | Email provider (Resend) + Twilio SMS |
-| Hosting | Cloudflare Workers |
+| Auth sessions / rate limits           | Cloudflare KV                                                        |
+| Calendar & Meet links                 | The site's public Google Calendar                                    |
+| Contact-form emails                   | Web3Forms → your inbox                                               |
+| Verification codes                    | Email provider (Resend) + Twilio SMS                                 |
+| Hosting                               | Cloudflare Workers                                                   |

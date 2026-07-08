@@ -30,11 +30,13 @@ Branch: `git checkout main && git pull && git checkout -b feat/security-headers-
 ### Task A1: HMAC-keyed, constant-time OTP hashes (#4)
 
 **Files:**
+
 - Modify: `src/server/verification/codes.ts`
 - Modify: `src/server/verification/property.ts:78`, `:127`
 - Test: `test/unit/codes.test.ts` (modify), `test/server/verification.test.ts:78,124,135` (modify seeds)
 
 **Interfaces:**
+
 - Produces: `hashCode(code: string, secret: string): Promise<string>`, `verifyCode(code: string, hash: string, secret: string): Promise<boolean>` (both now require `secret`). `generateCode()`, `MAX_ATTEMPTS`, `CODE_TTL_MS` unchanged.
 - Consumes: `env.BETTER_AUTH_SECRET` inside `property.ts`.
 
@@ -63,8 +65,12 @@ describe('codes', () => {
     expect(await verifyCode('000000', hash, SECRET)).toBe(false);
   });
   it('is keyed: the same code hashes differently under a different secret', async () => {
-    expect(await hashCode('123456', 'a')).not.toBe(await hashCode('123456', 'b'));
-    expect(await verifyCode('123456', await hashCode('123456', 'a'), 'b')).toBe(false);
+    expect(await hashCode('123456', 'a')).not.toBe(
+      await hashCode('123456', 'b'),
+    );
+    expect(await verifyCode('123456', await hashCode('123456', 'a'), 'b')).toBe(
+      false,
+    );
   });
   it('produces a 64-char hex digest (HMAC-SHA-256)', async () => {
     expect(await hashCode('123456', SECRET)).toMatch(/^[0-9a-f]{64}$/);
@@ -144,6 +150,7 @@ export async function verifyCode(
 - [ ] **Step 4: Thread the secret through `property.ts`**
 
 In `src/server/verification/property.ts`:
+
 - Line ~78 (inside `requestPropertyVerification`, the insert): change
   `codeHash: await hashCode(code),` → `codeHash: await hashCode(code, env.BETTER_AUTH_SECRET),`
 - Line ~127 (inside `confirmPropertyVerification`): change
@@ -152,6 +159,7 @@ In `src/server/verification/property.ts`:
 - [ ] **Step 5: Update the server verification test seeds**
 
 In `test/server/verification.test.ts`, the three direct `hashCode('…')` seed calls must use the same secret the handler uses (`env.BETTER_AUTH_SECRET`, already `test-secret-not-real` in the workers config):
+
 - Line ~78: `codeHash: await hashCode('123456'),` → `codeHash: await hashCode('123456', env.BETTER_AUTH_SECRET),`
 - Line ~124: `codeHash: await hashCode('111111'),` → `codeHash: await hashCode('111111', env.BETTER_AUTH_SECRET),`
 - Line ~135: `codeHash: await hashCode('654321'),` → `codeHash: await hashCode('654321', env.BETTER_AUTH_SECRET),`
@@ -186,6 +194,7 @@ EOF
 ### Task A2: Validate settings on write, normalize dues on read (#6)
 
 **Files:**
+
 - Modify: `src/lib/types.ts` (add `normalizeDuesSettings`)
 - Modify: `src/pages/api/admin/site.ts` (normalize before persist)
 - Modify: `src/pages/api/admin/dues.ts` (normalize before persist)
@@ -193,6 +202,7 @@ EOF
 - Test: `test/unit/dues-normalize.test.ts` (create), `test/server/content-dues-normalize.test.ts` (create)
 
 **Interfaces:**
+
 - Produces: `normalizeDuesSettings(raw: unknown): DuesSettings` (exported from `src/lib/types.ts`).
 - Consumes: existing `normalizeSiteSettings`, `DEFAULT_DUES_SETTINGS`, `PaymentOption`, `DuesSettings`.
 
@@ -202,7 +212,10 @@ Create `test/unit/dues-normalize.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { normalizeDuesSettings, DEFAULT_DUES_SETTINGS } from '../../src/lib/types';
+import {
+  normalizeDuesSettings,
+  DEFAULT_DUES_SETTINGS,
+} from '../../src/lib/types';
 
 describe('normalizeDuesSettings', () => {
   it('fills defaults for a non-object', () => {
@@ -240,7 +253,9 @@ describe('normalizeDuesSettings', () => {
     expect(out.paymentOptions[2].url).toBeUndefined();
   });
   it('replaces a non-array paymentOptions with []', () => {
-    expect(normalizeDuesSettings({ paymentOptions: 'nope' }).paymentOptions).toEqual([]);
+    expect(
+      normalizeDuesSettings({ paymentOptions: 'nope' }).paymentOptions,
+    ).toEqual([]);
   });
 });
 ```
@@ -261,12 +276,18 @@ Immediately after the `DEFAULT_DUES_SETTINGS` declaration, add:
  * (the url is rendered as an <a href> in DuesInfo.tsx). Unknown keys are dropped.
  */
 export function normalizeDuesSettings(raw: unknown): DuesSettings {
-  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<
+    string,
+    unknown
+  >;
   const str = (v: unknown, fallback: string) =>
     typeof v === 'string' ? v : fallback;
   const rawOptions = Array.isArray(r.paymentOptions) ? r.paymentOptions : [];
   const paymentOptions: PaymentOption[] = rawOptions.map((o) => {
-    const opt = (o && typeof o === 'object' ? o : {}) as Record<string, unknown>;
+    const opt = (o && typeof o === 'object' ? o : {}) as Record<
+      string,
+      unknown
+    >;
     const option: PaymentOption = {
       label: str(opt.label, ''),
       details: str(opt.details, ''),
@@ -274,7 +295,8 @@ export function normalizeDuesSettings(raw: unknown): DuesSettings {
     if (typeof opt.url === 'string') {
       try {
         const u = new URL(opt.url);
-        if (u.protocol === 'http:' || u.protocol === 'https:') option.url = opt.url;
+        if (u.protocol === 'http:' || u.protocol === 'https:')
+          option.url = opt.url;
       } catch {
         /* drop unparseable url */
       }
@@ -298,25 +320,34 @@ Expected: PASS.
 - [ ] **Step 5: Normalize before persisting (site + dues writes)**
 
 In `src/pages/api/admin/site.ts`: add the import and normalize:
+
 ```ts
 import { normalizeSiteSettings } from '../../../lib/types';
 ```
+
 Change `const value = JSON.stringify(await request.json());`
 to `const value = JSON.stringify(normalizeSiteSettings(await request.json()));`
 
 In `src/pages/api/admin/dues.ts`: add the import and normalize:
+
 ```ts
 import { normalizeDuesSettings } from '../../../lib/types';
 ```
+
 Change `const value = JSON.stringify(await request.json());`
 to `const value = JSON.stringify(normalizeDuesSettings(await request.json()));`
 
 - [ ] **Step 6: Normalize the public dues read**
 
 In `src/pages/api/content/dues.ts`: add the import and normalize the parsed row:
+
 ```ts
-import { DEFAULT_DUES_SETTINGS, normalizeDuesSettings } from '../../../lib/types';
+import {
+  DEFAULT_DUES_SETTINGS,
+  normalizeDuesSettings,
+} from '../../../lib/types';
 ```
+
 Change the `try` block body from `return Response.json(JSON.parse(row.value));`
 to `return Response.json(normalizeDuesSettings(JSON.parse(row.value)));`
 
@@ -347,7 +378,9 @@ describe('GET /api/content/dues normalization', () => {
           dueDate: 'Jan 31',
           notes: 'late fee $25',
           evil: '<script>',
-          paymentOptions: [{ label: 'X', details: 'y', url: 'javascript:alert(1)' }],
+          paymentOptions: [
+            { label: 'X', details: 'y', url: 'javascript:alert(1)' },
+          ],
         }),
         updatedAt: now,
       })
@@ -399,11 +432,13 @@ EOF
 ### Task A3: Baseline security headers on every response (#3)
 
 **Files:**
+
 - Modify: `src/middleware.ts`
 - Modify: `SETUP.md` (HSTS note)
 - Test: `test/server/middleware-headers.test.ts` (create)
 
 **Interfaces:**
+
 - Produces: security headers on every response (`X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, `Permissions-Policy`, `Content-Security-Policy-Report-Only`), including redirects.
 
 - [ ] **Step 1: Write the failing test**
@@ -443,7 +478,9 @@ describe('security headers', () => {
     const res = await call('/', async () => new Response('ok'));
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(res.headers.get('x-frame-options')).toBe('DENY');
-    expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+    expect(res.headers.get('referrer-policy')).toBe(
+      'strict-origin-when-cross-origin',
+    );
     expect(res.headers.get('permissions-policy')).toBeTruthy();
     expect(res.headers.get('content-security-policy-report-only')).toContain(
       'calendar.google.com',
@@ -489,7 +526,7 @@ const CSP = [
   "img-src 'self' data:",
   "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self' https://api.web3forms.com",
-  "frame-src https://calendar.google.com https://challenges.cloudflare.com",
+  'frame-src https://calendar.google.com https://challenges.cloudflare.com',
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -520,7 +557,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   let response: Response;
   if (path.startsWith('/admin') && ctx?.role !== 'board') {
     response = context.redirect('/login', 302);
-  } else if (path.startsWith('/homeowner') && (!ctx || ctx.role === 'visitor')) {
+  } else if (
+    path.startsWith('/homeowner') &&
+    (!ctx || ctx.role === 'visitor')
+  ) {
     response = context.redirect('/login', 302);
   } else {
     response = await next();
@@ -584,10 +624,12 @@ Branch: `git checkout main && git checkout -b feat/verify-rate-limit`
 ### Task B1: Rate-limit module (KV counters)
 
 **Files:**
+
 - Create: `src/server/verification/rate-limit.ts`
 - Test: `test/server/rate-limit.test.ts` (create)
 
 **Interfaces:**
+
 - Produces:
   - `checkUserRateLimit(env: Env, userId: string): Promise<{ ok: true } | { ok: false; reason: 'cooldown' | 'daily' }>`
   - `checkPropertyRateLimit(env: Env, propertyId: string): Promise<{ ok: true } | { ok: false; reason: 'daily' }>`
@@ -740,11 +782,13 @@ EOF
 ### Task B2: Enforce the limit in the request path
 
 **Files:**
+
 - Modify: `src/server/verification/property.ts` (per-property check + record on send; extend return type)
 - Modify: `src/pages/api/verify/request.ts` (per-user pre-check, cooldown, 429)
 - Test: `test/server/verify-request-ratelimit.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: rate-limit primitives from B1.
 - Produces: `requestPropertyVerification` return type becomes
   `Promise<{ ok: true } | { ok: false; queued: true } | { ok: false; rateLimited: true }>`.
@@ -760,7 +804,11 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 // Signed-in user + captcha pass; senders are inert so no real network.
 // (vi.mock calls are hoisted above the imports below by Vitest.)
 vi.mock('../../src/server/authz/context', () => ({
-  getAuthContext: async () => ({ userId: 'rluser', role: 'homeowner', propertyIds: [] }),
+  getAuthContext: async () => ({
+    userId: 'rluser',
+    role: 'homeowner',
+    propertyIds: [],
+  }),
 }));
 vi.mock('../../src/server/authz/turnstile', () => ({
   verifyTurnstile: async () => true,
@@ -805,7 +853,11 @@ function req() {
     request: new Request('http://localhost/api/verify/request', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ address: '5 Rate St', channel: 'email', turnstileToken: 't' }),
+      body: JSON.stringify({
+        address: '5 Rate St',
+        channel: 'email',
+        turnstileToken: 't',
+      }),
     }),
   } as never);
 }
@@ -816,7 +868,10 @@ describe('POST /api/verify/request rate limiting', () => {
     expect(first.status).toBe(200);
     const second = await req();
     expect(second.status).toBe(429);
-    const body = (await second.json()) as { rateLimited?: boolean; message?: string };
+    const body = (await second.json()) as {
+      rateLimited?: boolean;
+      message?: string;
+    };
     expect(body.rateLimited).toBe(true);
     expect(typeof body.message).toBe('string');
   });
@@ -833,11 +888,13 @@ Expected: FAIL — the second request currently returns 200 (no rate limiting).
 In `src/server/verification/property.ts`:
 
 Add to the imports:
+
 ```ts
 import { checkPropertyRateLimit, recordVerificationSend } from './rate-limit';
 ```
 
 Change the `requestPropertyVerification` return type:
+
 ```ts
 ): Promise<
   { ok: true } | { ok: false; queued: true } | { ok: false; rateLimited: true }
@@ -845,14 +902,16 @@ Change the `requestPropertyVerification` return type:
 ```
 
 After the `recipients.length === 0` queue block (i.e. once a property + recipients exist, just before `await db.delete(propertyVerifications)...`), insert:
+
 ```ts
-  const prl = await checkPropertyRateLimit(env, property.id);
-  if (!prl.ok) return { ok: false, rateLimited: true };
+const prl = await checkPropertyRateLimit(env, property.id);
+if (!prl.ok) return { ok: false, rateLimited: true };
 ```
 
 In the success path, immediately before the final `return { ok: true };`, insert:
+
 ```ts
-  await recordVerificationSend(env, userId, property.id);
+await recordVerificationSend(env, userId, property.id);
 ```
 
 - [ ] **Step 4: Add the per-user pre-check, cooldown, and 429 in `request.ts`**
@@ -882,7 +941,10 @@ export const POST: APIRoute = async ({ request }) => {
       rl.reason === 'cooldown'
         ? 'Please wait a couple of minutes before requesting another code.'
         : "You've reached the daily limit for verification requests. Please try again tomorrow.";
-    return Response.json({ ok: false, rateLimited: true, message }, { status: 429 });
+    return Response.json(
+      { ok: false, rateLimited: true, message },
+      { status: 429 },
+    );
   }
 
   const { address, channel, turnstileToken } = (await request.json()) as {
@@ -898,7 +960,12 @@ export const POST: APIRoute = async ({ request }) => {
   // Throttle re-submits regardless of outcome (incl. queued/not-found).
   await setCooldown(env, ctx.userId);
 
-  const result = await requestPropertyVerification(env, ctx.userId, address, channel);
+  const result = await requestPropertyVerification(
+    env,
+    ctx.userId,
+    address,
+    channel,
+  );
   if ('rateLimited' in result && result.rateLimited) {
     return Response.json(
       {
@@ -942,10 +1009,12 @@ EOF
 ### Task B3: Surface the 429 in the verification form
 
 **Files:**
+
 - Modify: `src/components/react/AuthForms.tsx` (`VerifyPropertyForm.request`)
 - Test: `test/unit/verify-form-ratelimit.test.tsx` (create)
 
 **Interfaces:**
+
 - Consumes: the 429 JSON `{ rateLimited, message }` from B2.
 
 - [ ] **Step 1: Write the failing test**
@@ -963,7 +1032,10 @@ describe('VerifyPropertyForm rate-limit message', () => {
   it('shows the server message on a 429', async () => {
     vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(
-        JSON.stringify({ rateLimited: true, message: 'Please wait a couple of minutes.' }),
+        JSON.stringify({
+          rateLimited: true,
+          message: 'Please wait a couple of minutes.',
+        }),
         { status: 429, headers: { 'content-type': 'application/json' } },
       ),
     );
@@ -973,7 +1045,9 @@ describe('VerifyPropertyForm rate-limit message', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /send code/i }));
     await waitFor(() =>
-      expect(screen.getByText(/please wait a couple of minutes/i)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/please wait a couple of minutes/i),
+      ).toBeInTheDocument(),
     );
   });
 });
@@ -989,25 +1063,24 @@ Expected: FAIL — the form currently ignores status 429 and would show the gene
 In `src/components/react/AuthForms.tsx`, inside `request`, replace the block from `const data = (await res.json())...` through the final `else` with:
 
 ```ts
-    const data = (await res.json()) as {
-      ok?: boolean;
-      queued?: boolean;
-      rateLimited?: boolean;
-      message?: string;
-    };
-    if (res.status === 429 || data.rateLimited) {
-      setMsg(data.message ?? 'Too many requests. Please wait and try again.');
-      return;
-    }
-    if (data.queued)
-      setMsg(
-        "Sent for manual review — you'll get a confirmation once your account is approved.",
-      );
-    else if (data.ok) {
-      setMsg('Code sent — check your phone/email.');
-      setStage('confirm');
-    } else
-      setMsg('Could not start verification. Check the address and try again.');
+const data = (await res.json()) as {
+  ok?: boolean;
+  queued?: boolean;
+  rateLimited?: boolean;
+  message?: string;
+};
+if (res.status === 429 || data.rateLimited) {
+  setMsg(data.message ?? 'Too many requests. Please wait and try again.');
+  return;
+}
+if (data.queued)
+  setMsg(
+    "Sent for manual review — you'll get a confirmation once your account is approved.",
+  );
+else if (data.ok) {
+  setMsg('Code sent — check your phone/email.');
+  setStage('confirm');
+} else setMsg('Could not start verification. Check the address and try again.');
 ```
 
 - [ ] **Step 4: Run it to verify it passes**
@@ -1040,10 +1113,12 @@ Branch: `git checkout main && git checkout -b feat/document-type-constraints`
 ### Task C1: Upload allowlist + canonical content type
 
 **Files:**
+
 - Modify: `src/pages/api/admin/documents.ts` (`POST`)
 - Test: `test/server/admin-documents-board.test.ts` (extend)
 
 **Interfaces:**
+
 - Produces: uploads restricted to an extension allowlist; stored `contentType` derived server-side (client MIME ignored).
 
 - [ ] **Step 1: Add failing tests to the board upload suite**
@@ -1051,41 +1126,44 @@ Branch: `git checkout main && git checkout -b feat/document-type-constraints`
 Append two tests inside the `describe('admin documents — board', …)` block in `test/server/admin-documents-board.test.ts`:
 
 ```ts
-  it('rejects a disallowed extension with 415', async () => {
-    const form = new FormData();
-    form.set('file', new File(['x'], 'evil.html', { type: 'text/html' }));
-    form.set('title', 'Evil');
-    form.set('category', 'Other');
-    form.set('visibility', 'public');
-    const res = await POST({
-      request: new Request('http://localhost/api/admin/documents', {
-        method: 'POST',
-        body: form,
-      }),
-    } as never);
-    expect(res.status).toBe(415);
-  });
+it('rejects a disallowed extension with 415', async () => {
+  const form = new FormData();
+  form.set('file', new File(['x'], 'evil.html', { type: 'text/html' }));
+  form.set('title', 'Evil');
+  form.set('category', 'Other');
+  form.set('visibility', 'public');
+  const res = await POST({
+    request: new Request('http://localhost/api/admin/documents', {
+      method: 'POST',
+      body: form,
+    }),
+  } as never);
+  expect(res.status).toBe(415);
+});
 
-  it('stores a server-derived content type, ignoring the client MIME', async () => {
-    const form = new FormData();
-    // Wrong/empty client MIME on a .csv — server should canonicalize to text/csv.
-    form.set('file', new File(['a,b'], 'roster.csv', { type: 'application/octet-stream' }));
-    form.set('title', 'Roster CSV');
-    form.set('category', 'Other');
-    form.set('visibility', 'public');
-    const res = await POST({
-      request: new Request('http://localhost/api/admin/documents', {
-        method: 'POST',
-        body: form,
-      }),
-    } as never);
-    expect(res.status).toBe(201);
-    const [row] = await getDb(env)
-      .select()
-      .from(documents)
-      .where(eq(documents.title, 'Roster CSV'));
-    expect(row.contentType).toBe('text/csv');
-  });
+it('stores a server-derived content type, ignoring the client MIME', async () => {
+  const form = new FormData();
+  // Wrong/empty client MIME on a .csv — server should canonicalize to text/csv.
+  form.set(
+    'file',
+    new File(['a,b'], 'roster.csv', { type: 'application/octet-stream' }),
+  );
+  form.set('title', 'Roster CSV');
+  form.set('category', 'Other');
+  form.set('visibility', 'public');
+  const res = await POST({
+    request: new Request('http://localhost/api/admin/documents', {
+      method: 'POST',
+      body: form,
+    }),
+  } as never);
+  expect(res.status).toBe(201);
+  const [row] = await getDb(env)
+    .select()
+    .from(documents)
+    .where(eq(documents.title, 'Roster CSV'));
+  expect(row.contentType).toBe('text/csv');
+});
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -1114,14 +1192,15 @@ const EXT_TO_TYPE: Record<string, string> = {
 ```
 
 Inside `POST`, after the `if (file.size > MAX_BYTES) ...` line, add the type check:
+
 ```ts
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  const contentType = EXT_TO_TYPE[ext];
-  if (!contentType)
-    return new Response('Unsupported file type', { status: 415 });
+const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+const contentType = EXT_TO_TYPE[ext];
+if (!contentType) return new Response('Unsupported file type', { status: 415 });
 ```
 
 Then replace the two `file.type` usages:
+
 - `httpMetadata: { contentType: file.type },` → `httpMetadata: { contentType },`
 - `contentType: file.type || 'application/octet-stream',` → `contentType,`
 
@@ -1151,10 +1230,12 @@ EOF
 ### Task C2: Safe download disposition + filename sanitization
 
 **Files:**
+
 - Modify: `src/pages/api/files/[id].ts` (`GET`)
 - Test: `test/server/files-download-safety.test.ts` (create)
 
 **Interfaces:**
+
 - Produces: `nosniff` on every download; `inline` only for `application/pdf`, `attachment` otherwise; control chars stripped from the filename header.
 
 - [ ] **Step 1: Write the failing test**
@@ -1232,19 +1313,21 @@ Expected: FAIL — today the handler sets no `nosniff` and always uses `inline`.
 In `src/pages/api/files/[id].ts`, replace the header-building block (from `const headers = new Headers();` through the `cache-control` set) with:
 
 ```ts
-  const headers = new Headers();
-  headers.set('content-type', doc.contentType);
-  headers.set('x-content-type-options', 'nosniff');
-  // Strip control chars and quotes/backslashes so the filename can't break the
-  // header or inject a second directive.
-  const safeName = [...doc.filename].filter((ch) => ch.charCodeAt(0) >= 0x20 && ch !== '"' && ch !== '\\').join('');
-  const disposition =
-    doc.contentType === 'application/pdf' ? 'inline' : 'attachment';
-  headers.set('content-disposition', `${disposition}; filename="${safeName}"`);
-  headers.set(
-    'cache-control',
-    doc.visibility === 'public' ? 'public, max-age=3600' : 'private, no-store',
-  );
+const headers = new Headers();
+headers.set('content-type', doc.contentType);
+headers.set('x-content-type-options', 'nosniff');
+// Strip control chars and quotes/backslashes so the filename can't break the
+// header or inject a second directive.
+const safeName = [...doc.filename]
+  .filter((ch) => ch.charCodeAt(0) >= 0x20 && ch !== '"' && ch !== '\\')
+  .join('');
+const disposition =
+  doc.contentType === 'application/pdf' ? 'inline' : 'attachment';
+headers.set('content-disposition', `${disposition}; filename="${safeName}"`);
+headers.set(
+  'cache-control',
+  doc.visibility === 'public' ? 'public, max-age=3600' : 'private, no-store',
+);
 ```
 
 - [ ] **Step 4: Run to verify pass**
@@ -1283,10 +1366,12 @@ Branch: `git checkout main && git checkout -b feat/board-handoff`
 ### Task D1: `roles.ts` → direct DB promote/demote + board list
 
 **Files:**
+
 - Modify: `src/pages/api/admin/roles.ts` (full rewrite)
 - Test: `test/server/admin-roles-board.test.ts` (create); `test/server/admin-roles.test.ts` (unchanged — its 401 checks still hold)
 
 **Interfaces:**
+
 - Produces:
   - `GET /api/admin/roles` → `{ board: { id, name, email, createdAt }[] }`
   - `POST /api/admin/roles` body `{ action: 'promote', email }` (204 / 404) or `{ action: 'demote', userId }` (204 / 409 when it's the last board member).
@@ -1341,9 +1426,15 @@ function post(body: unknown) {
 describe('admin roles — board handoff', () => {
   it('promotes an existing account to board by email', async () => {
     await mkUser('rd-home', 'incoming@example.com', 'homeowner');
-    const res = await post({ action: 'promote', email: 'incoming@example.com' });
+    const res = await post({
+      action: 'promote',
+      email: 'incoming@example.com',
+    });
     expect(res.status).toBe(204);
-    const [u] = await getDb(env).select().from(users).where(eq(users.id, 'rd-home'));
+    const [u] = await getDb(env)
+      .select()
+      .from(users)
+      .where(eq(users.id, 'rd-home'));
     expect(u.role).toBe('board');
   });
 
@@ -1367,7 +1458,10 @@ describe('admin roles — board handoff', () => {
     await mkUser('rd-b', 'b@example.com', 'board');
     const res = await post({ action: 'demote', userId: 'rd-b' });
     expect(res.status).toBe(204);
-    const [u] = await getDb(env).select().from(users).where(eq(users.id, 'rd-b'));
+    const [u] = await getDb(env)
+      .select()
+      .from(users)
+      .where(eq(users.id, 'rd-b'));
     expect(u.role).toBe('visitor');
   });
 
@@ -1375,7 +1469,10 @@ describe('admin roles — board handoff', () => {
     await mkUser('rd-solo', 'solo@example.com', 'board');
     const res = await post({ action: 'demote', userId: 'rd-solo' });
     expect(res.status).toBe(409);
-    const [u] = await getDb(env).select().from(users).where(eq(users.id, 'rd-solo'));
+    const [u] = await getDb(env)
+      .select()
+      .from(users)
+      .where(eq(users.id, 'rd-solo'));
     expect(u.role).toBe('board');
   });
 });
@@ -1431,10 +1528,16 @@ export const POST: APIRoute = async ({ request }) => {
   if (body.action === 'promote') {
     const email = body.email?.trim();
     if (!email) return new Response('Email required', { status: 400 });
-    const [target] = await db.select().from(users).where(eq(users.email, email));
+    const [target] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email));
     if (!target)
       return new Response('No account with that email', { status: 404 });
-    await db.update(users).set({ role: 'board' }).where(eq(users.id, target.id));
+    await db
+      .update(users)
+      .set({ role: 'board' })
+      .where(eq(users.id, target.id));
     return new Response(null, { status: 204 });
   }
 
@@ -1445,7 +1548,9 @@ export const POST: APIRoute = async ({ request }) => {
       .from(users)
       .where(eq(users.role, 'board'));
     if (board.length <= 1)
-      return new Response('Cannot demote the last board member', { status: 409 });
+      return new Response('Cannot demote the last board member', {
+        status: 409,
+      });
     await db
       .update(users)
       .set({ role: 'visitor' })
@@ -1483,10 +1588,12 @@ EOF
 ### Task D2: `members.ts` revoke → direct DB + refuse board demotion
 
 **Files:**
+
 - Modify: `src/pages/api/admin/members.ts` (revoke branch; drop `createAuth` import)
 - Test: `test/server/admin-members-revoke.test.ts` (create)
 
 **Interfaces:**
+
 - Produces: `POST /api/admin/members {action:'revoke', userId}` → 204 for a homeowner (role→visitor, links deleted); 409 if the target is a board member.
 
 - [ ] **Step 1: Write the failing test**
@@ -1512,15 +1619,17 @@ beforeAll(async () => {
 
 async function mkUser(id: string, role: string) {
   const now = new Date();
-  await getDb(env).insert(users).values({
-    id,
-    name: id,
-    email: `${id}@example.com`,
-    emailVerified: true,
-    role,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(users)
+    .values({
+      id,
+      name: id,
+      email: `${id}@example.com`,
+      emailVerified: true,
+      role,
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 function revoke(userId: string) {
@@ -1545,7 +1654,10 @@ describe('members revoke', () => {
     });
     const res = await revoke('mr-home');
     expect(res.status).toBe(204);
-    const [u] = await getDb(env).select().from(users).where(eq(users.id, 'mr-home'));
+    const [u] = await getDb(env)
+      .select()
+      .from(users)
+      .where(eq(users.id, 'mr-home'));
     expect(u.role).toBe('visitor');
     const links = await getDb(env)
       .select()
@@ -1558,7 +1670,10 @@ describe('members revoke', () => {
     await mkUser('mr-board', 'board');
     const res = await revoke('mr-board');
     expect(res.status).toBe(409);
-    const [u] = await getDb(env).select().from(users).where(eq(users.id, 'mr-board'));
+    const [u] = await getDb(env)
+      .select()
+      .from(users)
+      .where(eq(users.id, 'mr-board'));
     expect(u.role).toBe('board');
   });
 });
@@ -1572,6 +1687,7 @@ Expected: FAIL — current revoke calls `setRole` (which, without a real board s
 - [ ] **Step 3: Rewrite the revoke branch in `members.ts`**
 
 In `src/pages/api/admin/members.ts`:
+
 - Remove the import `import { createAuth } from '../../../server/auth';` (revoke was its only user; approve uses direct DB).
 - Ensure `users` and `userPropertyLinks` are imported (they already are; `and`/`eq` too).
 - Replace the whole `if (body.action === 'revoke') { ... }` block with:
@@ -1623,6 +1739,7 @@ EOF
 ### Task D3: Close impersonation/ban on board sessions
 
 **Files:**
+
 - Modify: `src/server/auth/permissions.ts` (drop `...adminAc.statements` from `board`)
 - Test: `test/unit/permissions.test.ts` (update)
 
@@ -1686,7 +1803,7 @@ Then remove the now-unused `adminAc` import: change
 to
 `import { defaultStatements } from 'better-auth/plugins/admin/access';`
 
-(Keep `...defaultStatements` in the `statement` object — that defines the available actions the roles are scoped against; only the `board` role's *grant* of the admin actions is removed.)
+(Keep `...defaultStatements` in the `statement` object — that defines the available actions the roles are scoped against; only the `board` role's _grant_ of the admin actions is removed.)
 
 - [ ] **Step 4: Run permissions + auth-handler tests to verify pass**
 
@@ -1717,12 +1834,14 @@ EOF
 ### Task D4: Board-members admin UI
 
 **Files:**
+
 - Modify: `src/lib/admin.ts` (add helpers), `src/lib/types.ts` (reuse `MemberUser`)
 - Create: `src/components/admin/BoardMembersManager.tsx`
 - Modify: `src/components/admin/AdminApp.tsx` (add section)
 - Test: `src/components/admin/BoardMembersManager.test.tsx` (create)
 
 **Interfaces:**
+
 - Consumes: `GET/POST /api/admin/roles` from D1.
 - Produces: `fetchBoardMembers(): Promise<MemberUser[]>`, `promoteToBoard(email: string): Promise<void>`, `demoteFromBoard(userId: string): Promise<void>`.
 
@@ -1747,9 +1866,16 @@ import BoardMembersManager from './BoardMembersManager';
 
 describe('BoardMembersManager', () => {
   beforeEach(() => {
-    fetchBoardMembers.mockReset().mockResolvedValue([
-      { id: 'u1', name: 'Alice', email: 'alice@example.com', createdAt: '2026-01-01' },
-    ]);
+    fetchBoardMembers
+      .mockReset()
+      .mockResolvedValue([
+        {
+          id: 'u1',
+          name: 'Alice',
+          email: 'alice@example.com',
+          createdAt: '2026-01-01',
+        },
+      ]);
     promoteToBoard.mockClear();
     demoteFromBoard.mockClear();
   });
@@ -1798,7 +1924,8 @@ export async function promoteToBoard(email: string): Promise<void> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'promote', email }),
   });
-  if (!res.ok) throw new Error((await res.text()) || `Promote failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error((await res.text()) || `Promote failed: ${res.status}`);
 }
 
 export async function demoteFromBoard(userId: string): Promise<void> {
@@ -1807,11 +1934,13 @@ export async function demoteFromBoard(userId: string): Promise<void> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'demote', userId }),
   });
-  if (!res.ok) throw new Error((await res.text()) || `Demote failed: ${res.status}`);
+  if (!res.ok)
+    throw new Error((await res.text()) || `Demote failed: ${res.status}`);
 }
 ```
 
 At the top of `src/lib/admin.ts`, add `MemberUser` to the existing type import:
+
 ```ts
 import type {
   Announcement,
@@ -1827,7 +1956,11 @@ import type {
 
 ```tsx
 import { useEffect, useState } from 'react';
-import { fetchBoardMembers, promoteToBoard, demoteFromBoard } from '../../lib/admin';
+import {
+  fetchBoardMembers,
+  promoteToBoard,
+  demoteFromBoard,
+} from '../../lib/admin';
 import type { MemberUser } from '../../lib/types';
 
 export default function BoardMembersManager() {
@@ -1880,9 +2013,9 @@ export default function BoardMembersManager() {
       </div>
       <p className="admin-panel__intro">
         Promote an existing account to the board or demote a board member. For a
-        handoff, the outgoing member promotes the incoming one, then the incoming
-        member demotes the outgoing one. The last remaining board member can't be
-        demoted.
+        handoff, the outgoing member promotes the incoming one, then the
+        incoming member demotes the outgoing one. The last remaining board
+        member can't be demoted.
       </p>
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
@@ -1942,11 +2075,13 @@ export default function BoardMembersManager() {
 - [ ] **Step 5: Wire it into `AdminApp.tsx`**
 
 In `src/components/admin/AdminApp.tsx`:
+
 - Add the import (next to the other manager imports):
   ```ts
   import BoardMembersManager from './BoardMembersManager';
   ```
 - Add a section to `SECTIONS`, immediately after the `members` entry:
+
   ```ts
   { key: 'board', label: 'Board members', render: () => <BoardMembersManager /> },
   ```
@@ -1977,6 +2112,7 @@ EOF
 ### Task D5: Align the docs
 
 **Files:**
+
 - Modify: `README.md`, `CLAUDE.md`
 
 **Interfaces:** none (docs only).
@@ -1989,7 +2125,7 @@ Find the sentence in `README.md` and in `CLAUDE.md` stating board is "never self
 > member can promote another account to `board` and demote a board member
 > (the last remaining board member can't be demoted). This supports board
 > handoff. A board member cannot escalate their own access beyond `board`, and
-> the *first* board account is still bootstrapped out-of-band via
+> the _first_ board account is still bootstrapped out-of-band via
 > `scripts/seed-board.ts`. The Better Auth admin plugin's impersonation/ban/
 > set-role endpoints are not granted to board sessions.
 
@@ -2022,6 +2158,7 @@ EOF
 ## Self-Review
 
 **Spec coverage:**
+
 - #1 rate limit → Tasks B1–B3 ✓
 - #2 upload/download → Tasks C1 (upload allowlist, expanded types), C2 (download safety) ✓; Drive import documented as non-goal in the spec ✓
 - #3 headers → Task A3 ✓ (CSP Report-Only + HSTS SETUP.md note)
@@ -2032,12 +2169,13 @@ EOF
 **Placeholder scan:** No TBD/TODO; every code and test step contains full content. The one external-behavior claim (adminRoles vs AC) is resolved in D3's background note from the Better Auth docs and asserted by the permissions test.
 
 **Type consistency:**
+
 - `hashCode`/`verifyCode` gain a `secret` param everywhere they're called (A1 covers `codes.ts`, `property.ts`, both test files).
 - `requestPropertyVerification` return type extended to include `{ ok:false; rateLimited:true }` (B2), and `request.ts` narrows with `'rateLimited' in result`.
 - `fetchBoardMembers`/`promoteToBoard`/`demoteFromBoard` names match between `lib/admin.ts` (D4 step 3) and the component/test (D4 steps 1, 4).
 - Roles endpoint contract (`{action:'promote', email}` / `{action:'demote', userId}` / `GET → {board}`) is identical across D1 (handler), D4 (helpers), and both tests.
 
-**Sequencing check:** D3 (remove board admin capabilities) is placed *after* D1+D2 (which remove the `setRole` calls), so no in-app call loses its permission mid-flight. ✓
+**Sequencing check:** D3 (remove board admin capabilities) is placed _after_ D1+D2 (which remove the `setRole` calls), so no in-app call loses its permission mid-flight. ✓
 
 ## Notes for the executor
 

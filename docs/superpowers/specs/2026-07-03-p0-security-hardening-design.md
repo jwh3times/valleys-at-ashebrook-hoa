@@ -29,7 +29,7 @@ separately. The code as it stands on `main` matches the review (verified against
   stored-XSS risk.
 - **#3** Set baseline security headers on every response.
 - **#4** Store OTPs as keyed HMAC and compare constant-time.
-- **#5** Make board-to-board handoff a *supported, deliberate* workflow (promote/demote via
+- **#5** Make board-to-board handoff a _supported, deliberate_ workflow (promote/demote via
   the admin app), align the docs with reality, and close the impersonation/ban surface.
 - **#6** Validate `settings` blobs on write and normalize dues on read.
 - Every change carries tests in the existing tiers (`npm test` jsdom, `npm run test:server`
@@ -45,7 +45,7 @@ separately. The code as it stands on `main` matches the review (verified against
   separate efforts. (Where a P0 change makes a P1 fix trivial and adjacent, it is noted but
   not required.)
 - **No data migration for existing R2 documents.** Download hardening (#2) makes already
-  stored files safe regardless of their stored content type; only *new* uploads get the
+  stored files safe regardless of their stored content type; only _new_ uploads get the
   canonical-type treatment.
 
 ## Delivery
@@ -53,12 +53,12 @@ separately. The code as it stands on `main` matches the review (verified against
 Four PRs off `main`, in dependency-free order. Sequencing follows `improvements.md`'s own
 recommendation: batch the quick wins, then one focused PR each for the larger items.
 
-| PR | Findings | Theme |
-| --- | --- | --- |
-| A | #3, #4, #6 | Quick wins: headers, OTP hardening, settings validation |
-| B | #1 | Rate-limit the verification request endpoint |
-| C | #2 | Upload allowlist + safe download |
-| D | #5 | Board handoff + role-surface tightening (incl. minimal UI) |
+| PR  | Findings   | Theme                                                      |
+| --- | ---------- | ---------------------------------------------------------- |
+| A   | #3, #4, #6 | Quick wins: headers, OTP hardening, settings validation    |
+| B   | #1         | Rate-limit the verification request endpoint               |
+| C   | #2         | Upload allowlist + safe download                           |
+| D   | #5         | Board handoff + role-surface tightening (incl. minimal UI) |
 
 ---
 
@@ -71,7 +71,7 @@ compare. Change to a keyed HMAC with a constant-time compare.
 
 - `hashCode(code: string, secret: string): Promise<string>` — import `secret` as an
   HMAC-SHA-256 key (`crypto.subtle.importKey('raw', …, {name:'HMAC', hash:'SHA-256'}, …,
-  ['sign'])`), sign the encoded code, return hex.
+['sign'])`), sign the encoded code, return hex.
 - `verifyCode(code: string, hash: string, secret: string): Promise<boolean>` — recompute
   and compare with a **constant-time** hex comparison (fixed-length XOR-accumulate; Workers
   has no `timingSafeEqual`). Reject length mismatch without early return.
@@ -134,7 +134,7 @@ redirect or rendered — passes through a single header-applying step before ret
 `requestPropertyVerification` (in `property.ts`) fans real SMS/email out to **every active
 owner contact** on a matched home, gated only by Turnstile. A signed-in user can burn
 Twilio credit and harass residents. Counting existing `property_verifications` rows is
-**not** reliable — each request deletes the caller's prior *unconsumed* code, so those rows
+**not** reliable — each request deletes the caller's prior _unconsumed_ code, so those rows
 vanish and a row count undercounts. Use dedicated KV counters instead (the `KV` binding is
 already bound in `wrangler.toml`; no new infrastructure, no schema change).
 
@@ -144,7 +144,7 @@ already bound in `wrangler.toml`; no new infrastructure, no schema change).
   - **Per-property daily cap:** 5 / 24h (KV key `verif:day:prop:<propertyId>`), so a
     property can't be targeted from multiple accounts.
 - **Placement / ordering:** check the cooldown and per-user cap in the endpoint
-  (`src/pages/api/verify/request.ts`) *before* the Turnstile/lookup work, returning early on
+  (`src/pages/api/verify/request.ts`) _before_ the Turnstile/lookup work, returning early on
   breach. The per-property cap is checked inside `requestPropertyVerification` once the
   address resolves to a property, before sends. Increment counters at the point a send is
   actually attempted (the cooldown increments on any accepted request, to also throttle
@@ -198,7 +198,7 @@ no allowlist change will be needed then.
 
 ## PR D — #5 Board handoff + role-surface tightening
 
-**Decision:** board-to-board handoff is a *supported* workflow — an outgoing board member
+**Decision:** board-to-board handoff is a _supported_ workflow — an outgoing board member
 promotes the incoming one, then the incoming one demotes the outgoing one. This reframes
 finding #5 from "lock down / delete" to "make it deliberate, safe, and documented," and
 closes the unrelated impersonation/ban exposure.
@@ -211,7 +211,7 @@ onto direct `users.role` writes. `getAuthContext` re-reads role from the DB ever
 (fail-closed), so a direct write takes effect on the next request — no session staleness.
 
 - **`POST /api/admin/roles`** (kept, no longer UI-orphaned): allow `grant`/`revoke` of
-  `homeowner` **and** `board` via direct DB writes. This is *the* deliberate
+  `homeowner` **and** `board` via direct DB writes. This is _the_ deliberate
   board-management surface.
 - **`members.ts`** (homeowner-focused Members panel): `revoke` becomes a direct DB write to
   `visitor`, and **refuses to demote a user whose current role is `board`** (fetch target
@@ -257,7 +257,7 @@ to board sessions.
 Update `README.md` and `CLAUDE.md`: board members **can** promote/demote other board
 members through the admin app (governance handoff); correct the "board is never
 self-grantable through the app" wording (a board member cannot escalate beyond board, and
-the *first* board is still bootstrapped via `scripts/seed-board.ts`). Reflect that the
+the _first_ board is still bootstrapped via `scripts/seed-board.ts`). Reflect that the
 Better Auth admin impersonation/ban surface is closed.
 
 ---

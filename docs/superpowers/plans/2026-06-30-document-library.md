@@ -56,11 +56,13 @@ SETUP.md, firebase.json, package.json  # Firebase removal
 ## Task 1: R2 binding, content schema, Visibility type, migration
 
 **Files:**
+
 - Modify: `wrangler.toml`, `vitest.workers.config.ts`, `src/env.d.ts`, `src/lib/types.ts`
 - Modify: `src/server/db/schema.ts`
 - Generated: `src/server/db/migrations/*`
 
 **Interfaces:**
+
 - Produces: Drizzle tables `documents`, `announcements`, `settings`; `Visibility` type; `DOCS` R2 binding on `Env`.
 
 - [ ] **Step 1: Add the R2 bucket binding to `wrangler.toml`**
@@ -88,7 +90,9 @@ export const documents = sqliteTable('documents', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   category: text('category').notNull(),
-  visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] }).notNull().default('board'),
+  visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] })
+    .notNull()
+    .default('board'),
   r2Key: text('r2_key').notNull(),
   filename: text('filename').notNull(),
   sizeBytes: integer('size_bytes').notNull(),
@@ -103,7 +107,9 @@ export const announcements = sqliteTable('announcements', {
   body: text('body').notNull(),
   date: text('date').notNull(),
   pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
-  visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] }).notNull().default('public'),
+  visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] })
+    .notNull()
+    .default('public'),
 });
 
 export const settings = sqliteTable('settings', {
@@ -135,10 +141,12 @@ git commit -m "feat: add R2 binding and D1 schema for tiered content"
 ## Task 2: Visibility tier helper
 
 **Files:**
+
 - Create: `src/server/content/visibility.ts`
 - Test: `test/unit/visibility.test.ts`
 
 **Interfaces:**
+
 - Produces: `tierAllows(role: Role, visibility: Visibility): boolean` (true iff the role's rank ≥ the visibility's rank; ranks `public=0`, `homeowner=1`, `board=2`; roles `visitor→0`, `homeowner→1`, `board→2`). `visibleTiers(role): Visibility[]`.
 
 - [ ] **Step 1: Write the failing test `test/unit/visibility.test.ts`**
@@ -176,7 +184,11 @@ describe('tierAllows', () => {
 import type { Role } from '../authz/guards';
 import type { Visibility } from '../../lib/types';
 
-const VIS_RANK: Record<Visibility, number> = { public: 0, homeowner: 1, board: 2 };
+const VIS_RANK: Record<Visibility, number> = {
+  public: 0,
+  homeowner: 1,
+  board: 2,
+};
 const ROLE_RANK: Record<Role, number> = { visitor: 0, homeowner: 1, board: 2 };
 
 export function tierAllows(role: Role, visibility: Visibility): boolean {
@@ -185,7 +197,9 @@ export function tierAllows(role: Role, visibility: Visibility): boolean {
 
 export function visibleTiers(role: Role): Visibility[] {
   const rank = ROLE_RANK[role] ?? 0;
-  return (['public', 'homeowner', 'board'] as Visibility[]).filter((v) => VIS_RANK[v] <= rank);
+  return (['public', 'homeowner', 'board'] as Visibility[]).filter(
+    (v) => VIS_RANK[v] <= rank,
+  );
 }
 ```
 
@@ -203,10 +217,12 @@ git commit -m "feat: add visibility tier helper"
 ## Task 3: Gated file serving `/api/files/[id]`
 
 **Files:**
+
 - Create: `src/pages/api/files/[id].ts`
 - Test: `test/server/files.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getAuthContext` (A), `tierAllows` (Task 2), `getDb` (A), `documents` (Task 1), `env.DOCS` (R2).
 - Produces: `GET /api/files/:id` — 404 unknown; public streams to anyone; gated tiers require role ≥ visibility else 403; streams the R2 object with its content type + filename.
 
@@ -226,13 +242,38 @@ beforeAll(async () => {
   await env.DOCS.put('documents/pub/pub.txt', 'public-bytes');
   await env.DOCS.put('documents/hoa/hoa.txt', 'homeowner-bytes');
   await db.insert(documents).values([
-    { id: 'doc-pub', title: 'P', category: 'Other', visibility: 'public', r2Key: 'documents/pub/pub.txt', filename: 'pub.txt', sizeBytes: 12, contentType: 'text/plain', uploadedAt: now, updatedAt: now },
-    { id: 'doc-hoa', title: 'H', category: 'Other', visibility: 'homeowner', r2Key: 'documents/hoa/hoa.txt', filename: 'hoa.txt', sizeBytes: 15, contentType: 'text/plain', uploadedAt: now, updatedAt: now },
+    {
+      id: 'doc-pub',
+      title: 'P',
+      category: 'Other',
+      visibility: 'public',
+      r2Key: 'documents/pub/pub.txt',
+      filename: 'pub.txt',
+      sizeBytes: 12,
+      contentType: 'text/plain',
+      uploadedAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'doc-hoa',
+      title: 'H',
+      category: 'Other',
+      visibility: 'homeowner',
+      r2Key: 'documents/hoa/hoa.txt',
+      filename: 'hoa.txt',
+      sizeBytes: 15,
+      contentType: 'text/plain',
+      uploadedAt: now,
+      updatedAt: now,
+    },
   ]);
 });
 
 function ctx(id: string) {
-  return { params: { id }, request: new Request(`http://localhost/api/files/${id}`) } as never;
+  return {
+    params: { id },
+    request: new Request(`http://localhost/api/files/${id}`),
+  } as never;
 }
 
 describe('file serving', () => {
@@ -267,13 +308,17 @@ export const prerender = false;
 
 export const GET: APIRoute = async ({ params, request }) => {
   const id = params.id!;
-  const [doc] = await getDb(env).select().from(documents).where(eq(documents.id, id));
+  const [doc] = await getDb(env)
+    .select()
+    .from(documents)
+    .where(eq(documents.id, id));
   if (!doc) return new Response('Not Found', { status: 404 });
 
   if (doc.visibility !== 'public') {
     const ctx = await getAuthContext(request, env);
     const role = ctx?.role ?? 'visitor';
-    if (!tierAllows(role, doc.visibility)) return new Response('Forbidden', { status: 403 });
+    if (!tierAllows(role, doc.visibility))
+      return new Response('Forbidden', { status: 403 });
   }
 
   const object = await env.DOCS.get(doc.r2Key);
@@ -281,8 +326,14 @@ export const GET: APIRoute = async ({ params, request }) => {
 
   const headers = new Headers();
   headers.set('content-type', doc.contentType);
-  headers.set('content-disposition', `inline; filename="${doc.filename.replace(/"/g, '')}"`);
-  headers.set('cache-control', doc.visibility === 'public' ? 'public, max-age=3600' : 'private, no-store');
+  headers.set(
+    'content-disposition',
+    `inline; filename="${doc.filename.replace(/"/g, '')}"`,
+  );
+  headers.set(
+    'cache-control',
+    doc.visibility === 'public' ? 'public, max-age=3600' : 'private, no-store',
+  );
   return new Response(object.body, { headers });
 };
 ```
@@ -302,10 +353,12 @@ git commit -m "feat: add gated R2 file serving endpoint"
 ## Task 4: Tier-filtered content read endpoints
 
 **Files:**
+
 - Create: `src/server/content/reads.ts`, `src/pages/api/content/announcements.ts`, `documents.ts`, `dues.ts`, `site.ts`
 - Test: `test/server/content-reads.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getAuthContext` (A), `visibleTiers` (Task 2), `getDb`, tables (Task 1), `DEFAULT_DUES_SETTINGS`/`DEFAULT_SITE_SETTINGS` (`types.ts`).
 - Produces:
   - `fetchAnnouncementsFor(env, role, limit?)` → announcements with `visibility ∈ visibleTiers(role)`, pinned-first then date desc.
@@ -326,15 +379,50 @@ beforeAll(async () => {
   const db = getDb(env);
   const now = new Date();
   await db.insert(documents).values([
-    { id: 'd-pub', title: 'P', category: 'Other', visibility: 'public', r2Key: 'k1', filename: 'a', sizeBytes: 1, contentType: 't', uploadedAt: now, updatedAt: now },
-    { id: 'd-hoa', title: 'H', category: 'Other', visibility: 'homeowner', r2Key: 'k2', filename: 'b', sizeBytes: 1, contentType: 't', uploadedAt: now, updatedAt: now },
-    { id: 'd-brd', title: 'B', category: 'Other', visibility: 'board', r2Key: 'k3', filename: 'c', sizeBytes: 1, contentType: 't', uploadedAt: now, updatedAt: now },
+    {
+      id: 'd-pub',
+      title: 'P',
+      category: 'Other',
+      visibility: 'public',
+      r2Key: 'k1',
+      filename: 'a',
+      sizeBytes: 1,
+      contentType: 't',
+      uploadedAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'd-hoa',
+      title: 'H',
+      category: 'Other',
+      visibility: 'homeowner',
+      r2Key: 'k2',
+      filename: 'b',
+      sizeBytes: 1,
+      contentType: 't',
+      uploadedAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'd-brd',
+      title: 'B',
+      category: 'Other',
+      visibility: 'board',
+      r2Key: 'k3',
+      filename: 'c',
+      sizeBytes: 1,
+      contentType: 't',
+      uploadedAt: now,
+      updatedAt: now,
+    },
   ]);
 });
 
 describe('documents read endpoint', () => {
   it('an anonymous caller sees only public documents', async () => {
-    const res = await documentsGet({ request: new Request('http://localhost/api/content/documents') } as never);
+    const res = await documentsGet({
+      request: new Request('http://localhost/api/content/documents'),
+    } as never);
     expect(res.status).toBe(200);
     const items = (await res.json()) as { id: string }[];
     expect(items.map((i) => i.id)).toEqual(['d-pub']);
@@ -354,12 +442,20 @@ import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
 
 export async function fetchDocumentsFor(env: Env, role: Role) {
-  return getDb(env).select().from(documents).where(inArray(documents.visibility, visibleTiers(role)));
+  return getDb(env)
+    .select()
+    .from(documents)
+    .where(inArray(documents.visibility, visibleTiers(role)));
 }
 
-export async function fetchAnnouncementsFor(env: Env, role: Role, limit?: number) {
+export async function fetchAnnouncementsFor(
+  env: Env,
+  role: Role,
+  limit?: number,
+) {
   const rows = await getDb(env)
-    .select().from(announcements)
+    .select()
+    .from(announcements)
     .where(inArray(announcements.visibility, visibleTiers(role)))
     .orderBy(desc(announcements.pinned), desc(announcements.date));
   return typeof limit === 'number' ? rows.slice(0, limit) : rows;
@@ -399,11 +495,13 @@ git commit -m "feat: add tier-filtered content read endpoints"
 ## Task 5: Rewire public read helpers + islands to the new endpoints
 
 **Files:**
+
 - Modify: `src/lib/content.ts`
 - Modify (if needed): `src/components/react/AnnouncementsList.tsx`, `DocumentsList.tsx`, `DuesInfo.tsx`
 - Test: existing `*.test.tsx` for these components must still pass
 
 **Interfaces:**
+
 - Consumes: `/api/content/*` (Task 4).
 - Produces: `lib/content.ts` fetch functions that call the endpoints instead of Firestore, keeping their existing exported names/return shapes so the islands are unchanged.
 
@@ -418,6 +516,7 @@ export async function fetchDocuments(): Promise<DocumentItem[]> {
   return (await res.json()) as DocumentItem[];
 }
 ```
+
 Do the same for announcements (pass `limit` as a query param), dues, and site. Remove Firestore imports from this file.
 
 - [ ] **Step 3: Update the islands only if their call signatures changed** (they shouldn't if names/shapes are preserved). Ensure the document download links point at `/api/files/<id>`.
@@ -437,11 +536,13 @@ git commit -m "feat: rewire public content reads to D1-backed endpoints"
 ## Task 6: Admin document endpoints (R2 upload + CRUD) + DocumentsManager
 
 **Files:**
+
 - Create: `src/pages/api/admin/documents.ts`
 - Modify: `src/lib/admin.ts` (document functions), `src/components/admin/DocumentsManager.tsx`
 - Test: `test/server/admin-documents.test.ts`
 
 **Interfaces:**
+
 - Consumes: `requireBoard` (A), `getDb`, `documents`, `env.DOCS`, `normalizeAddress` not needed here.
 - Produces: `POST /api/admin/documents` (multipart: file + title + category + visibility → R2 put + row insert), `PATCH` (id + title/category/visibility), `DELETE` (id → R2 delete + row delete). All board-only.
 
@@ -452,15 +553,27 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { POST, DELETE } from '../../src/pages/api/admin/documents';
 
-beforeAll(async () => { await applyD1Migrations(env.DATABASE, env.MIGRATIONS!); });
+beforeAll(async () => {
+  await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+});
 
 describe('admin documents', () => {
   it('rejects an unauthenticated upload with 401', async () => {
-    const res = await POST({ request: new Request('http://localhost/api/admin/documents', { method: 'POST' }) } as never);
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/documents', {
+        method: 'POST',
+      }),
+    } as never);
     expect(res.status).toBe(401);
   });
   it('rejects an unauthenticated delete with 401', async () => {
-    const res = await DELETE({ request: new Request('http://localhost/api/admin/documents', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: 'x' }) }) } as never);
+    const res = await DELETE({
+      request: new Request('http://localhost/api/admin/documents', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: 'x' }),
+      }),
+    } as never);
     expect(res.status).toBe(401);
   });
 });
@@ -482,42 +595,72 @@ export const prerender = false;
 const MAX_BYTES = 25 * 1024 * 1024;
 
 export const POST: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env); if (denied) return denied;
+  const denied = await requireBoard(request, env);
+  if (denied) return denied;
   const form = await request.formData();
   const file = form.get('file');
   const title = String(form.get('title') ?? '');
   const category = String(form.get('category') ?? '');
   const visibility = String(form.get('visibility') ?? 'board');
-  if (!(file instanceof File) || !title || !category) return new Response('Bad Request', { status: 400 });
+  if (!(file instanceof File) || !title || !category)
+    return new Response('Bad Request', { status: 400 });
   if (file.size > MAX_BYTES) return new Response('Too large', { status: 413 });
   const id = crypto.randomUUID();
   const r2Key = `documents/${id}/${file.name.replace(/[^\w.\-]/g, '_')}`;
-  await env.DOCS.put(r2Key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-  const now = new Date();
-  await getDb(env).insert(documents).values({
-    id, title, category, visibility: visibility as 'public' | 'homeowner' | 'board',
-    r2Key, filename: file.name, sizeBytes: file.size, contentType: file.type || 'application/octet-stream',
-    uploadedAt: now, updatedAt: now,
+  await env.DOCS.put(r2Key, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type },
   });
+  const now = new Date();
+  await getDb(env)
+    .insert(documents)
+    .values({
+      id,
+      title,
+      category,
+      visibility: visibility as 'public' | 'homeowner' | 'board',
+      r2Key,
+      filename: file.name,
+      sizeBytes: file.size,
+      contentType: file.type || 'application/octet-stream',
+      uploadedAt: now,
+      updatedAt: now,
+    });
   return new Response(null, { status: 201 });
 };
 
 export const PATCH: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env); if (denied) return denied;
-  const body = (await request.json()) as { id?: string; title?: string; category?: string; visibility?: string };
+  const denied = await requireBoard(request, env);
+  if (denied) return denied;
+  const body = (await request.json()) as {
+    id?: string;
+    title?: string;
+    category?: string;
+    visibility?: string;
+  };
   if (!body.id) return new Response('Bad Request', { status: 400 });
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  for (const k of ['title', 'category', 'visibility'] as const) if (k in body) patch[k] = body[k];
-  await getDb(env).update(documents).set(patch).where(eq(documents.id, body.id));
+  for (const k of ['title', 'category', 'visibility'] as const)
+    if (k in body) patch[k] = body[k];
+  await getDb(env)
+    .update(documents)
+    .set(patch)
+    .where(eq(documents.id, body.id));
   return new Response(null, { status: 204 });
 };
 
 export const DELETE: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env); if (denied) return denied;
+  const denied = await requireBoard(request, env);
+  if (denied) return denied;
   const body = (await request.json()) as { id?: string };
   if (!body.id) return new Response('Bad Request', { status: 400 });
-  const [doc] = await getDb(env).select().from(documents).where(eq(documents.id, body.id));
-  if (doc) { await env.DOCS.delete(doc.r2Key); await getDb(env).delete(documents).where(eq(documents.id, body.id)); }
+  const [doc] = await getDb(env)
+    .select()
+    .from(documents)
+    .where(eq(documents.id, body.id));
+  if (doc) {
+    await env.DOCS.delete(doc.r2Key);
+    await getDb(env).delete(documents).where(eq(documents.id, body.id));
+  }
   return new Response(null, { status: 204 });
 };
 ```
@@ -539,11 +682,13 @@ git commit -m "feat: add board document endpoints (R2 upload) and rewire Documen
 ## Task 7: Admin announcements endpoint + AnnouncementsManager
 
 **Files:**
+
 - Create: `src/pages/api/admin/announcements.ts`
 - Modify: `src/lib/admin.ts` (announcement functions), `src/components/admin/AnnouncementsManager.tsx`
 - Test: `test/server/admin-announcements.test.ts`
 
 **Interfaces:**
+
 - Produces: `POST` (create), `PATCH` (update incl. `visibility`, `pinned`), `DELETE` — board-only, on `announcements`.
 
 - [ ] **Step 1: Failing test** — `test/server/admin-announcements.test.ts`: unauthenticated `POST` → 401 (direct invocation, same shape as Task 6 Step 1).
@@ -569,11 +714,13 @@ git commit -m "feat: add board announcement endpoints and rewire manager with vi
 ## Task 8: Admin dues + site endpoints + managers
 
 **Files:**
+
 - Create: `src/pages/api/admin/dues.ts`, `src/pages/api/admin/site.ts`
 - Modify: `src/lib/admin.ts` (dues/site functions), `src/components/admin/DuesManager.tsx`, `SiteManager.tsx`
 - Test: `test/server/admin-settings.test.ts`
 
 **Interfaces:**
+
 - Produces: `PUT /api/admin/dues`, `PUT /api/admin/site` — board-only upsert of the `settings` singleton (`key`, JSON `value`).
 
 - [ ] **Step 1: Failing test** — `test/server/admin-settings.test.ts`: unauthenticated `PUT /api/admin/dues` → 401.
@@ -592,13 +739,20 @@ import { settings } from '../../../server/db/schema';
 export const prerender = false;
 
 export const PUT: APIRoute = async ({ request }) => {
-  const denied = await requireBoard(request, env); if (denied) return denied;
+  const denied = await requireBoard(request, env);
+  if (denied) return denied;
   const value = JSON.stringify(await request.json());
-  await getDb(env).insert(settings).values({ key: 'dues', value, updatedAt: new Date() })
-    .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+  await getDb(env)
+    .insert(settings)
+    .values({ key: 'dues', value, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value, updatedAt: new Date() },
+    });
   return new Response(null, { status: 204 });
 };
 ```
+
 `site.ts` is identical with `key: 'site'`.
 
 - [ ] **Step 4: Run to verify it passes** — `npm run test:server` → 401 test passes.
@@ -618,10 +772,12 @@ git commit -m "feat: add board dues/site settings endpoints and rewire managers"
 ## Task 9: Drive folder→tier mapping + import script
 
 **Files:**
+
 - Create: `scripts/doc-tiers.ts`, `scripts/import-documents.ts`
 - Test: `test/unit/doc-tiers.test.ts`
 
 **Interfaces:**
+
 - Produces: `pathToDocMeta(relPath: string): { visibility: Visibility; category: string }` (pure, unit-tested; unmatched → `{ visibility: 'board', category: 'Other' }`); a CLI that walks `private/HOA_files`, uploads to R2, inserts rows (best-effort, operator-run, not executed in tests).
 
 - [ ] **Step 1: Write the failing test `test/unit/doc-tiers.test.ts`**
@@ -632,16 +788,26 @@ import { pathToDocMeta } from '../../scripts/doc-tiers';
 
 describe('pathToDocMeta', () => {
   it('maps governing docs to public', () => {
-    expect(pathToDocMeta('Documents/Governing Documents/By-Laws.pdf').visibility).toBe('public');
+    expect(
+      pathToDocMeta('Documents/Governing Documents/By-Laws.pdf').visibility,
+    ).toBe('public');
   });
   it('maps meeting minutes to homeowner', () => {
-    expect(pathToDocMeta('Historical/8-Meetings/Annual/2024/Minutes.docx').visibility).toBe('homeowner');
+    expect(
+      pathToDocMeta('Historical/8-Meetings/Annual/2024/Minutes.docx')
+        .visibility,
+    ).toBe('homeowner');
   });
   it('maps legal/collections to board', () => {
-    expect(pathToDocMeta('Historical/7-Legal & Collections/Kornerstone.msg').visibility).toBe('board');
+    expect(
+      pathToDocMeta('Historical/7-Legal & Collections/Kornerstone.msg')
+        .visibility,
+    ).toBe('board');
   });
   it('defaults unmatched paths to board (fail-safe)', () => {
-    expect(pathToDocMeta('Historical/Something New/x.pdf').visibility).toBe('board');
+    expect(pathToDocMeta('Historical/Something New/x.pdf').visibility).toBe(
+      'board',
+    );
   });
 });
 ```
@@ -653,20 +819,45 @@ describe('pathToDocMeta', () => {
 ```ts
 import type { Visibility } from '../src/lib/types';
 
-interface Rule { match: RegExp; visibility: Visibility; category: string }
+interface Rule {
+  match: RegExp;
+  visibility: Visibility;
+  category: string;
+}
 
 // Order matters: board (most restricted) rules are checked first.
 const RULES: Rule[] = [
-  { match: /legal|collection|violation|enforcement|correspondence|bank statement|check image|invoice image|financials-board|financials-prelims|contract|tax return|transaction history|delinquen/i, visibility: 'board', category: 'Other' },
-  { match: /minutes|meeting|budget|financial|insurance|assessment|collection policy|welcome letter/i, visibility: 'homeowner', category: 'Financials' },
-  { match: /gov doc|governing|by-?law|covenant|articles of incorporation|plat|\bmaps?\b|resolution|owner faq|portal|arc form|architectural review form|forms?\b/i, visibility: 'public', category: 'Governing Documents' },
+  {
+    match:
+      /legal|collection|violation|enforcement|correspondence|bank statement|check image|invoice image|financials-board|financials-prelims|contract|tax return|transaction history|delinquen/i,
+    visibility: 'board',
+    category: 'Other',
+  },
+  {
+    match:
+      /minutes|meeting|budget|financial|insurance|assessment|collection policy|welcome letter/i,
+    visibility: 'homeowner',
+    category: 'Financials',
+  },
+  {
+    match:
+      /gov doc|governing|by-?law|covenant|articles of incorporation|plat|\bmaps?\b|resolution|owner faq|portal|arc form|architectural review form|forms?\b/i,
+    visibility: 'public',
+    category: 'Governing Documents',
+  },
 ];
 
-export function pathToDocMeta(relPath: string): { visibility: Visibility; category: string } {
-  for (const rule of RULES) if (rule.match.test(relPath)) return { visibility: rule.visibility, category: rule.category };
+export function pathToDocMeta(relPath: string): {
+  visibility: Visibility;
+  category: string;
+} {
+  for (const rule of RULES)
+    if (rule.match.test(relPath))
+      return { visibility: rule.visibility, category: rule.category };
   return { visibility: 'board', category: 'Other' };
 }
 ```
+
 Note: board rules are listed first so sensitive matches win over a looser homeowner/public match; the default is `board`.
 
 - [ ] **Step 4: Run to verify it passes** — `npx vitest run test/unit/doc-tiers.test.ts` → PASS.
@@ -686,11 +877,13 @@ git commit -m "feat: add Drive folder-to-tier mapping and document import script
 ## Task 10: Remove Firebase
 
 **Files:**
+
 - Delete: `src/lib/firebase.ts`, `firestore.rules`, `storage.rules`
 - Modify: `package.json` (drop `firebase`), `firebase.json`, `SETUP.md`, `src/components/react/ConfigNotice.tsx` (+ its test), any remaining Firebase imports
 - Test: full suite
 
 **Interfaces:**
+
 - Consumes: nothing new. Produces: a Firebase-free codebase.
 
 - [ ] **Step 1: Find every Firebase reference** — `git grep -n -i firebase src/ scripts/ *.json *.rules` (and `firestore`). List each consumer still importing Firebase; all content reads/writes should already be on the API endpoints after Tasks 5–8.
@@ -720,4 +913,7 @@ git commit -m "chore: remove Firebase; site now fully on Cloudflare D1/R2"
 - §3 data model → Task 1. §4 R2 → Task 1. §5 gated serving → Task 3 (+ `tierAllows` Task 2). §6 tier-aware reads → Task 4 + Task 5. §7 admin re-platforming → Tasks 6 (documents + visibility + edit), 7 (announcements + visibility), 8 (dues/site). §8 Drive import → Task 9. §9 Firebase removal → Task 10. §10 security → enforced in Tasks 3/4 (server-side filter, board default) + admin guards (6–8). §12 testing → unit (2, 9) + Worker/D1 (3, 4, 6, 7, 8) + component (5, 6–8).
 - Deferred per spec (not in this plan): OCR/embeddings/vector search (sub-project C); per-owner private data UI; homeowner uploads.
 - Operator-only (needs cloud accounts): `wrangler r2 bucket create`, remote D1 migrate, the `docs:import` run, deploy — documented in SETUP.md (Task 10), consistent with A.
+
+```
+
 ```

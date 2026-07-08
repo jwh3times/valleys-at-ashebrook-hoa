@@ -28,60 +28,60 @@ planned as new items (§3.9–§3.15, §4.7–§4.8).
 
 The plan's four PR groups all **merged to `main`** via PR #28 (`c842fc9 Merge pull request #28 from jwh3times/feat/p0-security-hardening`). Every task verified in code:
 
-| Task | Finding | Status | Evidence (code + commit) |
-| --- | --- | --- | --- |
-| A1 — HMAC-keyed, constant-time OTP hashes | #4 | **Done** | `src/server/verification/codes.ts` (`hashCode(code, secret)` HMAC-SHA-256, `timingSafeEqualHex`); secret threaded in `src/server/verification/property.ts`; `test/unit/codes.test.ts`. Commit `2ae44b1`. |
-| A2 — Validate settings on write, normalize dues on read | #6 | **Done** | `normalizeDuesSettings` at `src/lib/types.ts:95`; wired in `src/pages/api/admin/dues.ts:13`, `src/pages/api/admin/site.ts:13` (`normalizeSiteSettings`), `src/pages/api/content/dues.ts:20`; tests `test/unit/dues-normalize.test.ts`, `test/server/content-dues-normalize.test.ts`. Commit `5d6f1aa`. |
-| A3 — Baseline security headers on every response | #3 | **Done** (CSP still Report-Only — see item 3.1) | `applySecurityHeaders` in `src/middleware.ts:27-35` (nosniff, XFO DENY, Referrer-Policy, Permissions-Policy, `Content-Security-Policy-Report-Only`); HSTS note in `SETUP.md:219-226`; `test/server/middleware-headers.test.ts`. Commit `5c1fab1`. |
-| B1 — KV rate-limit primitives | #1 | **Done** | `src/server/verification/rate-limit.ts` (cooldown 120 s, `DAILY_LIMIT = 5` per user and per property); `test/server/rate-limit.test.ts`. Commit `ea04cb9`. |
-| B2 — Enforce limits on `/api/verify/request` | #1 | **Done** | `src/pages/api/verify/request.ts` (pre-check + `setCooldown` + 429 JSON); per-property check inside `src/server/verification/property.ts`; `test/server/verify-request-ratelimit.test.ts`. Commit `87cb69d`. |
-| B3 — Surface the 429 in the verify form | #1 | **Done** | `src/components/react/AuthForms.tsx` handles `rateLimited`/429; `test/unit/verify-form-ratelimit.test.tsx`. Commit `58e234c`. |
-| C1 — Upload extension allowlist + canonical content type | #2 | **Done** | `EXT_TO_TYPE` + 415 in `src/pages/api/admin/documents.ts:16-43`; `test/server/admin-documents-board.test.ts`. Commits `37a21ef`, plus `274e896` (upload UI widened to the allowlisted types). |
-| C2 — nosniff + attachment for non-PDF downloads | #2 | **Done** | `src/pages/api/files/[id].ts:31-38` (nosniff; `inline` only for `application/pdf`; sanitized filename); `test/server/files-download-safety.test.ts`. Commit `1024a21`. |
-| D1 — `roles.ts` → direct-DB promote/demote + board list | #5 | **Done** | `src/pages/api/admin/roles.ts` (GET board list; POST promote-by-email / demote with last-member 409); `test/server/admin-roles-board.test.ts`. Commit `7daed58`. |
-| D2 — `members.ts` revoke → direct DB + refuse board demotion | #5 | **Done** | `src/pages/api/admin/members.ts:57-64` (409 "use Board members"; direct write to `visitor`); `test/server/admin-members-revoke.test.ts`. Commit `1ce4440`. |
-| D3 — Close impersonation/ban for board sessions | #5 | **Done** | `src/server/auth/permissions.ts` (admin-plugin statements intentionally not granted; comment at lines 17-19); endpoint-level 403 proven in `test/server/admin-surface-closed.test.ts:79-106`. Commits `cb9c5e5`, `78ab824`. |
-| D4 — Board-members admin UI | #5 | **Done** | `src/components/admin/BoardMembersManager.tsx` + `BoardMembersManager.test.tsx`, wired into `AdminApp.tsx`. Commit `ab1a567`. |
-| D5 — Align the docs | #5 | **Done** (one gap: CHANGELOG — see item 3.6) | CLAUDE.md/README describe the board-handoff workflow and closed admin surface. Commit `32f8983`. |
+| Task                                                         | Finding | Status                                          | Evidence (code + commit)                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------ | ------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A1 — HMAC-keyed, constant-time OTP hashes                    | #4      | **Done**                                        | `src/server/verification/codes.ts` (`hashCode(code, secret)` HMAC-SHA-256, `timingSafeEqualHex`); secret threaded in `src/server/verification/property.ts`; `test/unit/codes.test.ts`. Commit `2ae44b1`.                                                                                               |
+| A2 — Validate settings on write, normalize dues on read      | #6      | **Done**                                        | `normalizeDuesSettings` at `src/lib/types.ts:95`; wired in `src/pages/api/admin/dues.ts:13`, `src/pages/api/admin/site.ts:13` (`normalizeSiteSettings`), `src/pages/api/content/dues.ts:20`; tests `test/unit/dues-normalize.test.ts`, `test/server/content-dues-normalize.test.ts`. Commit `5d6f1aa`. |
+| A3 — Baseline security headers on every response             | #3      | **Done** (CSP still Report-Only — see item 3.1) | `applySecurityHeaders` in `src/middleware.ts:27-35` (nosniff, XFO DENY, Referrer-Policy, Permissions-Policy, `Content-Security-Policy-Report-Only`); HSTS note in `SETUP.md:219-226`; `test/server/middleware-headers.test.ts`. Commit `5c1fab1`.                                                      |
+| B1 — KV rate-limit primitives                                | #1      | **Done**                                        | `src/server/verification/rate-limit.ts` (cooldown 120 s, `DAILY_LIMIT = 5` per user and per property); `test/server/rate-limit.test.ts`. Commit `ea04cb9`.                                                                                                                                             |
+| B2 — Enforce limits on `/api/verify/request`                 | #1      | **Done**                                        | `src/pages/api/verify/request.ts` (pre-check + `setCooldown` + 429 JSON); per-property check inside `src/server/verification/property.ts`; `test/server/verify-request-ratelimit.test.ts`. Commit `87cb69d`.                                                                                           |
+| B3 — Surface the 429 in the verify form                      | #1      | **Done**                                        | `src/components/react/AuthForms.tsx` handles `rateLimited`/429; `test/unit/verify-form-ratelimit.test.tsx`. Commit `58e234c`.                                                                                                                                                                          |
+| C1 — Upload extension allowlist + canonical content type     | #2      | **Done**                                        | `EXT_TO_TYPE` + 415 in `src/pages/api/admin/documents.ts:16-43`; `test/server/admin-documents-board.test.ts`. Commits `37a21ef`, plus `274e896` (upload UI widened to the allowlisted types).                                                                                                          |
+| C2 — nosniff + attachment for non-PDF downloads              | #2      | **Done**                                        | `src/pages/api/files/[id].ts:31-38` (nosniff; `inline` only for `application/pdf`; sanitized filename); `test/server/files-download-safety.test.ts`. Commit `1024a21`.                                                                                                                                 |
+| D1 — `roles.ts` → direct-DB promote/demote + board list      | #5      | **Done**                                        | `src/pages/api/admin/roles.ts` (GET board list; POST promote-by-email / demote with last-member 409); `test/server/admin-roles-board.test.ts`. Commit `7daed58`.                                                                                                                                       |
+| D2 — `members.ts` revoke → direct DB + refuse board demotion | #5      | **Done**                                        | `src/pages/api/admin/members.ts:57-64` (409 "use Board members"; direct write to `visitor`); `test/server/admin-members-revoke.test.ts`. Commit `1ce4440`.                                                                                                                                             |
+| D3 — Close impersonation/ban for board sessions              | #5      | **Done**                                        | `src/server/auth/permissions.ts` (admin-plugin statements intentionally not granted; comment at lines 17-19); endpoint-level 403 proven in `test/server/admin-surface-closed.test.ts:79-106`. Commits `cb9c5e5`, `78ab824`.                                                                            |
+| D4 — Board-members admin UI                                  | #5      | **Done**                                        | `src/components/admin/BoardMembersManager.tsx` + `BoardMembersManager.test.tsx`, wired into `AdminApp.tsx`. Commit `ab1a567`.                                                                                                                                                                          |
+| D5 — Align the docs                                          | #5      | **Done** (one gap: CHANGELOG — see item 3.6)    | CLAUDE.md/README describe the board-handoff workflow and closed admin surface. Commit `32f8983`.                                                                                                                                                                                                       |
 
 **Explicit follow-ups the P0 spec left open (these are the outstanding P0-adjacent work):**
 
-| Follow-up | Status | Evidence |
-| --- | --- | --- |
-| Flip CSP from Report-Only to enforced (spec "Rollout"; `SETUP.md:225-227`) | **Outstanding** | `src/middleware.ts:35` still sets `Content-Security-Policy-Report-Only`. |
-| Finding #7 — `test:server` in CI | **Done** (landed after the spec) | `.github/workflows/build.yml:34` runs `npm run test:server`; commit `3adad10`. |
-| Finding #14 — Turnstile widget reset on spent token | **Outstanding** | `src/components/react/AuthForms.tsx:104-105` reads `window.turnstileToken` once; no reset after a failed/rate-limited submit. |
-| Finding #10 — use `locals.authContext` instead of re-fetching | **Done** (§3.3, PR #36) | `resolveAuthContext(locals, request, env)` (`src/server/authz/api-guards.ts`) reads `locals.authContext` middleware-first with a fail-closed fallback; `requireBoard` now takes `locals`; all `/api/admin/*` and direct call sites resolve the caller once per request. |
-| Finding #8 — DB constraints/indexes | **Outstanding** | `src/server/db/schema.ts` has only primary keys (grep for `unique|index` matches nothing beyond PKs); e.g. no unique on `properties.addressNormalized`, no index on `owners.propertyId`, `user_property_links(userId)`, `property_verifications(userId)`, `documents(visibility)`. |
-| Finding #9 — broad input validation | **Done** (§3.8, PR #38) | Admin writes besides site/dues parse request JSON with type assertions and persist coerced-but-unvalidated strings (e.g. `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts`); no length caps. §3.8 — note #9 also spans the *public* read `limit` clamp + malformed-JSON→400 + `members.ts` approve check, added to §3.8's scope below. |
-| Finding #11 — trim the **public** documents read payload | **Done** (§3.9, PR #33) | `fetchDocumentsFor` (`src/server/content/reads.ts:7-22`) now projects only the `DocumentItem` columns (id, title, category, visibility, updatedAt); `r2Key`/`filename`/`sizeBytes`/`contentType` no longer reach `GET /api/content/documents`. |
-| Spec appendix — Google Docs/Sheets/Drive import | **Outstanding (backlog by design)** | Not implemented anywhere; explicitly deferred as a future stretch goal (`2026-07-03-p0-security-hardening-design.md` §PR C appendix). |
+| Follow-up                                                                  | Status                              | Evidence                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flip CSP from Report-Only to enforced (spec "Rollout"; `SETUP.md:225-227`) | **Outstanding**                     | `src/middleware.ts:35` still sets `Content-Security-Policy-Report-Only`.                                                                                                                                                                                                                                                                                  |
+| Finding #7 — `test:server` in CI                                           | **Done** (landed after the spec)    | `.github/workflows/build.yml:34` runs `npm run test:server`; commit `3adad10`.                                                                                                                                                                                                                                                                            |
+| Finding #14 — Turnstile widget reset on spent token                        | **Outstanding**                     | `src/components/react/AuthForms.tsx:104-105` reads `window.turnstileToken` once; no reset after a failed/rate-limited submit.                                                                                                                                                                                                                             |
+| Finding #10 — use `locals.authContext` instead of re-fetching              | **Done** (§3.3, PR #36)             | `resolveAuthContext(locals, request, env)` (`src/server/authz/api-guards.ts`) reads `locals.authContext` middleware-first with a fail-closed fallback; `requireBoard` now takes `locals`; all `/api/admin/*` and direct call sites resolve the caller once per request.                                                                                   |
+| Finding #8 — DB constraints/indexes                                        | **Outstanding**                     | `src/server/db/schema.ts` has only primary keys (grep for `unique                                                                                                                                                                                                                                                                                         | index`matches nothing beyond PKs); e.g. no unique on`properties.addressNormalized`, no index on `owners.propertyId`, `user_property_links(userId)`, `property_verifications(userId)`, `documents(visibility)`. |
+| Finding #9 — broad input validation                                        | **Done** (§3.8, PR #38)             | Admin writes besides site/dues parse request JSON with type assertions and persist coerced-but-unvalidated strings (e.g. `src/pages/api/admin/announcements.ts`, `properties.ts`, `owners.ts`); no length caps. §3.8 — note #9 also spans the _public_ read `limit` clamp + malformed-JSON→400 + `members.ts` approve check, added to §3.8's scope below. |
+| Finding #11 — trim the **public** documents read payload                   | **Done** (§3.9, PR #33)             | `fetchDocumentsFor` (`src/server/content/reads.ts:7-22`) now projects only the `DocumentItem` columns (id, title, category, visibility, updatedAt); `r2Key`/`filename`/`sizeBytes`/`contentType` no longer reach `GET /api/content/documents`.                                                                                                            |
+| Spec appendix — Google Docs/Sheets/Drive import                            | **Outstanding (backlog by design)** | Not implemented anywhere; explicitly deferred as a future stretch goal (`2026-07-03-p0-security-hardening-design.md` §PR C appendix).                                                                                                                                                                                                                     |
 
 ### 1.2 Deferred items from the other five plan/spec pairs
 
-| Item | Source | Status |
-| --- | --- | --- |
-| Roster admin UI (Properties→owners editor) | people-per-home-roster plan "Out of scope (follow-up)" | **Done** — shipped by the roster-admin-ui plan (`src/components/admin/RosterManager.tsx`, `MembersManager.tsx`; commits `24ebce0`, `0dd0ca7`). |
-| SMS provider selection (Twilio assumed) | identity-and-roles spec §13 | **Done** — Twilio wired in `src/server/auth/` senders; `TWILIO_*` in `src/env.d.ts`. |
-| Firebase/Firestore removal | identity-and-roles plan | **Done** — no `firebase` references remain in `src/`; `d131559` removed the last leftover. |
-| Admin-managed disclaimer / About copy + admin overview | resident-rebrand spec §11 | **Outstanding** — disclaimer/About copy hardcoded in `src/lib/site.ts` (lines 9, 14); `SiteSettings` (`src/lib/types.ts:37-45`) has no such fields. |
-| Cloudflare D1/R2 resource rename; GitHub repo rename | resident-rebrand spec §11 | **Outstanding — deliberately deferred, operational** (migration risk; maintainer dashboard/GitHub actions, not code). `wrangler.toml` still binds `ashebrook-hoa` / `ashebrook-hoa-docs`. |
-| Revisit officialMode flag storage if settings grow | resident-rebrand spec §11 | **Not triggered** — settings blob still small; fold into item 3.5 if it lands. |
-| Ownership-transfer workflow beyond deactivate/add; `Account #` capture; tenant modeling | people-per-home-roster plan/spec non-goals | **Outstanding (backlog)** — roster UI supports only status PATCH (`roster-admin-ui` spec non-goals honored). |
-| Bulk roster import UI (CLI remains the bulk path) | roster-admin-ui spec non-goals | **Outstanding (backlog)** — `npm run roster:import` CLI only (`scripts/import-roster.ts`). |
-| Per-owner private data (dues balances, violations) tables + UI | document-library spec §2/§13; identity-and-roles spec §13/§14 | **Outstanding (backlog)** — no such tables in `src/server/db/schema.ts`. |
-| Homeowner-facing uploads; signed-PUT for large files | document-library spec non-goals, §8 | **Outstanding (backlog, low priority)** — board-only upload with 25 MB cap in `src/pages/api/admin/documents.ts`. |
-| OCR / embeddings / vector search / AI assistant ("sub-project C") | document-library + identity-and-roles specs | **Outstanding (far backlog)** — never specced; requires its own design round. |
-| Tenants/renters accounts; online payments | identity-and-roles spec §13/§14 | **Outstanding (backlog, board-decision-gated)**. |
+| Item                                                                                    | Source                                                        | Status                                                                                                                                                                                    |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Roster admin UI (Properties→owners editor)                                              | people-per-home-roster plan "Out of scope (follow-up)"        | **Done** — shipped by the roster-admin-ui plan (`src/components/admin/RosterManager.tsx`, `MembersManager.tsx`; commits `24ebce0`, `0dd0ca7`).                                            |
+| SMS provider selection (Twilio assumed)                                                 | identity-and-roles spec §13                                   | **Done** — Twilio wired in `src/server/auth/` senders; `TWILIO_*` in `src/env.d.ts`.                                                                                                      |
+| Firebase/Firestore removal                                                              | identity-and-roles plan                                       | **Done** — no `firebase` references remain in `src/`; `d131559` removed the last leftover.                                                                                                |
+| Admin-managed disclaimer / About copy + admin overview                                  | resident-rebrand spec §11                                     | **Outstanding** — disclaimer/About copy hardcoded in `src/lib/site.ts` (lines 9, 14); `SiteSettings` (`src/lib/types.ts:37-45`) has no such fields.                                       |
+| Cloudflare D1/R2 resource rename; GitHub repo rename                                    | resident-rebrand spec §11                                     | **Outstanding — deliberately deferred, operational** (migration risk; maintainer dashboard/GitHub actions, not code). `wrangler.toml` still binds `ashebrook-hoa` / `ashebrook-hoa-docs`. |
+| Revisit officialMode flag storage if settings grow                                      | resident-rebrand spec §11                                     | **Not triggered** — settings blob still small; fold into item 3.5 if it lands.                                                                                                            |
+| Ownership-transfer workflow beyond deactivate/add; `Account #` capture; tenant modeling | people-per-home-roster plan/spec non-goals                    | **Outstanding (backlog)** — roster UI supports only status PATCH (`roster-admin-ui` spec non-goals honored).                                                                              |
+| Bulk roster import UI (CLI remains the bulk path)                                       | roster-admin-ui spec non-goals                                | **Outstanding (backlog)** — `npm run roster:import` CLI only (`scripts/import-roster.ts`).                                                                                                |
+| Per-owner private data (dues balances, violations) tables + UI                          | document-library spec §2/§13; identity-and-roles spec §13/§14 | **Outstanding (backlog)** — no such tables in `src/server/db/schema.ts`.                                                                                                                  |
+| Homeowner-facing uploads; signed-PUT for large files                                    | document-library spec non-goals, §8                           | **Outstanding (backlog, low priority)** — board-only upload with 25 MB cap in `src/pages/api/admin/documents.ts`.                                                                         |
+| OCR / embeddings / vector search / AI assistant ("sub-project C")                       | document-library + identity-and-roles specs                   | **Outstanding (far backlog)** — never specced; requires its own design round.                                                                                                             |
+| Tenants/renters accounts; online payments                                               | identity-and-roles spec §13/§14                               | **Outstanding (backlog, board-decision-gated)**.                                                                                                                                          |
 
 ### 1.3 Operational steps implying engineering work (SETUP.md / README.md)
 
-| Item | Source | Status |
-| --- | --- | --- |
+| Item                                                                                                                           | Source                  | Status                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | First-board bootstrap requires hand-writing a **temporary Worker route**, deploying, POSTing, then deleting it and redeploying | `SETUP.md:126-155` (§6) | **Outstanding** — `scripts/seed-board.ts` exists but has no safe invocation path; the documented procedure is error-prone (a forgotten route is a privileged backdoor). Plan: item 3.4. |
-| Roster import: CLI → SQL file → `wrangler d1 execute` | `SETUP.md:112-122` (§5) | Works as designed; UI bulk import is backlog (§4.3). |
-| Docs import: dry-run manifest → `--commit` | `SETUP.md:160-168` (§7) | Works as designed; no engineering gap. |
-| HSTS zone toggle + CSP report watching | `SETUP.md:219-227` | HSTS = dashboard action (operator). CSP flip = code change: item 3.1. |
+| Roster import: CLI → SQL file → `wrangler d1 execute`                                                                          | `SETUP.md:112-122` (§5) | Works as designed; UI bulk import is backlog (§4.3).                                                                                                                                    |
+| Docs import: dry-run manifest → `--commit`                                                                                     | `SETUP.md:160-168` (§7) | Works as designed; no engineering gap.                                                                                                                                                  |
+| HSTS zone toggle + CSP report watching                                                                                         | `SETUP.md:219-227`      | HSTS = dashboard action (operator). CSP flip = code change: item 3.1.                                                                                                                   |
 
 ### 1.4 CHANGELOG check
 
@@ -95,29 +95,29 @@ and `SECURITY.md` records the same at model altitude.
 Every finding reconciled against code on 2026-07-03. "Done" rows were verified in §1.1; the rest are
 planned below. This table supersedes the earlier "cannot be enumerated" caveat.
 
-| # | Finding | Status | Covered by |
-| --- | --- | --- | --- |
-| 1 | Rate-limit `/api/verify/request` | **Done** | §1.1 B1–B3 |
-| 2 | Constrain document uploads/downloads | **Done** | §1.1 C1–C2 |
-| 3 | Baseline security headers | **Done** (CSP enforced, PR #49) | §3.1 |
-| 4 | HMAC + constant-time OTP storage | **Done** | §1.1 A1 |
-| 5 | Board-granting story + `members.ts` revoke guard | **Done** | §1.1 D1–D5 |
-| 6 | Validate settings on write, normalize dues on read | **Done** | §1.1 A2 |
-| 7 | Run `test:server` in CI | **Done** | §1.1 follow-up (`build.yml:34`) |
-| 8 | DB constraints & indexes | **Done** (PR #43) | §3.7 |
-| 9 | Tighten write-endpoint input handling | **Done** | §3.8 (PR #38) |
-| 10 | Use `locals.authContext` | **Done** | §3.3 |
-| 11 | Trim **public** documents read payload | **Done** | §3.9 |
-| 12 | Server-render public content (SSR/SEO) | **Done** (PR #45) | **§3.10** |
-| 13 | Signed-in user presence in the chrome | **Done** (PR #46) | **§3.11** |
-| 14 | Verification-flow polish (3 parts) | **Done** (PR #40) | **§3.2 expanded** |
-| 15 | Consolidate duplicated UI logic | **Done** (PR #47) | **§3.12** |
-| 16 | Custom 404 + robots/sitemap | **Done** (PR #42) | **§3.13** |
-| 17 | CI/CD rounding-out | Partial — CodeQL claim already reframed (`README.md:75`); deploy workflow + coverage thresholds outstanding | **§4.7** |
-| 18 | Scheduled cleanup + observability + stray `console.log` | Partial — **§3.14 done** (`console.log` removed, `[observability]` on); cron outstanding | **§3.14** (done) + **§4.7** (cron) |
-| 19 | Repo cruft | **Done** — §3.15: firebase `.gitignore` block dropped; `requirePropertyAccess` kept as reserved-and-documented; `SESSION` documented as adapter-required | **§3.15** |
-| 20 | PII stance note (process, not code) | **Done** | §4.8 (SETUP.md §5 + SECURITY.md) |
-| 21 | Bootstrap ergonomics | **Done** (PR #41) | §3.4 (plan reached this independently from SETUP.md) |
+| #   | Finding                                                 | Status                                                                                                                                                   | Covered by                                           |
+| --- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| 1   | Rate-limit `/api/verify/request`                        | **Done**                                                                                                                                                 | §1.1 B1–B3                                           |
+| 2   | Constrain document uploads/downloads                    | **Done**                                                                                                                                                 | §1.1 C1–C2                                           |
+| 3   | Baseline security headers                               | **Done** (CSP enforced, PR #49)                                                                                                                          | §3.1                                                 |
+| 4   | HMAC + constant-time OTP storage                        | **Done**                                                                                                                                                 | §1.1 A1                                              |
+| 5   | Board-granting story + `members.ts` revoke guard        | **Done**                                                                                                                                                 | §1.1 D1–D5                                           |
+| 6   | Validate settings on write, normalize dues on read      | **Done**                                                                                                                                                 | §1.1 A2                                              |
+| 7   | Run `test:server` in CI                                 | **Done**                                                                                                                                                 | §1.1 follow-up (`build.yml:34`)                      |
+| 8   | DB constraints & indexes                                | **Done** (PR #43)                                                                                                                                        | §3.7                                                 |
+| 9   | Tighten write-endpoint input handling                   | **Done**                                                                                                                                                 | §3.8 (PR #38)                                        |
+| 10  | Use `locals.authContext`                                | **Done**                                                                                                                                                 | §3.3                                                 |
+| 11  | Trim **public** documents read payload                  | **Done**                                                                                                                                                 | §3.9                                                 |
+| 12  | Server-render public content (SSR/SEO)                  | **Done** (PR #45)                                                                                                                                        | **§3.10**                                            |
+| 13  | Signed-in user presence in the chrome                   | **Done** (PR #46)                                                                                                                                        | **§3.11**                                            |
+| 14  | Verification-flow polish (3 parts)                      | **Done** (PR #40)                                                                                                                                        | **§3.2 expanded**                                    |
+| 15  | Consolidate duplicated UI logic                         | **Done** (PR #47)                                                                                                                                        | **§3.12**                                            |
+| 16  | Custom 404 + robots/sitemap                             | **Done** (PR #42)                                                                                                                                        | **§3.13**                                            |
+| 17  | CI/CD rounding-out                                      | Partial — CodeQL claim already reframed (`README.md:75`); deploy workflow + coverage thresholds outstanding                                              | **§4.7**                                             |
+| 18  | Scheduled cleanup + observability + stray `console.log` | Partial — **§3.14 done** (`console.log` removed, `[observability]` on); cron outstanding                                                                 | **§3.14** (done) + **§4.7** (cron)                   |
+| 19  | Repo cruft                                              | **Done** — §3.15: firebase `.gitignore` block dropped; `requirePropertyAccess` kept as reserved-and-documented; `SESSION` documented as adapter-required | **§3.15**                                            |
+| 20  | PII stance note (process, not code)                     | **Done**                                                                                                                                                 | §4.8 (SETUP.md §5 + SECURITY.md)                     |
+| 21  | Bootstrap ergonomics                                    | **Done** (PR #41)                                                                                                                                        | §3.4 (plan reached this independently from SETUP.md) |
 
 **Bold section numbers are new in this revision.** The earlier draft covered #1–10 and #21 (as 3.4);
 #11 was mistargeted and #12–20 were absent.
@@ -128,24 +128,24 @@ planned below. This table supersedes the earlier "cannot be enumerated" caveat.
 
 Security-adjacent work first (finishing the P0 program), then correctness/robustness (P1-shaped), then product backlog. Each numbered item is one small PR off `main`; all are independent unless noted.
 
-| Order | Item | Priority | Size |
-| --- | --- | --- | --- |
-| 1 | 3.1 Flip CSP to enforce mode — **Done** (PR #49) | P0 follow-up | S |
-| 2 | 3.6 CHANGELOG + SECURITY.md sync for the shipped P0 work — **Done** (this docs pass) | P0 follow-up (docs) | S |
-| 3 | 3.9 Trim the public documents read payload (#11) — **Done** | P1 (info-leak) | S |
-| 4 | 3.14 Remove stray `console.log` + add Workers observability (#18) — **Done** | P3 (quick win) | S |
-| 5 | 3.15 Repo cruft — `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding (#19) — **Done** | P3 (quick win) | S |
-| 6 | 3.2 Verification-flow polish — Turnstile reset + OTP requester line + post-confirm refresh (#14) — **Done** (PR #40) | P1/P2 | S |
-| 7 | 3.3 `locals.authContext` plumbing — one auth read per request (#10) — **Done** | P1 | S–M |
-| 8 | 3.7 D1 constraints & indexes (#8) — **Done** (PR #43) | P1 | M |
-| 9 | 3.8 Input validation on admin writes + public `limit` clamp + malformed-JSON guard (#9) — **Done** | P1 | M |
-| 10 | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) (#21) — **Done** (PR #41) | P1 (ops safety) | M |
-| 11 | 3.13 Custom 404 + robots.txt + sitemap (#16) — **Done** (PR #42) | P2 (SEO) | S |
-| 12 | 3.10 Server-render public content (#12) — **Done** (PR #45) | P2 (biggest UX/SEO win) | M |
-| 13 | 3.11 Signed-in user presence in the chrome (#13) — **Done** (PR #46) | P2 | M |
-| 14 | 3.12 Consolidate duplicated UI logic (#15) — **Done** (PR #47) | P2 | M |
-| 15 | 3.5 Admin-managed disclaimer / About copy — **Done** (PR #48) | P2 | M |
-| 16+ | §4 Backlog: 4.7 deploy workflow + coverage thresholds + cleanup cron (#17, #18-cron), 4.8 PII stance note (#20), Google Drive import, per-owner data, bulk roster UI, tenants/payments, AI assistant | P3 / gated | S–XL |
+| Order | Item                                                                                                                                                                                                 | Priority                | Size |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---- |
+| 1     | 3.1 Flip CSP to enforce mode — **Done** (PR #49)                                                                                                                                                     | P0 follow-up            | S    |
+| 2     | 3.6 CHANGELOG + SECURITY.md sync for the shipped P0 work — **Done** (this docs pass)                                                                                                                 | P0 follow-up (docs)     | S    |
+| 3     | 3.9 Trim the public documents read payload (#11) — **Done**                                                                                                                                          | P1 (info-leak)          | S    |
+| 4     | 3.14 Remove stray `console.log` + add Workers observability (#18) — **Done**                                                                                                                         | P3 (quick win)          | S    |
+| 5     | 3.15 Repo cruft — `.gitignore` firebase block, dead `requirePropertyAccess`, unused `SESSION` binding (#19) — **Done**                                                                               | P3 (quick win)          | S    |
+| 6     | 3.2 Verification-flow polish — Turnstile reset + OTP requester line + post-confirm refresh (#14) — **Done** (PR #40)                                                                                 | P1/P2                   | S    |
+| 7     | 3.3 `locals.authContext` plumbing — one auth read per request (#10) — **Done**                                                                                                                       | P1                      | S–M  |
+| 8     | 3.7 D1 constraints & indexes (#8) — **Done** (PR #43)                                                                                                                                                | P1                      | M    |
+| 9     | 3.8 Input validation on admin writes + public `limit` clamp + malformed-JSON guard (#9) — **Done**                                                                                                   | P1                      | M    |
+| 10    | 3.4 Seed-board bootstrap hardening (retire the temp-route procedure) (#21) — **Done** (PR #41)                                                                                                       | P1 (ops safety)         | M    |
+| 11    | 3.13 Custom 404 + robots.txt + sitemap (#16) — **Done** (PR #42)                                                                                                                                     | P2 (SEO)                | S    |
+| 12    | 3.10 Server-render public content (#12) — **Done** (PR #45)                                                                                                                                          | P2 (biggest UX/SEO win) | M    |
+| 13    | 3.11 Signed-in user presence in the chrome (#13) — **Done** (PR #46)                                                                                                                                 | P2                      | M    |
+| 14    | 3.12 Consolidate duplicated UI logic (#15) — **Done** (PR #47)                                                                                                                                       | P2                      | M    |
+| 15    | 3.5 Admin-managed disclaimer / About copy — **Done** (PR #48)                                                                                                                                        | P2                      | M    |
+| 16+   | §4 Backlog: 4.7 deploy workflow + coverage thresholds + cleanup cron (#17, #18-cron), 4.8 PII stance note (#20), Google Drive import, per-owner data, bulk roster UI, tenants/payments, AI assistant | P3 / gated              | S–XL |
 
 Rationale for the top slots: item 3.1 is the only unfinished step of the P0 rollout plan itself ("the
 CSP flips from Report-Only to enforced in a small follow-up"); 3.9/3.14/3.15 are same-day quick wins
@@ -197,9 +197,9 @@ policy. The plan below is retained for context.
 
 **Objective & rationale.** Finding #14 has **three** sub-items; the earlier draft planned only (b). All three are small and touch the same flow:
 
-- **(a) Post-confirm redirect + session refresh.** After a successful confirm the UI should land the now-verified homeowner on content that reflects their new role. *Partially present:* `src/components/react/AuthForms.tsx:55` already does `window.location.href = '/'` — a full navigation, so middleware re-resolves the role. Remaining gap: `/` is the generic home, not the homeowner-gated content, and there's no explicit "your account is now verified" confirmation. Decide whether to redirect to a homeowner surface (e.g. `/documents`) and/or show a success state before the redirect.
+- **(a) Post-confirm redirect + session refresh.** After a successful confirm the UI should land the now-verified homeowner on content that reflects their new role. _Partially present:_ `src/components/react/AuthForms.tsx:55` already does `window.location.href = '/'` — a full navigation, so middleware re-resolves the role. Remaining gap: `/` is the generic home, not the homeowner-gated content, and there's no explicit "your account is now verified" confirmation. Decide whether to redirect to a homeowner surface (e.g. `/documents`) and/or show a success state before the redirect.
 - **(b) Reset the Turnstile widget on a spent token.** Turnstile tokens are single-use. After a 429 (rate-limit) or 400 from `/api/verify/request`, the form keeps the spent token in `window.turnstileToken`; the retry then fails Turnstile ("Bad captcha") with no recovery but a reload.
-- **(c) Name the requester in the OTP message.** The code that reaches an owner's phone/email today (`src/server/verification/property.ts:90`) is `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.` — it doesn't say *who* asked, so a recipient can't tell a legitimate request from an attacker probing their contact. Add the requesting account's (masked) email: e.g. `…requested by j***@gmail.com. If this wasn't you, ignore this.`
+- **(c) Name the requester in the OTP message.** The code that reaches an owner's phone/email today (`src/server/verification/property.ts:90`) is `Your Valleys at Ashebrook verification code is ${code}. It expires in 10 minutes.` — it doesn't say _who_ asked, so a recipient can't tell a legitimate request from an attacker probing their contact. Add the requesting account's (masked) email: e.g. `…requested by j***@gmail.com. If this wasn't you, ignore this.`
 
 **Current state.** (a) `AuthForms.tsx:55` redirects to `/` post-confirm; no homeowner-specific target or success state. (b) `AuthForms.tsx:104-105` reads `(window as …).turnstileToken`; no `window.turnstile.reset()` anywhere in `src/` (grep confirms); server consumes the token in `src/server/authz/turnstile.ts`. (c) `src/server/verification/property.ts:90-91` builds the SMS/email body/subject with no requester identity; the requesting user's email is available in that request's auth context (the caller must be signed in to request verification).
 
@@ -252,14 +252,14 @@ policy. The plan below is retained for context.
 1. Add `resolveAuthContext(locals, request, env)` to `src/server/authz/api-guards.ts`; refactor `requireBoard` to use it and take `locals` as its first parameter.
 2. Update all `/api/admin/*` routes (`documents.ts`, `announcements.ts`, `dues.ts`, `site.ts`, `properties.ts`, `owners.ts`, `members.ts`, `roles.ts`) to pass `locals` through.
 3. Update the six direct call sites listed above to `resolveAuthContext(locals, request, env)`.
-4. Add one server test (`test/server/authz-locals.test.ts`): (a) a handler invoked with `locals.authContext` set to a board context and a *failing* `getAuthContext` mock succeeds without a second lookup; (b) invoked with no `locals` falls back and stays fail-closed for anonymous.
+4. Add one server test (`test/server/authz-locals.test.ts`): (a) a handler invoked with `locals.authContext` set to a board context and a _failing_ `getAuthContext` mock succeeds without a second lookup; (b) invoked with no `locals` falls back and stays fail-closed for anonymous.
 5. Gate + commit `refactor(authz): resolve the caller once via locals.authContext (#10)`.
 
 **Testing plan.** Full `npm run test:server` (all `test/server/**` exercise these routes) + `npm test` + `npm run check` + `npm run format:check` + `npm run build`. Watch specifically `admin-*-board`, `files-authz`, `content-reads-authz`, `middleware*` suites for behavior drift — expected zero.
 
 **Docs updates.** CLAUDE.md "Server code" sentence for `authz/` gains `resolveAuthContext`; `CHANGELOG.md` `### Changed`. No README/SETUP impact.
 
-**Risks & open questions.** Risk: a route that runs before middleware (none exist — Astro middleware wraps all routes) or a subtle test relying on double-fetch counts. Open question: whether `verify/confirm.ts` needs the *freshest* role mid-flow (it promotes the user) — it reads the context only to identify the caller, so the middleware-resolved value is fine.
+**Risks & open questions.** Risk: a route that runs before middleware (none exist — Astro middleware wraps all routes) or a subtle test relying on double-fetch counts. Open question: whether `verify/confirm.ts` needs the _freshest_ role mid-flow (it promotes the user) — it reads the context only to identify the caller, so the middleware-resolved value is fine.
 
 **Size: S–M** (mechanical, ~10 files, one new test file).
 
@@ -296,7 +296,7 @@ policy. The plan below is retained for context.
 
 **Docs updates.** SETUP.md §6 rewrite; README seed-board sentence; CLAUDE.md endpoint list gains `/api/bootstrap/board`; SECURITY.md "board is never self-grantable" paragraph gains the bootstrap caveat; CHANGELOG `### Added`/`### Security`.
 
-**Risks & open questions.** Risk: the count-guard query must run against the Better Auth `user` table (`src/server/db/auth-schema.ts`) — use the Drizzle schema object, not raw SQL, to survive schema regeneration. Open question: should the endpoint also require the site to have zero *users* of any role (stricter)? Default **no** — homeowners may legitimately register before the board bootstraps; the board-count guard is the correct predicate. Low-stakes default, stated here.
+**Risks & open questions.** Risk: the count-guard query must run against the Better Auth `user` table (`src/server/db/auth-schema.ts`) — use the Drizzle schema object, not raw SQL, to survive schema regeneration. Open question: should the endpoint also require the site to have zero _users_ of any role (stricter)? Default **no** — homeowners may legitimately register before the board bootstraps; the board-count guard is the correct predicate. Low-stakes default, stated here.
 
 **Size: M**.
 
@@ -353,7 +353,7 @@ model altitude.
 
 **Testing plan.** `npm run format:check` (Prettier covers markdown); no code gates affected.
 
-**Docs updates.** This item *is* the docs update. **Risks:** none. **Size: S**.
+**Docs updates.** This item _is_ the docs update. **Risks:** none. **Size: S**.
 
 ---
 
@@ -396,13 +396,14 @@ model altitude.
 ### 3.8 Input validation on admin writes + public-read guards (#9)
 
 **Status: Done — shipped to `main` (PR #38).** Reject-loud `normalize{Announcement,Property,Owner}Input`
-+ `INPUT_LIMITS` in `src/lib/types.ts`, `readJson` malformed-body guards (`src/server/http.ts`), the
-public `?limit` clamp, and the members-approve property check (404/409) all landed; the plan below is
-retained for context.
 
-**Objective & rationale.** Site/dues writes are normalized (P0 #6), but the other board-only writes (`announcements`, `properties`, `owners`, `documents` metadata fields) parse JSON/FormData with bare type assertions and persist whatever strings arrive — no length caps, no field allowlists, no trimming. Board-only reduces the threat, but a compromised/mistaken board session can bloat D1 rows, break rendering with megabyte strings, or store unexpected keys. (Payload *trimming* — finding #11 — was previously miscounted here; it's a public-read column-leak fix, now planned separately as §3.9.) Finding #9 also has **three public-facing bullets** the admin-write scope missed, folded in here:
+- `INPUT_LIMITS` in `src/lib/types.ts`, `readJson` malformed-body guards (`src/server/http.ts`), the
+  public `?limit` clamp, and the members-approve property check (404/409) all landed; the plan below is
+  retained for context.
 
-- **Clamp `limit` on the public announcements read.** `GET /api/content/announcements` takes a `limit` query and a negative value drops items from the *end* via `slice(0, -n)` (`fetchAnnouncementsFor` in `src/server/content/reads.ts:24` does `rows.slice(0, limit)`; the endpoint parses the query). Clamp to a non-negative integer at the endpoint.
+**Objective & rationale.** Site/dues writes are normalized (P0 #6), but the other board-only writes (`announcements`, `properties`, `owners`, `documents` metadata fields) parse JSON/FormData with bare type assertions and persist whatever strings arrive — no length caps, no field allowlists, no trimming. Board-only reduces the threat, but a compromised/mistaken board session can bloat D1 rows, break rendering with megabyte strings, or store unexpected keys. (Payload _trimming_ — finding #11 — was previously miscounted here; it's a public-read column-leak fix, now planned separately as §3.9.) Finding #9 also has **three public-facing bullets** the admin-write scope missed, folded in here:
+
+- **Clamp `limit` on the public announcements read.** `GET /api/content/announcements` takes a `limit` query and a negative value drops items from the _end_ via `slice(0, -n)` (`fetchAnnouncementsFor` in `src/server/content/reads.ts:24` does `rows.slice(0, limit)`; the endpoint parses the query). Clamp to a non-negative integer at the endpoint.
 - **Guard malformed JSON bodies.** `request.json()` on a malformed body throws → opaque 500 across the write endpoints; wrap and return 400.
 - **`members.ts` approve → validate `propertyId`.** The approve action links a user to a property without confirming the `propertyId` exists and is active — verify before linking (405/404 on a bad/inactive id).
 
@@ -410,7 +411,7 @@ retained for context.
 
 **Design / approach.**
 
-- Extend the established normalizer pattern rather than adopting a validation library: per-shape `normalizeAnnouncementInput`, `normalizePropertyInput`, `normalizeOwnerInput` in `src/lib/types.ts` (shared with the client for pre-submit trimming) — coerce to string, `trim()`, enforce max lengths (title 200, body 10 000, address 300, name 200, notes 2 000, email 320, phone 32 — constants exported), validate enums (`visibility` via existing `Visibility`, owner/property `status` ∈ `active|inactive`), drop unknown keys, and **reject** (400 with a field message) rather than silently default when a *required* field is empty (title, address, fullName) — creating content is not the read path, so fail loudly. **Rejected:** zod/valibot — a new dependency and idiom for ~4 shapes when the codebase already has a tested hand-rolled pattern.
+- Extend the established normalizer pattern rather than adopting a validation library: per-shape `normalizeAnnouncementInput`, `normalizePropertyInput`, `normalizeOwnerInput` in `src/lib/types.ts` (shared with the client for pre-submit trimming) — coerce to string, `trim()`, enforce max lengths (title 200, body 10 000, address 300, name 200, notes 2 000, email 320, phone 32 — constants exported), validate enums (`visibility` via existing `Visibility`, owner/property `status` ∈ `active|inactive`), drop unknown keys, and **reject** (400 with a field message) rather than silently default when a _required_ field is empty (title, address, fullName) — creating content is not the read path, so fail loudly. **Rejected:** zod/valibot — a new dependency and idiom for ~4 shapes when the codebase already has a tested hand-rolled pattern.
 - Dates: announcements `date` must parse as ISO `YYYY-MM-DD` (regex + `Date` sanity) else 400.
 
 **Step-by-step tasks.**
@@ -437,7 +438,7 @@ retained for context.
 **Status: Done — shipped to `main` (PR #33).** `fetchDocumentsFor` now projects only the
 `DocumentItem` columns; the plan below is retained for context.
 
-**Objective & rationale.** `GET /api/content/documents` returns internal storage metadata — `r2Key`, `contentType`, `sizeBytes` — to every anonymous visitor, beyond the `DocumentItem` contract. `r2Key` in particular discloses the internal R2 object layout (`documents/<id>/…`). Select only the contracted columns. (This is the *real* finding #11 — it was previously miscounted under §3.8's admin-write trimming.)
+**Objective & rationale.** `GET /api/content/documents` returns internal storage metadata — `r2Key`, `contentType`, `sizeBytes` — to every anonymous visitor, beyond the `DocumentItem` contract. `r2Key` in particular discloses the internal R2 object layout (`documents/<id>/…`). Select only the contracted columns. (This is the _real_ finding #11 — it was previously miscounted under §3.8's admin-write trimming.)
 
 **Current state (verified).** `src/server/content/reads.ts:7-12` — `fetchDocumentsFor` is a bare `.select()` (= `SELECT *`) over `documents`; the public route ships the whole row. The download link goes through `GET /api/files/[id]`, which re-reads the row server-side, so the public list payload does **not** need `r2Key`/`contentType`/`sizeBytes`.
 
@@ -615,7 +616,7 @@ These are recorded so they aren't lost; each should get a spec under `docs/super
 
 Blocked on a board decision to publish per-owner data at all (privacy). Substrate exists: `owners`/`user_property_links` give the authorization join. Sketch: new D1 tables (`owner_dues`, `violations`) keyed to `owner_id`/`property_id` via Drizzle migration; homeowner-tier endpoints that filter to the caller's own `propertyIds` from `getAuthContext` (fail-closed: empty list ⇒ nothing); board CRUD in admin. Must reuse the tier model, never a client-side filter. **Size: L.**
 
-### 4.3 Roster quality-of-life — bulk import UI, ownership transfer, Account #
+### 4.3 Roster quality-of-life — bulk import UI, ownership transfer, Account
 
 Deferred by the roster plans (`2026-07-02-people-per-home-roster.md` "Out of scope"; `2026-07-02-roster-admin-ui-design.md` non-goals). Bulk import UI would wrap the `scripts/import-roster.ts` parse in a board-only upload endpoint (spreadsheet → preview diff → commit); ownership transfer is a one-click "deactivate old owner + add new" compound action on `RosterManager`; `Account #` is a nullable `owners` column + form field (needs migration). All board-only, standard `requireBoard` + tests pattern. **Size: M** (each).
 
@@ -652,7 +653,7 @@ The roster puts the whole neighborhood's names, phones, and emails in one reside
 
 ## 5. Open questions
 
-1. **`private/improvements.md` cross-reference — done (2026-07-03).** All 21 findings are reconciled in §1.5; #11 was corrected (it's a public-read metadata leak, §3.9, not admin-write trimming) and #12–20 are now planned (§3.9–3.15, §4.7–4.8). Nothing in improvements.md remains unaccounted for. Reminder: `private/improvements.md` stays gitignored because its P0 section is exploit-level detail; this **public** plan describes only the *outstanding* items at task altitude — keep it that way when editing (don't paste vulnerability write-ups here).
+1. **`private/improvements.md` cross-reference — done (2026-07-03).** All 21 findings are reconciled in §1.5; #11 was corrected (it's a public-read metadata leak, §3.9, not admin-write trimming) and #12–20 are now planned (§3.9–3.15, §4.7–4.8). Nothing in improvements.md remains unaccounted for. Reminder: `private/improvements.md` stays gitignored because its P0 section is exploit-level detail; this **public** plan describes only the _outstanding_ items at task altitude — keep it that way when editing (don't paste vulnerability write-ups here).
 2. **CSP production telemetry** (item 3.1): has anyone watched the deployed console for Report-Only violations since PR A shipped? If not, schedule a few days of observation before the flip.
 3. **Prod data audit for uniques** (item 3.7): run the duplicate-`addressNormalized` query against remote D1 before `db:migrate:remote`.
 4. **Product calls** flagged inline: About copy per-mode (3.5), bootstrap zero-users predicate (3.4), validation caps (3.8) — sensible defaults stated; cheap to change.
