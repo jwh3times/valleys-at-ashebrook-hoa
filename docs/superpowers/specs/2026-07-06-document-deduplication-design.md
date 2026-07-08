@@ -34,6 +34,7 @@ authorization is server-side and fail-closed; board writes go through `requireBo
 ## 2. Goals and non-goals
 
 ### Goals
+
 1. **Clean up existing duplicates** already on the site (R2 + D1), across all file
    types, without data loss.
 2. **Prevent new duplicates** at upload time: block a byte-identical re-upload, warn
@@ -42,6 +43,7 @@ authorization is server-side and fail-closed; board writes go through `requireBo
 4. One detection engine shared by every surface so the logic cannot drift.
 
 ### Non-goals
+
 - Content/text extraction, OCR, embeddings, or semantic similarity — near-duplicate
   detection is **metadata-only** (filename/title tokens + size + content-type). A
   content- or AI-based pass is a possible later phase, explicitly out of scope here.
@@ -100,7 +102,7 @@ endpoints, and the cleanup script identically.
 - `nearScore(a: DocLike, b: DocLike): number` — combines `tokenSimilarity`, size
   proximity, and equal content-type into a single score; a module-level
   `NEAR_THRESHOLD` decides "near". `DocLike = { title, filename, sizeBytes,
-  contentType }`.
+contentType }`.
 - `groupExact(docs): Group[]` — group by `contentHash` (ignores null hashes); only
   groups of size ≥ 2 returned.
 - `groupNear(docs): Group[]` — pairwise `nearScore ≥ NEAR_THRESHOLD`, merged into
@@ -125,12 +127,12 @@ R2:
 1. Compute `h = sha256Hex(bytes)`.
 2. **Exact:** `SELECT … FROM documents WHERE content_hash = h`. If any row →
    respond **409** `{ error: 'exact-duplicate', existing: { id, title, category,
-   visibility } }`. Nothing is written to R2 or D1. No override.
+visibility } }`. Nothing is written to R2 or D1. No override.
 3. **Near:** load lightweight metadata (`title, filename, size_bytes,
-   content_type`) for all documents; compute `nearScore` against the upload. If any
+content_type`) for all documents; compute `nearScore` against the upload. If any
    `≥ NEAR_THRESHOLD` **and** the form field `confirmDuplicate !== 'true'` →
    respond **409** `{ warning: 'near-duplicate', similar: [{ id, title, filename,
-   category, visibility }] }`. Nothing written.
+category, visibility }] }`. Nothing written.
 4. Otherwise (clean, or `confirmDuplicate=true`) → store to R2 and insert the row as
    today, **including `contentHash: h`**.
 
@@ -162,6 +164,7 @@ Two board-only endpoints under `src/pages/api/admin/duplicates.ts`:
   `DELETE` handler). Return **204**.
 
 UI: a new **Duplicates** section on the admin page.
+
 - **Exact groups** render with the suggested keep pre-selected and a one-click
   "keep suggested, delete the rest."
 - **Near groups** require the board to choose the keep and which members to delete,
@@ -180,7 +183,7 @@ the panel group-by-group. New `scripts/dedupe-documents.ts`, wired as
   R2 downloads). Each local file maps to its D1 row via
   `private/documents-manifest.json` (`relativePath → id/r2Key`). This is the
   intentional shortcut: it covers exactly the import-originated files, which are the
-  duplicates in question. Files uploaded through the panel *after* the import are
+  duplicates in question. Files uploaded through the panel _after_ the import are
   not on local disk and are **not** in scope for the script — they are covered by
   the panel's lazy backfill (§7) and the upload guard (§6). The two surfaces divide
   cleanly.
@@ -234,7 +237,7 @@ Apply to both the script's `--commit` and the panel's exact one-click:
 ## 11. Rollout
 
 1. Migration `0004` (`content_hash` + index) applied local then remote.
-2. Ship the shared engine + upload guard + panel (prevents *new* dupes immediately).
+2. Ship the shared engine + upload guard + panel (prevents _new_ dupes immediately).
 3. Run `npm run docs:dedupe` (dry run), review `dedupe-report.json`, then
    `--commit` to collapse the existing same-tier exact duplicates.
 4. Board works the panel for cross-tier exact groups and near-duplicate groups.

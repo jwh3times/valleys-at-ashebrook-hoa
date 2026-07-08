@@ -24,6 +24,7 @@
 ## File Structure
 
 **Created:**
+
 - `src/server/ai/search.ts` — AI Search retrieval wrapper + the minimal AI Search binding types.
 - `src/server/ai/pii.ts` — reversible pseudonymizer (surrogate pools, `buildPseudonymizer`, `anonymize`, `deanonymize`, `deanonymizeStream`).
 - `src/server/ai/sources.ts` — map retrieved chunks → real D1 document rows + download links.
@@ -35,6 +36,7 @@
 - `test/server/ai-sources.test.ts`, `test/server/admin-assistant.test.ts`
 
 **Modified:**
+
 - `package.json` — add `@anthropic-ai/sdk`.
 - `wrangler.toml` — add `[ai]` binding + `AI_SEARCH_INSTANCE` var.
 - `src/env.d.ts` — add `AI`, `AI_SEARCH_INSTANCE`, `ANTHROPIC_API_KEY`.
@@ -47,6 +49,7 @@
 ## Task 1: Config, dependency, and binding types
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: `wrangler.toml`
 - Create: `src/server/ai/search.ts` (types only in this task; retrieval logic added in Task 4)
@@ -54,6 +57,7 @@
 - Modify: `src/lib/types.ts:196-207` (the `INPUT_LIMITS` object)
 
 **Interfaces:**
+
 - Produces: the `AiBinding`, `AiSearchResult`, `AiSearchChunk` types (from `search.ts`); `env.AI`, `env.AI_SEARCH_INSTANCE`, `env.ANTHROPIC_API_KEY`; `INPUT_LIMITS.assistantQuestion`.
 
 - [ ] **Step 1: Install the Anthropic SDK**
@@ -117,12 +121,12 @@ export interface AiBinding {
 Add these members inside the `interface Env` block (after `TURNSTILE_SECRET_KEY`):
 
 ```ts
-    /** Anthropic API key for the admin document assistant (Claude generation). */
-    ANTHROPIC_API_KEY: string;
-    /** Cloudflare AI Search (autorag) binding for document retrieval. */
-    AI: import('./server/ai/search').AiBinding;
-    /** Name of the AI Search instance created in the dashboard. */
-    AI_SEARCH_INSTANCE: string;
+/** Anthropic API key for the admin document assistant (Claude generation). */
+ANTHROPIC_API_KEY: string;
+/** Cloudflare AI Search (autorag) binding for document retrieval. */
+AI: import('./server/ai/search').AiBinding;
+/** Name of the AI Search instance created in the dashboard. */
+AI_SEARCH_INSTANCE: string;
 ```
 
 - [ ] **Step 5: Add the assistant question length cap in `src/lib/types.ts`**
@@ -153,10 +157,12 @@ git commit -m "chore(assistant): add AI binding, Anthropic SDK, and assistant co
 ## Task 2: PII pseudonymizer core — `anonymize` / `deanonymize`
 
 **Files:**
+
 - Create: `src/server/ai/pii.ts`
 - Test: `test/unit/pii.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `type PiiType = 'name' | 'address' | 'phone' | 'email'`
   - `interface PiiEntry { type: PiiType; value: string }`
@@ -256,16 +262,52 @@ export interface Pseudonymizer {
 
 // --- Surrogate pools (deterministic, collision-free by construction) ---
 const FIRST = [
-  'Avery', 'Blake', 'Casey', 'Devon', 'Emerson', 'Finley', 'Harper', 'Jordan',
-  'Kendall', 'Logan', 'Morgan', 'Parker', 'Quinn', 'Reese', 'Sawyer', 'Taylor',
+  'Avery',
+  'Blake',
+  'Casey',
+  'Devon',
+  'Emerson',
+  'Finley',
+  'Harper',
+  'Jordan',
+  'Kendall',
+  'Logan',
+  'Morgan',
+  'Parker',
+  'Quinn',
+  'Reese',
+  'Sawyer',
+  'Taylor',
 ];
 const LAST = [
-  'Ashfield', 'Brookmere', 'Calder', 'Dunmore', 'Ellery', 'Fenwick', 'Granger',
-  'Holloway', 'Ives', 'Larkin', 'Merrow', 'Presley', 'Rowan', 'Sutton',
+  'Ashfield',
+  'Brookmere',
+  'Calder',
+  'Dunmore',
+  'Ellery',
+  'Fenwick',
+  'Granger',
+  'Holloway',
+  'Ives',
+  'Larkin',
+  'Merrow',
+  'Presley',
+  'Rowan',
+  'Sutton',
 ];
 const STREETS = [
-  'Maple', 'Cedar', 'Birch', 'Willow', 'Juniper', 'Aspen', 'Sycamore', 'Poplar',
-  'Hawthorn', 'Linden', 'Chestnut', 'Magnolia',
+  'Maple',
+  'Cedar',
+  'Birch',
+  'Willow',
+  'Juniper',
+  'Aspen',
+  'Sycamore',
+  'Poplar',
+  'Hawthorn',
+  'Linden',
+  'Chestnut',
+  'Magnolia',
 ];
 const SUFFIX = ['Street', 'Avenue', 'Court', 'Drive', 'Lane', 'Way'];
 const EMAIL_DOMAIN = 'example.org'; // reserved; never a real address
@@ -294,7 +336,7 @@ function makeAddress(i: number): string {
 }
 function makePhone(i: number): string {
   // 555-01xx line-number range is reserved for fictional use.
-  const line = String(1000 + (i * 7) % 9000).padStart(4, '0');
+  const line = String(1000 + ((i * 7) % 9000)).padStart(4, '0');
   const prefix = String(100 + (i % 100)).padStart(3, '0');
   return `(555) ${prefix}-${line}`;
 }
@@ -335,16 +377,23 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
   const forward = new Map<string, string>(); // `${type}:${norm}` -> surrogate
   const reverse = new Map<string, string>(); // surrogate -> real
   const realValues = new Set<string>(); // exact real strings, to avoid collisions
-  const counts: Record<PiiType, number> = { name: 0, address: 0, phone: 0, email: 0 };
+  const counts: Record<PiiType, number> = {
+    name: 0,
+    address: 0,
+    phone: 0,
+    email: 0,
+  };
   // Dictionary of known literal strings to match (names + addresses), longest first.
   const dict: { type: PiiType; value: string }[] = [];
   let maxSurrogateLen = 1;
 
   function keyOf(type: PiiType, value: string): string {
     const n =
-      type === 'phone' ? normPhone(value)
-      : type === 'email' ? value.toLowerCase()
-      : normName(value);
+      type === 'phone'
+        ? normPhone(value)
+        : type === 'email'
+          ? value.toLowerCase()
+          : normName(value);
     return `${type}:${n}`;
   }
 
@@ -354,10 +403,13 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
     for (;;) {
       const i = counts[type]++;
       const s =
-        type === 'name' ? makeName(i)
-        : type === 'address' ? makeAddress(i)
-        : type === 'phone' ? makePhone(i)
-        : makeEmail(i);
+        type === 'name'
+          ? makeName(i)
+          : type === 'address'
+            ? makeAddress(i)
+            : type === 'phone'
+              ? makePhone(i)
+              : makeEmail(i);
       if (!realValues.has(s) && !reverse.has(s)) return s;
     }
   }
@@ -378,7 +430,8 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
   for (const e of entries) realValues.add(e.value);
   for (const e of entries) {
     surrogateFor(e.type, e.value);
-    if (e.type === 'name' || e.type === 'address') dict.push({ type: e.type, value: e.value });
+    if (e.type === 'name' || e.type === 'address')
+      dict.push({ type: e.type, value: e.value });
   }
   // Longest literals first so an address wins over a name substring.
   dict.sort((a, b) => b.value.length - a.value.length);
@@ -387,23 +440,39 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
     const spans: Span[] = [];
     for (const m of text.matchAll(EMAIL_RE)) {
       const real = m[0];
-      spans.push({ start: m.index!, end: m.index! + real.length, len: real.length, replacement: surrogateFor('email', real) });
+      spans.push({
+        start: m.index!,
+        end: m.index! + real.length,
+        len: real.length,
+        replacement: surrogateFor('email', real),
+      });
     }
     for (const m of text.matchAll(PHONE_RE)) {
       const real = m[0];
       if (normPhone(real).length !== 10) continue;
-      spans.push({ start: m.index!, end: m.index! + real.length, len: real.length, replacement: surrogateFor('phone', real) });
+      spans.push({
+        start: m.index!,
+        end: m.index! + real.length,
+        len: real.length,
+        replacement: surrogateFor('phone', real),
+      });
     }
     for (const { type, value } of dict) {
       const re = new RegExp(escapeRegExp(value), 'gi');
       for (const m of text.matchAll(re)) {
-        spans.push({ start: m.index!, end: m.index! + value.length, len: value.length, replacement: surrogateFor(type, value) });
+        spans.push({
+          start: m.index!,
+          end: m.index! + value.length,
+          len: value.length,
+          replacement: surrogateFor(type, value),
+        });
       }
     }
     return applySpans(text, spans);
   }
 
-  const reverseByLen = () => [...reverse.keys()].sort((a, b) => b.length - a.length);
+  const reverseByLen = () =>
+    [...reverse.keys()].sort((a, b) => b.length - a.length);
 
   function deanonymize(text: string): string {
     const spans: Span[] = [];
@@ -411,7 +480,12 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
       const real = reverse.get(sur)!;
       let idx = 0;
       while ((idx = text.indexOf(sur, idx)) !== -1) {
-        spans.push({ start: idx, end: idx + sur.length, len: sur.length, replacement: real });
+        spans.push({
+          start: idx,
+          end: idx + sur.length,
+          len: sur.length,
+          replacement: real,
+        });
         idx += sur.length;
       }
     }
@@ -444,10 +518,12 @@ git commit -m "feat(assistant): reversible PII pseudonymizer (anonymize/deanonym
 ## Task 3: Streaming de-anonymization — `deanonymizeStream`
 
 **Files:**
+
 - Modify: `src/server/ai/pii.ts` (replace the `deanonymizeStream` stub)
 - Test: `test/unit/pii.test.ts` (add a case)
 
 **Interfaces:**
+
 - Produces: a working `deanonymizeStream(): TransformStream<string, string>` that reassembles surrogates split across chunk boundaries.
 
 - [ ] **Step 1: Write the failing test (append to `test/unit/pii.test.ts`)**
@@ -488,39 +564,39 @@ Expected: FAIL — throws "deanonymizeStream not implemented".
 Replace the stub `deanonymizeStream` with:
 
 ```ts
-  function safeCutBefore(buffer: string, cut: number): number {
-    // If a surrogate occurrence straddles `cut`, back up to its start so we never
-    // emit a half surrogate. Surrogates are bounded by maxSurrogateLen.
-    let best = cut;
-    for (const sur of reverseByLen()) {
-      let idx = 0;
-      while ((idx = buffer.indexOf(sur, idx)) !== -1) {
-        const end = idx + sur.length;
-        if (idx < cut && end > cut && idx < best) best = idx;
-        idx = end;
-      }
+function safeCutBefore(buffer: string, cut: number): number {
+  // If a surrogate occurrence straddles `cut`, back up to its start so we never
+  // emit a half surrogate. Surrogates are bounded by maxSurrogateLen.
+  let best = cut;
+  for (const sur of reverseByLen()) {
+    let idx = 0;
+    while ((idx = buffer.indexOf(sur, idx)) !== -1) {
+      const end = idx + sur.length;
+      if (idx < cut && end > cut && idx < best) best = idx;
+      idx = end;
     }
-    return best;
   }
+  return best;
+}
 
-  function deanonymizeStream(): TransformStream<string, string> {
-    let buffer = '';
-    const hold = maxSurrogateLen;
-    return new TransformStream<string, string>({
-      transform(chunk, controller) {
-        buffer += chunk;
-        if (buffer.length <= hold) return;
-        let cut = safeCutBefore(buffer, buffer.length - hold);
-        if (cut > 0) {
-          controller.enqueue(deanonymize(buffer.slice(0, cut)));
-          buffer = buffer.slice(cut);
-        }
-      },
-      flush(controller) {
-        if (buffer) controller.enqueue(deanonymize(buffer));
-      },
-    });
-  }
+function deanonymizeStream(): TransformStream<string, string> {
+  let buffer = '';
+  const hold = maxSurrogateLen;
+  return new TransformStream<string, string>({
+    transform(chunk, controller) {
+      buffer += chunk;
+      if (buffer.length <= hold) return;
+      let cut = safeCutBefore(buffer, buffer.length - hold);
+      if (cut > 0) {
+        controller.enqueue(deanonymize(buffer.slice(0, cut)));
+        buffer = buffer.slice(cut);
+      }
+    },
+    flush(controller) {
+      if (buffer) controller.enqueue(deanonymize(buffer));
+    },
+  });
+}
 ```
 
 - [ ] **Step 4: Run the full pii suite to verify it passes**
@@ -540,10 +616,12 @@ git commit -m "feat(assistant): streaming de-anonymization with cross-chunk hold
 ## Task 4: AI Search retrieval wrapper — `retrieve`
 
 **Files:**
+
 - Modify: `src/server/ai/search.ts` (add the function under the existing types)
 - Test: `test/unit/ai-search.test.ts`
 
 **Interfaces:**
+
 - Consumes: `env.AI` (`AiBinding`), `env.AI_SEARCH_INSTANCE`.
 - Produces: `class AiSearchUnavailableError extends Error`; `function retrieve(env: Env, query: string, limit?: number): Promise<AiSearchChunk[]>`.
 
@@ -567,7 +645,16 @@ describe('retrieve', () => {
       search_query: 'q',
       has_more: false,
       data: [
-        { id: '1', score: 0.9, content: 'hello', metadata: { filename: 'a.pdf', folder: 'documents/uuid-1/', timestamp: 1 } },
+        {
+          id: '1',
+          score: 0.9,
+          content: 'hello',
+          metadata: {
+            filename: 'a.pdf',
+            folder: 'documents/uuid-1/',
+            timestamp: 1,
+          },
+        },
       ],
     }));
     const chunks = await retrieve(fakeEnv(search), 'what is the late fee?');
@@ -642,10 +729,12 @@ git commit -m "feat(assistant): AI Search retrieval wrapper" -m "Co-Authored-By:
 ## Task 5: Chunk → document source mapping — `toSources`
 
 **Files:**
+
 - Create: `src/server/ai/sources.ts`
 - Test: `test/server/ai-sources.test.ts`
 
 **Interfaces:**
+
 - Consumes: `AiSearchChunk` (Task 1), `getDb(env)`, `documents` schema.
 - Produces:
   - `interface Source { id: string; title: string; category: string; href: string }`
@@ -679,14 +768,26 @@ beforeAll(async () => {
 });
 
 function chunk(folder: string): AiSearchChunk {
-  return { id: 'c', score: 0.9, content: 'x', metadata: { filename: 'f.pdf', folder, timestamp: 1 } };
+  return {
+    id: 'c',
+    score: 0.9,
+    content: 'x',
+    metadata: { filename: 'f.pdf', folder, timestamp: 1 },
+  };
 }
 
 describe('toSources', () => {
   it('maps a documents/<uuid>/ folder to the real doc row + download link', async () => {
-    const out = await toSources(env, [chunk('documents/uuid-1/collections.pdf')]);
+    const out = await toSources(env, [
+      chunk('documents/uuid-1/collections.pdf'),
+    ]);
     expect(out).toEqual([
-      { id: 'uuid-1', title: 'Collections Policy', category: 'Governing Documents', href: '/api/files/uuid-1' },
+      {
+        id: 'uuid-1',
+        title: 'Collections Policy',
+        category: 'Governing Documents',
+        href: '/api/files/uuid-1',
+      },
     ]);
   });
 
@@ -736,7 +837,10 @@ function docIdFromFolder(folder: string): string | null {
  * (best-score) order, deduped by document id. Sources are board-only metadata
  * shown to the caller — they are NOT sent to Anthropic.
  */
-export async function toSources(env: Env, chunks: AiSearchChunk[]): Promise<Source[]> {
+export async function toSources(
+  env: Env,
+  chunks: AiSearchChunk[],
+): Promise<Source[]> {
   const orderedIds: string[] = [];
   const seen = new Set<string>();
   for (const c of chunks) {
@@ -749,7 +853,11 @@ export async function toSources(env: Env, chunks: AiSearchChunk[]): Promise<Sour
   if (orderedIds.length === 0) return [];
 
   const rows = await getDb(env)
-    .select({ id: documents.id, title: documents.title, category: documents.category })
+    .select({
+      id: documents.id,
+      title: documents.title,
+      category: documents.category,
+    })
     .from(documents)
     .where(inArray(documents.id, orderedIds));
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -757,7 +865,12 @@ export async function toSources(env: Env, chunks: AiSearchChunk[]): Promise<Sour
   return orderedIds
     .map((id) => byId.get(id))
     .filter((r): r is NonNullable<typeof r> => Boolean(r))
-    .map((r) => ({ id: r.id, title: r.title, category: r.category, href: `/api/files/${r.id}` }));
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      category: r.category,
+      href: `/api/files/${r.id}`,
+    }));
 }
 ```
 
@@ -778,11 +891,13 @@ git commit -m "feat(assistant): map retrieved chunks to real document sources" -
 ## Task 6: Anthropic client + assistant orchestration — `answer`
 
 **Files:**
+
 - Create: `src/server/ai/anthropic.ts`
 - Create: `src/server/ai/assistant.ts`
 - Test: `test/server/admin-assistant.test.ts` (orchestration cases; endpoint cases added in Task 7)
 
 **Interfaces:**
+
 - Consumes: `retrieve` (Task 4), `toSources` + `Source` (Task 5), `buildPseudonymizer` + `PiiEntry` (Tasks 2–3), `getDb`, `owners`/`properties` schema.
 - Produces:
   - `class AssistantNotConfiguredError extends Error` + `function getAnthropic(env: Env): Anthropic` (`anthropic.ts`)
@@ -822,7 +937,16 @@ const captured: { params?: unknown } = {};
 vi.mock('../../src/server/ai/search', async (orig) => ({
   ...(await orig<typeof import('../../src/server/ai/search')>()),
   retrieve: async () => [
-    { id: 'c1', score: 0.9, content: 'Jane Q Homeowner owes $50 at 123 Ashebrook Lane.', metadata: { filename: 'f.pdf', folder: 'documents/uuid-1/f.pdf', timestamp: 1 } },
+    {
+      id: 'c1',
+      score: 0.9,
+      content: 'Jane Q Homeowner owes $50 at 123 Ashebrook Lane.',
+      metadata: {
+        filename: 'f.pdf',
+        folder: 'documents/uuid-1/f.pdf',
+        timestamp: 1,
+      },
+    },
   ],
 }));
 vi.mock('../../src/server/ai/anthropic', () => ({
@@ -833,12 +957,24 @@ vi.mock('../../src/server/ai/anthropic', () => ({
         captured.params = params;
         // Async-iterable of text deltas that echo the surrogate name back.
         async function* gen() {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'The balance for ' } };
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: SURROGATE_NAME } };
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: ' is $50.' } };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'The balance for ' },
+          };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: SURROGATE_NAME },
+          };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: ' is $50.' },
+          };
         }
         const it = gen();
-        return { [Symbol.asyncIterator]: () => it, finalMessage: async () => ({ stop_reason: 'end_turn' }) };
+        return {
+          [Symbol.asyncIterator]: () => it,
+          finalMessage: async () => ({ stop_reason: 'end_turn' }),
+        };
       },
     },
   }),
@@ -855,16 +991,27 @@ let SURROGATE_NAME = '';
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
   await getDb(env).insert(properties).values({
-    id: 'uuid-1', address: '123 Ashebrook Lane', addressNormalized: '123 ashebrook lane',
-    status: 'active', createdAt: new Date(), updatedAt: new Date(),
+    id: 'uuid-1',
+    address: '123 Ashebrook Lane',
+    addressNormalized: '123 ashebrook lane',
+    status: 'active',
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
   await getDb(env).insert(owners).values({
-    id: 'o1', propertyId: 'uuid-1', fullName: 'Jane Q Homeowner',
-    phone: '(919) 555-0100', email: 'jane@realmail.com', status: 'active',
-    createdAt: new Date(), updatedAt: new Date(),
+    id: 'o1',
+    propertyId: 'uuid-1',
+    fullName: 'Jane Q Homeowner',
+    phone: '(919) 555-0100',
+    email: 'jane@realmail.com',
+    status: 'active',
+    createdAt: new Date(),
+    updatedAt: new Date(),
   });
   const entries = await loadRosterEntries(env);
-  SURROGATE_NAME = buildPseudonymizer(entries).anonymize('Jane Q Homeowner').trim();
+  SURROGATE_NAME = buildPseudonymizer(entries)
+    .anonymize('Jane Q Homeowner')
+    .trim();
 });
 
 async function readAll(rs: ReadableStream<string>): Promise<string> {
@@ -889,9 +1036,16 @@ describe('assistant.answer', () => {
   });
 
   it('de-anonymizes the streamed answer before returning it', async () => {
-    const { sources, textStream } = await answer(env, { question: 'balance for Jane Q Homeowner?' });
+    const { sources, textStream } = await answer(env, {
+      question: 'balance for Jane Q Homeowner?',
+    });
     expect(sources).toEqual([
-      { id: 'uuid-1', title: expect.any(String), category: expect.any(String), href: '/api/files/uuid-1' },
+      {
+        id: 'uuid-1',
+        title: expect.any(String),
+        category: expect.any(String),
+        href: '/api/files/uuid-1',
+      },
     ]);
     const text = await readAll(textStream);
     expect(text).toContain('Jane Q Homeowner'); // surrogate mapped back to the real name
@@ -903,11 +1057,18 @@ describe('assistant.answer', () => {
 Note: `documents` row `uuid-1` is not seeded here, so `title`/`category` come back only if present — the test seeds a `properties` row with id `uuid-1` but `toSources` reads the `documents` table. Seed a matching `documents` row too in `beforeAll`:
 
 ```ts
-  await getDb(env).insert(documents).values({
-    id: 'uuid-1', title: 'Ledger', category: 'Financials', visibility: 'board',
-    r2Key: 'documents/uuid-1/f.pdf', filename: 'f.pdf', sizeBytes: 1,
-    contentType: 'application/pdf', uploadedAt: new Date(), updatedAt: new Date(),
-  });
+await getDb(env).insert(documents).values({
+  id: 'uuid-1',
+  title: 'Ledger',
+  category: 'Financials',
+  visibility: 'board',
+  r2Key: 'documents/uuid-1/f.pdf',
+  filename: 'f.pdf',
+  sizeBytes: 1,
+  contentType: 'application/pdf',
+  uploadedAt: new Date(),
+  updatedAt: new Date(),
+});
 ```
 
 (import `documents` from schema alongside `owners, properties`).
@@ -940,7 +1101,7 @@ export interface AnswerResult {
 const MODEL = 'claude-opus-4-8';
 
 const SYSTEM_PROMPT = [
-  'You are an assistant for the neighborhood board. Answer the board member\'s',
+  "You are an assistant for the neighborhood board. Answer the board member's",
   'question using ONLY the numbered document excerpts provided.',
   'Cite the excerpts you used by their [Source N] label. If the answer is not in',
   'the excerpts, say you could not find it in the documents. Do not invent facts.',
@@ -953,10 +1114,18 @@ const SYSTEM_PROMPT = [
 export async function loadRosterEntries(env: Env): Promise<PiiEntry[]> {
   const db = getDb(env);
   const [ownerRows, propRows] = await Promise.all([
-    db.select({ fullName: owners.fullName, phone: owners.phone, email: owners.email })
+    db
+      .select({
+        fullName: owners.fullName,
+        phone: owners.phone,
+        email: owners.email,
+      })
       .from(owners)
       .where(eq(owners.status, 'active')),
-    db.select({ address: properties.address }).from(properties).where(eq(properties.status, 'active')),
+    db
+      .select({ address: properties.address })
+      .from(properties)
+      .where(eq(properties.status, 'active')),
   ]);
   const entries: PiiEntry[] = [];
   for (const o of ownerRows) {
@@ -964,7 +1133,8 @@ export async function loadRosterEntries(env: Env): Promise<PiiEntry[]> {
     if (o.phone) entries.push({ type: 'phone', value: o.phone });
     if (o.email) entries.push({ type: 'email', value: o.email });
   }
-  for (const p of propRows) if (p.address) entries.push({ type: 'address', value: p.address });
+  for (const p of propRows)
+    if (p.address) entries.push({ type: 'address', value: p.address });
   return entries;
 }
 
@@ -981,13 +1151,19 @@ function claudeTextStream(stream: ClaudeStream): ReadableStream<string> {
     async start(controller) {
       try {
         for await (const event of stream) {
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
+          if (
+            event.type === 'content_block_delta' &&
+            event.delta?.type === 'text_delta' &&
+            event.delta.text
+          ) {
             controller.enqueue(event.delta.text);
           }
         }
         const final = await stream.finalMessage();
         if (final.stop_reason === 'refusal') {
-          controller.enqueue('\n\n[The assistant declined to answer this request.]');
+          controller.enqueue(
+            '\n\n[The assistant declined to answer this request.]',
+          );
         }
         controller.close();
       } catch (err) {
@@ -1025,7 +1201,9 @@ export async function answer(
     messages: [...history, { role: 'user', content: userText }],
   }) as unknown as ClaudeStream;
 
-  const textStream = claudeTextStream(stream).pipeThrough(pseud.deanonymizeStream());
+  const textStream = claudeTextStream(stream).pipeThrough(
+    pseud.deanonymizeStream(),
+  );
   return { sources, textStream };
 }
 ```
@@ -1047,10 +1225,12 @@ git commit -m "feat(assistant): orchestrate retrieve + pseudonymize + Claude gen
 ## Task 7: Board-only SSE endpoint — `/api/admin/assistant`
 
 **Files:**
+
 - Create: `src/pages/api/admin/assistant.ts`
 - Test: `test/server/admin-assistant.test.ts` (append endpoint cases)
 
 **Interfaces:**
+
 - Consumes: `requireBoard`, `readJson`/`stringField`, `INPUT_LIMITS.assistantQuestion`, `answer` + `Turn` (Task 6), `AiSearchUnavailableError` (Task 4), `AssistantNotConfiguredError` (Task 6).
 - Produces: `export const POST: APIRoute` returning an SSE stream (`sources` → `token`* → `done`, or `error`).
 
@@ -1067,7 +1247,11 @@ describe('POST /api/admin/assistant', () => {
   it('403s a non-board caller (fail-closed)', async () => {
     // Re-mock the caller context to a homeowner for this call.
     vi.doMock('../../src/server/authz/context', () => ({
-      getAuthContext: async () => ({ userId: 'h', role: 'homeowner', propertyIds: [] }),
+      getAuthContext: async () => ({
+        userId: 'h',
+        role: 'homeowner',
+        propertyIds: [],
+      }),
     }));
     const { POST: POST2 } = await import('../../src/pages/api/admin/assistant');
     const res = await POST2({
@@ -1144,7 +1328,9 @@ import { AssistantNotConfiguredError } from '../../../server/ai/anthropic';
 export const prerender = false;
 
 function sseFrame(event: string, data: unknown): Uint8Array {
-  return new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  return new TextEncoder().encode(
+    `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+  );
 }
 
 function parseHistory(body: unknown): Turn[] {
@@ -1155,8 +1341,14 @@ function parseHistory(body: unknown): Turn[] {
     .map((t) => {
       const role = (t as { role?: unknown })?.role;
       const content = (t as { content?: unknown })?.content;
-      if ((role === 'user' || role === 'assistant') && typeof content === 'string') {
-        return { role, content: content.slice(0, INPUT_LIMITS.assistantQuestion) };
+      if (
+        (role === 'user' || role === 'assistant') &&
+        typeof content === 'string'
+      ) {
+        return {
+          role,
+          content: content.slice(0, INPUT_LIMITS.assistantQuestion),
+        };
       }
       return null;
     })
@@ -1184,7 +1376,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response("The assistant isn't configured", { status: 500 });
     }
     if (err instanceof AiSearchUnavailableError) {
-      return new Response('Document search is temporarily unavailable', { status: 503 });
+      return new Response('Document search is temporarily unavailable', {
+        status: 503,
+      });
     }
     throw err;
   }
@@ -1202,7 +1396,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
         }
         controller.enqueue(sseFrame('done', {}));
       } catch {
-        controller.enqueue(sseFrame('error', { message: 'The assistant hit an error. Please try again.' }));
+        controller.enqueue(
+          sseFrame('error', {
+            message: 'The assistant hit an error. Please try again.',
+          }),
+        );
       } finally {
         controller.close();
       }
@@ -1235,11 +1433,13 @@ git commit -m "feat(assistant): board-only SSE endpoint for the document assista
 ## Task 8: Admin chat UI — `AssistantChat`
 
 **Files:**
+
 - Create: `src/components/admin/AssistantChat.tsx`
 - Modify: `src/components/admin/AdminApp.tsx` (import + add to `SECTIONS`)
 - Test: `src/components/admin/AssistantChat.test.tsx`
 
 **Interfaces:**
+
 - Consumes: the `/api/admin/assistant` SSE endpoint (Task 7).
 - Produces: a default-exported `AssistantChat` React component.
 
@@ -1258,7 +1458,10 @@ function sseResponse(frames: string[]): Response {
       c.close();
     },
   });
-  return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  return new Response(body, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -1275,11 +1478,18 @@ describe('AssistantChat', () => {
     );
 
     render(<AssistantChat />);
-    fireEvent.change(screen.getByPlaceholderText(/ask/i), { target: { value: 'late fee?' } });
+    fireEvent.change(screen.getByPlaceholderText(/ask/i), {
+      target: { value: 'late fee?' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /send/i }));
 
-    await waitFor(() => expect(screen.getByText(/The late fee is \$25\./)).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /Bylaws/ })).toHaveAttribute('href', '/api/files/d1');
+    await waitFor(() =>
+      expect(screen.getByText(/The late fee is \$25\./)).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('link', { name: /Bylaws/ })).toHaveAttribute(
+      'href',
+      '/api/files/d1',
+    );
   });
 });
 ```
@@ -1322,7 +1532,9 @@ export default function AssistantChat() {
     setBusy(true);
 
     const userMsg: Message = { role: 'user', content: question };
-    const priorHistory = historyRef.current.slice(-8).map((m) => ({ role: m.role, content: m.content }));
+    const priorHistory = historyRef.current
+      .slice(-8)
+      .map((m) => ({ role: m.role, content: m.content }));
     setMessages((m) => [...m, userMsg, { role: 'assistant', content: '' }]);
 
     try {
@@ -1357,7 +1569,11 @@ export default function AssistantChat() {
             answer += (data as { text: string }).text;
             setMessages((m) => {
               const next = [...m];
-              next[next.length - 1] = { role: 'assistant', content: answer, sources };
+              next[next.length - 1] = {
+                role: 'assistant',
+                content: answer,
+                sources,
+              };
               return next;
             });
           } else if (evLine[1] === 'error') {
@@ -1365,7 +1581,11 @@ export default function AssistantChat() {
           }
         }
       }
-      const finalAssistant: Message = { role: 'assistant', content: answer, sources };
+      const finalAssistant: Message = {
+        role: 'assistant',
+        content: answer,
+        sources,
+      };
       historyRef.current = [...historyRef.current, userMsg, finalAssistant];
     } catch {
       setError('Network error. Please try again.');
@@ -1381,16 +1601,19 @@ export default function AssistantChat() {
         <p className="eyebrow">Board tools</p>
         <h1 className="page-title">Document Assistant</h1>
         <p className="notice">
-          AI-generated from your documents — verify important details before acting. Scanned or
-          spreadsheet content may be incomplete, and answers can be wrong. Resident names and
-          contact details are pseudonymized before the question is sent to the AI provider.
+          AI-generated from your documents — verify important details before
+          acting. Scanned or spreadsheet content may be incomplete, and answers
+          can be wrong. Resident names and contact details are pseudonymized
+          before the question is sent to the AI provider.
         </p>
       </header>
 
       <div className="assistant__log">
         {messages.map((m, i) => (
           <div key={i} className={`assistant__msg assistant__msg--${m.role}`}>
-            <div className="assistant__bubble">{m.content || (m.role === 'assistant' ? '…' : '')}</div>
+            <div className="assistant__bubble">
+              {m.content || (m.role === 'assistant' ? '…' : '')}
+            </div>
             {m.sources && m.sources.length > 0 && (
               <ul className="assistant__sources">
                 {m.sources.map((s) => (
@@ -1465,6 +1688,7 @@ git commit -m "feat(assistant): admin chat UI wired into the admin panel" -m "Co
 ## Task 9: Documentation + minimal CSS + full gate
 
 **Files:**
+
 - Modify: `CLAUDE.md`, `SETUP.md`, `SECURITY.md`, `CHANGELOG.md`
 - Modify: `src/styles/global.css` (assistant layout classes referenced by the UI)
 
@@ -1475,15 +1699,47 @@ git commit -m "feat(assistant): admin chat UI wired into the admin panel" -m "Co
 Append (mirroring the existing admin/utility class conventions):
 
 ```css
-.assistant__log { display: flex; flex-direction: column; gap: 16px; margin: 24px 0; }
-.assistant__msg { display: flex; flex-direction: column; gap: 6px; }
-.assistant__msg--user { align-items: flex-end; }
-.assistant__bubble { max-width: 90%; padding: 10px 14px; border-radius: 12px; background: var(--surface, #f4f1ea); white-space: pre-wrap; }
-.assistant__msg--user .assistant__bubble { background: var(--accent, #2a4d69); color: #fff; }
-.assistant__sources { list-style: none; padding: 0; margin: 2px 0 0; font-size: 0.85em; }
-.assistant__cat { color: var(--muted, #6b7280); }
-.assistant__form { display: flex; gap: 8px; }
-.assistant__form input { flex: 1; }
+.assistant__log {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 24px 0;
+}
+.assistant__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.assistant__msg--user {
+  align-items: flex-end;
+}
+.assistant__bubble {
+  max-width: 90%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface, #f4f1ea);
+  white-space: pre-wrap;
+}
+.assistant__msg--user .assistant__bubble {
+  background: var(--accent, #2a4d69);
+  color: #fff;
+}
+.assistant__sources {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+  font-size: 0.85em;
+}
+.assistant__cat {
+  color: var(--muted, #6b7280);
+}
+.assistant__form {
+  display: flex;
+  gap: 8px;
+}
+.assistant__form input {
+  flex: 1;
+}
 ```
 
 (If the referenced CSS variables don't exist in `global.css`, use the concrete values already used elsewhere in that file — check the existing `:root` block and match it.)
@@ -1521,6 +1777,7 @@ git commit -m "docs(assistant): document the AI assistant + pseudonymization; ad
 ## Self-Review
 
 **Spec coverage:**
+
 - Board-only SSE endpoint → Task 7. AI Search retrieval → Task 4. Claude Opus 4.8 generation → Task 6. Citations → Task 5 + Task 8. PII pseudonymization (roster + regex, realistic surrogates, single-pass inbound, streaming outbound) → Tasks 2–3, used in Task 6. Cite-by-index / titles-not-sent → Task 6 prompt + Task 5 sources. No-PII-in-payload guardrail test → Task 6. Config/secret/binding + INPUT_LIMITS → Task 1. UI + disclaimer → Task 8. Docs (CLAUDE/SETUP/SECURITY/CHANGELOG) → Task 9. Error handling (403/500/503/400/empty/refusal) → Tasks 6–7. All spec sections mapped.
 - **Dependency noted:** the assistant is only useful once documents are imported to prod R2 (`docs:import --commit`) so AI Search has content — captured in SETUP.md (Task 9 Step 3) and the design spec.
 

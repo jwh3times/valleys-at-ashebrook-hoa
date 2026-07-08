@@ -41,7 +41,7 @@ known resident PII to the third-party LLM**.
 ## 2. Architecture & request flow
 
 Cloudflare AI Search runs **inside the site's own Cloudflare account** — indexing, embeddings, and
-vector search never leave it. The only new third-party hop is *retrieved chunks → Anthropic*. The
+vector search never leave it. The only new third-party hop is _retrieved chunks → Anthropic_. The
 pseudonymization boundary is placed exactly there, so retrieval still runs against **real** text
 (accurate matches) and only surrogates cross to Claude.
 
@@ -93,7 +93,7 @@ Per-request maps are **in-memory and discarded** after the response.
   from `@anthropic-ai/sdk` (new dependency; works on Workers via fetch). Throws a typed
   "assistant not configured" error if the key is absent.
 - **`assistant.ts`** — orchestration: `answer(env, { question, history }) →
-  { sources, stream }`. Retrieves, builds the pseudonymizer, anonymizes, calls Claude with streaming,
+{ sources, stream }`. Retrieves, builds the pseudonymizer, anonymizes, calls Claude with streaming,
   and returns the **de-anonymized** text stream plus the real `sources`.
 
 ### 3.2 Endpoint (`src/pages/api/admin/assistant.ts` — new)
@@ -116,8 +116,8 @@ Per-request maps are **in-memory and discarded** after the response.
   them as `history` (client-side only — no persistence).
 - On send: `fetch` the endpoint, read the SSE stream, render `token` deltas progressively, render
   `sources` as links to `/api/files/[id]` (board-accessible via the existing gated download route).
-- Standing disclaimer: *"AI-generated from your documents — verify important details before acting.
-  Scanned or spreadsheet content may be incomplete, and answers can be wrong."*
+- Standing disclaimer: _"AI-generated from your documents — verify important details before acting.
+  Scanned or spreadsheet content may be incomplete, and answers can be wrong."_
 
 ---
 
@@ -199,14 +199,14 @@ sent to Claude by design.
 
 ## 6. Error handling (fail-closed / friendly)
 
-| Condition | Response |
-| --- | --- |
-| Caller not board | 403 (fail-closed, via `requireBoard`) |
+| Condition                                   | Response                                                     |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| Caller not board                            | 403 (fail-closed, via `requireBoard`)                        |
 | `ANTHROPIC_API_KEY` or `AI` binding missing | 500 "assistant isn't configured" (no internal detail leaked) |
-| AI Search unavailable (`AutoRAG*Error`) | 503 "document search is temporarily unavailable" |
-| Empty retrieval | Answer states nothing relevant was found (system prompt) |
-| Anthropic refusal / 429 / 5xx | Friendly `error` SSE; SDK auto-retries 429/5xx |
-| Malformed body / over-length | 400 |
+| AI Search unavailable (`AutoRAG*Error`)     | 503 "document search is temporarily unavailable"             |
+| Empty retrieval                             | Answer states nothing relevant was found (system prompt)     |
+| Anthropic refusal / 429 / 5xx               | Friendly `error` SSE; SDK auto-retries 429/5xx               |
+| Malformed body / over-length                | 400                                                          |
 
 ---
 
@@ -272,4 +272,7 @@ mocked to return canned chunks and the Anthropic client `vi.mock`'d (repo's send
 - **R5 — Cost.** Opus 4.8 per query at board-query volume is negligible; Haiku 4.5 is a one-line swap
   if that ever changes.
 - **Q1 — Effort/thinking.** Start with adaptive thinking; revisit if latency or answer depth needs it.
+
+```
+
 ```

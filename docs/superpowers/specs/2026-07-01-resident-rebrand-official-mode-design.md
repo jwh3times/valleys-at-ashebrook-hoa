@@ -35,6 +35,7 @@ stays server-side.
 ## 2. Goals and non-goals
 
 ### Goals
+
 1. Rebrand the public site to **"The Valleys at Ashebrook Residents"** and remove
    "HOA" / "Homeowners Association" / "official" framing from default (unofficial) copy.
 2. Add an **official-mode** feature flag stored in D1 site settings, **toggleable live
@@ -50,6 +51,7 @@ stays server-side.
    eventual flip are maintainable.
 
 ### Non-goals
+
 - Renaming live Cloudflare resources (D1 `ashebrook-hoa`, R2 `ashebrook-hoa-docs`) —
   out of scope; not user-facing and would require migration/redeploy risk. See §11.
 - Renaming the GitHub repository — a GitHub-side action the maintainer does separately.
@@ -63,6 +65,7 @@ stays server-side.
 ## 3. The official-mode flag
 
 ### 3.1 Data model
+
 `officialMode: boolean` is added to `SiteSettings` (`src/lib/types.ts`), default
 `false` in `DEFAULT_SITE_SETTINGS`. It persists inside the existing single JSON blob in
 the D1 `settings` row keyed `site` — **no schema/migration change, no new endpoint**.
@@ -70,6 +73,7 @@ It is written by the existing whole-blob `PUT /api/admin/site` and returned by
 `GET /api/content/site`.
 
 ### 3.2 Server-side read path (the key new piece)
+
 Today no `.astro` page reads site settings server-side — nav, hero, and titles are
 hardcoded, and React islands fetch content client-side. For the flag to drive
 server-rendered `Header`, `Footer`, and page copy **without a client-side flash**, the
@@ -92,6 +96,7 @@ value must be available in `.astro` frontmatter at render time.
   (`officialMode`, `siteName`) — one indexed D1 read per page request.
 
 ### 3.3 Live toggle semantics
+
 Flipping the toggle writes the blob to D1; the **next page request** reads the new
 value and renders the other mode. Astro SSR responses are dynamic (not edge-cached by
 default), so the change is effectively immediate. Mode-gated markup is server-rendered
@@ -134,16 +139,16 @@ Association", the site title suffix) are selected in the component from
 
 ## 6. Mode-gated public surfaces
 
-| Surface / file | Official mode ON | OFF (default) |
-|---|---|---|
-| Header nav "Dues" link (`Header.astro`) | shown | hidden |
-| Header brand tag (`Header.astro`) | "Homeowners Association" | "Residents" |
-| Public "Board Login" link (`Header.astro`) | relabeled "Admin sign in" **always** | "Admin sign in" |
-| Home meta description + hero + tiles (`index.astro`) | "official website… / Pay Dues / Contact the Board" | resident-focused copy, no "official", no Pay-Dues CTA, "Contact" tile |
-| `/dues` (`dues.astro`) | full `DuesInfo` island | static message: dues are handled by the HOA; contact the HOA board with questions |
-| Contact (`contact.astro`, `ContactForm.tsx`) | "Contact the Board" → "the board's inbox" | "Contact" → reaches "the resident who maintains this site"; mailing block drops "HOA" |
-| Footer disclaimer (`Footer.astro`) | hidden | shown (short line + link to `/about`) |
-| Title suffix (`BaseLayout.astro`) | "… \| Valleys at Ashebrook HOA" | "… \| The Valleys at Ashebrook Residents" |
+| Surface / file                                       | Official mode ON                                   | OFF (default)                                                                         |
+| ---------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Header nav "Dues" link (`Header.astro`)              | shown                                              | hidden                                                                                |
+| Header brand tag (`Header.astro`)                    | "Homeowners Association"                           | "Residents"                                                                           |
+| Public "Board Login" link (`Header.astro`)           | relabeled "Admin sign in" **always**               | "Admin sign in"                                                                       |
+| Home meta description + hero + tiles (`index.astro`) | "official website… / Pay Dues / Contact the Board" | resident-focused copy, no "official", no Pay-Dues CTA, "Contact" tile                 |
+| `/dues` (`dues.astro`)                               | full `DuesInfo` island                             | static message: dues are handled by the HOA; contact the HOA board with questions     |
+| Contact (`contact.astro`, `ContactForm.tsx`)         | "Contact the Board" → "the board's inbox"          | "Contact" → reaches "the resident who maintains this site"; mailing block drops "HOA" |
+| Footer disclaimer (`Footer.astro`)                   | hidden                                             | shown (short line + link to `/about`)                                                 |
+| Title suffix (`BaseLayout.astro`)                    | "… \| Valleys at Ashebrook HOA"                    | "… \| The Valleys at Ashebrook Residents"                                             |
 
 Always-on rename (not mode-gated): page `<title>`/meta text, footer copyright name,
 auth email subjects/bodies ("Reset your HOA password" → "Reset your The Valleys at
@@ -157,13 +162,16 @@ Ashebrook Residents password", "Verify your … account", "Your … verification
 ## 7. Disclaimer + `/about` page
 
 ### Footer (every page, official mode off) — `DISCLAIMER_SHORT`
+
 > Not affiliated with, endorsed by, or operated by the Valleys at Ashebrook HOA or its
 > board. An independent site built and maintained by a resident of the neighborhood.
 > [About this site](/about)
 
 ### New `/about` page (`src/pages/about.astro`) — `DISCLAIMER_LONG`
+
 Full statement, shown regardless of mode — the About page always tells the truth about
 ownership. Covers:
+
 - What this site is: an independent, resident-built information hub for neighbors in
   The Valleys at Ashebrook.
 - Explicit disclaimer: not affiliated with, endorsed by, or operated by the HOA or its
@@ -196,11 +204,13 @@ exact prose is finalized in implementation.
 ## 9. Files touched (checklist)
 
 **New**
+
 - `src/lib/site.ts` — brand constants + disclaimer copy
 - `src/server/content/settings.ts` — `getSiteSettings(env)` + `hoaName`→`siteName` normalize
 - `src/pages/about.astro` — About / disclaimer page
 
 **Edited**
+
 - `src/middleware.ts` — also populate `context.locals.site` for page requests (already sets `authContext`)
 - `src/pages/api/content/site.ts` — delegate `GET` to `getSiteSettings`
 - `src/lib/types.ts` — `hoaName`→`siteName`, add `officialMode`, defaults
@@ -240,6 +250,7 @@ resource names, test fixture IDs (`doc-hoa`, etc.), `design/Ashebrook HOA.dc.htm
 ---
 
 ## 11. Out of scope / follow-ups
+
 - **GitHub repo rename** (`valleys-at-ashebrook-hoa` → e.g. `ashebrook-residents`) —
   maintainer action on GitHub; update local remote afterward.
 - **Cloudflare resource rename** (D1/R2) — deliberately deferred; carries migration

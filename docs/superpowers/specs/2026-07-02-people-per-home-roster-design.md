@@ -40,33 +40,36 @@ so the source data is now cleanly separable — 19 of 21 homes have two owners.
 Split the flat `owners` table into `properties` (homes) and `owners` (people).
 
 ### `properties` (new)
-| column | type | notes |
-| --- | --- | --- |
-| id | text pk | uuid |
-| address | text notnull | raw property address |
-| addressNormalized | text notnull | `normalizeAddress(address)`, match key |
-| unit | text nullable | |
-| status | text `active`\|`inactive` default `active` | |
-| notes | text nullable | |
-| createdAt / updatedAt | timestamp | |
+
+| column                | type                                       | notes                                  |
+| --------------------- | ------------------------------------------ | -------------------------------------- |
+| id                    | text pk                                    | uuid                                   |
+| address               | text notnull                               | raw property address                   |
+| addressNormalized     | text notnull                               | `normalizeAddress(address)`, match key |
+| unit                  | text nullable                              |                                        |
+| status                | text `active`\|`inactive` default `active` |                                        |
+| notes                 | text nullable                              |                                        |
+| createdAt / updatedAt | timestamp                                  |                                        |
 
 ### `owners` (repurposed → a person)
-| column | type | notes |
-| --- | --- | --- |
-| id | text pk | uuid |
-| propertyId | text notnull | logical FK → `properties.id` |
-| fullName | text notnull | one person |
-| phone | text nullable | E.164 (`+1XXXXXXXXXX`) |
-| email | text nullable | |
-| status | text `active`\|`inactive` default `active` | |
-| notes | text nullable | |
-| createdAt / updatedAt | timestamp | |
+
+| column                | type                                       | notes                        |
+| --------------------- | ------------------------------------------ | ---------------------------- |
+| id                    | text pk                                    | uuid                         |
+| propertyId            | text notnull                               | logical FK → `properties.id` |
+| fullName              | text notnull                               | one person                   |
+| phone                 | text nullable                              | E.164 (`+1XXXXXXXXXX`)       |
+| email                 | text nullable                              |                              |
+| status                | text `active`\|`inactive` default `active` |                              |
+| notes                 | text nullable                              |                              |
+| createdAt / updatedAt | timestamp                                  |                              |
 
 Removed from `owners`: `address`, `addressNormalized`, `unit` (now on the property).
 Two people may share a phone/email — that is allowed; dedup happens only at send
 time.
 
 ### Link tables — re-point owner → property
+
 Verification proves membership of a **home**, so both link tables reference the
 property, not a person:
 

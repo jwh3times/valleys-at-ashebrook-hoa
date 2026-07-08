@@ -24,10 +24,12 @@
 ### Task 1: Types + board-only client helpers
 
 **Files:**
+
 - Modify: `src/lib/types.ts` (append new shapes)
 - Modify: `src/lib/admin.ts` (append helpers)
 
 **Interfaces:**
+
 - Produces (types): `PropertyWithOwners`, `ManualApprovalItem`, `MemberUser`, `MembersView` (uses existing `Property`, `Owner`).
 - Produces (helpers): `fetchProperties(): Promise<PropertyWithOwners[]>`, `saveProperty(data, id?): Promise<void>`, `saveOwner(data, id?): Promise<void>`, `fetchMembers(): Promise<MembersView>`, `memberAction(payload): Promise<void>`.
 
@@ -151,6 +153,7 @@ Expected: 0 errors. (These helpers are exercised by the component tests in Tasks
 - [ ] **Step 4: Format + commit**
 
 Run: `npm run format`
+
 ```bash
 git add src/lib/types.ts src/lib/admin.ts
 git commit -m "feat: roster/members admin types + client helpers"
@@ -161,10 +164,12 @@ git commit -m "feat: roster/members admin types + client helpers"
 ### Task 2: `GET /api/admin/members` — email join
 
 **Files:**
+
 - Modify: `src/pages/api/admin/members.ts` (the GET query)
 - Test: `test/server/admin-members.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `GET /api/admin/members` `queue[]` rows now include `email: string | null` alongside `id, userId, claimedAddress, reason, status, createdAt`.
 
@@ -234,20 +239,20 @@ Expected: FAIL — the current GET returns raw `manualApprovalQueue` rows with n
 Replace the `queue` query in the `GET` handler (it currently is `db.select().from(manualApprovalQueue).where(...).orderBy(...)`) with an explicit projection + left join. `users`, `eq`, `desc` are already imported in this file.
 
 ```ts
-  const queue = await db
-    .select({
-      id: manualApprovalQueue.id,
-      userId: manualApprovalQueue.userId,
-      email: users.email,
-      claimedAddress: manualApprovalQueue.claimedAddress,
-      reason: manualApprovalQueue.reason,
-      status: manualApprovalQueue.status,
-      createdAt: manualApprovalQueue.createdAt,
-    })
-    .from(manualApprovalQueue)
-    .leftJoin(users, eq(manualApprovalQueue.userId, users.id))
-    .where(eq(manualApprovalQueue.status, 'pending'))
-    .orderBy(desc(manualApprovalQueue.createdAt));
+const queue = await db
+  .select({
+    id: manualApprovalQueue.id,
+    userId: manualApprovalQueue.userId,
+    email: users.email,
+    claimedAddress: manualApprovalQueue.claimedAddress,
+    reason: manualApprovalQueue.reason,
+    status: manualApprovalQueue.status,
+    createdAt: manualApprovalQueue.createdAt,
+  })
+  .from(manualApprovalQueue)
+  .leftJoin(users, eq(manualApprovalQueue.userId, users.id))
+  .where(eq(manualApprovalQueue.status, 'pending'))
+  .orderBy(desc(manualApprovalQueue.createdAt));
 ```
 
 - [ ] **Step 4: Run to verify it passes**
@@ -258,6 +263,7 @@ Expected: PASS.
 - [ ] **Step 5: Full gate + commit**
 
 Run: `npm run check && npm run test:server && npm run build`
+
 ```bash
 npm run format
 git add src/pages/api/admin/members.ts test/server/admin-members.test.ts
@@ -269,11 +275,13 @@ git commit -m "feat: include requester email on admin members queue rows"
 ### Task 3: RosterManager section
 
 **Files:**
+
 - Create: `src/components/admin/RosterManager.tsx`
 - Modify: `src/components/admin/AdminApp.tsx` (import + SECTIONS entry)
 - Test: `src/components/admin/RosterManager.test.tsx` (create)
 
 **Interfaces:**
+
 - Consumes: `fetchProperties`, `saveProperty`, `saveOwner` (Task 1); `PropertyWithOwners`, `Owner` types.
 - Produces: default-exported `RosterManager` React component; a `roster` entry in AdminApp `SECTIONS`.
 
@@ -330,7 +338,9 @@ describe('RosterManager', () => {
 
   it('adds an owner to a home with the correct propertyId', async () => {
     render(<RosterManager />);
-    fireEvent.click(await screen.findByRole('button', { name: /add owner to/i }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /add owner to/i }),
+    );
     fireEvent.change(screen.getByLabelText(/full name/i), {
       target: { value: 'John Roe' },
     });
@@ -412,7 +422,11 @@ export default function RosterManager() {
   function startEditHome(h: PropertyWithOwners) {
     resetOwner();
     setEditingHomeId(h.id);
-    setHomeForm({ address: h.address, unit: h.unit ?? '', notes: h.notes ?? '' });
+    setHomeForm({
+      address: h.address,
+      unit: h.unit ?? '',
+      notes: h.notes ?? '',
+    });
     setHomeStatus(h.status);
     setMsg('');
     toTop();
@@ -522,7 +536,11 @@ export default function RosterManager() {
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
 
-      <form className="panel-card" onSubmit={submitHome} style={{ marginBottom: '18px' }}>
+      <form
+        className="panel-card"
+        onSubmit={submitHome}
+        style={{ marginBottom: '18px' }}
+      >
         <div className="panel-editor__title">
           {editingHomeId ? 'Edit Home' : 'Add Home'}
         </div>
@@ -533,7 +551,9 @@ export default function RosterManager() {
               id="home-address"
               type="text"
               value={homeForm.address}
-              onChange={(e) => setHomeForm({ ...homeForm, address: e.target.value })}
+              onChange={(e) =>
+                setHomeForm({ ...homeForm, address: e.target.value })
+              }
               placeholder="123 Example Dr Raleigh, NC 27603"
               required
             />
@@ -544,7 +564,9 @@ export default function RosterManager() {
               id="home-unit"
               type="text"
               value={homeForm.unit}
-              onChange={(e) => setHomeForm({ ...homeForm, unit: e.target.value })}
+              onChange={(e) =>
+                setHomeForm({ ...homeForm, unit: e.target.value })
+              }
             />
           </div>
         </div>
@@ -566,7 +588,11 @@ export default function RosterManager() {
             {busy ? 'Saving…' : editingHomeId ? 'Save Home' : 'Add Home'}
           </button>
           {editingHomeId && (
-            <button type="button" className="btn btn--outline btn--small" onClick={resetHome}>
+            <button
+              type="button"
+              className="btn btn--outline btn--small"
+              onClick={resetHome}
+            >
               Cancel
             </button>
           )}
@@ -574,7 +600,11 @@ export default function RosterManager() {
       </form>
 
       {ownerPropertyId && (
-        <form className="panel-card" onSubmit={submitOwner} style={{ marginBottom: '26px' }}>
+        <form
+          className="panel-card"
+          onSubmit={submitOwner}
+          style={{ marginBottom: '26px' }}
+        >
           <div className="panel-editor__title">
             {editingOwnerId ? 'Edit Owner' : 'Add Owner'}
           </div>
@@ -585,17 +615,23 @@ export default function RosterManager() {
                 id="owner-name"
                 type="text"
                 value={ownerForm.fullName}
-                onChange={(e) => setOwnerForm({ ...ownerForm, fullName: e.target.value })}
+                onChange={(e) =>
+                  setOwnerForm({ ...ownerForm, fullName: e.target.value })
+                }
                 required
               />
             </div>
             <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="owner-phone">Phone (E.164, e.g. +19195551234)</label>
+              <label htmlFor="owner-phone">
+                Phone (E.164, e.g. +19195551234)
+              </label>
               <input
                 id="owner-phone"
                 type="text"
                 value={ownerForm.phone}
-                onChange={(e) => setOwnerForm({ ...ownerForm, phone: e.target.value })}
+                onChange={(e) =>
+                  setOwnerForm({ ...ownerForm, phone: e.target.value })
+                }
                 placeholder="+19195551234"
               />
             </div>
@@ -606,7 +642,9 @@ export default function RosterManager() {
               id="owner-email"
               type="email"
               value={ownerForm.email}
-              onChange={(e) => setOwnerForm({ ...ownerForm, email: e.target.value })}
+              onChange={(e) =>
+                setOwnerForm({ ...ownerForm, email: e.target.value })
+              }
             />
           </div>
           {editingOwnerId && (
@@ -626,7 +664,11 @@ export default function RosterManager() {
             <button className="btn btn--small" type="submit" disabled={busy}>
               {busy ? 'Saving…' : editingOwnerId ? 'Save Owner' : 'Add Owner'}
             </button>
-            <button type="button" className="btn btn--outline btn--small" onClick={resetOwner}>
+            <button
+              type="button"
+              className="btn btn--outline btn--small"
+              onClick={resetOwner}
+            >
               Cancel
             </button>
           </div>
@@ -640,7 +682,11 @@ export default function RosterManager() {
           <p className="muted panel-pad">No homes yet.</p>
         ) : (
           homes.map((h) => (
-            <div key={h.id} className="panel-card" style={{ marginBottom: '14px' }}>
+            <div
+              key={h.id}
+              className="panel-card"
+              style={{ marginBottom: '14px' }}
+            >
               <div className="list-row">
                 <div className="admin-row-main">
                   <div className="admin-row-title">
@@ -671,7 +717,11 @@ export default function RosterManager() {
                 </div>
               </div>
               {h.owners.map((o) => (
-                <div key={o.id} className="list-row" style={{ paddingLeft: '18px' }}>
+                <div
+                  key={o.id}
+                  className="list-row"
+                  style={{ paddingLeft: '18px' }}
+                >
                   <div className="admin-row-main">
                     <div className="admin-row-title">
                       {o.fullName}
@@ -680,11 +730,15 @@ export default function RosterManager() {
                       )}
                     </div>
                     <div className="admin-row-sub">
-                      {[o.phone, o.email].filter(Boolean).join(' · ') || 'no contact'}
+                      {[o.phone, o.email].filter(Boolean).join(' · ') ||
+                        'no contact'}
                     </div>
                   </div>
                   <div className="row-actions">
-                    <button className="row-link" onClick={() => startEditOwner(o)}>
+                    <button
+                      className="row-link"
+                      onClick={() => startEditOwner(o)}
+                    >
                       Edit
                     </button>
                     <button
@@ -730,6 +784,7 @@ Expected: PASS for both. (AdminApp default tab is Announcements, so RosterManage
 - [ ] **Step 6: Full gate + commit**
 
 Run: `npm run check && npm test && npm run build`
+
 ```bash
 npm run format
 git add src/components/admin/RosterManager.tsx src/components/admin/RosterManager.test.tsx src/components/admin/AdminApp.tsx
@@ -741,11 +796,13 @@ git commit -m "feat: admin Roster section (homes + owners CRUD)"
 ### Task 4: MembersManager section
 
 **Files:**
+
 - Create: `src/components/admin/MembersManager.tsx`
 - Modify: `src/components/admin/AdminApp.tsx` (import + SECTIONS entry)
 - Test: `src/components/admin/MembersManager.test.tsx` (create)
 
 **Interfaces:**
+
 - Consumes: `fetchMembers`, `memberAction`, `fetchProperties` (Task 1); `MembersView`, `PropertyWithOwners` types.
 - Produces: default-exported `MembersManager`; a `members` entry in AdminApp `SECTIONS`.
 
@@ -771,7 +828,12 @@ import MembersManager from './MembersManager';
 beforeEach(() => {
   fetchMembers.mockReset().mockResolvedValue({
     recent: [
-      { id: 'u1', name: 'Existing HO', email: 'ho@x.com', createdAt: '2026-06-01T00:00:00.000Z' },
+      {
+        id: 'u1',
+        name: 'Existing HO',
+        email: 'ho@x.com',
+        createdAt: '2026-06-01T00:00:00.000Z',
+      },
     ],
     queue: [
       {
@@ -785,9 +847,18 @@ beforeEach(() => {
       },
     ],
   });
-  fetchProperties.mockReset().mockResolvedValue([
-    { id: 'p9', address: '9 Elm St', unit: null, status: 'active', notes: null, owners: [] },
-  ]);
+  fetchProperties
+    .mockReset()
+    .mockResolvedValue([
+      {
+        id: 'p9',
+        address: '9 Elm St',
+        unit: null,
+        status: 'active',
+        notes: null,
+        owners: [],
+      },
+    ]);
   memberAction.mockClear();
 });
 
@@ -862,13 +933,19 @@ export default function MembersManager() {
 
   async function load() {
     setLoading(true);
-    const [members, props] = await Promise.all([fetchMembers(), fetchProperties()]);
+    const [members, props] = await Promise.all([
+      fetchMembers(),
+      fetchProperties(),
+    ]);
     const active = props.filter((h) => h.status === 'active');
     setHomes(active);
     setData(members);
     setPicks(
       Object.fromEntries(
-        members.queue.map((q) => [q.id, defaultHomeId(q.claimedAddress, active)]),
+        members.queue.map((q) => [
+          q.id,
+          defaultHomeId(q.claimedAddress, active),
+        ]),
       ),
     );
     setLoading(false);
@@ -1026,6 +1103,7 @@ Expected: PASS for both.
 - [ ] **Step 6: Full gate + commit**
 
 Run: `npm run check && npm test && npm run test:server && npm run build`
+
 ```bash
 npm run format
 git add src/components/admin/MembersManager.tsx src/components/admin/MembersManager.test.tsx src/components/admin/AdminApp.tsx
@@ -1037,6 +1115,7 @@ git commit -m "feat: admin Members section (approvals + revoke)"
 ## Self-Review
 
 **Spec coverage:**
+
 - RosterManager (home-centric CRUD, soft-delete, add-owner-with-propertyId) → Task 3. ✔
 - MembersManager (queue approve with property-picker, deny, revoke; recent homeowners) → Task 4. ✔
 - `members` GET email join → Task 2. ✔
