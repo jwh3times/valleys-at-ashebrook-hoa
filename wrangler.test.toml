@@ -1,0 +1,17 @@
+name = "valleys-at-ashebrook-hoa-test"
+compatibility_date = "2026-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DATABASE"
+database_name = "ashebrook-hoa"
+database_id = "test"
+migrations_dir = "src/server/db/migrations"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "test"
+
+[[r2_buckets]]
+binding = "DOCS"
+bucket_name = "ashebrook-hoa-docs"

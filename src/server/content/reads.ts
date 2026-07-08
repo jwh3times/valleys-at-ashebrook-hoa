@@ -26,10 +26,10 @@ export async function fetchAnnouncementsFor(
   role: Role,
   limit?: number,
 ) {
-  const rows = await getDb(env)
+  const query = getDb(env)
     .select()
     .from(announcements)
     .where(inArray(announcements.visibility, visibleTiers(role)))
     .orderBy(desc(announcements.pinned), desc(announcements.date));
-  return typeof limit === 'number' ? rows.slice(0, limit) : rows;
+  return typeof limit === 'number' ? query.limit(limit) : query;
 }

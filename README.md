@@ -76,7 +76,8 @@ npm run deploy     # build + deploy to Cloudflare Workers
 - **CI:** `.github/workflows/build.yml` runs format check, type check, tests,
   and build on every push and pull request. CodeQL code scanning runs via GitHub's
   default setup (configured in repo Settings — there is intentionally no CodeQL
-  workflow file in the repo).
+  workflow file in the repo). Deploys from `main` are handled by Cloudflare Workers
+  Builds, not a GitHub deploy workflow.
 
 ## Project layout
 

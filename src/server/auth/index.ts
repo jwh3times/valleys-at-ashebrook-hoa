@@ -10,7 +10,7 @@ import { ac, visitor, homeowner, board } from './permissions';
 import { sendEmail } from './senders';
 import { SITE_NAME } from '../../lib/site';
 
-export function createAuth(
+function createAuthUncached(
   env?: Env,
   cf?: IncomingRequestCfProperties,
   baseURL?: string,
@@ -109,5 +109,33 @@ export function createAuth(
   });
 }
 
-// No-arg export for the Better Auth CLI (`npm run auth:generate`).
+type AuthInstance = ReturnType<typeof createAuthUncached>;
+
+const runtimeAuthCache = new WeakMap<object, Map<string, AuthInstance>>();
+
+export function createAuth(
+  env?: Env,
+  cf?: IncomingRequestCfProperties,
+  baseURL?: string,
+) {
+  if (!env || cf) return createAuthUncached(env, cf, baseURL);
+
+  const envKey = env as object;
+  const baseUrlKey = baseURL ?? env.BETTER_AUTH_URL ?? '';
+  let byBaseUrl = runtimeAuthCache.get(envKey);
+  if (!byBaseUrl) {
+    byBaseUrl = new Map();
+    runtimeAuthCache.set(envKey, byBaseUrl);
+  }
+
+  let auth = byBaseUrl.get(baseUrlKey);
+  if (!auth) {
+    auth = createAuthUncached(env, undefined, baseURL);
+    byBaseUrl.set(baseUrlKey, auth);
+  }
+  return auth;
+}
+
+// No-arg export for the Better Auth CLI (`npm run auth:generate`). This is
+// intentionally load-bearing unless the CLI config path is changed in tandem.
 export const auth = createAuth();

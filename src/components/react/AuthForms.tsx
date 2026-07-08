@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
+import { useLoginForm } from './useLoginForm';
 
 export function RegisterForm() {
   const [email, setEmail] = useState('');
@@ -45,32 +46,19 @@ export function RegisterForm() {
 }
 
 export function LoginForm() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [msg, setMsg] = useState('');
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const { error } = await authClient.signIn.email({ email, password });
-    if (error) setMsg(error.message ?? 'Sign-in failed');
-    else window.location.href = '/';
-  }
-  async function onReset() {
-    if (!email) {
-      setMsg('Enter your email first, then click reset.');
-      return;
-    }
-    const { error } = await authClient.requestPasswordReset({
-      email,
-      redirectTo: '/reset-password',
-    });
-    setMsg(
-      error
-        ? (error.message ?? 'Could not send reset email.')
-        : 'If that email exists, a reset link is on its way.',
-    );
-  }
+  const {
+    email,
+    setEmail,
+    password,
+    setPassword,
+    error,
+    info,
+    handleSubmit,
+    handleReset,
+  } = useLoginForm({ onSignIn: () => (window.location.href = '/') });
+  const msg = error || info;
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={handleSubmit}>
       <input
         type="email"
         value={email}
@@ -86,7 +74,7 @@ export function LoginForm() {
         required
       />
       <button type="submit">Sign in</button>
-      <button type="button" onClick={onReset}>
+      <button type="button" onClick={handleReset}>
         Forgot password?
       </button>
       {msg && <p>{msg}</p>}
