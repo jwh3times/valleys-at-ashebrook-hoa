@@ -58,10 +58,12 @@ npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 
 CI (`.github/workflows/build.yml`) runs `format:check`, `check`, `test`, `test:server`, then
 `build` on every PR and push to `main`; run the relevant checks locally before pushing. On every
-merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit on
-the `package.json` major/minor release line. The first tag uses the package patch value
-(`0.2.0` -> `v0.2.0`); later merges on the same line increment the patch tag (`v0.2.1`,
-`v0.2.2`, ...).
+merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
+creates a GitHub release using the `package.json` major/minor release line. The project uses the
+third semver segment as a build number (`<major>.<minor>.<build>`). The first tag for a new line
+uses the package build value (`0.2.0` -> `v0.2.0`); later merges on the same line increment the
+build tag (`v0.2.1`, `v0.2.2`, ...). When bumping major or minor, `x.y.0` remains valid and is not
+incremented to `x.y.1` unless an `x.y.0` tag already exists.
 
 ## Coding Style & Naming Conventions
 
