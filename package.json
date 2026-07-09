@@ -1,7 +1,7 @@
 {
   "name": "valleys-at-ashebrook-hoa",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Resident-run website for The Valleys at Ashebrook",
   "engines": {
     "node": ">=26.4.0"
