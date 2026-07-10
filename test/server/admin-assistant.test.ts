@@ -121,6 +121,29 @@ describe('assistant.answer', () => {
     expect(payload).not.toContain('jane@realmail.com');
   });
 
+  it('anonymizes conversation history before sending to Anthropic', async () => {
+    await answer(env, {
+      question: 'and what about now?',
+      history: [
+        {
+          role: 'user',
+          content:
+            'Does Jane Q Homeowner at 123 Ashebrook Lane, (919) 555-0100 / jane@realmail.com owe dues?',
+        },
+        {
+          role: 'assistant',
+          content: 'I could not find that in the documents.',
+        },
+      ],
+    });
+    const payload = JSON.stringify(captured.params);
+    expect(payload).not.toContain('Jane Q Homeowner');
+    expect(payload).not.toContain('123 Ashebrook Lane');
+    expect(payload).not.toContain('(919) 555-0100');
+    expect(payload).not.toContain('919');
+    expect(payload).not.toContain('jane@realmail.com');
+  });
+
   it('de-anonymizes the streamed answer before returning it', async () => {
     const { sources, textStream } = await answer(env, {
       question: 'balance for Jane Q Homeowner?',
