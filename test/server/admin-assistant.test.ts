@@ -58,6 +58,7 @@ import { answer, loadRosterEntries } from '../../src/server/ai/assistant';
 import { buildPseudonymizer } from '../../src/server/ai/pii';
 import { getDb } from '../../src/server/db/client';
 import { owners, properties, documents } from '../../src/server/db/schema';
+import { POST } from '../../src/pages/api/admin/assistant';
 
 // Derive the surrogate the mock will echo, from the same roster the test seeds.
 let SURROGATE_NAME = '';
@@ -159,5 +160,68 @@ describe('assistant.answer', () => {
     const text = await readAll(textStream);
     expect(text).toContain('Jane Q Homeowner'); // surrogate mapped back to the real name
     expect(text).not.toContain(SURROGATE_NAME);
+  });
+});
+
+async function sse(res: Response): Promise<string> {
+  return await res.text();
+}
+
+describe('POST /api/admin/assistant', () => {
+  it('403s a non-board caller (fail-closed)', async () => {
+    // Pass a non-board caller directly via `locals.authContext`, the fast-path
+    // `resolveAuthContext` reads before ever falling back to the top-level
+    // (board) `getAuthContext` mock. This proves fail-closed behavior without
+    // relying on module-cache resets.
+    const res = await POST({
+      locals: {
+        authContext: { userId: 'h', role: 'homeowner', propertyIds: [] },
+      },
+      request: new Request('http://localhost/api/admin/assistant', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question: 'hi' }),
+      }),
+    } as never);
+    expect(res.status).toBe(403);
+  });
+
+  it('400s a malformed body', async () => {
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/assistant', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: 'not json',
+      }),
+    } as never);
+    expect(res.status).toBe(400);
+  });
+
+  it('400s an empty question', async () => {
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/assistant', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question: '   ' }),
+      }),
+    } as never);
+    expect(res.status).toBe(400);
+  });
+
+  it('streams sources then tokens then done for a board caller', async () => {
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/assistant', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ question: 'balance for Jane Q Homeowner?' }),
+      }),
+    } as never);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const body = await sse(res);
+    expect(body).toContain('event: sources');
+    expect(body).toContain('event: token');
+    expect(body).toContain('event: done');
+    expect(body).toContain('Jane Q Homeowner'); // de-anonymized in the token stream
   });
 });
