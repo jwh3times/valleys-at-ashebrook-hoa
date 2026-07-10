@@ -158,7 +158,7 @@ the rest of the site works without it — and only useful once documents have re
    up to 4 MB and does not index `.xlsx` spreadsheets — large or spreadsheet documents won't be
    searchable by the assistant even though they still work normally in the document library.
 2. Set the instance name in `wrangler.toml` under `[vars]` as `AI_SEARCH_INSTANCE` (this repo uses
-   `ashebrook-docs`; use whatever name you gave the instance in step 1).
+   `ashebrook-ai-docs-search`; use whatever name you gave the instance in step 1).
 3. Set the generation secret: `wrangler secret put ANTHROPIC_API_KEY`.
 4. The assistant only has something to answer from once documents are imported to R2 (see §7) and
    AI Search has finished indexing them — a fresh deployment with an empty or newly created bucket
