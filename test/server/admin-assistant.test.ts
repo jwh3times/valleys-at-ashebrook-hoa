@@ -8,20 +8,10 @@ vi.mock('../../src/server/authz/context', () => ({
 // Retrieval is mocked (no AI binding in the test pool); Anthropic is mocked to
 // capture the outgoing payload and return a scripted surrogate answer.
 const captured: { params?: unknown } = {};
+const { retrieveMock } = vi.hoisted(() => ({ retrieveMock: vi.fn() }));
 vi.mock('../../src/server/ai/search', async (orig) => ({
   ...(await orig<typeof import('../../src/server/ai/search')>()),
-  retrieve: async () => [
-    {
-      id: 'c1',
-      score: 0.9,
-      content: 'Jane Q Homeowner owes $50 at 123 Ashebrook Lane.',
-      metadata: {
-        filename: 'f.pdf',
-        folder: 'documents/uuid-1/f.pdf',
-        timestamp: 1,
-      },
-    },
-  ],
+  retrieve: retrieveMock,
 }));
 vi.mock('../../src/server/ai/anthropic', () => ({
   AssistantNotConfiguredError: class extends Error {},
@@ -65,6 +55,18 @@ let SURROGATE_NAME = '';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+  retrieveMock.mockImplementation(async () => [
+    {
+      id: 'c1',
+      score: 0.9,
+      content: 'Jane Q Homeowner owes $50 at 123 Ashebrook Lane.',
+      metadata: {
+        filename: 'f.pdf',
+        folder: 'documents/uuid-1/f.pdf',
+        timestamp: 1,
+      },
+    },
+  ]);
   await getDb(env).insert(properties).values({
     id: 'uuid-1',
     address: '123 Ashebrook Lane',
@@ -80,6 +82,17 @@ beforeAll(async () => {
     phone: '(919) 555-0100',
     email: 'jane@realmail.com',
     status: 'active',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  // A former (inactive) owner — must still be pseudonymized even though the
+  // roster feed is not filtered to active status (loadRosterEntries feeds
+  // only the PII dictionary, never a user-facing read).
+  await getDb(env).insert(owners).values({
+    id: 'o2',
+    propertyId: 'uuid-1',
+    fullName: 'Pat Pastowner',
+    status: 'inactive',
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -122,6 +135,12 @@ describe('assistant.answer', () => {
     expect(payload).not.toContain('jane@realmail.com');
   });
 
+  it('pseudonymizes former (inactive) owners too', async () => {
+    await answer(env, { question: 'What about Pat Pastowner?' });
+    const payload = JSON.stringify(captured.params);
+    expect(payload).not.toContain('Pat Pastowner');
+  });
+
   it('anonymizes conversation history before sending to Anthropic', async () => {
     await answer(env, {
       question: 'and what about now?',
@@ -160,6 +179,72 @@ describe('assistant.answer', () => {
     const text = await readAll(textStream);
     expect(text).toContain('Jane Q Homeowner'); // surrogate mapped back to the real name
     expect(text).not.toContain(SURROGATE_NAME);
+  });
+
+  it('numbers excerpt citations per-document, matching the sources order', async () => {
+    await getDb(env).insert(documents).values({
+      id: 'uuid-2',
+      title: 'Rules',
+      category: 'Governing Documents',
+      visibility: 'board',
+      r2Key: 'documents/uuid-2/g.pdf',
+      filename: 'g.pdf',
+      sizeBytes: 1,
+      contentType: 'application/pdf',
+      uploadedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    retrieveMock.mockImplementationOnce(async () => [
+      {
+        id: 'c1',
+        score: 0.9,
+        content: 'Ledger excerpt one.',
+        metadata: {
+          filename: 'f.pdf',
+          folder: 'documents/uuid-1/f.pdf',
+          timestamp: 1,
+        },
+      },
+      {
+        id: 'c2',
+        score: 0.8,
+        content: 'Rules excerpt.',
+        metadata: {
+          filename: 'g.pdf',
+          folder: 'documents/uuid-2/g.pdf',
+          timestamp: 2,
+        },
+      },
+      {
+        id: 'c3',
+        score: 0.7,
+        content: 'Ledger excerpt two.',
+        metadata: {
+          filename: 'f.pdf',
+          folder: 'documents/uuid-1/f.pdf',
+          timestamp: 3,
+        },
+      },
+    ]);
+
+    const { sources } = await answer(env, { question: 'multi-doc question' });
+    expect(sources.map((s) => s.id)).toEqual(['uuid-1', 'uuid-2']);
+
+    const params = captured.params as {
+      messages: { role: string; content: string }[];
+    };
+    const userText = params.messages[params.messages.length - 1].content;
+    expect(userText).toContain('[Source 1]\nLedger excerpt one.');
+    expect(userText).toContain('[Source 2]\nRules excerpt.');
+    expect(userText).toContain('[Source 1]\nLedger excerpt two.');
+    expect(userText).not.toContain('[Source 3]');
+
+    const distinctLabels = new Set(userText.match(/\[Source \d+\]/g));
+    expect(distinctLabels.size).toBe(sources.length);
+
+    // No PII regression: still anonymized.
+    expect(userText).not.toContain('Jane Q Homeowner');
+    expect(userText).not.toContain('123 Ashebrook Lane');
   });
 });
 

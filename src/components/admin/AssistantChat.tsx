@@ -40,7 +40,9 @@ export default function AssistantChat() {
         body: JSON.stringify({ question, history: priorHistory }),
       });
       if (!res.ok || !res.body) {
-        setError(await res.text().catch(() => 'The assistant is unavailable.'));
+        setError(
+          (await res.text().catch(() => '')) || 'The assistant is unavailable.',
+        );
         setMessages((m) => m.slice(0, -1)); // drop the empty assistant bubble
         return;
       }
@@ -74,6 +76,8 @@ export default function AssistantChat() {
             });
           } else if (evLine[1] === 'error') {
             setError((data as { message: string }).message);
+            setMessages((m) => m.slice(0, -1)); // drop the trailing assistant bubble
+            return; // stop consuming the stream; don't commit this turn to history
           }
         }
       }
