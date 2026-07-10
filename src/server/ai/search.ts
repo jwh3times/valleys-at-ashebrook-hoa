@@ -26,3 +26,30 @@ export interface AutoRag {
 export interface AiBinding {
   autorag(instance: string): AutoRag;
 }
+
+export class AiSearchUnavailableError extends Error {
+  constructor(cause?: unknown) {
+    super('Document search is temporarily unavailable');
+    this.name = 'AiSearchUnavailableError';
+    this.cause = cause;
+  }
+}
+
+/** Retrieve the top document chunks relevant to `query` from the AI Search index. */
+export async function retrieve(
+  env: Env,
+  query: string,
+  limit = 8,
+): Promise<AiSearchChunk[]> {
+  try {
+    const res = await env.AI.autorag(env.AI_SEARCH_INSTANCE).search({
+      query,
+      max_num_results: limit,
+      ranking_options: { score_threshold: 0.3 },
+      rewrite_query: true,
+    });
+    return res.data ?? [];
+  } catch (err) {
+    throw new AiSearchUnavailableError(err);
+  }
+}
