@@ -1,8 +1,11 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
-import { requireBoard } from '../../../server/authz/api-guards';
-import { readJson, stringField } from '../../../server/http';
+import {
+  requireBoard,
+  resolveAuthContext,
+} from '../../../server/authz/api-guards';
+import { readJson } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
 import {
@@ -56,6 +59,12 @@ function serialize(group: DupeGroup, matchKind: 'exact' | 'near') {
         m.uploadedAt instanceof Date
           ? m.uploadedAt.toISOString()
           : new Date((m.uploadedAt ?? 0) as number).toISOString(),
+      verifiedAt:
+        m.keepVerifiedAt == null
+          ? null
+          : m.keepVerifiedAt instanceof Date
+            ? m.keepVerifiedAt.toISOString()
+            : new Date(m.keepVerifiedAt as number).toISOString(),
     })),
   };
 }
@@ -77,6 +86,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
       contentHash: documents.contentHash,
       r2Key: documents.r2Key,
       uploadedAt: documents.uploadedAt,
+      keepVerifiedAt: documents.keepVerifiedAt,
     })
     .from(documents);
 
@@ -128,11 +138,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
     category: r.category,
     uploadedAt: r.uploadedAt ?? undefined,
     contentHash: r.contentHash,
+    keepVerifiedAt: r.keepVerifiedAt ?? null,
   }));
 
+  // A group is worth showing only while at least one member is still
+  // unverified. Fully-kept groups are hidden until a matching upload resets
+  // one of them (see the documents upload endpoint).
+  const hasUnverified = (g: DupeGroup) =>
+    g.members.some((m) => m.keepVerifiedAt == null);
+
   return Response.json({
-    exact: groupExact(docs).map((g) => serialize(g, 'exact')),
-    near: groupNear(docs).map((g) => serialize(g, 'near')),
+    exact: groupExact(docs)
+      .filter(hasUnverified)
+      .map((g) => serialize(g, 'exact')),
+    near: groupNear(docs)
+      .filter(hasUnverified)
+      .map((g) => serialize(g, 'near')),
     remaining,
   });
 };
@@ -140,6 +161,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
+  const ctx = await resolveAuthContext(locals, request, env);
   const parsed = await readJson(request);
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
   const body =
@@ -148,15 +170,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
       : {};
   if (body.action !== 'resolve')
     return new Response('Bad action', { status: 400 });
-  const keepId = stringField(body, 'keepId');
-  if (!keepId) return new Response('keepId is required', { status: 400 });
+  const keepIds = Array.isArray(body.keepIds)
+    ? body.keepIds.filter((x): x is string => typeof x === 'string')
+    : [];
   const deleteIds = Array.isArray(body.deleteIds)
     ? body.deleteIds.filter((x): x is string => typeof x === 'string')
     : [];
-  if (deleteIds.length === 0)
-    return new Response('deleteIds is required', { status: 400 });
-  if (deleteIds.includes(keepId))
-    return new Response('keepId cannot be in deleteIds', { status: 400 });
+  // Always keep at least one file; never delete something we are also keeping.
+  if (keepIds.length === 0)
+    return new Response('keepIds is required', { status: 400 });
+  if (keepIds.some((id) => deleteIds.includes(id)))
+    return new Response('keepIds and deleteIds must be disjoint', {
+      status: 400,
+    });
 
   const db = getDb(env);
   for (const id of deleteIds) {
@@ -165,5 +191,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     await env.DOCS.delete(doc.r2Key);
     await db.delete(documents).where(eq(documents.id, id));
   }
+  await db
+    .update(documents)
+    .set({ keepVerifiedAt: new Date(), keepVerifiedBy: ctx?.userId ?? null })
+    .where(inArray(documents.id, keepIds));
   return new Response(null, { status: 204 });
 };

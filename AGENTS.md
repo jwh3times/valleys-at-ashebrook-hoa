@@ -94,10 +94,16 @@ though app auth uses Better Auth's D1 sessions rather than `Astro.session`.
 - Gated document download from R2 with tier checks: `GET /api/files/[id]`.
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
   `/api/admin/{properties,owners,members}`. `POST /api/admin/documents` hashes uploads, blocks exact
-  duplicates, warns on near duplicates, and stores `content_hash` on success.
+  duplicates, warns on near duplicates, and stores `content_hash` on success; a confirmed
+  near-duplicate upload also clears `keep_verified_at`/`keep_verified_by` on the existing documents
+  it near-matches, so that duplicate group resurfaces for review.
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
-  and returns exact or near groups; `POST /api/admin/duplicates` resolves selected duplicates by
-  deleting their D1 rows and R2 objects.
+  and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
+  where every member is already kept-verified are hidden until a matching upload resets one.
+  `POST /api/admin/duplicates` takes `{ action: 'resolve', keepIds, deleteIds }`, deletes each
+  `deleteIds` document (D1 row + R2 object), and marks the surviving `keepIds` as kept-verified;
+  `keepIds` must be non-empty and disjoint from `deleteIds`, while `deleteIds` may be empty for a
+  keep-all/mark-reviewed resolution.
 - Board handoff: `GET /api/admin/roles` lists current board; `POST /api/admin/roles` accepts
   `{ action: 'promote', email }` or `{ action: 'demote', userId }` and returns 409 when attempting
   to demote the last board member.
@@ -134,19 +140,22 @@ though app auth uses Better Auth's D1 sessions rather than `Astro.session`.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 
 **Data model.** D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`,
-`documents` (metadata including nullable indexed `content_hash`; files live in R2 under
-`documents/<id>/...`), `settings` (key/value singletons `dues` and `site`), roster/verification
-tables (`properties`, `owners`, `user_property_links`, `property_verifications`,
-`manual_approval_queue`), and Better Auth tables (`user`, `session`, `account`, `verification`).
+`documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`
+and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
+review; files live in R2 under `documents/<id>/...`), `settings` (key/value singletons `dues` and
+`site`), roster/verification tables (`properties`, `owners`, `user_property_links`,
+`property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
+`account`, `verification`).
 
 Migration `0002` split homes and people into `properties` and `owners`. Migration `0003` adds
 uniqueness constraints (`properties.address_normalized`, `user_property_links (user_id,
 property_id)`) and hot-path indexes. Migration `0004` adds `documents.content_hash` and
-`documents_content_hash_idx` for duplicate detection. Migrations are applied with
-`npm run db:migrate:{local,remote}` via Wrangler, which tracks applied files in D1 independently of
-Drizzle's `meta/` snapshots. `0002` and `0003` were hand-authored SQL, but the Drizzle snapshot
-history has been reconciled through `0003`, so `npm run db:generate` should diff cleanly for future
-changes.
+`documents_content_hash_idx` for duplicate detection. Migration `0005` reconciles foreign keys and
+enums on the roster/verification tables. Migration `0006` adds `documents.keep_verified_at` and
+`documents.keep_verified_by`. Migrations are applied with `npm run db:migrate:{local,remote}` via
+Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
+`0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
+so `npm run db:generate` should diff cleanly for future changes.
 
 **Roles and access.** Roles are `visitor`, `homeowner`, and `board`; content visibility tiers are
 `public`, `homeowner`, and `board`. Access is enforced server-side and fail-closed: anonymous users

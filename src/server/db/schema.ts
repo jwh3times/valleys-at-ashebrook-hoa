@@ -131,6 +131,12 @@ export const documents = sqliteTable(
     sizeBytes: integer('size_bytes').notNull(),
     contentType: text('content_type').notNull(),
     contentHash: text('content_hash'),
+    // Set when a board member explicitly keeps this file during duplicate
+    // review. Non-null ⇒ verified/kept; reset to null when a matching new
+    // document is uploaded so the group resurfaces. keep_verified_by is the
+    // resolving board user id (audit trail).
+    keepVerifiedAt: integer('keep_verified_at', { mode: 'timestamp' }),
+    keepVerifiedBy: text('keep_verified_by'),
     uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   },
