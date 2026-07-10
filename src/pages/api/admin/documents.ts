@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { eq, ne, inArray } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
@@ -133,6 +133,42 @@ export const POST: APIRoute = async ({ request, locals }) => {
     uploadedAt: now,
     updatedAt: now,
   });
+
+  // A confirmed near-duplicate is the only path that stores a file with
+  // existing near-matches (a clean upload has none; an exact match is blocked
+  // above). When it happens, the board's earlier "keep" decisions on those
+  // matches are stale — clear them so the group resurfaces for re-review.
+  if (confirmDuplicate) {
+    const candidate: DocLike = {
+      id,
+      title,
+      filename: file.name,
+      sizeBytes: file.size,
+      contentType,
+      visibility: visibility as DocLike['visibility'],
+    };
+    const others = await db
+      .select({
+        id: documents.id,
+        title: documents.title,
+        filename: documents.filename,
+        sizeBytes: documents.sizeBytes,
+        contentType: documents.contentType,
+        visibility: documents.visibility,
+      })
+      .from(documents)
+      .where(ne(documents.id, id));
+    const matchedIds = others
+      .filter((e) => nearScore(candidate, e as DocLike) >= NEAR_THRESHOLD)
+      .map((e) => e.id);
+    if (matchedIds.length > 0) {
+      await db
+        .update(documents)
+        .set({ keepVerifiedAt: null, keepVerifiedBy: null })
+        .where(inArray(documents.id, matchedIds));
+    }
+  }
+
   return new Response(null, { status: 201 });
 };
 
