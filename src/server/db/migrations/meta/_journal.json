@@ -43,6 +43,13 @@
       "when": 1783511331351,
       "tag": "0005_secret_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1783657176857,
+      "tag": "0006_young_madripoor",
+      "breakpoints": true
     }
   ]
 }
