@@ -10,6 +10,8 @@ export interface DocLike {
   category?: string;
   uploadedAt?: number | Date;
   contentHash?: string | null;
+  /** Non-null ⇒ a board member kept this file during dup review. Never affects grouping. */
+  keepVerifiedAt?: number | Date | null;
 }
 
 export interface DupeGroup {
