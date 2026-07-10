@@ -54,6 +54,19 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   one-time verification code sent to the contact already on file. Public docs describe the purpose
   and high-level handling; deployment-specific removal, erasure, backup, and retention runbooks
   belong under `private/`.
+- **The admin document assistant is board-only and pseudonymizes known PII before it leaves the
+  Worker.** `POST /api/admin/assistant` is gated by `requireBoard` (fail-closed, same as every other
+  admin endpoint). Answering a question sends retrieved document excerpts, the question, and recent
+  chat history to Anthropic; before any of that text is transmitted, every roster owner name and
+  property address is swapped for a realistic, consistent placeholder — including each individual
+  name token (so a resident's standalone first name or surname is also replaced, not just their full
+  name) — and any email address or phone number found anywhere in the text is pseudonymized the same
+  way, regardless of whether it matches the roster. Document titles are never sent; citations
+  reference retrieved excerpts by index label and are resolved back to real documents server-side.
+  This is **best-effort, not a guarantee**: it only catches PII matching a current roster entry or
+  the email/phone patterns, so it does not cover non-resident names or other free text that doesn't
+  match those patterns, and has narrow documented edge cases (for example, a roster value whose
+  closing abbreviation period is glued directly to the next word with no separating space).
 
 ## Automated safeguards
 
