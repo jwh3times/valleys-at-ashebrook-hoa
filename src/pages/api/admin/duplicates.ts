@@ -56,6 +56,12 @@ function serialize(group: DupeGroup, matchKind: 'exact' | 'near') {
         m.uploadedAt instanceof Date
           ? m.uploadedAt.toISOString()
           : new Date((m.uploadedAt ?? 0) as number).toISOString(),
+      verifiedAt:
+        m.keepVerifiedAt == null
+          ? null
+          : m.keepVerifiedAt instanceof Date
+            ? m.keepVerifiedAt.toISOString()
+            : new Date(m.keepVerifiedAt as number).toISOString(),
     })),
   };
 }
@@ -77,6 +83,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
       contentHash: documents.contentHash,
       r2Key: documents.r2Key,
       uploadedAt: documents.uploadedAt,
+      keepVerifiedAt: documents.keepVerifiedAt,
     })
     .from(documents);
 
@@ -128,11 +135,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
     category: r.category,
     uploadedAt: r.uploadedAt ?? undefined,
     contentHash: r.contentHash,
+    keepVerifiedAt: r.keepVerifiedAt ?? null,
   }));
 
+  // A group is worth showing only while at least one member is still
+  // unverified. Fully-kept groups are hidden until a matching upload resets
+  // one of them (see the documents upload endpoint).
+  const hasUnverified = (g: DupeGroup) =>
+    g.members.some((m) => m.keepVerifiedAt == null);
+
   return Response.json({
-    exact: groupExact(docs).map((g) => serialize(g, 'exact')),
-    near: groupNear(docs).map((g) => serialize(g, 'near')),
+    exact: groupExact(docs)
+      .filter(hasUnverified)
+      .map((g) => serialize(g, 'exact')),
+    near: groupNear(docs)
+      .filter(hasUnverified)
+      .map((g) => serialize(g, 'near')),
     remaining,
   });
 };

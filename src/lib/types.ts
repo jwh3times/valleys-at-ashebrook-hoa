@@ -30,6 +30,8 @@ export interface DupeMember {
   sizeBytes: number;
   uploadedAt: string; // ISO
   contentHash?: string | null;
+  /** ISO timestamp the file was kept-verified by a board member, else null. */
+  verifiedAt: string | null;
 }
 
 export interface DupeGroupView {
