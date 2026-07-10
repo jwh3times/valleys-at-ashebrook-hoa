@@ -16,6 +16,12 @@ declare namespace Cloudflare {
     TWILIO_FROM: string;
     TURNSTILE_SITE_KEY?: string;
     TURNSTILE_SECRET_KEY: string;
+    /** Anthropic API key for the admin document assistant (Claude generation). */
+    ANTHROPIC_API_KEY: string;
+    /** Cloudflare AI Search (autorag) binding for document retrieval. */
+    AI: import('./server/ai/search').AiBinding;
+    /** Name of the AI Search instance created in the dashboard. */
+    AI_SEARCH_INSTANCE: string;
     WEB3FORMS_KEY?: string;
     /**
      * First-board bootstrap secrets (see /api/bootstrap/board). Optional: set

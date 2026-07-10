@@ -17,6 +17,13 @@ crons = ["0 7 * * *"]
 BETTER_AUTH_URL = "https://ashebrookresidents.com"
 TURNSTILE_SITE_KEY = "0x4AAAAAADt_bUgYAEN03njN"
 WEB3FORMS_KEY = "ad82b2e5-ff8c-49dd-82fb-50bf90272b55"
+AI_SEARCH_INSTANCE = "ashebrook-docs"
+
+# Workers AI binding — used for the admin document assistant's retrieval via
+# Cloudflare AI Search (env.AI.autorag(...)). The AI Search instance is created
+# once in the dashboard against the ashebrook-hoa-docs R2 bucket (see SETUP.md).
+[ai]
+binding = "AI"
 
 [[d1_databases]]
 binding = "DATABASE"
