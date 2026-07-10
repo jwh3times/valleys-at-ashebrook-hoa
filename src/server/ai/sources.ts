@@ -11,7 +11,7 @@ export interface Source {
 }
 
 /** The R2 layout is `documents/<uuid>/<filename>` — pull the uuid out. */
-function docIdFromFolder(folder: string): string | null {
+export function docIdFromFolder(folder: string): string | null {
   const m = /(?:^|\/)documents\/([^/]+)\//.exec(folder);
   return m ? m[1] : null;
 }

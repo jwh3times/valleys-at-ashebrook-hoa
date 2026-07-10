@@ -8,3 +8,5 @@ TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_FROM=
 TURNSTILE_SECRET_KEY=
+# Board-only AI document assistant (admin panel); leave blank to disable it locally.
+ANTHROPIC_API_KEY=

@@ -1,8 +1,7 @@
-import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { owners, properties } from '../db/schema';
 import { retrieve } from './search';
-import { toSources, type Source } from './sources';
+import { toSources, docIdFromFolder, type Source } from './sources';
 import { buildPseudonymizer, type PiiEntry } from './pii';
 import { getAnthropic } from './anthropic';
 
@@ -27,7 +26,12 @@ const SYSTEM_PROMPT = [
   'Respond with the answer only — no preamble or meta-commentary.',
 ].join(' ');
 
-/** Load the roster into PII entries (active owners' names/phones/emails + property addresses). */
+/**
+ * Load the roster into PII entries (owners' names/phones/emails + property
+ * addresses). This feeds ONLY the pseudonymization dictionary, so it is not
+ * filtered to active status — former owners and inactive properties must
+ * still be masked if their names or addresses appear in document excerpts.
+ */
 export async function loadRosterEntries(env: Env): Promise<PiiEntry[]> {
   const db = getDb(env);
   const [ownerRows, propRows] = await Promise.all([
@@ -37,12 +41,8 @@ export async function loadRosterEntries(env: Env): Promise<PiiEntry[]> {
         phone: owners.phone,
         email: owners.email,
       })
-      .from(owners)
-      .where(eq(owners.status, 'active')),
-    db
-      .select({ address: properties.address })
-      .from(properties)
-      .where(eq(properties.status, 'active')),
+      .from(owners),
+    db.select({ address: properties.address }).from(properties),
   ]);
   const entries: PiiEntry[] = [];
   for (const o of ownerRows) {
@@ -98,8 +98,16 @@ export async function answer(
   const sources = await toSources(env, chunks);
   const pseud = buildPseudonymizer(await loadRosterEntries(env));
 
+  // Number excerpts per-document (matching `sources` order) rather than
+  // per-chunk, since toSources() dedupes chunks into one entry per document.
+  const sourceIndexByDocId = new Map(sources.map((s, i) => [s.id, i + 1]));
   const context = chunks
-    .map((c, i) => `[Source ${i + 1}]\n${pseud.anonymize(c.content)}`)
+    .map((c) => {
+      const docId = docIdFromFolder(c.metadata.folder);
+      const idx = docId ? sourceIndexByDocId.get(docId) : undefined;
+      const label = idx !== undefined ? `[Source ${idx}]` : '[Source]';
+      return `${label}\n${pseud.anonymize(c.content)}`;
+    })
     .join('\n\n');
   const history = (input.history ?? []).map((t) => ({
     role: t.role,

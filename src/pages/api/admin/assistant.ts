@@ -66,10 +66,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const { sources, textStream } = result;
+  let reader: ReadableStreamDefaultReader<string> | undefined;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(sseFrame('sources', sources));
-      const reader = textStream.getReader();
+      reader = textStream.getReader();
       try {
         for (;;) {
           const { value, done } = await reader.read();
@@ -86,6 +87,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       } finally {
         controller.close();
       }
+    },
+    cancel() {
+      void reader?.cancel();
     },
   });
 

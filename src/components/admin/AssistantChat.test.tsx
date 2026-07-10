@@ -42,4 +42,49 @@ describe('AssistantChat', () => {
       '/api/files/d1',
     );
   });
+
+  it('shows the error and drops the empty assistant bubble on an error frame', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      sseResponse([
+        `event: sources\ndata: ${JSON.stringify([{ id: 'd1', title: 'Bylaws', category: 'Governing Documents', href: '/api/files/d1' }])}\n\n`,
+        `event: error\ndata: ${JSON.stringify({ message: 'The assistant hit an error. Please try again.' })}\n\n`,
+      ]),
+    );
+
+    render(<AssistantChat />);
+    fireEvent.change(screen.getByPlaceholderText(/ask/i), {
+      target: { value: 'late fee?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/The assistant hit an error\. Please try again\./),
+      ).toBeInTheDocument(),
+    );
+    // No lingering empty assistant bubble: only the user's message remains in the log.
+    expect(screen.queryByText('…')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /Bylaws/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('falls back to a generic message when a non-ok response has an empty body', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('', { status: 500 }),
+    );
+
+    render(<AssistantChat />);
+    fireEvent.change(screen.getByPlaceholderText(/ask/i), {
+      target: { value: 'late fee?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/The assistant is unavailable\./),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('…')).not.toBeInTheDocument();
+  });
 });
