@@ -10,6 +10,7 @@ import SiteManager from './SiteManager';
 import RosterManager from './RosterManager';
 import MembersManager from './MembersManager';
 import BoardMembersManager from './BoardMembersManager';
+import AssistantChat from './AssistantChat';
 
 const SECTIONS = [
   {
@@ -18,6 +19,7 @@ const SECTIONS = [
     render: () => <AnnouncementsManager />,
   },
   { key: 'documents', label: 'Documents', render: () => <DocumentsManager /> },
+  { key: 'assistant', label: 'Assistant', render: () => <AssistantChat /> },
   {
     key: 'duplicates',
     label: 'Duplicates',
