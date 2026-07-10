@@ -40,7 +40,6 @@ function serialize(group: DupeGroup, matchKind: 'exact' | 'near') {
     contentHash,
     sameTier,
     autoResolvable: auto !== null,
-    deleteIds: auto?.deleteIds ?? [],
     recommendation:
       matchKind === 'exact'
         ? auto

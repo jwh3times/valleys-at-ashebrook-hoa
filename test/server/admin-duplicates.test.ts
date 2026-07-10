@@ -21,7 +21,7 @@ describe('admin duplicates - gate', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           action: 'resolve',
-          keepId: 'x',
+          keepIds: ['x'],
           deleteIds: ['y'],
         }),
       }),
