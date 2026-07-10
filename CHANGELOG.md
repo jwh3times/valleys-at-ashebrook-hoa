@@ -10,7 +10,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ### Added
 
 - **Board-only AI document assistant** — ask questions about the document library and get
-  streamed, cited answers (Cloudflare AI Search + Claude).
+  streamed, cited answers (Cloudflare AI Search + Claude). Answers draw on both the documents
+  and general knowledge, clearly labeling which parts come from the documents (cited by
+  `[Source N]`) versus general knowledge not found in them.
 
 ### Changed
 

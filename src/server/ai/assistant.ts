@@ -16,15 +16,22 @@ export interface AnswerResult {
 
 const MODEL = 'claude-opus-4-8';
 
+// One logical instruction per array element (joined with newlines). Keep phrases
+// like the general-knowledge label intact on a single element — don't split them
+// across elements, or a mid-phrase newline creeps into the prompt.
 const SYSTEM_PROMPT = [
-  "You are an assistant for the neighborhood board. Answer the board member's",
-  'question using ONLY the numbered document excerpts provided.',
-  'Cite the excerpts you used by their [Source N] label. If the answer is not in',
-  'the excerpts, say you could not find it in the documents. Do not invent facts.',
-  'Names, addresses, phone numbers, and emails in the excerpts are placeholders —',
-  'use them exactly as written; never alter, abbreviate, or reformat them.',
-  'Respond with the answer only — no preamble or meta-commentary.',
-].join(' ');
+  'You are an assistant for the neighborhood board. You have two sources to answer with: the numbered document excerpts provided below, and your own general knowledge.',
+  '',
+  'Prefer the document excerpts. When they are relevant, ground your answer in them and cite each one you use by its [Source N] label. You may also use general knowledge to add context, explain concepts, or answer questions the documents do not cover.',
+  '',
+  'Make it unambiguous which parts of your answer come from the documents and which are general knowledge not found in them:',
+  '- Present facts drawn from the excerpts plainly and cite them with [Source N].',
+  '- Clearly mark any statement that comes from general knowledge and is not supported by the excerpts — for example, prefix it with "General knowledge (not from the documents):" — and never present such information as if it came from the HOA’s documents.',
+  '- If the documents and general knowledge disagree, defer to the documents and note the difference.',
+  '- If you can answer from neither, say so.',
+  '',
+  'Do not fabricate document contents or [Source N] citations for claims the excerpts do not support. Names, addresses, phone numbers, and emails in the excerpts are placeholders — use them exactly as written; never alter, abbreviate, or reformat them. Respond with the answer only — no preamble or meta-commentary.',
+].join('\n');
 
 /**
  * Load the roster into PII entries (owners' names/phones/emails + property

@@ -181,6 +181,20 @@ describe('assistant.answer', () => {
     expect(text).not.toContain(SURROGATE_NAME);
   });
 
+  it('instructs hybrid answering with clear doc-vs-general-knowledge labeling', async () => {
+    await answer(env, { question: 'what are the rules about fences?' });
+    const system = (captured.params as { system: string }).system;
+    const lower = system.toLowerCase();
+    // General knowledge is permitted (hybrid), not documents-only.
+    expect(lower).toContain('general knowledge');
+    // ...but anything not from the documents must be labeled as such.
+    expect(lower).toContain('not from the documents');
+    // Document-sourced facts are still cited by [Source N].
+    expect(system).toContain('[Source N]');
+    // The PII placeholder rule is preserved (de-anonymization depends on it).
+    expect(lower).toContain('placeholder');
+  });
+
   it('numbers excerpt citations per-document, matching the sources order', async () => {
     await getDb(env).insert(documents).values({
       id: 'uuid-2',
