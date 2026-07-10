@@ -94,10 +94,16 @@ though app auth uses Better Auth's D1 sessions rather than `Astro.session`.
 - Gated document download from R2 with tier checks: `GET /api/files/[id]`.
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
   `/api/admin/{properties,owners,members}`. `POST /api/admin/documents` hashes uploads, blocks exact
-  duplicates, warns on near duplicates, and stores `content_hash` on success.
+  duplicates, warns on near duplicates, and stores `content_hash` on success; a confirmed
+  near-duplicate upload also clears `keep_verified_at`/`keep_verified_by` on the existing documents
+  it near-matches, so that duplicate group resurfaces for review.
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
-  and returns exact or near groups; `POST /api/admin/duplicates` resolves selected duplicates by
-  deleting their D1 rows and R2 objects.
+  and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
+  where every member is already kept-verified are hidden until a matching upload resets one.
+  `POST /api/admin/duplicates` takes `{ action: 'resolve', keepIds, deleteIds }`, deletes each
+  `deleteIds` document (D1 row + R2 object), and marks the surviving `keepIds` as kept-verified;
+  `keepIds` must be non-empty and disjoint from `deleteIds`, while `deleteIds` may be empty for a
+  keep-all/mark-reviewed resolution.
 - Board handoff: `GET /api/admin/roles` lists current board; `POST /api/admin/roles` accepts
   `{ action: 'promote', email }` or `{ action: 'demote', userId }` and returns 409 when attempting
   to demote the last board member.
