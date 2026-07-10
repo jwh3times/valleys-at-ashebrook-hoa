@@ -84,9 +84,11 @@ client refresh. Runtime bindings and secrets are read via `import { env } from '
 Build-time `PUBLIC_*` vars are inlined by Astro from `.env`.
 
 **Cloudflare bindings.** `wrangler.toml` defines `DATABASE` (D1), `KV` (app KV), `SESSION` (KV for
-Astro sessions), and `DOCS` (R2 document storage). `SESSION` is required by the
-`@astrojs/cloudflare` adapter, which enables Astro sessions against that binding by default even
-though app auth uses Better Auth's D1 sessions rather than `Astro.session`.
+Astro sessions), `DOCS` (R2 document storage), and `AI` (Workers AI / AI Search binding). `SESSION`
+is required by the `@astrojs/cloudflare` adapter, which enables Astro sessions against that binding
+by default even though app auth uses Better Auth's D1 sessions rather than `Astro.session`. `AI`
+backs the admin document assistant's retrieval via `env.AI.autorag(...)`, pointed at the
+`AI_SEARCH_INSTANCE` var; answer generation additionally requires the `ANTHROPIC_API_KEY` secret.
 
 **HTTP endpoints.** API routes live under `src/pages/api/`:
 
@@ -107,6 +109,12 @@ though app auth uses Better Auth's D1 sessions rather than `Astro.session`.
 - Board handoff: `GET /api/admin/roles` lists current board; `POST /api/admin/roles` accepts
   `{ action: 'promote', email }` or `{ action: 'demote', userId }` and returns 409 when attempting
   to demote the last board member.
+- Board-only document assistant: `POST /api/admin/assistant` (SSE) takes `{ question, history? }`
+  and streams a Claude-generated, cited answer over the document library, retrieved via Cloudflare
+  AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
+  consistent surrogates) before they reach Anthropic, document titles are never sent, and citations
+  reference retrieved chunks back to real documents server-side. See SECURITY.md for the
+  pseudonymization guarantees and limits.
 - Homeowner verification: `/api/verify/{request,confirm}`.
 - First-board bootstrap: `POST /api/bootstrap/board`, which is fail-closed, self-disables once a
   board account exists, and requires bootstrap secret/config values.
@@ -138,6 +146,12 @@ though app auth uses Better Auth's D1 sessions rather than `Astro.session`.
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
 - `roster/` and `verification/`: homeowner verification support.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
+- `ai/`: the board-only document assistant — `search.ts` (`retrieve`, Cloudflare AI Search/autorag
+  retrieval), `pii.ts` (`buildPseudonymizer`, a reversible roster-based PII pseudonymizer with
+  streaming de-anonymization), `sources.ts` (`toSources`, maps retrieved chunks back to real D1
+  document rows for citations), `anthropic.ts` (`getAnthropic`, Anthropic client + config guard),
+  and `assistant.ts` (`answer`, `loadRosterEntries`; orchestrates retrieve -> pseudonymize -> Claude
+  generation -> de-anonymized streamed output).
 
 **Data model.** D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`,
 `documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`

@@ -7,6 +7,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Added
+
+- **Board-only AI document assistant** — ask questions about the document library and get
+  streamed, cited answers (Cloudflare AI Search + Claude).
+
 ### Changed
 
 - **Duplicate review remembers resolved groups** — resolving duplicates now marks the file(s) a
@@ -17,6 +22,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   reviewed without deleting anything. If a later upload is confirmed as a near duplicate of a
   previously-kept file, that file's kept state is cleared so the group resurfaces for review. The
   panel also adds a per-file "View" link and a "kept" badge.
+
+### Security
+
+- The assistant pseudonymizes known resident PII before sending document excerpts to Anthropic
+  (best-effort, roster-based).
 
 ## [0.2.0] - 2026-07-08
 
