@@ -88,10 +88,17 @@ function escapeRegExp(s: string): string {
 
 // Word-bounded, whitespace-flexible literal matcher: tolerates irregular
 // internal spacing (e.g. double spaces) and prevents substring corruption
-// (e.g. a roster name "Lane" matching inside "airplane").
+// (e.g. a roster name "Lane" matching inside "airplane"). Uses non-word
+// lookarounds rather than `\b` so a value whose own edge is a non-word
+// character (e.g. an address ending in "St.") still matches — `\b` requires
+// the matched text's edge to be a word character, so it fails (and the real
+// value leaks) whenever a roster value is followed/preceded by punctuation.
+// `(?<!\w)`/`(?!\w)` still block gluing onto a surrounding word (so "Lane"
+// still won't match inside "airplane"), without constraining the value's own
+// edge character.
 function compileDictRegex(value: string): RegExp {
   const pattern = escapeRegExp(value).replace(/\s+/g, '\\s+');
-  return new RegExp(`\\b${pattern}\\b`, 'gi');
+  return new RegExp(`(?<!\\w)${pattern}(?!\\w)`, 'gi');
 }
 
 function makeName(i: number): string {

@@ -94,4 +94,12 @@ describe('pseudonymizer — hardening', () => {
     const standalone = p.anonymize('Call Lane now');
     expect(standalone).not.toMatch(/\bLane\b/);
   });
+
+  it('matches a roster address ending in a period even though it is not a word character', () => {
+    const p = buildPseudonymizer([{ type: 'address', value: '123 Main St.' }]);
+    const text = 'Mail to 123 Main St. today';
+    const out = p.anonymize(text);
+    expect(out).not.toContain('123 Main St.');
+    expect(p.deanonymize(p.anonymize(text))).toBe(text);
+  });
 });
