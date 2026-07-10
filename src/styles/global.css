@@ -1641,3 +1641,81 @@ body.body--bare {
   white-space: nowrap;
   border: 0;
 }
+
+/* =========================================================================
+   Admin — document assistant chat
+   ========================================================================= */
+.assistant {
+  padding: 36px 44px;
+}
+
+@media (max-width: 720px) {
+  .assistant {
+    padding: 28px 22px;
+  }
+}
+
+.assistant__log {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.assistant__msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assistant__msg--user {
+  align-items: flex-end;
+}
+
+.assistant__bubble {
+  max-width: 90%;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--tint);
+  white-space: pre-wrap;
+}
+
+.assistant__msg--user .assistant__bubble {
+  background: var(--navy);
+  color: #fff;
+}
+
+.assistant__sources {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+  font-size: 0.85em;
+}
+
+.assistant__cat {
+  color: var(--text-muted);
+}
+
+.assistant__form {
+  display: flex;
+  gap: 8px;
+}
+
+.assistant__form input {
+  flex: 1;
+  padding: 11px 13px;
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  font-size: 14.5px;
+  color: var(--text);
+  background: #fff;
+  outline: none;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.assistant__form input:focus {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.12);
+}

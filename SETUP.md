@@ -147,12 +147,39 @@ npm run docs:dedupe -- --commit
 The cleanup script auto-resolves only same-tier exact duplicates. Cross-tier exact groups and
 near-duplicate groups are left for board review in `/admin` -> **Duplicates**.
 
-## 8. Connect Calendar and Contact Services
+## 8. AI Document Assistant (optional)
+
+The admin panel's **Assistant** tab lets a board member ask natural-language questions about the
+document library and get a streamed, cited answer (Cloudflare AI Search + Claude). It's optional —
+the rest of the site works without it — and only useful once documents have real content indexed.
+
+1. In the Cloudflare dashboard, create an **AI Search** instance pointed at the same R2 bucket used
+   for documents (`ashebrook-hoa-docs` in this repo's `wrangler.toml`). AI Search only indexes files
+   up to 4 MB and does not index `.xlsx` spreadsheets — large or spreadsheet documents won't be
+   searchable by the assistant even though they still work normally in the document library.
+2. Set the instance name in `wrangler.toml` under `[vars]` as `AI_SEARCH_INSTANCE` (this repo uses
+   `ashebrook-ai-docs-search`; use whatever name you gave the instance in step 1).
+3. Set the generation secret: `wrangler secret put ANTHROPIC_API_KEY`.
+4. The assistant only has something to answer from once documents are imported to R2 (see §7) and
+   AI Search has finished indexing them — a fresh deployment with an empty or newly created bucket
+   will return "could not find it in the documents" for everything until content exists.
+5. Before any document excerpt, the question, or prior chat turns are sent to Anthropic, known
+   resident PII is pseudonymized: roster names (including individual first/last name tokens, so a
+   standalone first name or surname is also caught) and addresses are matched against the current
+   roster and swapped for realistic, consistent placeholder values, and any email address or phone
+   number anywhere in the text is swapped the same way — the real values are restored only in the
+   answer streamed back to the board member's browser, and document titles are never sent (citations
+   use index labels, resolved back to real documents server-side). This is **best-effort**, not a
+   guarantee: it does not catch non-resident names, free text that doesn't match a roster value, or
+   narrow edge cases such as a roster value whose closing abbreviation period is glued directly to
+   the next word with no separating space.
+
+## 9. Connect Calendar and Contact Services
 
 - Google Calendar: make the community calendar public and set `PUBLIC_GOOGLE_CALENDAR_ID`.
 - Web3Forms: create an access key and set `WEB3FORMS_KEY` in `wrangler.toml`.
 
-## 9. Deploy
+## 10. Deploy
 
 Production deploys from `main` are handled by Cloudflare Workers Builds. GitHub Actions is the
 verification gate for formatting, type checks, tests, and build.
