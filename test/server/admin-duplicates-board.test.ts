@@ -5,7 +5,7 @@ vi.mock('../../src/server/authz/context', () => ({
   getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
 }));
 
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { GET, POST } from '../../src/pages/api/admin/duplicates';
 import { getDb } from '../../src/server/db/client';
 import { documents } from '../../src/server/db/schema';
@@ -87,6 +87,46 @@ describe('admin duplicates - board', () => {
       .from(documents)
       .where(eq(documents.id, 'd1'));
     expect(row.contentHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('omits a group whose members are all kept-verified', async () => {
+    // Force a valid shared hash so the exact group forms deterministically,
+    // independent of the capped lazy backfill / row ordering.
+    await seed('ver-a', 'verified-a', 'ver-a.pdf', 'a'.repeat(64));
+    await seed('ver-b', 'verified-b', 'ver-b.pdf', 'a'.repeat(64));
+    await getDb(env)
+      .update(documents)
+      .set({ keepVerifiedAt: new Date(), keepVerifiedBy: 'b' })
+      .where(inArray(documents.id, ['ver-a', 'ver-b']));
+    const res = await call(GET, 'GET');
+    const body = (await res.json()) as {
+      exact: { members: { id: string }[] }[];
+    };
+    const group = body.exact.find((g) =>
+      g.members.some((m) => m.id === 'ver-a'),
+    );
+    expect(group).toBeUndefined();
+  });
+
+  it('keeps a partially-verified group and reports verifiedAt per member', async () => {
+    await seed('part-a', 'partial-identical', 'part-a.pdf', null);
+    await seed('part-b', 'partial-identical', 'part-b.pdf', null);
+    await getDb(env)
+      .update(documents)
+      .set({ keepVerifiedAt: new Date(), keepVerifiedBy: 'b' })
+      .where(eq(documents.id, 'part-a'));
+    const res = await call(GET, 'GET');
+    const body = (await res.json()) as {
+      exact: { members: { id: string; verifiedAt: string | null }[] }[];
+    };
+    const group = body.exact.find((g) =>
+      g.members.some((m) => m.id === 'part-a'),
+    );
+    expect(group).toBeTruthy();
+    const a = group!.members.find((m) => m.id === 'part-a')!;
+    const b = group!.members.find((m) => m.id === 'part-b')!;
+    expect(a.verifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(b.verifiedAt).toBeNull();
   });
 
   it('reports cross-tier exact groups as manual-review, not auto-resolvable', async () => {
