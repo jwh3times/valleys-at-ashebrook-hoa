@@ -71,7 +71,9 @@ const EMAIL_DOMAIN = 'example.org'; // reserved; never a real address
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 // NANP-style: optional +1, area code (parens optional), separators optional.
-const PHONE_RE = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/g;
+// Separators allow whitespace, '.', '/', or '-' (e.g. "919/555/0100").
+const PHONE_RE =
+  /(?:\+?1[\s./-]?)?(?:\(\d{3}\)|\d{3})[\s./-]?\d{3}[\s./-]?\d{4}/g;
 
 function normName(v: string): string {
   return v.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -82,6 +84,14 @@ function normPhone(v: string): string {
 }
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Word-bounded, whitespace-flexible literal matcher: tolerates irregular
+// internal spacing (e.g. double spaces) and prevents substring corruption
+// (e.g. a roster name "Lane" matching inside "airplane").
+function compileDictRegex(value: string): RegExp {
+  const pattern = escapeRegExp(value).replace(/\s+/g, '\\s+');
+  return new RegExp(`\\b${pattern}\\b`, 'gi');
 }
 
 function makeName(i: number): string {
@@ -140,8 +150,10 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
     phone: 0,
     email: 0,
   };
-  // Dictionary of known literal strings to match (names + addresses), longest first.
-  const dict: { type: PiiType; value: string }[] = [];
+  // Dictionary of known literal strings to match (names + addresses), longest
+  // first, each with its regex compiled once up front (not per anonymize call).
+  const dict: { type: PiiType; value: string; re: RegExp }[] = [];
+  const dictKeys = new Set<string>(); // dedup: a token or value registered at most once
   let maxSurrogateLen = 1;
 
   function keyOf(type: PiiType, value: string): string {
@@ -183,14 +195,37 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
     return s;
   }
 
+  function addDictEntry(type: PiiType, value: string): void {
+    const key = `${type}:${normName(value)}`;
+    if (dictKeys.has(key)) return;
+    dictKeys.add(key);
+    dict.push({ type, value, re: compileDictRegex(value) });
+  }
+
   // Pre-register roster entries so surrogates are stable and dictionary-driven.
   for (const e of entries) realValues.add(e.value);
   for (const e of entries) {
     surrogateFor(e.type, e.value);
     if (e.type === 'name' || e.type === 'address')
-      dict.push({ type: e.type, value: e.value });
+      addDictEntry(e.type, e.value);
   }
-  // Longest literals first so an address wins over a name substring.
+  // Also register individual name tokens (e.g. "Marie" from "Anne Marie") as
+  // lower-priority matchers. These catch the residual real-name fragment left
+  // behind when two roster names share a token and their spans cross (the
+  // greedy non-overlap selection in applySpans drops the crossing span
+  // entirely, leaving its non-overlapping tail unscrubbed). Single-letter
+  // tokens (middle initials) are skipped. Addresses are NOT tokenized —
+  // street words like "Lane" or "Court" are too common to scrub safely, and
+  // address crossing-overlaps are not a concern here.
+  for (const e of entries) {
+    if (e.type !== 'name') continue;
+    for (const token of e.value.split(/\s+/)) {
+      if (token.length < 2) continue;
+      addDictEntry('name', token);
+    }
+  }
+  // Longest literals first so an address or full name wins over a shorter
+  // token/substring match.
   dict.sort((a, b) => b.value.length - a.value.length);
 
   function anonymize(text: string): string {
@@ -214,13 +249,15 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
         replacement: surrogateFor('phone', real),
       });
     }
-    for (const { type, value } of dict) {
-      const re = new RegExp(escapeRegExp(value), 'gi');
+    for (const { type, value, re } of dict) {
+      // `matchAll` clones the regex internally, so reusing this precompiled,
+      // stateful-looking `g` regex across calls/entries is safe.
       for (const m of text.matchAll(re)) {
+        const matched = m[0];
         spans.push({
           start: m.index!,
-          end: m.index! + value.length,
-          len: value.length,
+          end: m.index! + matched.length,
+          len: matched.length,
           replacement: surrogateFor(type, value),
         });
       }

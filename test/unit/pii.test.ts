@@ -56,3 +56,42 @@ describe('pseudonymizer — anonymize', () => {
     expect(out).not.toContain('Bob Neighbor');
   });
 });
+
+describe('pseudonymizer — hardening', () => {
+  it('does not leak a real name fragment from a crossing overlap between two roster names', () => {
+    const p = buildPseudonymizer([
+      { type: 'name', value: 'Anne Marie' },
+      { type: 'name', value: 'Marie Smith' },
+    ]);
+    const text = 'Anne Marie Smith';
+    const out = p.anonymize(text);
+    expect(out).not.toContain('Smith');
+    expect(out).not.toContain('Marie');
+    expect(out).not.toContain('Anne');
+    expect(out).not.toContain('Anne Marie');
+    expect(out).not.toContain('Marie Smith');
+    expect(p.deanonymize(p.anonymize(text))).toBe(text);
+  });
+
+  it('scrubs a slash-separated phone number', () => {
+    const p = buildPseudonymizer([]);
+    const out = p.anonymize('call 919/555/0100 today');
+    expect(out).not.toContain('919/555/0100');
+  });
+
+  it('matches a dictionary address across irregular internal spacing', () => {
+    const p = buildPseudonymizer([
+      { type: 'address', value: '123 Ashebrook Lane' },
+    ]);
+    const out = p.anonymize('Mail to 123  Ashebrook  Lane please');
+    expect(out).not.toContain('Ashebrook');
+  });
+
+  it('applies word boundaries so a dictionary name cannot corrupt a longer word', () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Lane' }]);
+    const airplane = p.anonymize('The airplane landed');
+    expect(airplane).toContain('airplane');
+    const standalone = p.anonymize('Call Lane now');
+    expect(standalone).not.toMatch(/\bLane\b/);
+  });
+});
