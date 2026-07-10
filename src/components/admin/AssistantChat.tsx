@@ -101,10 +101,12 @@ export default function AssistantChat() {
         <p className="eyebrow">Board tools</p>
         <h1 className="page-title">Document Assistant</h1>
         <p className="notice">
-          AI-generated from your documents — verify important details before
-          acting. Scanned or spreadsheet content may be incomplete, and answers
-          can be wrong. Resident names and contact details are pseudonymized
-          before the question is sent to the AI provider.
+          AI-generated from your documents and general knowledge — the answer
+          labels which parts come from the documents. Verify important details
+          before acting: general knowledge is not specific to this HOA, scanned
+          or spreadsheet content may be incomplete, and answers can be wrong.
+          Resident names and contact details are pseudonymized before the
+          question is sent to the AI provider.
         </p>
       </header>
 
