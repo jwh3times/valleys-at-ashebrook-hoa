@@ -103,3 +103,27 @@ describe('pseudonymizer — hardening', () => {
     expect(p.deanonymize(p.anonymize(text))).toBe(text);
   });
 });
+
+describe('pseudonymizer — deanonymizeStream', () => {
+  it('reassembles a surrogate split across two chunks', async () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Jane Q Homeowner' }]);
+    const sur = p.anonymize('Jane Q Homeowner').trim(); // e.g. "Avery Ashfield"
+    const cut = Math.ceil(sur.length / 2);
+    const parts = [`Owner is ${sur.slice(0, cut)}`, `${sur.slice(cut)} today.`];
+
+    const out: string[] = [];
+    const rs = new ReadableStream<string>({
+      start(c) {
+        for (const part of parts) c.enqueue(part);
+        c.close();
+      },
+    });
+    const reader = rs.pipeThrough(p.deanonymizeStream()).getReader();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      out.push(value);
+    }
+    expect(out.join('')).toBe('Owner is Jane Q Homeowner today.');
+  });
+});
