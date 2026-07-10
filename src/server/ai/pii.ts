@@ -293,9 +293,38 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
     return applySpans(text, spans);
   }
 
+  function safeCutBefore(buffer: string, cut: number): number {
+    // If a surrogate occurrence straddles `cut`, back up to its start so we never
+    // emit a half surrogate. Surrogates are bounded by maxSurrogateLen.
+    let best = cut;
+    for (const sur of reverseByLen()) {
+      let idx = 0;
+      while ((idx = buffer.indexOf(sur, idx)) !== -1) {
+        const end = idx + sur.length;
+        if (idx < cut && end > cut && idx < best) best = idx;
+        idx = end;
+      }
+    }
+    return best;
+  }
+
   function deanonymizeStream(): TransformStream<string, string> {
-    // Implemented in Task 3.
-    throw new Error('deanonymizeStream not implemented');
+    let buffer = '';
+    const hold = maxSurrogateLen;
+    return new TransformStream<string, string>({
+      transform(chunk, controller) {
+        buffer += chunk;
+        if (buffer.length <= hold) return;
+        let cut = safeCutBefore(buffer, buffer.length - hold);
+        if (cut > 0) {
+          controller.enqueue(deanonymize(buffer.slice(0, cut)));
+          buffer = buffer.slice(cut);
+        }
+      },
+      flush(controller) {
+        if (buffer) controller.enqueue(deanonymize(buffer));
+      },
+    });
   }
 
   return { anonymize, deanonymize, deanonymizeStream };
