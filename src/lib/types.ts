@@ -42,7 +42,6 @@ export interface DupeGroupView {
   contentHash?: string | null;
   sameTier?: boolean;
   autoResolvable?: boolean;
-  deleteIds?: string[];
   recommendation?: string;
 }
 

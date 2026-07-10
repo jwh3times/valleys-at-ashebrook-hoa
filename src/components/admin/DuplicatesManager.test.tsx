@@ -28,7 +28,6 @@ const exactGroup = () => ({
   contentHash: 'f'.repeat(64),
   sameTier: true,
   autoResolvable: true,
-  deleteIds: ['drop'],
   recommendation:
     'Same-tier exact duplicate: keep the suggested file and delete the byte-identical copies.',
   members: [member('keep', 'a.pdf'), member('drop', 'a(1).pdf')],

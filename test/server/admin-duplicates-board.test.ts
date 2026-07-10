@@ -64,7 +64,6 @@ describe('admin duplicates - board', () => {
         contentHash: string;
         sameTier: boolean;
         autoResolvable: boolean;
-        deleteIds: string[];
         recommendation: string;
       }[];
       remaining: number;
@@ -80,7 +79,6 @@ describe('admin duplicates - board', () => {
     ).toBe(true);
     expect(group!.sameTier).toBe(true);
     expect(group!.autoResolvable).toBe(true);
-    expect(group!.deleteIds).toEqual(['d2']);
     expect(group!.recommendation).toMatch(/same-tier exact/i);
     const [row] = await getDb(env)
       .select()
@@ -151,7 +149,6 @@ describe('admin duplicates - board', () => {
         members: { id: string }[];
         sameTier: boolean;
         autoResolvable: boolean;
-        deleteIds: string[];
         recommendation: string;
       }[];
     };
@@ -165,7 +162,6 @@ describe('admin duplicates - board', () => {
     ]);
     expect(group!.sameTier).toBe(false);
     expect(group!.autoResolvable).toBe(false);
-    expect(group!.deleteIds).toEqual([]);
     expect(group!.recommendation).toMatch(/visibility tiers/i);
   });
 
