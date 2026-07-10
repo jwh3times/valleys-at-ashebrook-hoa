@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
-    "@cloudflare/vitest-pool-workers": "^0.18.2",
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
     "@cloudflare/workers-types": "^4.20260702.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -51,11 +51,11 @@
     "@vitest/coverage-v8": "^4.1.10",
     "drizzle-kit": "^0.31.10",
     "jsdom": "^29.1.1",
-    "prettier": "^3.9.4",
+    "prettier": "^3.9.5",
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
-    "wrangler": "^4.108.0",
+    "wrangler": "^4.110.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "overrides": {
