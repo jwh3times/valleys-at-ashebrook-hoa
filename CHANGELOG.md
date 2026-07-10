@@ -7,7 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-No changes yet.
+### Changed
+
+- **Duplicate review remembers resolved groups** — resolving duplicates now marks the file(s) a
+  board member keeps with a `keep_verified_at`/`keep_verified_by` state, and the admin
+  **Duplicates** panel hides any group whose members are all already kept-verified instead of
+  re-showing it on every visit. Resolving now takes an explicit list of files to keep alongside
+  the files to delete, rather than a single keeper, so a "keep all" action can mark a group
+  reviewed without deleting anything. If a later upload is confirmed as a near duplicate of a
+  previously-kept file, that file's kept state is cleared so the group resurfaces for review. The
+  panel also adds a per-file "View" link and a "kept" badge.
 
 ## [0.2.0] - 2026-07-08
 

@@ -113,13 +113,13 @@ export async function fetchDuplicates(): Promise<DuplicatesView> {
 }
 
 export async function resolveDuplicates(
-  keepId: string,
+  keepIds: string[],
   deleteIds: string[],
 ): Promise<void> {
   const res = await fetch('/api/admin/duplicates', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'resolve', keepId, deleteIds }),
+    body: JSON.stringify({ action: 'resolve', keepIds, deleteIds }),
   });
   if (!res.ok) throw new Error(`Resolve failed: ${res.status}`);
 }

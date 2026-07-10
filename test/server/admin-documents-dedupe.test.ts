@@ -89,4 +89,39 @@ describe('upload guard', () => {
     );
     expect(ok.status).toBe(201);
   });
+
+  it('resets kept-verified state on existing near-matches when a confirmed near-duplicate is uploaded', async () => {
+    // A clean upload that will later be a near-match.
+    const first = await upload(
+      'board-minutes-body-one',
+      'Board Minutes 2025.pdf',
+      'Board Minutes 2025',
+    );
+    expect(first.status).toBe(201);
+    const [orig] = await getDb(env)
+      .select()
+      .from(documents)
+      .where(eq(documents.title, 'Board Minutes 2025'));
+    // Mark it kept-verified, as if a board member reviewed it earlier.
+    await getDb(env)
+      .update(documents)
+      .set({ keepVerifiedAt: new Date(), keepVerifiedBy: 'b' })
+      .where(eq(documents.id, orig.id));
+
+    // Upload a near-duplicate (same name, different bytes) and confirm it.
+    const ok = await upload(
+      'board-minutes-body-two-different',
+      'Board Minutes 2025.pdf',
+      'Board Minutes 2025',
+      { confirmDuplicate: 'true' },
+    );
+    expect(ok.status).toBe(201);
+
+    const [after] = await getDb(env)
+      .select()
+      .from(documents)
+      .where(eq(documents.id, orig.id));
+    expect(after.keepVerifiedAt).toBeNull();
+    expect(after.keepVerifiedBy).toBeNull();
+  });
 });

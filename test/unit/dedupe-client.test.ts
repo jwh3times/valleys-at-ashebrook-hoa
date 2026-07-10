@@ -57,14 +57,14 @@ describe('uploadDocument duplicate handling', () => {
 });
 
 describe('resolveDuplicates', () => {
-  it('POSTs a resolve action with keep/delete ids', async () => {
+  it('POSTs a resolve action with keep/delete id arrays', async () => {
     const f = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal('fetch', f);
-    await resolveDuplicates('keep', ['drop1', 'drop2']);
+    await resolveDuplicates(['keep'], ['drop1', 'drop2']);
     const [, init] = f.mock.calls[0];
     expect(JSON.parse(init.body as string)).toEqual({
       action: 'resolve',
-      keepId: 'keep',
+      keepIds: ['keep'],
       deleteIds: ['drop1', 'drop2'],
     });
   });

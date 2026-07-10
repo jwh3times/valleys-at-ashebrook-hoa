@@ -5,7 +5,7 @@ vi.mock('../../src/server/authz/context', () => ({
   getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
 }));
 
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { GET, POST } from '../../src/pages/api/admin/duplicates';
 import { getDb } from '../../src/server/db/client';
 import { documents } from '../../src/server/db/schema';
@@ -87,6 +87,46 @@ describe('admin duplicates - board', () => {
       .from(documents)
       .where(eq(documents.id, 'd1'));
     expect(row.contentHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('omits a group whose members are all kept-verified', async () => {
+    // Force a valid shared hash so the exact group forms deterministically,
+    // independent of the capped lazy backfill / row ordering.
+    await seed('ver-a', 'verified-a', 'ver-a.pdf', 'a'.repeat(64));
+    await seed('ver-b', 'verified-b', 'ver-b.pdf', 'a'.repeat(64));
+    await getDb(env)
+      .update(documents)
+      .set({ keepVerifiedAt: new Date(), keepVerifiedBy: 'b' })
+      .where(inArray(documents.id, ['ver-a', 'ver-b']));
+    const res = await call(GET, 'GET');
+    const body = (await res.json()) as {
+      exact: { members: { id: string }[] }[];
+    };
+    const group = body.exact.find((g) =>
+      g.members.some((m) => m.id === 'ver-a'),
+    );
+    expect(group).toBeUndefined();
+  });
+
+  it('keeps a partially-verified group and reports verifiedAt per member', async () => {
+    await seed('part-a', 'partial-identical', 'part-a.pdf', null);
+    await seed('part-b', 'partial-identical', 'part-b.pdf', null);
+    await getDb(env)
+      .update(documents)
+      .set({ keepVerifiedAt: new Date(), keepVerifiedBy: 'b' })
+      .where(eq(documents.id, 'part-a'));
+    const res = await call(GET, 'GET');
+    const body = (await res.json()) as {
+      exact: { members: { id: string; verifiedAt: string | null }[] }[];
+    };
+    const group = body.exact.find((g) =>
+      g.members.some((m) => m.id === 'part-a'),
+    );
+    expect(group).toBeTruthy();
+    const a = group!.members.find((m) => m.id === 'part-a')!;
+    const b = group!.members.find((m) => m.id === 'part-b')!;
+    expect(a.verifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(b.verifiedAt).toBeNull();
   });
 
   it('reports cross-tier exact groups as manual-review, not auto-resolvable', async () => {
@@ -197,31 +237,59 @@ describe('admin duplicates - board', () => {
     expect(missing.contentHash).toBeNull();
   });
 
-  it('resolves a group by deleting the extras from D1 and R2', async () => {
-    await seed('keep', 'keep-bytes', 'keep.pdf', 'kh');
-    await seed('drop', 'drop-bytes', 'drop.pdf', 'dh');
+  it('deletes selected files and marks the survivors kept-verified', async () => {
+    await seed('r-keep', 'resolve-keep', 'r-keep.pdf', null);
+    await seed('r-drop', 'resolve-drop', 'r-drop.pdf', null);
     const res = await call(POST, 'POST', {
       action: 'resolve',
-      keepId: 'keep',
-      deleteIds: ['drop'],
+      keepIds: ['r-keep'],
+      deleteIds: ['r-drop'],
+    });
+    expect(res.status).toBe(204);
+    const dropped = await getDb(env)
+      .select()
+      .from(documents)
+      .where(eq(documents.id, 'r-drop'));
+    expect(dropped.length).toBe(0);
+    expect(await env.DOCS.get('documents/r-drop/r-drop.pdf')).toBeNull();
+    const [keep] = await getDb(env)
+      .select()
+      .from(documents)
+      .where(eq(documents.id, 'r-keep'));
+    expect(keep.keepVerifiedAt).toBeInstanceOf(Date);
+    expect(keep.keepVerifiedBy).toBe('b');
+  });
+
+  it('marks all members reviewed when deleteIds is empty (keep all)', async () => {
+    await seed('ka-a', 'keepall-a', 'ka-a.pdf', null);
+    await seed('ka-b', 'keepall-b', 'ka-b.pdf', null);
+    const res = await call(POST, 'POST', {
+      action: 'resolve',
+      keepIds: ['ka-a', 'ka-b'],
+      deleteIds: [],
     });
     expect(res.status).toBe(204);
     const rows = await getDb(env)
       .select()
       .from(documents)
-      .where(eq(documents.id, 'drop'));
-    expect(rows.length).toBe(0);
-    expect(await env.DOCS.get('documents/drop/drop.pdf')).toBeNull();
-    const keepRows = await getDb(env)
-      .select()
-      .from(documents)
-      .where(eq(documents.id, 'keep'));
-    expect(keepRows.length).toBe(1);
+      .where(inArray(documents.id, ['ka-a', 'ka-b']));
+    expect(rows.length).toBe(2);
+    expect(rows.every((r) => r.keepVerifiedAt instanceof Date)).toBe(true);
   });
 
-  it('rejects a resolve missing keepId', async () => {
+  it('rejects a resolve with empty keepIds', async () => {
     const res = await call(POST, 'POST', {
       action: 'resolve',
+      keepIds: [],
+      deleteIds: ['x'],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a resolve where keep and delete overlap', async () => {
+    const res = await call(POST, 'POST', {
+      action: 'resolve',
+      keepIds: ['x'],
       deleteIds: ['x'],
     });
     expect(res.status).toBe(400);
