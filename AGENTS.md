@@ -134,19 +134,22 @@ though app auth uses Better Auth's D1 sessions rather than `Astro.session`.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 
 **Data model.** D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`,
-`documents` (metadata including nullable indexed `content_hash`; files live in R2 under
-`documents/<id>/...`), `settings` (key/value singletons `dues` and `site`), roster/verification
-tables (`properties`, `owners`, `user_property_links`, `property_verifications`,
-`manual_approval_queue`), and Better Auth tables (`user`, `session`, `account`, `verification`).
+`documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`
+and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
+review; files live in R2 under `documents/<id>/...`), `settings` (key/value singletons `dues` and
+`site`), roster/verification tables (`properties`, `owners`, `user_property_links`,
+`property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
+`account`, `verification`).
 
 Migration `0002` split homes and people into `properties` and `owners`. Migration `0003` adds
 uniqueness constraints (`properties.address_normalized`, `user_property_links (user_id,
 property_id)`) and hot-path indexes. Migration `0004` adds `documents.content_hash` and
-`documents_content_hash_idx` for duplicate detection. Migrations are applied with
-`npm run db:migrate:{local,remote}` via Wrangler, which tracks applied files in D1 independently of
-Drizzle's `meta/` snapshots. `0002` and `0003` were hand-authored SQL, but the Drizzle snapshot
-history has been reconciled through `0003`, so `npm run db:generate` should diff cleanly for future
-changes.
+`documents_content_hash_idx` for duplicate detection. Migration `0005` reconciles foreign keys and
+enums on the roster/verification tables. Migration `0006` adds `documents.keep_verified_at` and
+`documents.keep_verified_by`. Migrations are applied with `npm run db:migrate:{local,remote}` via
+Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
+`0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
+so `npm run db:generate` should diff cleanly for future changes.
 
 **Roles and access.** Roles are `visitor`, `homeowner`, and `board`; content visibility tiers are
 `public`, `homeowner`, and `board`. Access is enforced server-side and fail-closed: anonymous users
