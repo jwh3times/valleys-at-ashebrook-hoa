@@ -234,6 +234,7 @@ export const INPUT_LIMITS = {
   phone: 32,
   category: 100,
   propertyId: 100,
+  assistantQuestion: 2_000,
 } as const;
 
 export type InputResult<T> =
