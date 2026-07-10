@@ -112,6 +112,20 @@ describe('groupExact', () => {
     expect(groups.length).toBe(1);
     expect(groups[0].members.map((m) => m.id).sort()).toEqual(['a', 'b']);
   });
+
+  it('groups identically whether or not members are kept-verified', () => {
+    const base = [
+      doc({ id: 'a', contentHash: 'h1' }),
+      doc({ id: 'b', contentHash: 'h1' }),
+    ];
+    const verified = [
+      doc({ id: 'a', contentHash: 'h1', keepVerifiedAt: Date.now() }),
+      doc({ id: 'b', contentHash: 'h1', keepVerifiedAt: new Date() }),
+    ];
+    expect(groupExact(verified).map((g) => g.members.map((m) => m.id))).toEqual(
+      groupExact(base).map((g) => g.members.map((m) => m.id)),
+    );
+  });
 });
 
 describe('groupNear', () => {
