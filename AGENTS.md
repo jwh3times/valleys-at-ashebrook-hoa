@@ -174,7 +174,7 @@ at `documents/<uuid>/<filename>`, served by `GET /api/files/<id>` with tier chec
 Markdown twin at `rag/<uuid>.md` that AI Search indexes (see **Cloudflare bindings** and the
 board-only document assistant above). `docIdFromFolder` (`src/server/ai/sources.ts`) resolves a
 document's uuid from either key shape so citations always point back to the real, tier-checked
-download. The current library (444 human documents, 429 Markdown twins) was loaded by the
+download. The document library (444 human documents, 429 Markdown twins) is (re)built by the
 operator-run `scripts/import-corpus.ts` as a clean replace; see SETUP.md §7.
 
 Migration `0002` split homes and people into `properties` and `owners`. Migration `0003` adds
