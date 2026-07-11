@@ -14,3 +14,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0006: People-per-Home Roster](./0006-people-per-home-roster.md)
 - [ADR 0007: Document Deduplication Policy](./0007-document-deduplication-policy.md)
 - [ADR 0008: AI Assistant Privacy Gate](./0008-ai-assistant-privacy-gate.md)
+- [ADR 0009: RAG Index Corpus Separate from the Download Library](./0009-rag-index-separate-from-download-library.md)
