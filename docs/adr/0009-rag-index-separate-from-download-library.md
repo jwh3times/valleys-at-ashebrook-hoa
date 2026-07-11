@@ -58,7 +58,7 @@ Markdown corpus is a derived artifact, never surfaced to residents and never a
 2. **The index is NOT tier-aware; the assistant MUST remain board-only.** AI
    Search retrieves across all indexed Markdown regardless of each document's
    visibility, and returns chunk **text** that the model uses to compose its
-   answer. Only the citation *link* is tier-checked (`/api/files`), not the
+   answer. Only the citation _link_ is tier-checked (`/api/files`), not the
    retrieved text. Consequently, if the assistant were ever exposed to
    homeowners or the public, board-only document text (financials, per-owner
    correspondence, legal/collections) could appear verbatim inside an answer

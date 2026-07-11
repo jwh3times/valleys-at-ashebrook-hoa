@@ -67,6 +67,17 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   the email/phone patterns, so it does not cover non-resident names or other free text that doesn't
   match those patterns, and has narrow documented edge cases (for example, a roster value whose
   closing abbreviation period is glued directly to the next word with no separating space).
+- **The AI Search index is not tier-aware, which is why the assistant stays board-only.** Retrieval
+  runs over a single Cloudflare AI Search index built from every document's Markdown text
+  (`rag/<uuid>.md`) regardless of that document's visibility tier, and returns un-pseudonymized
+  excerpt **text** for the model to compose an answer from — only the citation _link_ is tier-checked
+  (`/api/files/<id>`), not the retrieved text itself. Exposing `POST /api/admin/assistant` to
+  `homeowner` or public callers would let board-tier document text (financials, per-owner
+  correspondence, legal/collections) surface verbatim in an answer even though the citation download
+  would still correctly return 403 — a tier bypass through the answer body, not the download. See
+  §2 of [ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md) for the constraint
+  in full: relaxing the board-only gate requires per-caller retrieval filtering or separate per-tier
+  indexes, plus a re-review of the PII-pseudonymization boundary described above.
 
 ## Automated safeguards
 
