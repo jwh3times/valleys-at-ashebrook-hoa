@@ -16,6 +16,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Changed
 
+- **Document search index split from the download library** — the AI assistant now retrieves over
+  a dedicated Markdown index (one `rag/<uuid>.md` per document, indexed by Cloudflare AI Search)
+  instead of the raw files, so scanned and oversized documents become searchable while citations
+  still link to the original human-readable file for download. Deleting or de-duplicating a document
+  now also removes its search-index copy. The document library's category list expanded from 5 to 16
+  for finer organization.
 - **Duplicate review remembers resolved groups** — resolving duplicates now marks the file(s) a
   board member keeps with a `keep_verified_at`/`keep_verified_by` state, and the admin
   **Duplicates** panel hides any group whose members are all already kept-verified instead of

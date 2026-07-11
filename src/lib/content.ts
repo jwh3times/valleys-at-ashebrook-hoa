@@ -4,6 +4,7 @@ import {
   type DocumentItem,
   type DuesSettings,
   type SiteSettings,
+  DOCUMENT_CATEGORIES,
   normalizeSiteSettings,
 } from './types';
 
@@ -31,13 +32,20 @@ export async function fetchSiteSettings(): Promise<SiteSettings> {
   return normalizeSiteSettings(await res.json());
 }
 
-/** Group documents by their category for display. */
+/** Group documents by their category for display, ordered by DOCUMENT_CATEGORIES. */
 export function groupDocumentsByCategory(
   docs: DocumentItem[],
 ): Record<string, DocumentItem[]> {
-  return docs.reduce<Record<string, DocumentItem[]>>((acc, d) => {
+  const groups = docs.reduce<Record<string, DocumentItem[]>>((acc, d) => {
     const key = d.category || 'Other';
     (acc[key] ??= []).push(d);
     return acc;
   }, {});
+  const order = (c: string) => {
+    const i = (DOCUMENT_CATEGORIES as readonly string[]).indexOf(c);
+    return i === -1 ? DOCUMENT_CATEGORIES.length : i;
+  };
+  return Object.fromEntries(
+    Object.entries(groups).sort(([a], [b]) => order(a) - order(b)),
+  );
 }

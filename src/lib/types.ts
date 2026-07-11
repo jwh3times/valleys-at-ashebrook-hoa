@@ -15,7 +15,7 @@ export interface Announcement {
 export interface DocumentItem {
   id: string;
   title: string;
-  category: string; // e.g. "Governing Documents", "Meeting Minutes", "Forms"
+  category: string; // e.g. "Governing Documents", "Meetings", "Forms"
   /** ISO date the document was added/updated. */
   updatedAt: string;
   visibility: Visibility;
@@ -168,10 +168,21 @@ export function normalizeDuesSettings(raw: unknown): DuesSettings {
 
 export const DOCUMENT_CATEGORIES = [
   'Governing Documents',
-  'Meeting Minutes',
-  'Financials',
+  'Policies',
   'Forms',
-  'Other',
+  'FAQs & How-To',
+  'Budgets',
+  'Financial Reports',
+  'Bank & Payments',
+  'Taxes',
+  'Contracts',
+  'Insurance',
+  'Meetings',
+  'Member Correspondence',
+  'Legal & Collections',
+  'Maps & Deeds',
+  'Maintenance & Work Orders',
+  'Rosters & Contacts',
 ] as const;
 
 export interface Property {

@@ -237,6 +237,17 @@ describe('documents write validation', () => {
     );
     expect(res.status).toBe(400);
   });
+
+  it('accepts a newly added category (Insurance) with 201', async () => {
+    const res = await documentsPost(
+      upload({
+        title: 'Master Policy',
+        category: 'Insurance',
+        visibility: 'homeowner',
+      }),
+    );
+    expect(res.status).toBe(201);
+  });
 });
 
 describe('members approve — property validation', () => {

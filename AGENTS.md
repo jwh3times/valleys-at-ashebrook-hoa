@@ -89,6 +89,8 @@ is required by the `@astrojs/cloudflare` adapter, which enables Astro sessions a
 by default even though app auth uses Better Auth's D1 sessions rather than `Astro.session`. `AI`
 backs the admin document assistant's retrieval via `env.AI.autorag(...)`, pointed at the
 `AI_SEARCH_INSTANCE` var; answer generation additionally requires the `ANTHROPIC_API_KEY` secret.
+The AI Search instance's R2 data source is scoped to the `rag/` folder only, so it indexes the
+Markdown twins described below and never the human-readable originals.
 
 **HTTP endpoints.** API routes live under `src/pages/api/`:
 
@@ -114,7 +116,11 @@ backs the admin document assistant's retrieval via `env.AI.autorag(...)`, pointe
   AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
   consistent surrogates) before they reach Anthropic, document titles are never sent, and citations
   reference retrieved chunks back to real documents server-side. See SECURITY.md for the
-  pseudonymization guarantees and limits.
+  pseudonymization guarantees and limits. Retrieval is not tier-aware, which is why this endpoint
+  stays board-only — see SECURITY.md and **Data model** below for the two-representation R2 layout
+  retrieval runs over. `POST /api/admin/documents` does not yet create a document's `rag/<uuid>.md`
+  twin on upload, so a newly uploaded document is downloadable immediately but not
+  assistant-searchable until that twin exists (Phase 2, not yet built).
 - Homeowner verification: `/api/verify/{request,confirm}`.
 - First-board bootstrap: `POST /api/bootstrap/board`, which is fail-closed, self-disables once a
   board account exists, and requires bootstrap secret/config values.
@@ -148,18 +154,28 @@ backs the admin document assistant's retrieval via `env.AI.autorag(...)`, pointe
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant — `search.ts` (`retrieve`, Cloudflare AI Search/autorag
   retrieval), `pii.ts` (`buildPseudonymizer`, a reversible roster-based PII pseudonymizer with
-  streaming de-anonymization), `sources.ts` (`toSources`, maps retrieved chunks back to real D1
-  document rows for citations), `anthropic.ts` (`getAnthropic`, Anthropic client + config guard),
-  and `assistant.ts` (`answer`, `loadRosterEntries`; orchestrates retrieve -> pseudonymize -> Claude
-  generation -> de-anonymized streamed output).
+  streaming de-anonymization), `sources.ts` (`toSources` maps retrieved chunks back to real D1
+  document rows for citations; `docIdFromFolder` extracts a document's uuid from either R2 key shape,
+  `documents/<uuid>/…` or `rag/<uuid>.md`), `anthropic.ts` (`getAnthropic`, Anthropic client + config
+  guard), and `assistant.ts` (`answer`, `loadRosterEntries`; orchestrates retrieve -> pseudonymize ->
+  Claude generation -> de-anonymized streamed output).
 
 **Data model.** D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`,
 `documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`
 and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
-review; files live in R2 under `documents/<id>/...`), `settings` (key/value singletons `dues` and
-`site`), roster/verification tables (`properties`, `owners`, `user_property_links`,
-`property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
-`account`, `verification`).
+review; the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
+(key/value singletons `dues` and `site`), roster/verification tables (`properties`, `owners`,
+`user_property_links`, `property_verifications`, `manual_approval_queue`), and Better Auth tables
+(`user`, `session`, `account`, `verification`).
+
+Every document has two R2 representations keyed by its D1 uuid, per
+[ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md): the human-readable original
+at `documents/<uuid>/<filename>`, served by `GET /api/files/<id>` with tier checks, and a derived
+Markdown twin at `rag/<uuid>.md` that AI Search indexes (see **Cloudflare bindings** and the
+board-only document assistant above). `docIdFromFolder` (`src/server/ai/sources.ts`) resolves a
+document's uuid from either key shape so citations always point back to the real, tier-checked
+download. The document library (444 human documents, 429 Markdown twins) is (re)built by the
+operator-run `scripts/import-corpus.ts` as a clean replace; see SETUP.md §7.
 
 Migration `0002` split homes and people into `properties` and `owners`. Migration `0003` adds
 uniqueness constraints (`properties.address_normalized`, `user_property_links (user_id,
