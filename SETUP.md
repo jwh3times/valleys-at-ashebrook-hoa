@@ -147,6 +147,26 @@ npm run docs:dedupe -- --commit
 The cleanup script auto-resolves only same-tier exact duplicates. Cross-tier exact groups and
 near-duplicate groups are left for board review in `/admin` -> **Duplicates**.
 
+### Importing the RAG/Download Corpus
+
+The document library and the AI Search index are two R2 representations of the same corpus, keyed
+by uuid (see [ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md)):
+human-readable originals under `documents/<uuid>/<filename>` (what residents download) and Markdown
+twins under `rag/<uuid>.md` (what AI Search indexes). `scripts/import-corpus.ts` loads both from a
+private manifest as a **clean replace** — it is operator-run, not part of the app's normal write
+path.
+
+```bash
+npm run corpus:import
+# Dry run: review the manifest and planned R2/D1 writes.
+npm run corpus:import -- --commit --wipe
+# Destructive: wipes the current documents/R2 corpus, then loads it fresh.
+```
+
+A full run loads 444 human-readable documents and 429 Markdown twins (some human files have no
+searchable twin, e.g. formats AI Search can't usefully index). After a commit, follow §8 step 4 to
+trigger an AI Search sync and confirm the indexed count lands around 429.
+
 ## 8. AI Document Assistant (optional)
 
 The admin panel's **Assistant** tab lets a board member ask natural-language questions about the
@@ -154,15 +174,21 @@ document library and get a streamed, cited answer (Cloudflare AI Search + Claude
 the rest of the site works without it — and only useful once documents have real content indexed.
 
 1. In the Cloudflare dashboard, create an **AI Search** instance pointed at the same R2 bucket used
-   for documents (`ashebrook-hoa-docs` in this repo's `wrangler.toml`). AI Search only indexes files
-   up to 4 MB and does not index `.xlsx` spreadsheets — large or spreadsheet documents won't be
-   searchable by the assistant even though they still work normally in the document library.
+   for documents (`ashebrook-hoa-docs` in this repo's `wrangler.toml`). **Scope the instance's R2
+   data source to the `rag/` folder only** (not the bucket root) — AI Search must index the
+   `rag/<uuid>.md` Markdown twins, never the human-readable originals under `documents/<uuid>/…`
+   (see [ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md)). AI Search only
+   indexes files up to 4 MB and does not index `.xlsx` spreadsheets, but that no longer matters for
+   the resident-facing library: the `rag/` twins are plain Markdown, so retrieval quality no longer
+   depends on the original file's format or size.
 2. Set the instance name in `wrangler.toml` under `[vars]` as `AI_SEARCH_INSTANCE` (this repo uses
    `ashebrook-ai-docs-search`; use whatever name you gave the instance in step 1).
 3. Set the generation secret: `wrangler secret put ANTHROPIC_API_KEY`.
-4. The assistant only has something to answer from once documents are imported to R2 (see §7) and
-   AI Search has finished indexing them — a fresh deployment with an empty or newly created bucket
-   will return "could not find it in the documents" for everything until content exists.
+4. Load or refresh the corpus with `scripts/import-corpus.ts` (see "Importing the RAG/Download
+   Corpus" under §7), then trigger a sync on the AI Search instance from the Cloudflare dashboard and
+   confirm it reports roughly **429 indexed objects** — the count of `rag/<uuid>.md` twins, not the
+   larger human-file count. A fresh deployment with an empty or newly created bucket will return
+   "could not find it in the documents" for everything until the corpus is imported and indexed.
 5. Before any document excerpt, the question, or prior chat turns are sent to Anthropic, known
    resident PII is pseudonymized: roster names (including individual first/last name tokens, so a
    standalone first name or surname is also caught) and addresses are matched against the current

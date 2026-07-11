@@ -52,7 +52,7 @@ with open(INDEX, encoding="utf-8") as fh:
             "ragRelPath": row["new_path"],
         }
 
-# 2) walk HOA_Files; add the 15 unindexed human files not in the index
+# 2) walk HOA_files; add the 15 unindexed human files not in the index
 entries = []
 seen = set()
 for dirpath, _, names in os.walk(HOA):
