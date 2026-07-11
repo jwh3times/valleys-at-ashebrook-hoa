@@ -81,12 +81,19 @@ async function main() {
   fs.writeFileSync(SQL, buildInsertSql(entries));
 
   const indexed = manifest.filter((m) => m.ragRelPath).length;
+  const tiers = manifest.reduce<Record<string, number>>((a, m) => {
+    a[m.visibility] = (a[m.visibility] ?? 0) + 1;
+    return a;
+  }, {});
   console.log(
     `Manifest: ${entries.length} human files, ${indexed} rag twins. SQL -> ${SQL}.`,
   );
+  console.log(
+    `Tiers: public ${tiers.public ?? 0} / homeowner ${tiers.homeowner ?? 0} / board ${tiers.board ?? 0}.`,
+  );
   if (!commit) {
     console.log(
-      `\nDry run. Re-run with \`-- --commit\` (add \`--wipe\` to clear the current library first).`,
+      `\nReview the per-document tiers in ${MANIFEST} (especially homeowner/board), then re-run with \`-- --commit\` (add \`--wipe\` to clear the current library first).`,
     );
     return;
   }
