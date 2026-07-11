@@ -45,7 +45,7 @@ describe('admin documents — board', () => {
     const form = new FormData();
     form.set('file', new File(['x'], 'evil.html', { type: 'text/html' }));
     form.set('title', 'Evil');
-    form.set('category', 'Other');
+    form.set('category', 'Policies');
     form.set('visibility', 'public');
     const res = await POST({
       request: new Request('http://localhost/api/admin/documents', {
@@ -64,7 +64,7 @@ describe('admin documents — board', () => {
       new File(['a,b'], 'roster.csv', { type: 'application/octet-stream' }),
     );
     form.set('title', 'Roster CSV');
-    form.set('category', 'Other');
+    form.set('category', 'Policies');
     form.set('visibility', 'public');
     const res = await POST({
       request: new Request('http://localhost/api/admin/documents', {
