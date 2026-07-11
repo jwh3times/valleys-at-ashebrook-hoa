@@ -220,6 +220,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
     .where(eq(documents.id, id));
   if (doc) {
     await env.DOCS.delete(doc.r2Key);
+    await env.DOCS.delete(`rag/${id}.md`); // remove the AI-index twin (ADR 0009 §1)
     await getDb(env).delete(documents).where(eq(documents.id, id));
   }
   return new Response(null, { status: 204 });
