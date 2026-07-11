@@ -10,10 +10,15 @@ export interface Source {
   href: string;
 }
 
-/** The R2 layout is `documents/<uuid>/<filename>` — pull the uuid out. */
+/**
+ * Pull the document uuid out of an R2 key. Handles the download layout
+ * `documents/<uuid>/<filename>` and the RAG layout `rag/<uuid>.md`.
+ */
 export function docIdFromFolder(folder: string): string | null {
-  const m = /(?:^|\/)documents\/([^/]+)\//.exec(folder);
-  return m ? m[1] : null;
+  const doc = /(?:^|\/)documents\/([^/]+)\//.exec(folder);
+  if (doc) return doc[1];
+  const rag = /(?:^|\/)rag\/([^/]+)\.md$/.exec(folder);
+  return rag ? rag[1] : null;
 }
 
 /**
