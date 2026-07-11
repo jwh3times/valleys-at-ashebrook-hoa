@@ -15,7 +15,7 @@ export interface Announcement {
 export interface DocumentItem {
   id: string;
   title: string;
-  category: string; // e.g. "Governing Documents", "Meeting Minutes", "Forms"
+  category: string; // e.g. "Governing Documents", "Meetings", "Forms"
   /** ISO date the document was added/updated. */
   updatedAt: string;
   visibility: Visibility;

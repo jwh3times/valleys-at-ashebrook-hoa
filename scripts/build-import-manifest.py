@@ -76,8 +76,8 @@ for dirpath, _, names in os.walk(HOA):
 
 entries.sort(key=lambda e: e["relativePath"])
 out = os.path.join(CORPUS, "import-manifest.json")
-json.dump(entries, open(out, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
 indexed = sum(1 for e in entries if e["ragRelPath"])
-print(f"Wrote {len(entries)} entries ({indexed} indexed, {len(entries)-indexed} download-only) -> {out}")
 assert len(entries) == 444, f"expected 444 human files, got {len(entries)}"
 assert indexed == 429, f"expected 429 indexed, got {indexed}"
+json.dump(entries, open(out, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+print(f"Wrote {len(entries)} entries ({indexed} indexed, {len(entries)-indexed} download-only) -> {out}")
