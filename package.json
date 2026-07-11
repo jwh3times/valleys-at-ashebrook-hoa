@@ -25,7 +25,8 @@
     "test:server": "vitest run --config vitest.workers.config.ts",
     "roster:import": "node --experimental-strip-types scripts/import-roster.ts",
     "docs:import": "node --experimental-strip-types scripts/import-documents.ts",
-    "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts"
+    "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts",
+    "corpus:import": "node --experimental-strip-types scripts/import-corpus.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
