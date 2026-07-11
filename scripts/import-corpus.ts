@@ -10,7 +10,7 @@ import {
   type ManifestEntry,
 } from './corpus-import-meta.ts';
 
-const HOA = 'private/HOA_Files';
+const HOA = 'private/HOA_files';
 const CORPUS = 'private/rag_corpus';
 const MANIFEST = `${CORPUS}/import-manifest.json`;
 const ID_MAP = `${CORPUS}/import-ids.json`; // relativePath -> uuid (stable re-runs)
@@ -27,6 +27,21 @@ const runWrangler = (args: string[]) =>
   execFileSync(process.execPath, [wranglerBin, ...args], { stdio: 'inherit' });
 const runWranglerJson = (args: string[]): string =>
   execFileSync(process.execPath, [wranglerBin, ...args], { encoding: 'utf8' });
+const tryDeleteR2 = (key: string) => {
+  try {
+    runWrangler([
+      'r2',
+      'object',
+      'delete',
+      `ashebrook-hoa-docs/${key}`,
+      '--remote',
+    ]);
+  } catch (e) {
+    console.warn(
+      `[wipe] delete skipped/failed for ${key} (continuing): ${(e as Error).message}`,
+    );
+  }
+};
 
 function loadJson<T>(p: string, fallback: T): T {
   try {
@@ -94,20 +109,8 @@ async function main() {
       `[wipe] deleting ${rows.length} R2 objects (+ rag twins) and all rows…`,
     );
     for (const r of rows) {
-      runWrangler([
-        'r2',
-        'object',
-        'delete',
-        `ashebrook-hoa-docs/${r.r2_key}`,
-        '--remote',
-      ]);
-      runWrangler([
-        'r2',
-        'object',
-        'delete',
-        `ashebrook-hoa-docs/${ragKeyFor(r.id)}`,
-        '--remote',
-      ]);
+      tryDeleteR2(r.r2_key);
+      tryDeleteR2(ragKeyFor(r.id));
     }
     runWrangler([
       'd1',

@@ -2,7 +2,7 @@
 import os, re, csv, json
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-HOA = os.path.join(ROOT, "private", "HOA_Files")
+HOA = os.path.join(ROOT, "private", "HOA_files")
 CORPUS = os.path.join(ROOT, "private", "rag_corpus")
 INDEX = os.path.join(CORPUS, "corpus_index.csv")
 
