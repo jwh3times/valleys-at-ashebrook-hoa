@@ -1,6 +1,7 @@
 // Admin-only write helpers.
 import type {
   Announcement,
+  AdminDocumentItem,
   DuesSettings,
   SiteSettings,
   PropertyWithOwners,
@@ -43,6 +44,12 @@ export async function deleteAnnouncement(id: string): Promise<void> {
 }
 
 // ---------- Documents ----------
+export async function fetchAdminDocuments(): Promise<AdminDocumentItem[]> {
+  const res = await fetch('/api/admin/documents');
+  if (!res.ok) throw new Error(`admin documents ${res.status}`);
+  return (await res.json()) as AdminDocumentItem[];
+}
+
 export class DuplicateError extends Error {
   kind: 'exact' | 'near';
   existing?: {

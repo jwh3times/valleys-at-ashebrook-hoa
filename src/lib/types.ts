@@ -21,6 +21,12 @@ export interface DocumentItem {
   visibility: Visibility;
 }
 
+/** Board-only view of a document: DocumentItem plus its searchability status.
+ * `ragStatus` is never included in the public `/api/content/documents` read. */
+export interface AdminDocumentItem extends DocumentItem {
+  ragStatus: 'ok' | 'unsupported' | null;
+}
+
 export interface DupeMember {
   id: string;
   title: string;
