@@ -233,3 +233,26 @@ describe('pseudonymizer — deanonymizeStream', () => {
     expect(out.join('')).toBe('Owner is Jane Q Homeowner today.');
   });
 });
+
+describe('pseudonymizer — common-word name tokens', () => {
+  it('does not garble a common English word that is also a roster name token', () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Bill Green' }]);
+    const out = p.anonymize('Paint the fence green and pay the water bill.');
+    expect(out).toContain('green');
+    expect(out).toContain('bill');
+  });
+
+  it('still masks the full roster name even when its tokens are common words', () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Bill Green' }]);
+    const text = 'Contact Bill Green about the fence.';
+    const out = p.anonymize(text);
+    expect(out).not.toContain('Bill Green');
+    expect(p.deanonymize(out)).toBe(text);
+  });
+
+  it('still masks an uncommon token standalone (regression)', () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Jane Q Homeowner' }]);
+    const out = p.anonymize('Ask Homeowner about it.');
+    expect(out).not.toContain('Homeowner');
+  });
+});

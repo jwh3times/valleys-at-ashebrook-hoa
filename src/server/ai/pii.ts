@@ -70,6 +70,92 @@ const STREETS = [
 const SUFFIX = ['Street', 'Avenue', 'Court', 'Drive', 'Lane', 'Way'];
 const EMAIL_DOMAIN = 'example.org'; // reserved; never a real address
 
+// Common English words that also occur as name tokens. A roster name token
+// equal to one of these is NOT registered as a standalone matcher, so ordinary
+// document words ("green", "bill", "may") are not garbled. The full multi-token
+// roster name still matches exactly, so the resident is masked when their whole
+// name appears. Surnames that are proper nouns (e.g. "Smith") are intentionally
+// absent — they stay maskable.
+const COMMON_WORD_TOKENS = new Set([
+  'bill',
+  'green',
+  'brown',
+  'white',
+  'black',
+  'gray',
+  'grey',
+  'rose',
+  'may',
+  'june',
+  'april',
+  'august',
+  'summer',
+  'sunny',
+  'young',
+  'long',
+  'short',
+  'small',
+  'major',
+  'minor',
+  'love',
+  'joy',
+  'hope',
+  'faith',
+  'grace',
+  'honor',
+  'noble',
+  'stone',
+  'wood',
+  'woods',
+  'hill',
+  'moore',
+  'moor',
+  'fields',
+  'banks',
+  'brooks',
+  'rivers',
+  'forest',
+  'baker',
+  'cook',
+  'mason',
+  'carter',
+  'page',
+  'drew',
+  'chase',
+  'case',
+  'reed',
+  'read',
+  'ford',
+  'swift',
+  'fox',
+  'wolf',
+  'bear',
+  'lamb',
+  'bird',
+  'buck',
+  'crane',
+  'robin',
+  'jay',
+  'finch',
+  'wren',
+  'king',
+  'knight',
+  'earl',
+  'duke',
+  'will',
+  'ray',
+  'dean',
+  'mark',
+  'frank',
+  'rich',
+  'miles',
+  'grant',
+  'hunter',
+  'walker',
+  'turner',
+  'fisher',
+]);
+
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 // Generic catch-all for NON-roster phones. Requires either a parenthesized area
 // code or at least one internal separator, and is digit-bounded, so a bare or
@@ -317,6 +403,7 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
     if (e.type !== 'name') continue;
     for (const token of e.value.split(/\s+/)) {
       if (token.length < 2) continue;
+      if (COMMON_WORD_TOKENS.has(token.toLowerCase())) continue;
       addDictEntry('name', token);
     }
   }
