@@ -1,6 +1,7 @@
 # ADR 0009: RAG Index Corpus Separate from the Download Library
 
-**Status:** Accepted (implementation pending)
+**Status:** Accepted (implemented — clean-replace corpus import shipped; see Consequence 1 for
+the still-open upload-time sync gap)
 **Date:** 2026-07-10
 
 ## Context
@@ -47,13 +48,19 @@ Markdown corpus is a derived artifact, never surfaced to residents and never a
 1. **The two representations must stay in sync, per uuid.** Every code path that
    creates a document (`POST /api/admin/documents`) must also produce its
    `rag/<uuid>.md`; every path that removes one (`DELETE`, duplicate resolution
-   in `/api/admin/duplicates`) must remove both. Born-digital uploads can be
-   text-extracted in-Worker; a **scanned** upload needs OCR (Workers AI, or an
-   explicit "not searchable" flag) — a scan with no Markdown is silently absent
-   from assistant retrieval while still appearing in the library. This ongoing
-   sync is the primary maintenance obligation of this design; without it the
-   index drifts from the library. Detailed hook points live in the private
-   integration handoff, not this public record.
+   in `/api/admin/duplicates`) must remove both. The removal side is implemented
+   (deleting or de-duplicating a document also removes its `rag/<uuid>.md`); the
+   creation side is **not yet implemented** — `POST /api/admin/documents` does not
+   currently produce a `rag/<uuid>.md` twin, so a document uploaded through the
+   admin panel is downloadable immediately but stays absent from assistant
+   retrieval until the corpus is next rebuilt via `scripts/import-corpus.ts` (see
+   `ROADMAP.md` item 7). Born-digital uploads can be text-extracted in-Worker; a
+   **scanned** upload needs OCR (Workers AI, or an explicit "not searchable" flag)
+   — a scan with no Markdown is silently absent from assistant retrieval while
+   still appearing in the library. This ongoing sync is the primary maintenance
+   obligation of this design; without it the index drifts from the library.
+   Detailed hook points live in the private integration handoff, not this public
+   record.
 
 2. **The index is NOT tier-aware; the assistant MUST remain board-only.** AI
    Search retrieves across all indexed Markdown regardless of each document's

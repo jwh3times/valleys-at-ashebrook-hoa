@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** 2026-07-08
+**Updated:** 2026-07-11
 
 This is the current list of work that is not implemented yet. It replaces the older private review
 notes and now-removed implementation handoff docs.
@@ -107,16 +107,24 @@ The site can display dues information in official mode, but it does not process
 payments. Payment work should wait until the board adopts the site for official
 HOA use and selects a provider.
 
-### 7. OCR, Search, and Admin AI Assistant
+### 7. Assistant Upload-Time RAG Twin + OCR
 
-**Status:** Not implemented
+**Status:** Partially implemented — see `CHANGELOG.md` for the shipped board-only AI
+document assistant (Cloudflare AI Search retrieval + Claude generation, PII
+pseudonymization, hybrid document/general-knowledge answers) and
+[ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md) for the
+retrieval-vs-download index split.
 **Gate:** Dedicated spec
-**Likely size:** Large to extra large
+**Likely size:** Medium
 
-Potential future document intelligence work: OCR, embeddings, vector search, and
-an admin assistant over the document archive. This should be designed as its own
-sub-project because it affects storage, privacy, indexing, cost, and operator
-expectations.
+Remaining work the shipped assistant does not yet cover:
+
+- `POST /api/admin/documents` does not create a new upload's `rag/<uuid>.md` search
+  twin, so a newly uploaded document is downloadable immediately but not
+  assistant-searchable until the corpus is next rebuilt with
+  `scripts/import-corpus.ts`.
+- Scanned uploads have no in-app OCR path to produce a searchable Markdown twin; the
+  current corpus was OCR'd offline before import.
 
 ## Operations Backlog
 

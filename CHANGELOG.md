@@ -31,10 +31,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   previously-kept file, that file's kept state is cleared so the group resurfaces for review. The
   panel also adds a per-file "View" link and a "kept" badge.
 
+### Fixed
+
+- **Assistant no longer hangs on a full roster** — the PII pseudonymizer's surrogate name pools
+  were finite, so a large enough roster could exhaust them mid-request and spin forever, hanging
+  the Worker on every assistant call. Surrogate generation is now injective over an unbounded index
+  range (deterministic disambiguation tiers), so it always terminates. Answer generation also gets
+  more token headroom so adaptive thinking no longer starves the visible answer, and a cut-off reply
+  now shows a visible "cut off by the length limit" notice instead of ending silently.
+
 ### Security
 
 - The assistant pseudonymizes known resident PII before sending document excerpts to Anthropic
-  (best-effort, roster-based).
+  (best-effort, roster-based). Generated surrogate names are also checked against the roster so a
+  disambiguated placeholder can never coincide with a real resident's actual name.
 
 ## [0.2.0] - 2026-07-08
 
