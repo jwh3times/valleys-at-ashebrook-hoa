@@ -1,36 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-const { uploadDocument, DuplicateError } = vi.hoisted(() => {
-  const uploadDocument = vi.fn().mockResolvedValue(undefined);
-  class DuplicateError extends Error {
-    kind: 'exact' | 'near';
-    existing?: {
-      id: string;
-      title: string;
-      category: string;
-      visibility: string;
-    };
-    similar?: { id: string; title: string; filename: string }[];
+const { uploadDocument, fetchAdminDocuments, DuplicateError } = vi.hoisted(
+  () => {
+    const uploadDocument = vi.fn().mockResolvedValue(undefined);
+    const fetchAdminDocuments = vi.fn().mockResolvedValue([]);
+    class DuplicateError extends Error {
+      kind: 'exact' | 'near';
+      existing?: {
+        id: string;
+        title: string;
+        category: string;
+        visibility: string;
+      };
+      similar?: { id: string; title: string; filename: string }[];
 
-    constructor(kind: 'exact' | 'near', payload: Record<string, unknown>) {
-      super(kind);
-      this.name = 'DuplicateError';
-      this.kind = kind;
-      Object.assign(this, payload);
+      constructor(kind: 'exact' | 'near', payload: Record<string, unknown>) {
+        super(kind);
+        this.name = 'DuplicateError';
+        this.kind = kind;
+        Object.assign(this, payload);
+      }
     }
-  }
-  return { uploadDocument, DuplicateError };
-});
+    return { uploadDocument, fetchAdminDocuments, DuplicateError };
+  },
+);
 vi.mock('../../lib/admin', () => ({
   uploadDocument: (...a: unknown[]) => uploadDocument(...a),
   editDocument: vi.fn(),
   deleteDocument: vi.fn(),
+  fetchAdminDocuments: (...a: unknown[]) => fetchAdminDocuments(...a),
   DuplicateError,
-}));
-const fetchDocuments = vi.fn().mockResolvedValue([]);
-vi.mock('../../lib/content', () => ({
-  fetchDocuments: (...a: unknown[]) => fetchDocuments(...a),
 }));
 
 import DocumentsManager from './DocumentsManager';
@@ -128,7 +128,7 @@ describe('DocumentsManager visibility filter', () => {
     },
   ];
 
-  beforeEach(() => fetchDocuments.mockResolvedValue(docs));
+  beforeEach(() => fetchAdminDocuments.mockResolvedValue(docs));
 
   it('shows every document by default with a per-tier count on each tab', async () => {
     render(<DocumentsManager />);
@@ -223,5 +223,36 @@ describe('DocumentsManager duplicate handling', () => {
     fireEvent.click(anyway);
     await waitFor(() => expect(uploadDocument).toHaveBeenCalledTimes(2));
     expect(uploadDocument.mock.calls[1][4]).toBe(true);
+  });
+});
+
+describe('DocumentsManager searchability badge', () => {
+  beforeEach(() =>
+    fetchAdminDocuments.mockResolvedValue([
+      {
+        id: '1',
+        title: 'Scanned Deed',
+        category: 'Maps & Deeds',
+        visibility: 'board',
+        updatedAt: '2026-01-01',
+        ragStatus: 'unsupported',
+      },
+      {
+        id: '2',
+        title: 'Clean Bylaws',
+        category: 'Governing Documents',
+        visibility: 'board',
+        updatedAt: '2026-01-01',
+        ragStatus: 'ok',
+      },
+    ]),
+  );
+
+  it('shows a "Not searchable" badge only for unsupported documents', async () => {
+    render(<DocumentsManager />);
+    await screen.findByText('Scanned Deed');
+    expect(screen.getByText('Clean Bylaws')).toBeInTheDocument();
+    // Exactly one badge — the scanned doc, not the clean one.
+    expect(screen.getAllByText(/not searchable/i)).toHaveLength(1);
   });
 });

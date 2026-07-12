@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react';
-import { fetchDocuments } from '../../lib/content';
 import {
   deleteDocument,
   editDocument,
   uploadDocument,
+  fetchAdminDocuments,
   DuplicateError,
 } from '../../lib/admin';
 import {
   DOCUMENT_CATEGORIES,
-  type DocumentItem,
+  type AdminDocumentItem,
   type Visibility,
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
@@ -55,7 +55,7 @@ export default function DocumentsManager() {
     msg,
     setMsg,
     run,
-  } = useAdminResource<DocumentItem[]>(fetchDocuments, []);
+  } = useAdminResource<AdminDocumentItem[]>(fetchAdminDocuments, []);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<string>(DOCUMENT_CATEGORIES[0]);
   const [visibility, setVisibility] = useState<Visibility>('board');
@@ -73,7 +73,7 @@ export default function DocumentsManager() {
   });
   const fileInput = useRef<HTMLInputElement>(null);
 
-  function startEdit(d: DocumentItem) {
+  function startEdit(d: AdminDocumentItem) {
     setEditingId(d.id);
     setEditForm({
       title: d.title,
@@ -152,7 +152,7 @@ export default function DocumentsManager() {
     }, 'Document updated.');
   }
 
-  async function handleDelete(item: DocumentItem) {
+  async function handleDelete(item: AdminDocumentItem) {
     if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
     await deleteDocument(item.id);
     await reload();
@@ -394,6 +394,14 @@ export default function DocumentsManager() {
                 <div className="admin-row-title">{d.title}</div>
                 <div className="admin-row-sub">
                   {d.category} &middot; {d.visibility}
+                  {d.ragStatus === 'unsupported' && (
+                    <span
+                      className="admin-badge admin-badge--warn"
+                      title="This file (a scan or unsupported format) couldn't be made searchable — download still works."
+                    >
+                      {' · '}Not searchable
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="row-actions">
