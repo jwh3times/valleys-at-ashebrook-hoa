@@ -49,11 +49,30 @@ export async function generateTwin(
       const blob = new Blob([input.bytes], { type: input.contentType });
       const results = await env.AI.toMarkdown([{ name: input.filename, blob }]);
       const md = results?.[0];
+      // Surface an unexpected response shape (e.g. a Workers AI change so
+      // `format` no longer holds 'markdown'/'error') — otherwise every binary
+      // would silently become "unsupported" with no trace. Log the KEYS only,
+      // never document text.
+      if (md && md.format !== 'markdown' && md.format !== 'error') {
+        console.warn(
+          '[twin] unexpected toMarkdown result shape — keys:',
+          Object.keys(md),
+        );
+      }
       const data = md?.format === 'markdown' ? (md.data ?? '') : '';
       return usable(data);
     }
     return { markdown: null, status: 'unsupported' };
-  } catch {
+  } catch (err) {
+    // A thrown error (transient Workers AI outage, malformed input) is
+    // indistinguishable downstream from a genuinely unconvertible file — both
+    // yield 'unsupported' and drive the board-facing "Not searchable" badge.
+    // Log the extension + message only (never the filename or document bytes)
+    // so an outage is diagnosable from Workers logs.
+    console.warn(
+      `[twin] conversion failed for .${ext}:`,
+      err instanceof Error ? err.message : String(err),
+    );
     return { markdown: null, status: 'unsupported' };
   }
 }
