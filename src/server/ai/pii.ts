@@ -17,7 +17,8 @@ export interface Pseudonymizer {
   deanonymizeStream(): TransformStream<string, string>;
 }
 
-// --- Surrogate pools (deterministic, collision-free by construction) ---
+// --- Surrogate pools (deterministic; uniqueness comes from injective makers
+// plus gen()'s collision checks against real values and issued surrogates) ---
 const FIRST = [
   'Avery',
   'Blake',
@@ -101,18 +102,41 @@ function compileDictRegex(value: string): RegExp {
   return new RegExp(`(?<!\\w)${pattern}(?!\\w)`, 'gi');
 }
 
+// Every maker below is injective over ALL indexes: the base pool comes first,
+// then deterministic disambiguation tiers (middle initial / apartment / phone
+// extension / numeric tag). This is what guarantees gen() terminates — its
+// skip-loop only ever discards a candidate for colliding with a finite set
+// (roster values + already-issued surrogates), so never-repeating candidates
+// must eventually clear it. With the old finite pools (16x14 = 224 names), a
+// full roster exhausted the pool during pre-registration and gen() spun
+// forever, hanging the Worker on every assistant request.
 function makeName(i: number): string {
-  return `${FIRST[i % FIRST.length]} ${LAST[Math.floor(i / FIRST.length) % LAST.length]}`;
+  const first = FIRST[i % FIRST.length];
+  const last = LAST[Math.floor(i / FIRST.length) % LAST.length];
+  const tier = Math.floor(i / (FIRST.length * LAST.length));
+  if (tier === 0) return `${first} ${last}`;
+  // Tiers 1-26 add a middle initial (A. through Z.) — still natural-looking,
+  // which matters because the model must echo surrogates back verbatim.
+  if (tier <= 26) return `${first} ${String.fromCharCode(64 + tier)}. ${last}`;
+  return `${first} ${last} ${tier - 26}`;
 }
 function makeAddress(i: number): string {
   const num = 100 + ((i * 37) % 800);
-  return `${num} ${STREETS[i % STREETS.length]} ${SUFFIX[Math.floor(i / STREETS.length) % SUFFIX.length]}`;
+  const q = Math.floor(i / 800);
+  const street = STREETS[q % STREETS.length];
+  const suffix = SUFFIX[Math.floor(q / STREETS.length) % SUFFIX.length];
+  const apt = Math.floor(q / (STREETS.length * SUFFIX.length));
+  const base = `${num} ${street} ${suffix}`;
+  return apt === 0 ? base : `${base} Apt ${apt}`;
 }
 function makePhone(i: number): string {
-  // 555-01xx line-number range is reserved for fictional use.
+  // Area code 555 is unassigned in the NANP, so these numbers are structurally
+  // undialable and can never digit-collide with a real roster phone.
   const line = String(1000 + ((i * 7) % 9000)).padStart(4, '0');
   const prefix = String(100 + (i % 100)).padStart(3, '0');
-  return `(555) ${prefix}-${line}`;
+  const ext = Math.floor(i / 9000);
+  const base = `(555) ${prefix}-${line}`;
+  return ext === 0 ? base : `${base} x${ext}`;
 }
 function makeEmail(i: number): string {
   const f = FIRST[i % FIRST.length].toLowerCase();
@@ -150,7 +174,7 @@ function applySpans(text: string, spans: Span[]): string {
 export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
   const forward = new Map<string, string>(); // `${type}:${norm}` -> surrogate
   const reverse = new Map<string, string>(); // surrogate -> real
-  const realValues = new Set<string>(); // exact real strings, to avoid collisions
+  const realValues = new Set<string>(); // normalized real strings, to avoid look-alike surrogates
   const counts: Record<PiiType, number> = {
     name: 0,
     address: 0,
@@ -162,6 +186,32 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
   const dict: { type: PiiType; value: string; re: RegExp }[] = [];
   const dictKeys = new Set<string>(); // dedup: a token or value registered at most once
   let maxSurrogateLen = 1;
+
+  // Name-pool word pairs that both appear in the SAME real roster name. The
+  // exact-equality check below blocks only the base form, so without this the
+  // disambiguation tiers would mint "Morgan A. Sutton" for a roster with a
+  // real Morgan Sutton — a surrogate any reader identifies as that resident.
+  // Tokens are lowercased with punctuation stripped and both orders stored,
+  // so "Sutton, Morgan" and "Morgan J Sutton" block the pair too.
+  const blockedPairs = new Set<string>();
+  for (const e of entries) {
+    if (e.type !== 'name') continue;
+    const tokens = normName(e.value)
+      .split(' ')
+      .map((t) => t.replace(/[^a-z]/g, ''))
+      .filter((t) => t.length >= 2);
+    for (const a of tokens)
+      for (const b of tokens) if (a !== b) blockedPairs.add(`${a}|${b}`);
+  }
+  // Safety valve: pair-blocking must never leave gen() with zero eligible
+  // name combinations — that would be the exhaustion hang all over again. If
+  // a pathological roster blocks every FIRST x LAST pair, fall back to the
+  // exact-value check alone.
+  const pairBlockingActive = FIRST.some((f) =>
+    LAST.some(
+      (l) => !blockedPairs.has(`${f.toLowerCase()}|${l.toLowerCase()}`),
+    ),
+  );
 
   function keyOf(type: PiiType, value: string): string {
     const n =
@@ -175,9 +225,22 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
 
   function gen(type: PiiType): string {
     // Bump the index until the surrogate collides with neither a real value nor
-    // an already-issued surrogate.
+    // an already-issued surrogate. Terminates because the makers are injective
+    // over all indexes (see the maker comment above) while the collision set is
+    // finite. The real-value check is case/whitespace-insensitive so an all-caps
+    // roster entry still blocks its look-alike surrogate.
     for (;;) {
       const i = counts[type]++;
+      if (type === 'name' && pairBlockingActive) {
+        // Skip every tier of a (first, last) combination belonging to a real
+        // resident. At least one combination is guaranteed unblocked (see the
+        // safety valve above), and it recurs every 224 indexes across the
+        // infinite tiers, so termination is preserved.
+        const f = FIRST[i % FIRST.length].toLowerCase();
+        const l =
+          LAST[Math.floor(i / FIRST.length) % LAST.length].toLowerCase();
+        if (blockedPairs.has(`${f}|${l}`)) continue;
+      }
       const s =
         type === 'name'
           ? makeName(i)
@@ -186,7 +249,7 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
             : type === 'phone'
               ? makePhone(i)
               : makeEmail(i);
-      if (!realValues.has(s) && !reverse.has(s)) return s;
+      if (!realValues.has(normName(s)) && !reverse.has(s)) return s;
     }
   }
 
@@ -210,7 +273,7 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
   }
 
   // Pre-register roster entries so surrogates are stable and dictionary-driven.
-  for (const e of entries) realValues.add(e.value);
+  for (const e of entries) realValues.add(normName(e.value));
   for (const e of entries) {
     surrogateFor(e.type, e.value);
     if (e.type === 'name' || e.type === 'address')
@@ -310,10 +373,13 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
 
   function deanonymizeStream(): TransformStream<string, string> {
     let buffer = '';
-    const hold = maxSurrogateLen;
     return new TransformStream<string, string>({
       transform(chunk, controller) {
         buffer += chunk;
+        // Read maxSurrogateLen live on every chunk — lazy minting during a
+        // later anonymize() call can grow it after this stream was created,
+        // and a stale hold could split that longer surrogate across emits.
+        const hold = maxSurrogateLen;
         if (buffer.length <= hold) return;
         let cut = safeCutBefore(buffer, buffer.length - hold);
         if (cut > 0) {
