@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** 2026-07-11
+**Updated:** 2026-07-12
 
 This is the current list of work that is not implemented yet. It replaces the older private review
 notes and now-removed implementation handoff docs.
@@ -119,12 +119,11 @@ retrieval-vs-download index split.
 
 Remaining work the shipped assistant does not yet cover:
 
-- `POST /api/admin/documents` does not create a new upload's `rag/<uuid>.md` search
-  twin, so a newly uploaded document is downloadable immediately but not
-  assistant-searchable until the corpus is next rebuilt with
-  `scripts/import-corpus.ts`.
 - Scanned uploads have no in-app OCR path to produce a searchable Markdown twin; the
   current corpus was OCR'd offline before import.
+- New uploads become searchable only at the next AI Search sync (default ≤6h), not
+  immediately on upload; triggering a sync automatically after upload is a possible
+  future refinement.
 
 ## Operations Backlog
 

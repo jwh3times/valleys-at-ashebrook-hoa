@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Added
+
+- **New document uploads become assistant-searchable automatically.** Uploading a document now
+  builds its search index copy (via Cloudflare Workers AI), so board members no longer need an
+  operator to re-run the import for a new file to show up in the assistant. Files that can't be
+  converted to searchable text (scans or unsupported formats) are marked "Not searchable" in the
+  admin Documents panel and still download normally.
+
 ## [0.3.8] - 2026-07-12
 
 ### Fixed

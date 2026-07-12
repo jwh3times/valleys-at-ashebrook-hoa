@@ -119,9 +119,11 @@ Markdown twins described below and never the human-readable originals.
   reference retrieved chunks back to real documents server-side. See SECURITY.md for the
   pseudonymization guarantees and limits. Retrieval is not tier-aware, which is why this endpoint
   stays board-only — see SECURITY.md and **Data model** below for the two-representation R2 layout
-  retrieval runs over. `POST /api/admin/documents` does not yet create a document's `rag/<uuid>.md`
-  twin on upload, so a newly uploaded document is downloadable immediately but not
-  assistant-searchable until that twin exists (Phase 2, not yet built).
+  retrieval runs over. `POST /api/admin/documents` generates the document's `rag/<uuid>.md` twin on
+  upload via Workers AI `toMarkdown` and records `documents.rag_status` (`ok`/`unsupported`); a new
+  upload is searchable at the next AI Search sync, and files that cannot be converted (scans, old
+  `.doc`) are flagged "Not searchable" in the admin Documents panel via a board-only
+  `GET /api/admin/documents`. Real OCR of scanned/image-only PDFs is the remaining gap.
 - Homeowner verification: `/api/verify/{request,confirm}`.
 - First-board bootstrap: `POST /api/bootstrap/board`, which is fail-closed, self-disables once a
   board account exists, and requires bootstrap secret/config values.
@@ -183,7 +185,8 @@ uniqueness constraints (`properties.address_normalized`, `user_property_links (u
 property_id)`) and hot-path indexes. Migration `0004` adds `documents.content_hash` and
 `documents_content_hash_idx` for duplicate detection. Migration `0005` reconciles foreign keys and
 enums on the roster/verification tables. Migration `0006` adds `documents.keep_verified_at` and
-`documents.keep_verified_by`. Migrations are applied with `npm run db:migrate:{local,remote}` via
+`documents.keep_verified_by`. Migration `0007` adds `documents.rag_status`. Migrations are applied
+with `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
 so `npm run db:generate` should diff cleanly for future changes.
