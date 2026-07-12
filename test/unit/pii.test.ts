@@ -104,6 +104,85 @@ describe('pseudonymizer — hardening', () => {
   });
 });
 
+describe('pseudonymizer — surrogate pool exhaustion (roster-scale)', () => {
+  const names = (n: number): PiiEntry[] =>
+    Array.from({ length: n }, (_, i) => ({
+      type: 'name' as const,
+      value: `Resident${i} Household${i}`,
+    }));
+
+  it('construction terminates and round-trips past the 224-combination base name pool', () => {
+    // 300 full names (plus their per-token surrogates) exceed the 16x14 base
+    // pool several times over; the old generator looped forever once it ran dry.
+    const p = buildPseudonymizer(names(300));
+    const text =
+      'Resident0 Household0, Resident150 Household150, Resident299 Household299';
+    const out = p.anonymize(text);
+    expect(out).not.toMatch(/Resident\d|Household\d/);
+    expect(p.deanonymize(out)).toBe(text);
+  });
+
+  it('name surrogates stay collision-free deep into the disambiguated tiers', () => {
+    // 6100 pre-registered names push generation past the base pool AND the
+    // middle-initial tier (224 + 224*26 = 6048) into the numeric tail.
+    const p = buildPseudonymizer(names(6100));
+    const text =
+      'Resident1 Household1 met Resident3000 Household3000 and Resident6099 Household6099.';
+    const out = p.anonymize(text);
+    expect(out).not.toMatch(/Resident\d|Household\d/);
+    expect(p.deanonymize(out)).toBe(text);
+  });
+
+  it('never issues a surrogate that case-insensitively equals a real roster value', () => {
+    // "Morgan Sutton" is a base-pool combination. A resident stored in a
+    // different case must still block it from being issued as a surrogate.
+    const roster: PiiEntry[] = [
+      { type: 'name', value: 'MORGAN SUTTON' },
+      ...names(230),
+    ];
+    const p = buildPseudonymizer(roster);
+    const text = 'Attendees: MORGAN SUTTON, Resident100 Household100';
+    const out = p.anonymize(text);
+    expect(out.toLowerCase()).not.toContain('morgan sutton');
+    expect(p.deanonymize(out)).toBe(text);
+  });
+
+  it("never issues a tiered surrogate reusing a real resident's first+last pair", () => {
+    // A real "Morgan Sutton" blocks the base surrogate via the equality check,
+    // but the disambiguation tiers must be blocked too — "Morgan A. Sutton"
+    // still reads as the real resident. Tier minting starts past 224 issued
+    // surrogates, so pad the roster well beyond it.
+    const roster: PiiEntry[] = [
+      { type: 'name', value: 'Morgan Sutton' },
+      ...names(460),
+    ];
+    const p = buildPseudonymizer(roster);
+    const text = roster.map((e) => e.value).join(', ');
+    const out = p.anonymize(text);
+    expect(out).not.toMatch(/morgan(?:\s+\w+\.?)?\s+sutton/i);
+    expect(p.deanonymize(out)).toBe(text);
+  });
+
+  it('address and phone generation survive their base-pool sizes', () => {
+    const roster: PiiEntry[] = [
+      ...Array.from({ length: 7300 }, (_, i) => ({
+        type: 'address' as const,
+        value: `${1000 + i} Ashwood Circle Unit ${i}`,
+      })),
+      ...Array.from({ length: 9100 }, (_, i) => ({
+        type: 'phone' as const,
+        value: String(9190000000 + i),
+      })),
+    ];
+    const p = buildPseudonymizer(roster);
+    const text = 'Deed for 8299 Ashwood Circle Unit 7299, call 9190009099.';
+    const out = p.anonymize(text);
+    expect(out).not.toContain('Ashwood');
+    expect(out).not.toContain('9190009099');
+    expect(p.deanonymize(out)).toBe(text);
+  });
+});
+
 describe('pseudonymizer — deanonymizeStream', () => {
   it('reassembles a surrogate split across two chunks', async () => {
     const p = buildPseudonymizer([{ type: 'name', value: 'Jane Q Homeowner' }]);
