@@ -191,14 +191,18 @@ the rest of the site works without it — and only useful once documents have re
    "could not find it in the documents" for everything until the corpus is imported and indexed.
 5. Before any document excerpt, the question, or prior chat turns are sent to Anthropic, known
    resident PII is pseudonymized: roster names (including individual first/last name tokens, so a
-   standalone first name or surname is also caught) and addresses are matched against the current
-   roster and swapped for realistic, consistent placeholder values, and any email address or phone
-   number anywhere in the text is swapped the same way — the real values are restored only in the
-   answer streamed back to the board member's browser, and document titles are never sent (citations
-   use index labels, resolved back to real documents server-side). This is **best-effort**, not a
-   guarantee: it does not catch non-resident names, free text that doesn't match a roster value, or
-   narrow edge cases such as a roster value whose closing abbreviation period is glued directly to
-   the next word with no separating space.
+   standalone first name or surname is also caught, except tokens that are common English words,
+   which are left intact so ordinary document text isn't garbled) and addresses are matched against
+   the current roster and swapped for realistic, consistent placeholder values. Any email address
+   found anywhere in the text is pseudonymized the same way; roster phone numbers are pseudonymized
+   in any format, and any number written in a standard phone format is pseudonymized whether or not
+   it matches the roster, but bare/long numeric IDs are left alone. Document titles are
+   pseudonymized the same way and sent as part of each excerpt's label. The real values are restored
+   only in the answer streamed back to the board member's browser, and citations use index labels
+   resolved back to real documents server-side. This is **best-effort**, not a guarantee: it does
+   not catch non-resident names, free text that doesn't match a roster value, or narrow edge cases
+   such as a roster value whose closing abbreviation period is glued directly to the next word with
+   no separating space.
 
 ## 9. Connect Calendar and Contact Services
 

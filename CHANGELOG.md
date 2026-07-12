@@ -7,6 +7,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Changed
+
+- **Assistant is clearer and more accurate.** When no documents match a question, the answer is now
+  flagged as general-knowledge-only; each cited excerpt shows its category and (pseudonymized)
+  title; and stale index entries with no matching document are ignored instead of showing an empty
+  citation. A "New conversation" button resets the chat.
+
+### Fixed
+
+- **Assistant stops garbling document numbers and words.** The PII pseudonymizer no longer masks
+  arbitrary long/bare numbers as phone numbers, and no longer replaces common English words that
+  happen to match a resident's name token. Roster phone numbers are still masked in any format, and
+  conversation history is fully pseudonymized before any length cap is applied.
+
+### Security
+
+- Document titles sent to the AI provider are now pseudonymized (previously they were withheld);
+  roster names, addresses, phones, and emails are still always masked.
+
 ## [0.3.8] - 2026-07-12
 
 ### Fixed
