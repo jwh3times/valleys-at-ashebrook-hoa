@@ -14,6 +14,9 @@ It provides:
   with Google Meet links for virtual meetings
 - 📄 **Governing documents** — bylaws, CC&Rs, minutes, and forms, with board-side
   duplicate detection and cleanup tools
+- 🤖 **Board-only AI document assistant** — ask natural-language questions about the
+  document library and get a streamed, cited answer (Cloudflare AI Search + Claude),
+  with known resident PII pseudonymized before anything reaches the model
 - 💳 **Dues & payments** — annual dues amount and payment options (shown in official
   mode)
 - ✉️ **Contact form** — reaches the resident who maintains the site (or the board, in
@@ -28,22 +31,24 @@ and board.
 
 ## Tech stack
 
-| Concern            | Choice                                                                       | Cost      |
-| ------------------ | ---------------------------------------------------------------------------- | --------- |
-| Framework          | [Astro](https://astro.build) (SSR) + React                                   | Free      |
-| Hosting / runtime  | [Cloudflare Workers](https://workers.cloudflare.com)                         | Free tier |
-| Database           | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite, Drizzle ORM) | Free tier |
-| File storage       | [Cloudflare R2](https://developers.cloudflare.com/r2/)                       | Free tier |
-| Sessions           | [Cloudflare KV](https://developers.cloudflare.com/kv/)                       | Free tier |
-| Auth               | [Better Auth](https://www.better-auth.com) (email/password)                  | Free      |
-| Verification email | [Resend](https://resend.com)                                                 | Free tier |
-| Verification SMS   | [Twilio](https://twilio.com)                                                 | ~1¢/text  |
-| Bot protection     | [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)         | Free      |
-| Calendar / Meet    | Public Google Calendar                                                       | Free      |
-| Contact email      | [Web3Forms](https://web3forms.com) → Gmail                                   | Free      |
+| Concern            | Choice                                                                                                                                                              | Cost        |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Framework          | [Astro](https://astro.build) (SSR) + React                                                                                                                          | Free        |
+| Hosting / runtime  | [Cloudflare Workers](https://workers.cloudflare.com)                                                                                                                | Free tier   |
+| Database           | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite, Drizzle ORM)                                                                                        | Free tier   |
+| File storage       | [Cloudflare R2](https://developers.cloudflare.com/r2/)                                                                                                              | Free tier   |
+| Sessions           | [Cloudflare KV](https://developers.cloudflare.com/kv/)                                                                                                              | Free tier   |
+| Auth               | [Better Auth](https://www.better-auth.com) (email/password)                                                                                                         | Free        |
+| Verification email | [Resend](https://resend.com)                                                                                                                                        | Free tier   |
+| Verification SMS   | [Twilio](https://twilio.com)                                                                                                                                        | ~1¢/text    |
+| Bot protection     | [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)                                                                                                | Free        |
+| Calendar / Meet    | Public Google Calendar                                                                                                                                              | Free        |
+| Contact email      | [Web3Forms](https://web3forms.com) → Gmail                                                                                                                          | Free        |
+| AI doc assistant   | [Cloudflare AI Search](https://developers.cloudflare.com/ai-search/) (retrieval) + [Anthropic Claude](https://www.anthropic.com) (generation), optional, board-only | Pay-per-use |
 
 The whole site runs on free tiers with **no recurring cost** (Twilio SMS is ~1¢ per
-text; a custom domain is optional, ~$10–15/yr).
+text; the optional AI document assistant is pay-per-use against the Anthropic API; a
+custom domain is optional, ~$10–15/yr).
 
 ## Getting started
 
@@ -90,6 +95,8 @@ src/
     admin/            The board admin app
   lib/                Client helpers (content.ts, admin.ts, site.ts, format.ts, types.ts, auth-client.ts)
   server/             Server-only code
+    ai/               Board-only document assistant: AI Search retrieval, PII
+                       pseudonymization, Anthropic client, orchestration
     auth/             Better Auth config, Resend + Twilio senders
     authz/            getAuthContext, requireRole, requireBoard, Turnstile check
     content/          Visibility logic (tierAllows / visibleTiers) + read helpers
@@ -97,7 +104,7 @@ src/
     roster/           Owner roster helpers
     verification/     One-time code flow
   styles/             Global CSS
-wrangler.toml         Cloudflare bindings (D1, KV, R2)
+wrangler.toml         Cloudflare bindings (D1, KV, R2, AI)
 drizzle.config.ts     Drizzle ORM config
 src/server/db/migrations/   D1 migration files
 ```
