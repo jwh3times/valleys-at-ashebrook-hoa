@@ -78,6 +78,11 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   §2 of [ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md) for the constraint
   in full: relaxing the board-only gate requires per-caller retrieval filtering or separate per-tier
   indexes, plus a re-review of the PII-pseudonymization boundary described above.
+- **Uploaded document content is converted to Markdown by Cloudflare Workers AI to build the search
+  index.** `POST /api/admin/documents` runs the upload through `env.AI.toMarkdown` to produce the
+  `rag/<uuid>.md` twin. This processing stays within Cloudflare (not a third-party egress like the
+  Anthropic answer-generation step); the resulting index text is un-pseudonymized and board-only,
+  consistent with the non-tier-aware index described above.
 
 ## Automated safeguards
 

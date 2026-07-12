@@ -1,7 +1,7 @@
 # ADR 0009: RAG Index Corpus Separate from the Download Library
 
-**Status:** Accepted (implemented — clean-replace corpus import shipped; see Consequence 1 for
-the still-open upload-time sync gap)
+**Status:** Accepted (implemented — clean-replace corpus import shipped, and upload-time twin
+generation ships per Consequence 1; real OCR for scanned/image-only PDFs remains open)
 **Date:** 2026-07-10
 
 ## Context
@@ -49,12 +49,12 @@ Markdown corpus is a derived artifact, never surfaced to residents and never a
    creates a document (`POST /api/admin/documents`) must also produce its
    `rag/<uuid>.md`; every path that removes one (`DELETE`, duplicate resolution
    in `/api/admin/duplicates`) must remove both. The removal side is implemented
-   (deleting or de-duplicating a document also removes its `rag/<uuid>.md`); the
-   creation side is **not yet implemented** — `POST /api/admin/documents` does not
-   currently produce a `rag/<uuid>.md` twin, so a document uploaded through the
-   admin panel is downloadable immediately but stays absent from assistant
-   retrieval until the corpus is next rebuilt via `scripts/import-corpus.ts` (see
-   `ROADMAP.md` item 7). Born-digital uploads can be text-extracted in-Worker; a
+   (deleting or de-duplicating a document also removes its `rag/<uuid>.md`). The
+   creation side is now implemented: `POST /api/admin/documents` generates the
+   `rag/<uuid>.md` twin on upload via Workers AI `toMarkdown` (born-digital text) and records a
+   `rag_status`; uploads that cannot be converted (scanned/image-only PDFs, old `.doc`) are stored
+   downloadable-but-not-searchable and flagged. Real OCR for scanned/image-only PDFs remains the one
+   open gap (see `ROADMAP.md` item 7). Born-digital uploads can be text-extracted in-Worker; a
    **scanned** upload needs OCR (Workers AI, or an explicit "not searchable" flag)
    — a scan with no Markdown is silently absent from assistant retrieval while
    still appearing in the library. This ongoing sync is the primary maintenance

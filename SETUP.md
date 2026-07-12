@@ -189,6 +189,11 @@ the rest of the site works without it — and only useful once documents have re
    confirm it reports roughly **429 indexed objects** — the count of `rag/<uuid>.md` twins, not the
    larger human-file count. A fresh deployment with an empty or newly created bucket will return
    "could not find it in the documents" for everything until the corpus is imported and indexed.
+   After this initial load, board uploads made through the admin panel build their own
+   `rag/<uuid>.md` twin automatically and become assistant-searchable at the next AI Search sync
+   (default sync interval is ≤6h, not instant). An upload that can't be converted to searchable text
+   (a scan or an unsupported format) still stores and downloads normally, but shows a
+   "Not searchable" badge in the admin Documents panel.
 5. Before any document excerpt, the question, or prior chat turns are sent to Anthropic, known
    resident PII is pseudonymized: roster names (including individual first/last name tokens, so a
    standalone first name or surname is also caught) and addresses are matched against the current
