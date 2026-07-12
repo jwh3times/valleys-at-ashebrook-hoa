@@ -183,6 +183,33 @@ describe('pseudonymizer — surrogate pool exhaustion (roster-scale)', () => {
   });
 });
 
+describe('pseudonymizer — phone precision', () => {
+  it('does not mask a bare 10-digit number that is not a roster phone', () => {
+    const p = buildPseudonymizer([]);
+    const out = p.anonymize('Account 1234567890 is past due.');
+    expect(out).toContain('1234567890');
+  });
+
+  it('does not mask a 10-digit run inside a longer numeric id', () => {
+    const p = buildPseudonymizer([]);
+    const out = p.anonymize('Parcel 12345678901234 recorded.');
+    expect(out).toContain('12345678901234');
+  });
+
+  it('still masks a formatted non-roster phone', () => {
+    const p = buildPseudonymizer([]);
+    const out = p.anonymize('Vendor: 704-555-0199');
+    expect(out).not.toContain('704-555-0199');
+  });
+
+  it('masks a roster phone in any format, including bare digits', () => {
+    const p = buildPseudonymizer([{ type: 'phone', value: '(919) 555-0100' }]);
+    expect(p.anonymize('call (919) 555-0100')).not.toContain('919');
+    expect(p.anonymize('call 919-555-0100')).not.toContain('919-555-0100');
+    expect(p.anonymize('call 9195550100')).not.toContain('9195550100');
+  });
+});
+
 describe('pseudonymizer — deanonymizeStream', () => {
   it('reassembles a surrogate split across two chunks', async () => {
     const p = buildPseudonymizer([{ type: 'name', value: 'Jane Q Homeowner' }]);
