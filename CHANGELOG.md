@@ -7,6 +7,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-07-12
+
 ### Added
 
 - **New document uploads become assistant-searchable automatically.** Uploading a document now
@@ -14,6 +16,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   operator to re-run the import for a new file to show up in the assistant. Files that can't be
   converted to searchable text (scans or unsupported formats) are marked "Not searchable" in the
   admin Documents panel and still download normally.
+
+## [0.3.10] - 2026-07-12
+
+### Changed
+
+- **Assistant is clearer and more accurate.** When no documents match a question, the answer is now
+  flagged as general-knowledge-only; each cited excerpt shows its category and (pseudonymized)
+  title; and stale index entries with no matching document are ignored instead of showing an empty
+  citation. A "New conversation" button resets the chat.
+
+### Fixed
+
+- **Assistant stops garbling document numbers and words.** The PII pseudonymizer no longer masks
+  arbitrary long/bare numbers as phone numbers, and no longer replaces common English words that
+  happen to match a resident's name token. Roster phone numbers are still masked in any format, and
+  conversation history is fully pseudonymized before any length cap is applied.
+
+### Security
+
+- Document titles sent to the AI provider are now pseudonymized (previously they were withheld);
+  roster names, addresses, phones, and emails are still always masked.
+
+## [0.3.9] - 2026-07-12
+
+### Changed
+
+- Documentation and internal tooling only — public docs brought in line with the already-shipped AI
+  assistant, a docs-freshness automation fix, and a changelog restructure. No user-facing changes.
 
 ## [0.3.8] - 2026-07-12
 
@@ -277,7 +307,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.8...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.10...v0.3.11
+[0.3.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.9...v0.3.10
+[0.3.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.5...v0.3.6

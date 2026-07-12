@@ -10,6 +10,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   sources?: Source[];
+  noDocuments?: boolean;
 }
 
 export default function AssistantChat() {
@@ -51,6 +52,7 @@ export default function AssistantChat() {
       let buf = '';
       let answer = '';
       let sources: Source[] = [];
+      let sourcesReceived = false;
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -62,8 +64,20 @@ export default function AssistantChat() {
           const dataLine = frame.match(/^data: (.+)$/m);
           if (!evLine || !dataLine) continue;
           const data = JSON.parse(dataLine[1]);
-          if (evLine[1] === 'sources') sources = data as Source[];
-          else if (evLine[1] === 'token') {
+          if (evLine[1] === 'sources') {
+            sources = data as Source[];
+            sourcesReceived = true;
+            const noDocuments = sources.length === 0;
+            setMessages((m) => {
+              const next = [...m];
+              next[next.length - 1] = {
+                ...next[next.length - 1],
+                sources,
+                noDocuments,
+              };
+              return next;
+            });
+          } else if (evLine[1] === 'token') {
             answer += (data as { text: string }).text;
             setMessages((m) => {
               const next = [...m];
@@ -71,6 +85,7 @@ export default function AssistantChat() {
                 role: 'assistant',
                 content: answer,
                 sources,
+                noDocuments: sourcesReceived && sources.length === 0,
               };
               return next;
             });
@@ -85,6 +100,7 @@ export default function AssistantChat() {
         role: 'assistant',
         content: answer,
         sources,
+        noDocuments: sourcesReceived && sources.length === 0,
       };
       historyRef.current = [...historyRef.current, userMsg, finalAssistant];
     } catch {
@@ -95,11 +111,26 @@ export default function AssistantChat() {
     }
   }
 
+  function newConversation() {
+    setMessages([]);
+    historyRef.current = [];
+    setError('');
+    setInput('');
+  }
+
   return (
     <section className="assistant">
       <header>
         <p className="eyebrow">Board tools</p>
         <h1 className="page-title">Document Assistant</h1>
+        <button
+          type="button"
+          className="btn assistant__new"
+          onClick={newConversation}
+          disabled={busy}
+        >
+          New conversation
+        </button>
         <p className="notice">
           AI-generated from your documents and general knowledge — the answer
           labels which parts come from the documents. Verify important details
@@ -116,6 +147,12 @@ export default function AssistantChat() {
             <div className="assistant__bubble">
               {m.content || (m.role === 'assistant' ? '…' : '')}
             </div>
+            {m.role === 'assistant' && m.noDocuments && (
+              <p className="assistant__notice notice">
+                No matching documents found — this answer is general knowledge
+                only.
+              </p>
+            )}
             {m.sources && m.sources.length > 0 && (
               <ul className="assistant__sources">
                 {m.sources.map((s) => (

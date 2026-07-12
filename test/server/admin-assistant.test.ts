@@ -272,9 +272,15 @@ describe('assistant.answer', () => {
       messages: { role: string; content: string }[];
     };
     const userText = params.messages[params.messages.length - 1].content;
-    expect(userText).toContain('[Source 1]\nLedger excerpt one.');
-    expect(userText).toContain('[Source 2]\nRules excerpt.');
-    expect(userText).toContain('[Source 1]\nLedger excerpt two.');
+    expect(userText).toContain(
+      '[Source 1] Financials — "Ledger"\nLedger excerpt one.',
+    );
+    expect(userText).toContain(
+      '[Source 2] Governing Documents — "Rules"\nRules excerpt.',
+    );
+    expect(userText).toContain(
+      '[Source 1] Financials — "Ledger"\nLedger excerpt two.',
+    );
     expect(userText).not.toContain('[Source 3]');
 
     const distinctLabels = new Set(userText.match(/\[Source \d+\]/g));
@@ -283,6 +289,75 @@ describe('assistant.answer', () => {
     // No PII regression: still anonymized.
     expect(userText).not.toContain('Jane Q Homeowner');
     expect(userText).not.toContain('123 Ashebrook Lane');
+  });
+
+  it('drops orphan chunks whose uuid has no document row', async () => {
+    retrieveMock.mockImplementationOnce(async () => [
+      {
+        id: 'orphan',
+        score: 0.9,
+        content: 'Stale orphan text that must not reach the model.',
+        metadata: {
+          filename: 'x.pdf',
+          folder: 'documents/no-such-uuid/x.pdf',
+          timestamp: 1,
+        },
+      },
+    ]);
+    const { sources, documentsFound } = await answer(env, {
+      question: 'orphan?',
+    });
+    expect(sources).toEqual([]);
+    expect(documentsFound).toBe(false);
+    const params = captured.params as { messages: { content: string }[] };
+    const userText = params.messages[params.messages.length - 1].content;
+    expect(userText).not.toContain('Stale orphan text');
+    expect(userText).not.toContain('[Source]');
+    expect(userText).toContain('(no relevant excerpts found)');
+  });
+
+  it('reports documentsFound=false and still answers when retrieval is empty', async () => {
+    retrieveMock.mockImplementationOnce(async () => []);
+    const { sources, documentsFound, textStream } = await answer(env, {
+      question: 'no docs?',
+    });
+    expect(sources).toEqual([]);
+    expect(documentsFound).toBe(false);
+    const text = await readAll(textStream);
+    expect(text.length).toBeGreaterThan(0); // general-knowledge answer still streams
+  });
+
+  it('sends a pseudonymized document title to the model but keeps the real title in sources', async () => {
+    await getDb(env).insert(documents).values({
+      id: 'uuid-3',
+      title: 'Jane Q Homeowner Complaint',
+      category: 'Member Correspondence',
+      visibility: 'board',
+      r2Key: 'documents/uuid-3/h.pdf',
+      filename: 'h.pdf',
+      sizeBytes: 1,
+      contentType: 'application/pdf',
+      uploadedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    retrieveMock.mockImplementationOnce(async () => [
+      {
+        id: 'c1',
+        score: 0.9,
+        content: 'A complaint was filed.',
+        metadata: {
+          filename: 'h.pdf',
+          folder: 'documents/uuid-3/h.pdf',
+          timestamp: 1,
+        },
+      },
+    ]);
+    const { sources } = await answer(env, { question: 'complaint?' });
+    expect(sources[0].title).toBe('Jane Q Homeowner Complaint'); // real title for the board
+    const params = captured.params as { messages: { content: string }[] };
+    const userText = params.messages[params.messages.length - 1].content;
+    expect(userText).not.toContain('Jane Q Homeowner'); // title pseudonymized before the model
+    expect(userText).toContain('Member Correspondence'); // category sent verbatim
   });
 });
 
@@ -346,5 +421,30 @@ describe('POST /api/admin/assistant', () => {
     expect(body).toContain('event: token');
     expect(body).toContain('event: done');
     expect(body).toContain('Jane Q Homeowner'); // de-anonymized in the token stream
+  });
+
+  it('does not shear a roster value in history before pseudonymizing', async () => {
+    // The endpoint must NOT truncate raw history content before masking. Pad so
+    // the roster address starts near index 1989 and its tail crosses the
+    // 2000-char cap. The OLD parseHistory sliced raw content to 2000 first,
+    // shearing "…Ashebrook Lane" and leaking the "123 Ashe" head fragment;
+    // answer() then could not match the partial address. captured.params is set
+    // synchronously when answer() opens the (mocked) Anthropic stream.
+    const pad = 'x'.repeat(1988);
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/assistant', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          question: 'and now?',
+          history: [
+            { role: 'user', content: `${pad} 123 Ashebrook Lane owes dues` },
+          ],
+        }),
+      }),
+    } as never);
+    await res.text(); // drain the SSE stream
+    const payload = JSON.stringify(captured.params);
+    expect(payload).not.toContain('123 Ashe');
   });
 });
