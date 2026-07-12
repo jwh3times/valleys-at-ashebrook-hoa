@@ -27,10 +27,10 @@ function parseHistory(body: unknown): Turn[] {
         (role === 'user' || role === 'assistant') &&
         typeof content === 'string'
       ) {
-        return {
-          role,
-          content: content.slice(0, INPUT_LIMITS.assistantQuestion),
-        };
+        // Do NOT slice here: raw resident content must not be truncated before
+        // pseudonymization (that could shear a PII value mid-string). answer()
+        // anonymizes the full turn, then caps the already-masked text.
+        return { role, content };
       }
       return null;
     })
