@@ -8,7 +8,10 @@ vi.mock('../../src/server/authz/context', () => ({
 // Retrieval is mocked (no AI binding in the test pool); Anthropic is mocked to
 // capture the outgoing payload and return a scripted surrogate answer.
 const captured: { params?: unknown } = {};
-const { retrieveMock } = vi.hoisted(() => ({ retrieveMock: vi.fn() }));
+const { retrieveMock, mockFinal } = vi.hoisted(() => ({
+  retrieveMock: vi.fn(),
+  mockFinal: { stop_reason: 'end_turn' },
+}));
 vi.mock('../../src/server/ai/search', async (orig) => ({
   ...(await orig<typeof import('../../src/server/ai/search')>()),
   retrieve: retrieveMock,
@@ -37,7 +40,7 @@ vi.mock('../../src/server/ai/anthropic', () => ({
         const it = gen();
         return {
           [Symbol.asyncIterator]: () => it,
-          finalMessage: async () => ({ stop_reason: 'end_turn' }),
+          finalMessage: async () => ({ stop_reason: mockFinal.stop_reason }),
         };
       },
     },
@@ -179,6 +182,27 @@ describe('assistant.answer', () => {
     const text = await readAll(textStream);
     expect(text).toContain('Jane Q Homeowner'); // surrogate mapped back to the real name
     expect(text).not.toContain(SURROGATE_NAME);
+  });
+
+  it('appends a visible notice when generation is truncated by max_tokens', async () => {
+    mockFinal.stop_reason = 'max_tokens';
+    try {
+      const { textStream } = await answer(env, {
+        question: 'summarize every covenant article in detail',
+      });
+      const text = await readAll(textStream);
+      expect(text).toContain('cut off by the length limit');
+    } finally {
+      mockFinal.stop_reason = 'end_turn';
+    }
+  });
+
+  it('requests enough max_tokens headroom for adaptive thinking', async () => {
+    await answer(env, { question: 'headroom check' });
+    const params = captured.params as { max_tokens: number };
+    // Adaptive thinking spends from the same max_tokens budget as the visible
+    // answer; a chat-sized cap can be consumed by thinking alone.
+    expect(params.max_tokens).toBeGreaterThanOrEqual(16000);
   });
 
   it('instructs hybrid answering with clear doc-vs-general-knowledge labeling', async () => {
