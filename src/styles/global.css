@@ -1685,6 +1685,18 @@ body.body--bare {
   color: #fff;
 }
 
+/* Empty-retrieval provenance banner. A distinct amber tint (the answer bubble
+   above also uses --tint) so "general knowledge only" reads as a callout, not
+   as part of the answer. Overrides .notice, which is defined earlier. */
+.assistant__notice {
+  background: #fff7e6;
+  border-color: #f0dcae;
+  border-left-color: #d99a2b;
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
 .assistant__sources {
   list-style: none;
   padding: 0;

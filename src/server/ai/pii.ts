@@ -372,7 +372,8 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
   }
 
   function addDictEntry(type: PiiType, value: string, re?: RegExp): void {
-    const key = `${type}:${keyOf(type, value)}`;
+    // keyOf already namespaces by type (`${type}:…`), so it IS the dedup key.
+    const key = keyOf(type, value);
     if (dictKeys.has(key)) return;
     dictKeys.add(key);
     dict.push({ type, value, re: re ?? compileDictRegex(value) });
