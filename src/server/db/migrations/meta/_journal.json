@@ -50,6 +50,13 @@
       "when": 1783657176857,
       "tag": "0006_young_madripoor",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1783872398911,
+      "tag": "0007_lumpy_the_call",
+      "breakpoints": true
     }
   ]
 }
