@@ -183,6 +183,33 @@ describe('pseudonymizer — surrogate pool exhaustion (roster-scale)', () => {
   });
 });
 
+describe('pseudonymizer — phone precision', () => {
+  it('does not mask a bare 10-digit number that is not a roster phone', () => {
+    const p = buildPseudonymizer([]);
+    const out = p.anonymize('Account 1234567890 is past due.');
+    expect(out).toContain('1234567890');
+  });
+
+  it('does not mask a 10-digit run inside a longer numeric id', () => {
+    const p = buildPseudonymizer([]);
+    const out = p.anonymize('Parcel 12345678901234 recorded.');
+    expect(out).toContain('12345678901234');
+  });
+
+  it('still masks a formatted non-roster phone', () => {
+    const p = buildPseudonymizer([]);
+    const out = p.anonymize('Vendor: 704-555-0199');
+    expect(out).not.toContain('704-555-0199');
+  });
+
+  it('masks a roster phone in any format, including bare digits', () => {
+    const p = buildPseudonymizer([{ type: 'phone', value: '(919) 555-0100' }]);
+    expect(p.anonymize('call (919) 555-0100')).not.toContain('919');
+    expect(p.anonymize('call 919-555-0100')).not.toContain('919-555-0100');
+    expect(p.anonymize('call 9195550100')).not.toContain('9195550100');
+  });
+});
+
 describe('pseudonymizer — deanonymizeStream', () => {
   it('reassembles a surrogate split across two chunks', async () => {
     const p = buildPseudonymizer([{ type: 'name', value: 'Jane Q Homeowner' }]);
@@ -204,5 +231,28 @@ describe('pseudonymizer — deanonymizeStream', () => {
       out.push(value);
     }
     expect(out.join('')).toBe('Owner is Jane Q Homeowner today.');
+  });
+});
+
+describe('pseudonymizer — common-word name tokens', () => {
+  it('does not garble a common English word that is also a roster name token', () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Bill Green' }]);
+    const out = p.anonymize('Paint the fence green and pay the water bill.');
+    expect(out).toContain('green');
+    expect(out).toContain('bill');
+  });
+
+  it('still masks the full roster name even when its tokens are common words', () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Bill Green' }]);
+    const text = 'Contact Bill Green about the fence.';
+    const out = p.anonymize(text);
+    expect(out).not.toContain('Bill Green');
+    expect(p.deanonymize(out)).toBe(text);
+  });
+
+  it('still masks an uncommon token standalone (regression)', () => {
+    const p = buildPseudonymizer([{ type: 'name', value: 'Jane Q Homeowner' }]);
+    const out = p.anonymize('Ask Homeowner about it.');
+    expect(out).not.toContain('Homeowner');
   });
 });
