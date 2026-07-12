@@ -5,6 +5,7 @@ import { requireBoard } from '../../../server/authz/api-guards';
 import { generateTwin } from '../../../server/ai/twin';
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
+import { fetchAdminDocuments } from '../../../server/content/reads';
 import { documents } from '../../../server/db/schema';
 import { DOCUMENT_CATEGORIES, INPUT_LIMITS } from '../../../lib/types';
 import {
@@ -32,6 +33,12 @@ const EXT_TO_TYPE: Record<string, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   xls: 'application/vnd.ms-excel',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+export const GET: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
+  if (denied) return denied;
+  return Response.json(await fetchAdminDocuments(env));
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
