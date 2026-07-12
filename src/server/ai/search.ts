@@ -51,8 +51,24 @@ export interface AutoRag {
   }): Promise<RawSearchResult>;
 }
 
+export interface MarkdownDocument {
+  name: string;
+  blob: Blob;
+}
+export interface ToMarkdownResult {
+  name: string;
+  format: string; // 'markdown' | 'error'
+  mimetype?: string;
+  tokens?: number;
+  data?: string;
+}
+
 export interface AiBinding {
   autorag(instance: string): AutoRag;
+  toMarkdown(
+    files: MarkdownDocument[],
+    options?: Record<string, unknown>,
+  ): Promise<ToMarkdownResult[]>;
 }
 
 export class AiSearchUnavailableError extends Error {
