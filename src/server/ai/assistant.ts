@@ -88,6 +88,10 @@ function claudeTextStream(stream: ClaudeStream): ReadableStream<string> {
           controller.enqueue(
             '\n\n[The assistant declined to answer this request.]',
           );
+        } else if (final.stop_reason === 'max_tokens') {
+          controller.enqueue(
+            '\n\n[This answer was cut off by the length limit. Ask a follow-up to continue.]',
+          );
         }
         controller.close();
       } catch (err) {
@@ -125,10 +129,14 @@ export async function answer(
     `Question: ${pseud.anonymize(input.question)}`;
 
   const client = getAnthropic(env);
+  // max_tokens is a ceiling, not a spend — only generated tokens are billed.
+  // Adaptive thinking draws from this same budget, so keep it well above
+  // chat-answer size or thinking can consume it and truncate the answer.
   const stream = client.messages.stream({
     model: MODEL,
-    max_tokens: 4000,
+    max_tokens: 64000,
     thinking: { type: 'adaptive' },
+    output_config: { effort: 'high' },
     system: SYSTEM_PROMPT,
     messages: [...history, { role: 'user', content: userText }],
   }) as unknown as ClaudeStream;
