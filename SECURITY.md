@@ -60,8 +60,12 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   chat history to Anthropic; before any of that text is transmitted, every roster owner name and
   property address is swapped for a realistic, consistent placeholder — including each individual
   name token (so a resident's standalone first name or surname is also replaced, not just their full
-  name) — and any email address or phone number found anywhere in the text is pseudonymized the same
-  way, regardless of whether it matches the roster. Document titles are never sent; citations
+  name) — except tokens that are common English words, which are left intact so ordinary document
+  text is not garbled — and any email address found anywhere in the text is pseudonymized the same
+  way; roster phone numbers are pseudonymized in any format (including bare digits), and any number
+  written in a standard phone format (parenthesized area code or separators) is pseudonymized
+  whether or not it matches the roster. Document titles are pseudonymized the same way and sent as
+  part of each excerpt label; citations
   reference retrieved excerpts by index label and are resolved back to real documents server-side.
   This is **best-effort, not a guarantee**: it only catches PII matching a current roster entry or
   the email/phone patterns, so it does not cover non-resident names or other free text that doesn't
