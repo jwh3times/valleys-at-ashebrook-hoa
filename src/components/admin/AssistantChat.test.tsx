@@ -87,4 +87,71 @@ describe('AssistantChat', () => {
     );
     expect(screen.queryByText('…')).not.toBeInTheDocument();
   });
+
+  it('shows a general-knowledge notice when no documents matched (empty sources)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      sseResponse([
+        `event: sources\ndata: ${JSON.stringify([])}\n\n`,
+        `event: token\ndata: ${JSON.stringify({ text: 'Generally, fences need approval.' })}\n\n`,
+        `event: done\ndata: {}\n\n`,
+      ]),
+    );
+    render(<AssistantChat />);
+    fireEvent.change(screen.getByPlaceholderText(/ask/i), {
+      target: { value: 'fences?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/general knowledge only/i)).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/Generally, fences need approval\./),
+    ).toBeInTheDocument();
+  });
+
+  it('does not show the notice when documents matched', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      sseResponse([
+        `event: sources\ndata: ${JSON.stringify([{ id: 'd1', title: 'Bylaws', category: 'Governing Documents', href: '/api/files/d1' }])}\n\n`,
+        `event: token\ndata: ${JSON.stringify({ text: 'The late fee is $25.' })}\n\n`,
+        `event: done\ndata: {}\n\n`,
+      ]),
+    );
+    render(<AssistantChat />);
+    fireEvent.change(screen.getByPlaceholderText(/ask/i), {
+      target: { value: 'late fee?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/The late fee is \$25\./)).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText(/general knowledge only/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('clears the log when New conversation is clicked', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      sseResponse([
+        `event: sources\ndata: ${JSON.stringify([{ id: 'd1', title: 'Bylaws', category: 'Governing Documents', href: '/api/files/d1' }])}\n\n`,
+        `event: token\ndata: ${JSON.stringify({ text: 'The late fee is $25.' })}\n\n`,
+        `event: done\ndata: {}\n\n`,
+      ]),
+    );
+    render(<AssistantChat />);
+    fireEvent.change(screen.getByPlaceholderText(/ask/i), {
+      target: { value: 'late fee?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/The late fee is \$25\./)).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /new conversation/i }));
+    expect(
+      screen.queryByText(/The late fee is \$25\./),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /Bylaws/ }),
+    ).not.toBeInTheDocument();
+  });
 });
