@@ -21,6 +21,22 @@ export async function fetchDocumentsFor(env: Env, role: Role) {
     .where(inArray(documents.visibility, visibleTiers(role)));
 }
 
+export async function fetchAdminDocuments(env: Env) {
+  // Board-only: includes rag_status (searchability), which the public
+  // DocumentItem projection deliberately omits. All tiers, newest first.
+  return getDb(env)
+    .select({
+      id: documents.id,
+      title: documents.title,
+      category: documents.category,
+      visibility: documents.visibility,
+      updatedAt: documents.updatedAt,
+      ragStatus: documents.ragStatus,
+    })
+    .from(documents)
+    .orderBy(desc(documents.updatedAt));
+}
+
 export async function fetchAnnouncementsFor(
   env: Env,
   role: Role,

@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-07-12
+
+### Added
+
+- **New document uploads become assistant-searchable automatically.** Uploading a document now
+  builds its search index copy (via Cloudflare Workers AI), so board members no longer need an
+  operator to re-run the import for a new file to show up in the assistant. Files that can't be
+  converted to searchable text (scans or unsupported formats) are marked "Not searchable" in the
+  admin Documents panel and still download normally.
+
+## [0.3.10] - 2026-07-12
+
 ### Changed
 
 - **Assistant is clearer and more accurate.** When no documents match a question, the answer is now
@@ -25,6 +37,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 - Document titles sent to the AI provider are now pseudonymized (previously they were withheld);
   roster names, addresses, phones, and emails are still always masked.
+
+## [0.3.9] - 2026-07-12
+
+### Changed
+
+- Documentation and internal tooling only — public docs brought in line with the already-shipped AI
+  assistant, a docs-freshness automation fix, and a changelog restructure. No user-facing changes.
 
 ## [0.3.8] - 2026-07-12
 
@@ -288,7 +307,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.8...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.10...v0.3.11
+[0.3.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.9...v0.3.10
+[0.3.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.5...v0.3.6
