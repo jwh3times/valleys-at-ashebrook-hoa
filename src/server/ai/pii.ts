@@ -71,10 +71,12 @@ const SUFFIX = ['Street', 'Avenue', 'Court', 'Drive', 'Lane', 'Way'];
 const EMAIL_DOMAIN = 'example.org'; // reserved; never a real address
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-// NANP-style: optional +1, area code (parens optional), separators optional.
-// Separators allow whitespace, '.', '/', or '-' (e.g. "919/555/0100").
+// Generic catch-all for NON-roster phones. Requires either a parenthesized area
+// code or at least one internal separator, and is digit-bounded, so a bare or
+// longer numeric run (account/parcel/tracking IDs) is NOT masked as a phone.
+// Roster phones are matched separately (compilePhoneRegex) in any format.
 const PHONE_RE =
-  /(?:\+?1[\s./-]?)?(?:\(\d{3}\)|\d{3})[\s./-]?\d{3}[\s./-]?\d{4}/g;
+  /(?<!\d)(?:\+?1[\s./-]?)?(?:\(\d{3}\)[\s./-]?\d{3}[\s./-]?\d{4}|\d{3}[\s./-]\d{3}[\s./-]\d{4})(?!\d)/g;
 
 function normName(v: string): string {
   return v.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -100,6 +102,24 @@ function escapeRegExp(s: string): string {
 function compileDictRegex(value: string): RegExp {
   const pattern = escapeRegExp(value).replace(/\s+/g, '\\s+');
   return new RegExp(`(?<!\\w)${pattern}(?!\\w)`, 'gi');
+}
+
+// Matches a specific roster phone's 10 digits in any common format — bare,
+// separated (space/./-/ /), or with a parenthesized area code and optional +1
+// country code. Anchored to the exact digits (digit-bounded), so it cannot
+// over-match a longer numeric run. Falls back to a literal matcher for values
+// that are not 10 digits.
+function compilePhoneRegex(value: string): RegExp {
+  const d = normPhone(value);
+  if (d.length !== 10) return compileDictRegex(value);
+  const s = '[\\s./-]?';
+  const area = `\\(?${d.slice(0, 3)}\\)?`;
+  const mid = d.slice(3, 6);
+  const line = d.slice(6, 10);
+  return new RegExp(
+    `(?<!\\d)(?:\\+?1${s})?${area}${s}${mid}${s}${line}(?!\\d)`,
+    'g',
+  );
 }
 
 // Every maker below is injective over ALL indexes: the base pool comes first,
@@ -265,19 +285,25 @@ export function buildPseudonymizer(entries: PiiEntry[]): Pseudonymizer {
     return s;
   }
 
-  function addDictEntry(type: PiiType, value: string): void {
-    const key = `${type}:${normName(value)}`;
+  function addDictEntry(type: PiiType, value: string, re?: RegExp): void {
+    const key = `${type}:${keyOf(type, value)}`;
     if (dictKeys.has(key)) return;
     dictKeys.add(key);
-    dict.push({ type, value, re: compileDictRegex(value) });
+    dict.push({ type, value, re: re ?? compileDictRegex(value) });
   }
 
   // Pre-register roster entries so surrogates are stable and dictionary-driven.
   for (const e of entries) realValues.add(normName(e.value));
   for (const e of entries) {
     surrogateFor(e.type, e.value);
-    if (e.type === 'name' || e.type === 'address')
+    if (e.type === 'name' || e.type === 'address') {
       addDictEntry(e.type, e.value);
+    } else if (e.type === 'phone') {
+      // Roster phones match in any format (incl. bare digits) via a flexible,
+      // digit-anchored regex, so tightening the generic PHONE_RE above cannot
+      // let a bare-digit roster phone leak.
+      addDictEntry('phone', e.value, compilePhoneRegex(e.value));
+    }
   }
   // Also register individual name tokens (e.g. "Marie" from "Anne Marie") as
   // lower-priority matchers. These catch the residual real-name fragment left
