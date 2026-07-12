@@ -7,29 +7,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-### Added
-
-- **Board-only AI document assistant** — ask questions about the document library and get
-  streamed, cited answers (Cloudflare AI Search + Claude). Answers draw on both the documents
-  and general knowledge, clearly labeling which parts come from the documents (cited by
-  `[Source N]`) versus general knowledge not found in them.
-
-### Changed
-
-- **Document search index split from the download library** — the AI assistant now retrieves over
-  a dedicated Markdown index (one `rag/<uuid>.md` per document, indexed by Cloudflare AI Search)
-  instead of the raw files, so scanned and oversized documents become searchable while citations
-  still link to the original human-readable file for download. Deleting or de-duplicating a document
-  now also removes its search-index copy. The document library's category list expanded from 5 to 16
-  for finer organization.
-- **Duplicate review remembers resolved groups** — resolving duplicates now marks the file(s) a
-  board member keeps with a `keep_verified_at`/`keep_verified_by` state, and the admin
-  **Duplicates** panel hides any group whose members are all already kept-verified instead of
-  re-showing it on every visit. Resolving now takes an explicit list of files to keep alongside
-  the files to delete, rather than a single keeper, so a "keep all" action can mark a group
-  reviewed without deleting anything. If a later upload is confirmed as a near duplicate of a
-  previously-kept file, that file's kept state is cleared so the group resurfaces for review. The
-  panel also adds a per-file "View" link and a "kept" badge.
+## [0.3.8] - 2026-07-12
 
 ### Fixed
 
@@ -42,9 +20,95 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Security
 
-- The assistant pseudonymizes known resident PII before sending document excerpts to Anthropic
-  (best-effort, roster-based). Generated surrogate names are also checked against the roster so a
-  disambiguated placeholder can never coincide with a real resident's actual name.
+- Generated surrogate names are now checked against the roster so a disambiguated placeholder can
+  never coincide with a real resident's actual name.
+
+## [0.3.7] - 2026-07-11
+
+### Changed
+
+- **Document search index split from the download library** — the AI assistant now retrieves over
+  a dedicated Markdown index (one `rag/<uuid>.md` per document, indexed by Cloudflare AI Search)
+  instead of the raw files, so scanned and oversized documents become searchable while citations
+  still link to the original human-readable file for download. Deleting or de-duplicating a document
+  now also removes its search-index copy. The document library's category list expanded from 5 to 16
+  for finer organization.
+
+## [0.3.6] - 2026-07-10
+
+### Changed
+
+- **Hybrid assistant answers** — answers now draw on both the documents and general knowledge,
+  clearly labeling which parts come from the documents (cited by `[Source N]`) versus general
+  knowledge not found in them.
+
+## [0.3.5] - 2026-07-10
+
+### Fixed
+
+- **Assistant retrieval works in production** — an unexpected Cloudflare AI Search response shape
+  returned a production `500` on every question; the response is now normalized so document search
+  returns results.
+
+## [0.3.4] - 2026-07-10
+
+### Added
+
+- **Board-only AI document assistant** — ask questions about the document library from the admin
+  panel and get streamed answers with per-document citations that link back to the tier-checked
+  download (Cloudflare AI Search retrieval + Claude generation).
+
+### Security
+
+- The assistant pseudonymizes known resident PII (current and former owners, best-effort and
+  roster-based) before sending document excerpts to Anthropic; document titles are never sent.
+
+## [0.3.3] - 2026-07-10
+
+### Changed
+
+- Internal cleanup of the duplicate-resolution response payload (removed a vestigial `deleteIds`
+  field and a stale test payload). No behavior change.
+
+## [0.3.2] - 2026-07-10
+
+### Changed
+
+- Dependency updates (Dependabot: npm minor/patch group).
+
+## [0.3.1] - 2026-07-10
+
+### Changed
+
+- **Duplicate review remembers resolved groups** — resolving duplicates now marks the file(s) a
+  board member keeps with a `keep_verified_at`/`keep_verified_by` state, and the admin
+  **Duplicates** panel hides any group whose members are all already kept-verified instead of
+  re-showing it on every visit. Resolving now takes an explicit list of files to keep alongside
+  the files to delete, rather than a single keeper, so a "keep all" action can mark a group
+  reviewed without deleting anything. If a later upload is confirmed as a near duplicate of a
+  previously-kept file, that file's kept state is cleared so the group resurfaces for review. The
+  panel also adds a per-file "View" link and a "kept" badge.
+
+## [0.3.0] - 2026-07-09
+
+### Changed
+
+- **Release-line versioning scheme** — adopted the `<major>.<minor>.<build>` release-line tagging
+  used for these releases (the first tag on a line uses the package build value; later merges on the
+  same line increment the build segment), replacing the earlier four-part build tags.
+
+## [0.2.2] - 2026-07-09
+
+### Changed
+
+- Dependency updates (Dependabot: npm minor/patch group).
+
+## [0.2.1] - 2026-07-08
+
+### Changed
+
+- Introduced `AGENTS.md` as the canonical contributor/agent guide and pointed the docs and agent
+  references at it.
 
 ## [0.2.0] - 2026-07-08
 
@@ -205,5 +269,16 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.8...HEAD
+[0.3.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.7...v0.3.8
+[0.3.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.6...v0.3.7
+[0.3.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.5...v0.3.6
+[0.3.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.4...v0.3.5
+[0.3.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/releases/tag/v0.2.0
