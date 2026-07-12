@@ -141,7 +141,7 @@ export const documents = sqliteTable(
     // searchable at the next AI Search sync) or 'unsupported' (scan/unsupported
     // format — downloadable but not assistant-searchable). Null for documents
     // loaded by the offline corpus importer, which already have twins.
-    ragStatus: text('rag_status'),
+    ragStatus: text('rag_status', { enum: ['ok', 'unsupported'] }),
     uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   },

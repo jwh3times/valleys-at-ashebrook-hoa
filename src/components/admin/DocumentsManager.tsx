@@ -396,10 +396,10 @@ export default function DocumentsManager() {
                   {d.category} &middot; {d.visibility}
                   {d.ragStatus === 'unsupported' && (
                     <span
-                      className="admin-badge admin-badge--warn"
+                      className="pinned-badge"
                       title="This file (a scan or unsupported format) couldn't be made searchable — download still works."
                     >
-                      {' · '}Not searchable
+                      Not searchable
                     </span>
                   )}
                 </div>
