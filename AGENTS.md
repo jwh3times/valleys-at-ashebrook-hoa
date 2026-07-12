@@ -115,8 +115,9 @@ Markdown twins described below and never the human-readable originals.
 - Board-only document assistant: `POST /api/admin/assistant` (SSE) takes `{ question, history? }`
   and streams a Claude-generated, cited answer over the document library, retrieved via Cloudflare
   AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
-  consistent surrogates) before they reach Anthropic, document titles are never sent, and citations
-  reference retrieved chunks back to real documents server-side. See SECURITY.md for the
+  consistent surrogates) before they reach Anthropic, document titles are pseudonymized before being
+  sent, orphan/empty retrieval chunks are dropped before generation, and citations reference
+  retrieved chunks back to real documents server-side. See SECURITY.md for the
   pseudonymization guarantees and limits. Retrieval is not tier-aware, which is why this endpoint
   stays board-only — see SECURITY.md and **Data model** below for the two-representation R2 layout
   retrieval runs over. `POST /api/admin/documents` generates the document's `rag/<uuid>.md` twin on
