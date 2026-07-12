@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-07-12
+
+### Changed
+
+- The assistant's "general knowledge only" empty-retrieval notice now has a distinct tint so it
+  stands out from the answer instead of blending in. (Internal: simplified a pseudonymizer dedup
+  key; no behavior change.)
+
 ## [0.3.11] - 2026-07-12
 
 ### Added
@@ -307,7 +315,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.11...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.12...HEAD
+[0.3.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.8...v0.3.9
