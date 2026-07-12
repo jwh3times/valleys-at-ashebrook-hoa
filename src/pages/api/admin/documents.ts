@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq, ne, inArray } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
+import { generateTwin } from '../../../server/ai/twin';
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
@@ -119,6 +120,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await env.DOCS.put(r2Key, bytes, {
     httpMetadata: { contentType },
   });
+
+  // Best-effort RAG twin (ADR 0009 §1). Never fatal to the upload: generateTwin
+  // does not throw, and a twin-write failure only downgrades searchability.
+  let ragStatus: 'ok' | 'unsupported' = 'unsupported';
+  try {
+    const twin = await generateTwin(env, {
+      filename: file.name,
+      contentType,
+      bytes,
+    });
+    ragStatus = twin.status;
+    if (twin.markdown) {
+      await env.DOCS.put(`rag/${id}.md`, twin.markdown, {
+        httpMetadata: { contentType: 'text/markdown' },
+      });
+    }
+  } catch {
+    ragStatus = 'unsupported';
+  }
+
   const now = new Date();
   await db.insert(documents).values({
     id,
@@ -130,6 +151,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     sizeBytes: file.size,
     contentType,
     contentHash,
+    ragStatus,
     uploadedAt: now,
     updatedAt: now,
   });
