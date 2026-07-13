@@ -25,6 +25,7 @@ export interface DocumentItem {
  * `ragStatus` is never included in the public `/api/content/documents` read. */
 export interface AdminDocumentItem extends DocumentItem {
   ragStatus: 'ok' | 'unsupported' | null;
+  filename: string;
 }
 
 export interface DupeMember {
