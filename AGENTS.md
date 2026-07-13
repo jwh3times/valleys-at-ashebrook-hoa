@@ -46,7 +46,7 @@ npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
 npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
 npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; see SETUP.md §7
-npm run ocr:scanned      # OCR scanned/"unsupported" PDF uploads into search twins; see SETUP.md
+npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins; see SETUP.md
 npm run deploy            # build and deploy with Wrangler
 ```
 
