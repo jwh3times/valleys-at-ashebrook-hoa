@@ -119,8 +119,11 @@ retrieval-vs-download index split.
 
 Remaining work the shipped assistant does not yet cover:
 
-- Scanned uploads have no in-app OCR path to produce a searchable Markdown twin; the
-  current corpus was OCR'd offline before import.
+- Scanned/image-only PDF uploads are addressed via an operator-run offline job
+  (`npm run ocr:scanned`; see [ADR 0010](./docs/adr/0010-ocr-scanned-documents-operator-job.md)),
+  not automatically on upload — there is no supported way to rasterize an existing
+  PDF's pages to images inside a Worker today. Revisit on-upload/automatic OCR if
+  Cloudflare ships a supported in-Worker PDF rasterization primitive.
 - New uploads become searchable only at the next AI Search sync (default ≤6h), not
   immediately on upload; triggering a sync automatically after upload is a possible
   future refinement.

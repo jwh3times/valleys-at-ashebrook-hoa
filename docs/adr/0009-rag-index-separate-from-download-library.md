@@ -1,7 +1,9 @@
 # ADR 0009: RAG Index Corpus Separate from the Download Library
 
 **Status:** Accepted (implemented — clean-replace corpus import shipped, and upload-time twin
-generation ships per Consequence 1; real OCR for scanned/image-only PDFs remains open)
+generation ships per Consequence 1; OCR of scanned/image-only PDFs is addressed by an operator-run
+job — see [ADR 0010](./0010-ocr-scanned-documents-operator-job.md); automatic on-upload OCR remains
+future work)
 **Date:** 2026-07-10
 
 ## Context
@@ -53,14 +55,14 @@ Markdown corpus is a derived artifact, never surfaced to residents and never a
    creation side is now implemented: `POST /api/admin/documents` generates the
    `rag/<uuid>.md` twin on upload via Workers AI `toMarkdown` (born-digital text) and records a
    `rag_status`; uploads that cannot be converted (scanned/image-only PDFs, old `.doc`) are stored
-   downloadable-but-not-searchable and flagged. Real OCR for scanned/image-only PDFs remains the one
-   open gap (see `ROADMAP.md` item 7). Born-digital uploads can be text-extracted in-Worker; a
-   **scanned** upload needs OCR (Workers AI, or an explicit "not searchable" flag)
-   — a scan with no Markdown is silently absent from assistant retrieval while
-   still appearing in the library. This ongoing sync is the primary maintenance
-   obligation of this design; without it the index drifts from the library.
-   Detailed hook points live in the private integration handoff, not this public
-   record.
+   downloadable-but-not-searchable and flagged. OCR of scanned/image-only PDFs is addressed by an
+   operator-run job — see [ADR 0010](./0010-ocr-scanned-documents-operator-job.md); automatic
+   on-upload OCR remains future work (see `ROADMAP.md` item 7). Born-digital uploads can be
+   text-extracted in-Worker; a **scanned** upload needs OCR (the operator-run job, or an explicit
+   "not searchable" flag) — a scan with no Markdown is silently absent from assistant retrieval
+   while still appearing in the library until the operator runs the OCR job. This ongoing sync is
+   the primary maintenance obligation of this design; without it the index drifts from the library.
+   Detailed hook points live in the private integration handoff, not this public record.
 
 2. **The index is NOT tier-aware; the assistant MUST remain board-only.** AI
    Search retrieves across all indexed Markdown regardless of each document's

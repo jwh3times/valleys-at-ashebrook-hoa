@@ -46,6 +46,7 @@ npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
 npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
 npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; see SETUP.md §7
+npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins; see SETUP.md
 npm run deploy            # build and deploy with Wrangler
 ```
 
@@ -124,7 +125,9 @@ Markdown twins described below and never the human-readable originals.
   upload via Workers AI `toMarkdown` and records `documents.rag_status` (`ok`/`unsupported`); a new
   upload is searchable at the next AI Search sync, and files that cannot be converted (scans, old
   `.doc`) are flagged "Not searchable" in the admin Documents panel via a board-only
-  `GET /api/admin/documents`. Real OCR of scanned/image-only PDFs is the remaining gap.
+  `GET /api/admin/documents`. Scanned uploads that `toMarkdown` cannot convert are flagged
+  `rag_status = 'unsupported'` and can be made searchable later by the operator-run
+  `scripts/ocr-scanned.ts` (rasterize + Workers AI vision; see [ADR 0010](./docs/adr/0010-ocr-scanned-documents-operator-job.md)).
 - Homeowner verification: `/api/verify/{request,confirm}`.
 - First-board bootstrap: `POST /api/bootstrap/board`, which is fail-closed, self-disables once a
   board account exists, and requires bootstrap secret/config values.

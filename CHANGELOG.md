@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-07-12
+
+### Added
+
+- **Scanned PDFs can now be made searchable.** A new operator command
+  (`npm run ocr:scanned`) OCRs scanned/image-only PDF uploads — which upload fine
+  but were flagged "Not searchable" — into the assistant's search index, using
+  Cloudflare Workers AI (document content stays within Cloudflare). Results become
+  searchable at the next search sync.
+
 ## [0.3.12] - 2026-07-12
 
 ### Changed
@@ -315,7 +325,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.12...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.13...HEAD
+[0.3.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.9...v0.3.10
