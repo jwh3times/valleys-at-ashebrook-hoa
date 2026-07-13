@@ -7,6 +7,26 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-07-13
+
+### Added
+
+- **Search the admin document library by name.** The board's Documents panel now has a search box
+  that filters the list as you type, matching either the document title or the underlying uploaded
+  filename (case-insensitive). It works alongside the existing visibility tabs — searching narrows
+  within the selected tier — so finding one document among hundreds no longer means scrolling.
+
+## [0.3.14] - 2026-07-13
+
+### Fixed
+
+- **Scanned PDFs are correctly flagged "Not searchable" again.** Image-only PDF uploads were being
+  marked searchable even when no text could be extracted, because the searchability check counted
+  the metadata boilerplate that Workers AI wraps around every document. The check now measures only
+  the extracted page text, so a scan with no real content is flagged "Not searchable" and becomes
+  eligible for the `npm run ocr:scanned` recovery job. Text-native files (`.md`/`.txt`/`.csv`) are
+  unaffected, and the stored search copy still keeps the document's metadata for retrieval context.
+
 ## [0.3.13] - 2026-07-12
 
 ### Added
@@ -325,7 +345,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.13...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.15...HEAD
+[0.3.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.14...v0.3.15
+[0.3.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.10...v0.3.11
