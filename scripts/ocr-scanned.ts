@@ -157,7 +157,7 @@ async function main() {
   }
   if (!ACCOUNT_ID || !API_TOKEN) {
     console.error(
-      'Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (Workers AI Run scope).',
+      'Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN (Workers AI Run + R2 + D1 read/write; wrangler inherits it).',
     );
     process.exit(1);
   }
