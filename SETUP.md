@@ -171,7 +171,9 @@ trigger an AI Search sync and confirm the indexed count lands around 429.
 
 Scanned/image-only PDFs upload fine but are flagged "Not searchable" (no text to
 index). To OCR them into the search index, set `CLOUDFLARE_ACCOUNT_ID` and a
-`CLOUDFLARE_API_TOKEN` with the **Workers AI Run** permission, then run:
+`CLOUDFLARE_API_TOKEN` with **Workers AI Run**, **R2 object read/write**, and
+**D1 read/write** permissions (the script's wrangler R2/D1 calls inherit this
+token, so a Workers-AI-only token would 403 those steps), then run:
 
 - `npm run ocr:scanned` — lists the unsupported-PDF candidates (no changes).
 - `npm run ocr:scanned -- --sample` — OCRs one document and prints the Markdown
