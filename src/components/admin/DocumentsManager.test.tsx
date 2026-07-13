@@ -111,6 +111,7 @@ describe('DocumentsManager visibility filter', () => {
       category: 'Governing Documents',
       visibility: 'board',
       updatedAt: '2026-01-01',
+      filename: 'alpha.pdf',
     },
     {
       id: '2',
@@ -118,6 +119,7 @@ describe('DocumentsManager visibility filter', () => {
       category: 'Meeting Minutes',
       visibility: 'board',
       updatedAt: '2026-01-01',
+      filename: 'beta.pdf',
     },
     {
       id: '3',
@@ -125,6 +127,7 @@ describe('DocumentsManager visibility filter', () => {
       category: 'Forms',
       visibility: 'public',
       updatedAt: '2026-01-01',
+      filename: 'gamma.pdf',
     },
   ];
 
@@ -235,6 +238,7 @@ describe('DocumentsManager searchability badge', () => {
         category: 'Maps & Deeds',
         visibility: 'board',
         updatedAt: '2026-01-01',
+        filename: 'scanned-deed.pdf',
         ragStatus: 'unsupported',
       },
       {
@@ -243,6 +247,7 @@ describe('DocumentsManager searchability badge', () => {
         category: 'Governing Documents',
         visibility: 'board',
         updatedAt: '2026-01-01',
+        filename: 'clean-bylaws.pdf',
         ragStatus: 'ok',
       },
     ]),
