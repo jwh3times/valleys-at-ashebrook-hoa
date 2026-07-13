@@ -36,6 +36,40 @@ function usable(text: string): TwinResult {
     : { markdown: null, status: 'unsupported' };
 }
 
+// Workers AI's toMarkdown wraps every PDF/office doc in a fixed envelope — a
+// `# <filename>` title, a `## Metadata` block of `- Key=Value` lines, and
+// `## Contents` / `### Page N` section headers — even when it extracts NO page
+// text (an image-only scan). That boilerplate is ~300 chars, so gating the
+// whole string on MIN_TWIN_CHARS would pass every scan as searchable. Measure
+// only the extracted prose: drop heading lines and the metadata block that runs
+// from `## Metadata` to the next heading.
+//
+// This assumes toMarkdown's current ATX-with-space envelope (`## Metadata`). If
+// Workers AI ever changes that shape (closed ATX, no-space, setext), the block
+// would be counted as prose and a metadata-only scan would again pass as 'ok' —
+// so the metadata-only case in twin.test.ts is the tripwire for that drift.
+function extractedText(markdown: string): string {
+  const kept: string[] = [];
+  let inMetadata = false;
+  for (const line of markdown.split(/\r?\n/)) {
+    const heading = /^#{1,6}\s+(.*)$/.exec(line);
+    if (heading) {
+      inMetadata = heading[1].trim().toLowerCase() === 'metadata';
+      continue; // headings themselves carry no searchable content
+    }
+    if (!inMetadata) kept.push(line);
+  }
+  return kept.join('\n').trim();
+}
+
+// A converted binary is usable only if it yielded real extracted prose; the
+// stored twin keeps the full markdown (metadata is useful retrieval context).
+function convertible(markdown: string): TwinResult {
+  return extractedText(markdown).length >= MIN_TWIN_CHARS
+    ? { markdown, status: 'ok' }
+    : { markdown: null, status: 'unsupported' };
+}
+
 export async function generateTwin(
   env: Env,
   input: TwinInput,
@@ -60,7 +94,7 @@ export async function generateTwin(
         );
       }
       const data = md?.format === 'markdown' ? (md.data ?? '') : '';
-      return usable(data);
+      return convertible(data);
     }
     return { markdown: null, status: 'unsupported' };
   } catch (err) {
