@@ -111,6 +111,7 @@ describe('DocumentsManager visibility filter', () => {
       category: 'Governing Documents',
       visibility: 'board',
       updatedAt: '2026-01-01',
+      filename: 'alpha.pdf',
     },
     {
       id: '2',
@@ -118,6 +119,7 @@ describe('DocumentsManager visibility filter', () => {
       category: 'Meeting Minutes',
       visibility: 'board',
       updatedAt: '2026-01-01',
+      filename: 'beta.pdf',
     },
     {
       id: '3',
@@ -125,6 +127,7 @@ describe('DocumentsManager visibility filter', () => {
       category: 'Forms',
       visibility: 'public',
       updatedAt: '2026-01-01',
+      filename: 'gamma.pdf',
     },
   ];
 
@@ -235,6 +238,7 @@ describe('DocumentsManager searchability badge', () => {
         category: 'Maps & Deeds',
         visibility: 'board',
         updatedAt: '2026-01-01',
+        filename: 'scanned-deed.pdf',
         ragStatus: 'unsupported',
       },
       {
@@ -243,6 +247,7 @@ describe('DocumentsManager searchability badge', () => {
         category: 'Governing Documents',
         visibility: 'board',
         updatedAt: '2026-01-01',
+        filename: 'clean-bylaws.pdf',
         ragStatus: 'ok',
       },
     ]),
@@ -254,5 +259,82 @@ describe('DocumentsManager searchability badge', () => {
     expect(screen.getByText('Clean Bylaws')).toBeInTheDocument();
     // Exactly one badge — the scanned doc, not the clean one.
     expect(screen.getAllByText(/not searchable/i)).toHaveLength(1);
+  });
+});
+
+describe('DocumentsManager search', () => {
+  const docs = [
+    {
+      id: '1',
+      title: 'Annual Budget',
+      category: 'Financials',
+      visibility: 'board',
+      updatedAt: '2026-01-01',
+      filename: 'budget-2026.pdf',
+    },
+    {
+      id: '2',
+      title: 'Meeting Minutes',
+      category: 'Meeting Minutes',
+      visibility: 'public',
+      updatedAt: '2026-01-01',
+      filename: 'minutes-jan.pdf',
+    },
+    {
+      id: '3',
+      title: 'Community Bylaws',
+      category: 'Governing Documents',
+      visibility: 'board',
+      updatedAt: '2026-01-01',
+      filename: 'bylaws.pdf',
+    },
+  ];
+
+  beforeEach(() => fetchAdminDocuments.mockResolvedValue(docs));
+
+  function searchBox() {
+    return screen.getByPlaceholderText(/search by title or filename/i);
+  }
+
+  it('narrows the list to documents whose title matches the query', async () => {
+    render(<DocumentsManager />);
+    await screen.findByText('Annual Budget');
+    fireEvent.change(searchBox(), { target: { value: 'bylaws' } });
+    expect(screen.getByText('Community Bylaws')).toBeInTheDocument();
+    expect(screen.queryByText('Annual Budget')).not.toBeInTheDocument();
+    expect(screen.queryByText('Meeting Minutes')).not.toBeInTheDocument();
+  });
+
+  it('matches on filename when the title does not contain the query', async () => {
+    render(<DocumentsManager />);
+    await screen.findByText('Annual Budget');
+    // 'minutes-jan' is only in the filename of doc 2; also substring of its title,
+    // so use the date fragment that is filename-only.
+    fireEvent.change(searchBox(), { target: { value: 'jan' } });
+    expect(screen.getByText('Meeting Minutes')).toBeInTheDocument();
+    expect(screen.queryByText('Annual Budget')).not.toBeInTheDocument();
+    expect(screen.queryByText('Community Bylaws')).not.toBeInTheDocument();
+  });
+
+  it('composes with the visibility tab as AND', async () => {
+    render(<DocumentsManager />);
+    await screen.findByText('Annual Budget');
+    // Board tab: docs 1 and 3. Query 'community' further narrows to doc 3.
+    fireEvent.click(screen.getByRole('button', { name: /Board \(2\)/ }));
+    fireEvent.change(searchBox(), { target: { value: 'community' } });
+    expect(screen.getByText('Community Bylaws')).toBeInTheDocument();
+    expect(screen.queryByText('Annual Budget')).not.toBeInTheDocument();
+  });
+
+  it('shows a search-specific empty message when nothing matches', async () => {
+    render(<DocumentsManager />);
+    await screen.findByText('Annual Budget');
+    fireEvent.change(searchBox(), { target: { value: 'zzzznomatch' } });
+    expect(
+      screen.getByText(/no documents match your search/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/no documents are set to this visibility/i),
+    ).not.toBeInTheDocument();
   });
 });
