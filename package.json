@@ -26,7 +26,8 @@
     "roster:import": "node --experimental-strip-types scripts/import-roster.ts",
     "docs:import": "node --experimental-strip-types scripts/import-documents.ts",
     "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts",
-    "corpus:import": "node --experimental-strip-types scripts/import-corpus.ts"
+    "corpus:import": "node --experimental-strip-types scripts/import-corpus.ts",
+    "ocr:scanned": "node --experimental-strip-types scripts/ocr-scanned.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -43,6 +44,7 @@
     "@astrojs/check": "^0.9.9",
     "@cloudflare/vitest-pool-workers": "^0.18.4",
     "@cloudflare/workers-types": "^4.20260702.1",
+    "@napi-rs/canvas": "^1.0.2",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -53,6 +55,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "drizzle-kit": "^0.31.10",
     "jsdom": "^29.1.1",
+    "pdfjs-dist": "^6.1.200",
     "prettier": "^3.9.5",
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "^6.0.3",

@@ -167,6 +167,24 @@ A full run loads 444 human-readable documents and 429 Markdown twins (some human
 searchable twin, e.g. formats AI Search can't usefully index). After a commit, follow §8 step 4 to
 trigger an AI Search sync and confirm the indexed count lands around 429.
 
+### OCR scanned uploads (make "Not searchable" PDFs searchable)
+
+Scanned/image-only PDFs upload fine but are flagged "Not searchable" (no text to
+index). To OCR them into the search index, set `CLOUDFLARE_ACCOUNT_ID` and a
+`CLOUDFLARE_API_TOKEN` with **Workers AI Run**, **R2 object read/write**, and
+**D1 read/write** permissions (the script's wrangler R2/D1 calls inherit this
+token, so a Workers-AI-only token would 403 those steps), then run:
+
+- `npm run ocr:scanned` — lists the unsupported-PDF candidates (no changes).
+- `npm run ocr:scanned -- --sample` — OCRs one document and prints the Markdown
+  so you can judge quality (no changes).
+- `npm run ocr:scanned -- --commit` — OCRs and writes each usable twin, flipping
+  `rag_status` to `ok`. Add `--limit=N` to do a small batch first.
+
+OCR runs on Cloudflare Workers AI (document content stays within Cloudflare).
+Results become assistant-searchable at the next AI Search sync (default ≤6h). A
+scan with no readable text is left "Not searchable" rather than indexed empty.
+
 ## 8. AI Document Assistant (optional)
 
 The admin panel's **Assistant** tab lets a board member ask natural-language questions about the
