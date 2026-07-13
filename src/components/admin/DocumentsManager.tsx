@@ -407,7 +407,7 @@ export default function DocumentsManager() {
           <p className="muted panel-pad">None yet.</p>
         ) : shown.length === 0 ? (
           <p className="muted panel-pad">
-            {query.trim()
+            {q
               ? 'No documents match your search.'
               : 'No documents are set to this visibility.'}
           </p>
