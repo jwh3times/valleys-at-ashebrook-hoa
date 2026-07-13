@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Added
+
+- **Scanned PDFs can now be made searchable.** A new operator command
+  (`npm run ocr:scanned`) OCRs scanned/image-only PDF uploads — which upload fine
+  but were flagged "Not searchable" — into the assistant's search index, using
+  Cloudflare Workers AI (document content stays within Cloudflare). Results become
+  searchable at the next search sync.
+
 ## [0.3.12] - 2026-07-12
 
 ### Changed
