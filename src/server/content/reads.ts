@@ -32,6 +32,7 @@ export async function fetchAdminDocuments(env: Env) {
       visibility: documents.visibility,
       updatedAt: documents.updatedAt,
       ragStatus: documents.ragStatus,
+      filename: documents.filename,
     })
     .from(documents)
     .orderBy(desc(documents.updatedAt));

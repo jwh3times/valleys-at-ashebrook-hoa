@@ -65,6 +65,7 @@ export default function DocumentsManager() {
     similar: { id: string; title?: string; filename?: string }[];
   } | null>(null);
   const [filter, setFilter] = useState<Visibility | 'all'>('all');
+  const [query, setQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     title: '',
@@ -158,8 +159,16 @@ export default function DocumentsManager() {
     await reload();
   }
 
-  const shown =
+  const q = query.trim().toLowerCase();
+  const byVisibility =
     filter === 'all' ? items : items.filter((d) => d.visibility === filter);
+  const shown = q
+    ? byVisibility.filter(
+        (d) =>
+          d.title.toLowerCase().includes(q) ||
+          d.filename.toLowerCase().includes(q),
+      )
+    : byVisibility;
   const countFor = (value: Visibility | 'all') =>
     value === 'all'
       ? items.length
@@ -353,6 +362,19 @@ export default function DocumentsManager() {
       )}
 
       {!loading && items.length > 0 && (
+        <div className="field" style={{ marginBottom: '14px' }}>
+          <label htmlFor="doc-search">Search</label>
+          <input
+            id="doc-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by title or filename…"
+          />
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
         <div
           className="doc-filter"
           role="group"
@@ -385,7 +407,9 @@ export default function DocumentsManager() {
           <p className="muted panel-pad">None yet.</p>
         ) : shown.length === 0 ? (
           <p className="muted panel-pad">
-            No documents are set to this visibility.
+            {q
+              ? 'No documents match your search.'
+              : 'No documents are set to this visibility.'}
           </p>
         ) : (
           shown.map((d) => (
