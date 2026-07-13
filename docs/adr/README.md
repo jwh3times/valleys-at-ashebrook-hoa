@@ -15,3 +15,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0007: Document Deduplication Policy](./0007-document-deduplication-policy.md)
 - [ADR 0008: AI Assistant Privacy Gate](./0008-ai-assistant-privacy-gate.md)
 - [ADR 0009: RAG Index Corpus Separate from the Download Library](./0009-rag-index-separate-from-download-library.md)
+- [ADR 0010: OCR of Scanned Documents Runs as an Operator Offline Job](./0010-ocr-scanned-documents-operator-job.md)
