@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.22] - 2026-07-15
+
+### Fixed
+
+- **The admin sidebar's "View site" and "Log out" links stay in view on long pages.** The left
+  navigation no longer stretches to match tall page content — most noticeable on the Documents
+  panel, where reaching the footer actions previously meant scrolling to the very bottom. The
+  sidebar is now pinned to the viewport height and scrolls on its own when it can't fit, so its
+  footer actions remain visible regardless of how long the main content is.
+
 ## [0.3.21] - 2026-07-15
 
 ### Added
