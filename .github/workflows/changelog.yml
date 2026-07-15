@@ -1,0 +1,60 @@
+name: Changelog Version
+
+# Verifies that CHANGELOG.md documents the version THIS PR's merge will mint.
+#
+# Every merge to main is auto-tagged v<major>.<minor>.<build> by version.yml, where the
+# build slot auto-increments. scripts/next-version.sh predicts that tag from the release
+# line and existing tags — the SAME algorithm version.yml uses to create it. This job runs
+# that script and fails the PR unless CHANGELOG.md has a matching `## [<version>]` section,
+# so the changelog can never silently fall behind the tags.
+#
+# Dependabot PRs are exempt: they don't edit the changelog, and the /ship skill backfills
+# their entries later (see .claude/skills/ship/SKILL.md). version.yml still tags them. The
+# exemption is checked INSIDE the step (not via a job-level `if`) so the check always
+# reports a status — a skipped job can otherwise leave a required check pending forever.
+#
+# Race note: the prediction is exact only if no other PR merges between this run and this
+# PR's merge. Enable branch protection's "Require branches to be up to date before merging"
+# so an intervening merge forces a re-sync + re-run here, keeping the prediction honest.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changelog-version:
+    name: Verify changelog names the target version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags, needed to predict the build number
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Verify CHANGELOG.md documents the target version
+        env:
+          PR_ACTOR: ${{ github.actor }}
+        run: |
+          if [ "$PR_ACTOR" = "dependabot[bot]" ]; then
+            echo "Dependabot PR — changelog entry is backfilled by /ship on the next human PR. Skipping."
+            exit 0
+          fi
+          target=$(bash scripts/next-version.sh)
+          echo "This merge will mint: v${target}"
+          if grep -qF "## [${target}]" CHANGELOG.md; then
+            echo "CHANGELOG.md documents ${target} — ok"
+          else
+            echo "::error::CHANGELOG.md has no '## [${target}]' section, but this merge will mint v${target}."
+            echo "Run /ship (or add a '## [${target}] - <YYYY-MM-DD>' section to CHANGELOG.md) and push again."
+            exit 1
+          fi

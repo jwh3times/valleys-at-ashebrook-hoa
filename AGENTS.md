@@ -67,6 +67,12 @@ uses the package build value (`0.2.0` -> `v0.2.0`); later merges on the same lin
 build tag (`v0.2.1`, `v0.2.2`, ...). When bumping major or minor, `x.y.0` remains valid and is not
 incremented to `x.y.1` unless an `x.y.0` tag already exists.
 
+The Changelog Version workflow (`.github/workflows/changelog.yml`) runs on every non-dependabot PR
+and fails it unless `CHANGELOG.md` documents the version that PR's merge will mint.
+`scripts/next-version.sh` predicts that version by mirroring the Version workflow's tag algorithm,
+and the `/ship` skill (`.claude/skills/ship/`) writes the matching changelog section. Dependabot
+PRs are exempt; their entries are backfilled by `/ship` on the next human PR.
+
 ## Coding Style & Naming Conventions
 
 Use TypeScript and Astro conventions already present in the repo. Follow the existing Prettier
