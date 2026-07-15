@@ -27,7 +27,11 @@ KV, R2, secrets) is only needed for deployment and is documented step-by-step in
    npm run build          # SSR build
    ```
 
-4. Open a Pull Request against `main`.
+4. Open a Pull Request against `main`. CI's **Changelog Version** check
+   (`.github/workflows/changelog.yml`) fails the PR unless it adds a `## [<version>]` section to
+   `CHANGELOG.md` for the version the merge will mint — compute that version with
+   `scripts/next-version.sh`, or run the `ship` skill to handle the doc, changelog, and PR flow for
+   you. Dependabot PRs are exempt.
 
 ## Conventions to honour
 

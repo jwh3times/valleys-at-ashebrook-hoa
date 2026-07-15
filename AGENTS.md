@@ -262,6 +262,11 @@ Project subagents live in `.claude/agents/`: `docs-updater` keeps `AGENTS.md`, `
 `SETUP.md`, `SECURITY.md`, and `CHANGELOG.md` in sync with the code; `code-reviewer` reviews diffs
 against tier-enforcement, board-only, and fail-closed access rules before merging.
 
+The user-invokable `ship` skill (`.claude/skills/ship/`) takes a branch from code-complete to an
+open PR: it invokes `docs-updater` scoped to that branch's diff, writes the `CHANGELOG.md` section
+for the version `scripts/next-version.sh` predicts (see the Changelog Version workflow above), runs
+the fast `format:check`/`check` gates, then pushes and opens or updates the PR.
+
 Docs freshness is auto-checked at the end of every response turn by a read-only Stop hook in
 `.claude/settings.json` using a pre-approved git command plus Read/Grep/Glob. It never edits files.
 When it detects drift, it blocks the stop with specifics and the main session invokes
