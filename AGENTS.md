@@ -67,6 +67,12 @@ uses the package build value (`0.2.0` -> `v0.2.0`); later merges on the same lin
 build tag (`v0.2.1`, `v0.2.2`, ...). When bumping major or minor, `x.y.0` remains valid and is not
 incremented to `x.y.1` unless an `x.y.0` tag already exists.
 
+The Changelog Version workflow (`.github/workflows/changelog.yml`) runs on every non-dependabot PR
+and fails it unless `CHANGELOG.md` documents the version that PR's merge will mint.
+`scripts/next-version.sh` predicts that version by mirroring the Version workflow's tag algorithm,
+and the `/ship` skill (`.claude/skills/ship/`) writes the matching changelog section. Dependabot
+PRs are exempt; their entries are backfilled by `/ship` on the next human PR.
+
 ## Coding Style & Naming Conventions
 
 Use TypeScript and Astro conventions already present in the repo. Follow the existing Prettier
@@ -255,6 +261,11 @@ resident-data handling details.
 Project subagents live in `.claude/agents/`: `docs-updater` keeps `AGENTS.md`, `README.md`,
 `SETUP.md`, `SECURITY.md`, and `CHANGELOG.md` in sync with the code; `code-reviewer` reviews diffs
 against tier-enforcement, board-only, and fail-closed access rules before merging.
+
+The user-invokable `ship` skill (`.claude/skills/ship/`) takes a branch from code-complete to an
+open PR: it invokes `docs-updater` scoped to that branch's diff, writes the `CHANGELOG.md` section
+for the version `scripts/next-version.sh` predicts (see the Changelog Version workflow above), runs
+the fast `format:check`/`check` gates, then pushes and opens or updates the PR.
 
 Docs freshness is auto-checked at the end of every response turn by a read-only Stop hook in
 `.claude/settings.json` using a pre-approved git command plus Read/Grep/Glob. It never edits files.
