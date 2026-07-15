@@ -1359,6 +1359,13 @@ body.body--bare {
   display: flex;
   flex-direction: column;
   padding: 24px 0;
+  /* Pin the sidebar to the viewport so it doesn't stretch to match tall
+     main content (e.g. the Documents list); the foot stays in view. */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .admin-side__brand {
@@ -1484,6 +1491,9 @@ body.body--bare {
   }
   .admin-side {
     width: 100%;
+    position: static;
+    height: auto;
+    overflow-y: visible;
   }
   .admin-panel {
     padding: 28px 22px;
