@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.23] - 2026-07-15
+
+### Changed
+
+- Removed the per-turn documentation-freshness Stop hook from `.claude/settings.json`.
+  Documentation is now kept current at ship time by the `ship` skill's scoped `docs-updater` pass,
+  so routine work no longer triggers an end-of-turn docs check.
+
 ## [0.3.22] - 2026-07-15
 
 ### Fixed
