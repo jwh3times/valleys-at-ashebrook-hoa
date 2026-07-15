@@ -7,6 +7,51 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.21] - 2026-07-15
+
+### Added
+
+- **A `ship` skill now takes a finished branch to an open PR.** Running `/ship`
+  (`.claude/skills/ship/`) refreshes the docs, writes the CHANGELOG entry for the exact version
+  the merge will mint, runs the fast format and type checks, and opens or updates the pull
+  request — so the changelog stays in lockstep with the release tags instead of drifting behind
+  them.
+- **CI now guards the changelog against drift.** A new "Changelog Version" workflow
+  (`.github/workflows/changelog.yml`) fails any non-dependabot pull request unless `CHANGELOG.md`
+  documents the version that PR's merge will mint. The target version is computed by the new
+  `scripts/next-version.sh`, which mirrors the auto-tagging algorithm in `version.yml`. Dependabot
+  PRs are exempt; their entries are backfilled by `/ship` on the next human PR.
+
+## [0.3.20] - 2026-07-15
+
+### Changed
+
+- Dependabot pull requests are now labeled by ecosystem (`npm`, `github-actions`).
+
+## [0.3.19] - 2026-07-15
+
+### Changed
+
+- Bumped `actions/setup-node` from 6 to 7 in the CI workflow.
+
+## [0.3.18] - 2026-07-15
+
+### Changed
+
+- Dependabot now checks for updates daily at 05:00 instead of on its previous schedule.
+
+## [0.3.17] - 2026-07-14
+
+### Changed
+
+- Bumped `@astrojs/cloudflare` from 14.1.2 to 14.1.3 and `astro` from 7.0.7 to 7.0.9.
+
+## [0.3.16] - 2026-07-13
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.110.0 to 0.111.0.
+
 ## [0.3.15] - 2026-07-13
 
 ### Added
