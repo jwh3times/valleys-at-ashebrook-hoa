@@ -9,5 +9,19 @@
       "Bash(git diff:*)",
       "Bash(git log:*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types scripts/sync-agent-skills.ts --hook",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
   }
 }
