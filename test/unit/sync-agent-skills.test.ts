@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
 import {
+  REPO_ROOT,
   parseFrontmatter,
   yamlScalar,
   banner,
@@ -124,13 +126,28 @@ describe('isSourcePath', () => {
     expect(isSourcePath('.agents/skills/ship/SKILL.md')).toBe(true);
   });
 
-  it('accepts a windows-style absolute path inside the repo', () => {
-    expect(isSourcePath(`${process.cwd()}\\.claude\\agents\\x.md`)).toBe(true);
+  // A hook payload carries whatever separator the machine Claude Code runs on
+  // uses, so both spellings must resolve the same way wherever the tests run.
+  it('resolves windows and posix absolute paths identically', () => {
+    expect(isSourcePath('C:\\repo\\.claude\\agents\\x.md', 'C:\\repo')).toBe(
+      true,
+    );
+    expect(isSourcePath('/repo/.claude/skills/ship/SKILL.md', '/repo')).toBe(
+      true,
+    );
+    expect(isSourcePath('.claude\\agents\\x.md')).toBe(true);
+  });
+
+  it('accepts an absolute path inside this repo', () => {
+    expect(
+      isSourcePath(path.join(REPO_ROOT, '.claude', 'agents', 'x.md')),
+    ).toBe(true);
   });
 
   it('ignores everything else', () => {
     expect(isSourcePath('src/pages/index.astro')).toBe(false);
     expect(isSourcePath('.claude/settings.json')).toBe(false);
+    expect(isSourcePath('/somewhere/else/.claude/agents/x.md')).toBe(false);
   });
 });
 
