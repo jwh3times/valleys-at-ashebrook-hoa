@@ -279,5 +279,6 @@ is written, `npm run agents:check` fails CI on drift, and the same check runs in
 The user-invokable `ship` skill (`.claude/skills/ship/`) takes a branch from code-complete to an
 open PR: it invokes `docs-updater` scoped to that branch's diff, writes the `CHANGELOG.md` section
 for the version `scripts/next-version.sh` predicts (see the Changelog Version workflow above), runs
-the fast `format:check`/`check` gates, then pushes and opens or updates the PR. Documentation is
-kept in sync at ship time through that `docs-updater` pass, so there is no per-turn docs hook.
+the fast `agents:check`/`format:check`/`check` gates, then pushes and opens or updates the PR.
+Documentation is kept in sync at ship time through that `docs-updater` pass, so there is no
+per-turn docs hook.
