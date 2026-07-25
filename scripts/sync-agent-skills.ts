@@ -140,7 +140,9 @@ export type MirrorPlan = {
   files: Map<string, Buffer>;
 };
 
-const toPosix = (p: string) => p.split(path.sep).join('/');
+// Both separators, on every platform: hook payloads carry whatever separator the
+// machine Claude Code runs on uses, and tests run on Windows and Linux alike.
+const toPosix = (p: string) => p.replace(/\\/g, '/');
 const read = (abs: string) => fs.readFileSync(abs);
 const readText = (abs: string) => fs.readFileSync(abs, 'utf8');
 
@@ -322,10 +324,12 @@ export function isSourcePath(
   filePath: string,
   root: string = REPO_ROOT,
 ): boolean {
-  const normalized = toPosix(filePath).replace(/^\.\//, '');
-  const rel = path.isAbsolute(filePath)
-    ? toPosix(path.relative(root, filePath))
-    : normalized;
+  const file = toPosix(filePath).replace(/^\.\//, '');
+  const base = toPosix(root).replace(/\/+$/, '');
+  // Drive-letter case varies between Windows path spellings, so match case-insensitively.
+  const rel = file.toLowerCase().startsWith(`${base.toLowerCase()}/`)
+    ? file.slice(base.length + 1)
+    : file;
   if (rel.startsWith('..')) return false;
   return (
     rel.startsWith(`${AGENT_SOURCE_DIR}/`) ||
