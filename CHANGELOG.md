@@ -7,6 +7,83 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.32] - 2026-07-24
+
+### Added
+
+- **Codex now runs this repo's agents and skills, generated from the Claude Code originals.**
+  `.claude/agents/` and `.claude/skills/` remain the single source of truth, and
+  `npm run agents:sync` renders the mirror Codex actually discovers at
+  `.agents/skills/<name>/SKILL.md`. Skills copy verbatim under a provenance banner; subagents are
+  re-rendered as skills — Codex has no project-level subagent registry — with the Claude-only
+  `tools:`/`model:` frontmatter dropped and a short "delegated role" preamble added. `ship`,
+  `code-reviewer`, and `docs-updater` are now reachable under the same names in either CLI. See
+  [ADR 0011](docs/adr/0011-claude-sourced-agent-assets-mirrored-for-codex.md).
+- **Drift between the source and that mirror is caught automatically.** `npm run agents:check`
+  reports the exact missing, stale, extra, or orphaned paths and exits non-zero. It runs in CI on
+  every pull request, in `/ship`'s fast checks, and from a `PostToolUse` hook that re-syncs the
+  mirror the moment a `.claude/` agent or skill file is written, so an edit in one CLI cannot
+  silently leave the other behind.
+
+### Removed
+
+- Deleted the hand-written `.codex/agents/*.toml` files. Codex reads neither `.codex/agents/` nor a
+  repo-level `.codex/skills/`, so those files were parity in appearance only.
+
+## [0.3.31] - 2026-07-24
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.113.0 to 0.114.0, `better-auth` from 1.6.24 to 1.6.25,
+  `better-auth-cloudflare` from 0.3.0 to 0.3.1, and `@cloudflare/vitest-pool-workers` from 0.18.7
+  to 0.18.8.
+
+## [0.3.30] - 2026-07-23
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.112.5 to 0.113.0 and `better-auth` from 1.6.23 to 1.6.24.
+
+## [0.3.29] - 2026-07-22
+
+### Changed
+
+- Bumped `@testing-library/jest-dom` from 6.9.1 to 7.0.0.
+
+## [0.3.28] - 2026-07-22
+
+### Changed
+
+- Bumped the transitive `svgo` dependency from 4.0.1 to 4.0.2.
+
+## [0.3.27] - 2026-07-22
+
+### Changed
+
+- Bumped the transitive `fast-uri` dependency from 3.1.2 to 3.1.4.
+
+## [0.3.26] - 2026-07-22
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.112.4 to 0.112.5, `react` and `react-dom` from 19.2.7 to
+  19.2.8, `@cloudflare/vitest-pool-workers` from 0.18.6 to 0.18.7, and `@vitejs/plugin-react` from
+  6.0.3 to 6.0.4.
+
+## [0.3.25] - 2026-07-21
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.112.1 to 0.112.4, `@astrojs/cloudflare` from 14.1.3 to 14.1.4,
+  `astro` from 7.1.1 to 7.1.3, and `prettier` from 3.9.5 to 3.9.6.
+
+## [0.3.24] - 2026-07-17
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.111.0 to 0.112.1, `astro` from 7.0.9 to 7.1.1, and
+  `@cloudflare/vitest-pool-workers` from 0.18.4 to 0.18.6.
+
 ## [0.3.23] - 2026-07-15
 
 ### Changed
