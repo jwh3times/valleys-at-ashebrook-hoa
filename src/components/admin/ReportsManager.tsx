@@ -114,7 +114,8 @@ export default function ReportsManager() {
     }
   }
 
-  async function onDelete(id: string) {
+  async function onDelete(id: string, topic: string) {
+    if (!confirm(`Delete "${topic}"? This cannot be undone.`)) return;
     try {
       await deleteReport(id);
       setView({ kind: 'list' });
@@ -183,20 +184,29 @@ export default function ReportsManager() {
           ) : items.length === 0 ? (
             <p>No reports yet. Generate one with “New report”.</p>
           ) : (
-            <ul>
+            <ul className="reports__history">
               {items.map((r) => (
-                <li key={r.id}>
-                  <button type="button" onClick={() => void openReport(r.id)}>
-                    {r.topic}
-                  </button>
-                  <span> · {new Date(r.createdAt).toLocaleDateString()}</span>
+                <li key={r.id} className="reports__row">
                   <button
                     type="button"
-                    className="btn btn--outline"
-                    onClick={() => void onDelete(r.id)}
+                    className="reports__topic-btn"
+                    onClick={() => void openReport(r.id)}
                   >
-                    Delete
+                    {r.topic}
                   </button>
+                  <div className="reports__row-actions">
+                    <span className="reports__row-date">
+                      {new Date(r.createdAt).toLocaleDateString()}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn--outline btn--small"
+                      aria-label={`Delete ${r.topic}`}
+                      onClick={() => void onDelete(r.id, r.topic)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -212,15 +222,15 @@ export default function ReportsManager() {
               <button
                 key={t.key}
                 type="button"
-                className="btn btn--outline"
+                className="reports__template-card"
                 onClick={() => void generate({ template: t.key })}
               >
-                {t.label}
-                <span> — {t.description}</span>
+                <span className="reports__template-label">{t.label}</span>
+                <span className="reports__template-desc">{t.description}</span>
               </button>
             ))}
           </div>
-          <form onSubmit={onFreeform}>
+          <form className="reports__form" onSubmit={onFreeform}>
             <input
               type="text"
               value={topicInput}
@@ -246,12 +256,12 @@ export default function ReportsManager() {
       {view.kind === 'report' && (
         <div className="reports__report">
           <h2>{view.report.topic}</h2>
-          <p>
+          <p className="reports__report-meta">
             Generated {new Date(view.report.createdAt).toLocaleString()}
             <button
               type="button"
-              className="btn btn--outline"
-              onClick={() => void onDelete(view.report.id)}
+              className="btn btn--outline btn--small"
+              onClick={() => void onDelete(view.report.id, view.report.topic)}
             >
               Delete
             </button>
@@ -268,7 +278,7 @@ export default function ReportsManager() {
                   >
                     {s.title}
                   </a>
-                  <span> · {s.category}</span>
+                  <span className="reports__cat"> · {s.category}</span>
                 </li>
               ))}
             </ul>

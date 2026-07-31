@@ -65,6 +65,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const { sources, textStream } = generation;
   let reader: ReadableStreamDefaultReader<string> | undefined;
+  // Set by cancel() when the client disconnects mid-stream. The read loop in
+  // start() can still be awaiting reader.read() when that happens; once it
+  // unblocks we must not insert the (truncated) report, emit a done frame, or
+  // touch the controller at all — the underlying stream is already torn down,
+  // and enqueue/close on it would throw.
+  let clientGone = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(sseFrame('sources', sources));
@@ -79,6 +85,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
             controller.enqueue(sseFrame('token', { text: value }));
           }
         }
+        if (clientGone) return;
         // Save BEFORE emitting done — a failed insert must not report success.
         const id = crypto.randomUUID();
         await getDb(env)
@@ -100,16 +107,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
           });
         controller.enqueue(sseFrame('done', { id }));
       } catch {
-        controller.enqueue(
-          sseFrame('error', {
-            message: 'Report generation failed. Please try again.',
-          }),
-        );
+        if (!clientGone) {
+          controller.enqueue(
+            sseFrame('error', {
+              message: 'Report generation failed. Please try again.',
+            }),
+          );
+        }
       } finally {
-        controller.close();
+        if (!clientGone) controller.close();
       }
     },
     cancel() {
+      clientGone = true;
       void reader?.cancel();
     },
   });

@@ -56,7 +56,7 @@ export async function planSubQueries(
   }
 }
 
-const REPORT_MODEL = 'claude-opus-4-8';
+export const REPORT_MODEL = 'claude-opus-4-8';
 
 // One logical instruction per element (same convention as assistant.ts).
 const REPORT_SYSTEM_PROMPT = [

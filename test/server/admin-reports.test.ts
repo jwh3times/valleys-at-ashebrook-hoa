@@ -5,7 +5,10 @@ const captured: { params?: unknown[] } = { params: [] };
 const { retrieveMock, genState, authState, anthropicState } = vi.hoisted(
   () => ({
     retrieveMock: vi.fn(),
-    genState: { fail: false },
+    // `hang: true` makes the mocked generation stream stall forever right
+    // after its first token, so a test can prove disconnect-cancellation is
+    // what ends the read loop — not a race against natural completion.
+    genState: { fail: false, hang: false },
     // Controllable stand-in for the real getAuthContext fallback that
     // resolveAuthContext calls when `locals.authContext` is nullish (both
     // absent `locals.authContext` and an explicit `null` fall through to
@@ -58,6 +61,11 @@ vi.mock('../../src/server/ai/anthropic', () => {
                   text: '## Summary\nRentals are restricted.',
                 },
               };
+              if (genState.hang) {
+                // Never resolves on its own; only cancellation ends the
+                // read loop that's consuming this generator.
+                await new Promise<never>(() => {});
+              }
             }
             const it = gen();
             return {
@@ -213,6 +221,29 @@ describe('POST /api/admin/reports', () => {
     expect(JSON.parse(row!.sourcesJson)).toEqual([
       { id: 'doc-1', title: 'CCRs', category: 'Governing Documents' },
     ]);
+  });
+
+  it('does not persist a truncated report when the client disconnects mid-generation', async () => {
+    genState.hang = true;
+    try {
+      const before = (await getDb(env).select().from(reports)).length;
+      const res = await post({ template: 'rentals' });
+      const reader = res.body!.getReader();
+      // Read only the first chunk (the `sources` frame) — the generation is
+      // stalled on genState.hang, so nothing else can have been produced yet.
+      const first = await reader.read();
+      expect(first.done).toBe(false);
+      expect(new TextDecoder().decode(first.value)).toContain('event: sources');
+      // Disconnect mid-stream, before any `token`/`done` frame arrives.
+      await reader.cancel();
+      // Let the cancel() callback's teardown (setting clientGone and
+      // cancelling the inner reader) run before asserting.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const after = (await getDb(env).select().from(reports)).length;
+      expect(after).toBe(before);
+    } finally {
+      genState.hang = false;
+    }
   });
 
   it('sends no real roster PII to Anthropic across planning and generation', async () => {
