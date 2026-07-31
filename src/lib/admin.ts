@@ -9,6 +9,7 @@ import type {
   MemberUser,
   DuplicatesView,
 } from './types';
+import type { ReportListItem, ReportDetail } from './reports';
 
 // ---------- Announcements ----------
 export async function saveAnnouncement(
@@ -263,4 +264,26 @@ export async function demoteFromBoard(userId: string): Promise<void> {
   });
   if (!res.ok)
     throw new Error((await res.text()) || `Demote failed: ${res.status}`);
+}
+
+// ---------- Reports ----------
+export async function fetchReports(): Promise<ReportListItem[]> {
+  const res = await fetch('/api/admin/reports');
+  if (!res.ok) throw new Error(`reports ${res.status}`);
+  return (await res.json()) as ReportListItem[];
+}
+
+export async function fetchReport(id: string): Promise<ReportDetail> {
+  const res = await fetch(`/api/admin/reports?id=${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`report ${res.status}`);
+  return (await res.json()) as ReportDetail;
+}
+
+export async function deleteReport(id: string): Promise<void> {
+  const res = await fetch('/api/admin/reports', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }

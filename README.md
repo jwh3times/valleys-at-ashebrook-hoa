@@ -17,6 +17,10 @@ It provides:
 - 🤖 **Board-only AI document assistant** — ask natural-language questions about the
   document library and get a streamed, cited answer (Cloudflare AI Search + Claude),
   with known resident PII pseudonymized before anything reaches the model
+- 📊 **Board-only AI governing-documents reports** — generate a saved, citable markdown
+  report from a curated template (rentals, fences/improvements, assessments, enforcement,
+  meetings/voting, maintenance) or a freeform topic, built on the same AI Search + Claude
+  - pseudonymization pipeline as the document assistant
 - 💳 **Dues & payments** — annual dues amount and payment options (shown in official
   mode)
 - ✉️ **Contact form** — reaches the resident who maintains the site (or the board, in
@@ -93,10 +97,11 @@ src/
   layouts/            Shared page shell
   components/         Header/Footer + React islands
     admin/            The board admin app
-  lib/                Client helpers (content.ts, admin.ts, site.ts, format.ts, types.ts, auth-client.ts)
+  lib/                Client helpers (content.ts, admin.ts, site.ts, format.ts, types.ts,
+                      reports.ts, auth-client.ts)
   server/             Server-only code
-    ai/               Board-only document assistant: AI Search retrieval, PII
-                       pseudonymization, Anthropic client, orchestration
+    ai/               Board-only document assistant + report generator: AI Search
+                       retrieval, PII pseudonymization, Anthropic client, orchestration
     auth/             Better Auth config, Resend + Twilio senders
     authz/            getAuthContext, requireRole, requireBoard, Turnstile check
     content/          Visibility logic (tierAllows / visibleTiers) + read helpers

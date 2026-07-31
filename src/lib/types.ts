@@ -253,6 +253,7 @@ export const INPUT_LIMITS = {
   category: 100,
   propertyId: 100,
   assistantQuestion: 2_000,
+  reportTopic: 200,
 } as const;
 
 export type InputResult<T> =
