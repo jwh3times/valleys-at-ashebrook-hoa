@@ -7,6 +7,72 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.39] - 2026-07-31
+
+### Added
+
+- **Board members can generate saved, citable AI reports over the governing documents.** A new
+  **Reports** section in the admin panel offers six curated topics (rentals & leasing, fences &
+  improvements, assessments & collections, enforcement & fines, meetings & voting, maintenance
+  responsibilities) plus a freeform topic box. Each report runs several targeted searches over the
+  document library, pools the best excerpts, and streams a structured brief — Summary, What the
+  documents say, Where it lives, Ambiguities and conflicts, Gaps — with `[Source N]` citations
+  linking back to the tier-checked document downloads. Reports persist to a new `reports` table
+  (migration `0008`) as a board-only history with view and delete (with confirmation); a failed or
+  disconnected generation saves nothing. Freeform topics are expanded into search queries by a
+  small Claude Haiku planning call that degrades gracefully to a single query if it fails.
+- New board-only endpoint `POST/GET/DELETE /api/admin/reports` (SSE generation stream, metadata
+  list, full detail, delete), fail-closed like the rest of the admin surface.
+
+### Security
+
+- Both AI calls behind report generation — the Haiku query planner and the Claude generation
+  pass — receive only pseudonymized text via the same roster-based pseudonymization the document
+  assistant uses; server tests assert no real roster values reach either payload. Saved report
+  content is de-anonymized (real) text stored in D1 at the same board-only tier as the documents
+  it cites.
+
+## [0.3.38] - 2026-07-30
+
+### Changed
+
+- Bumped `@astrojs/cloudflare` from 14.1.6 to 14.1.7, `astro` from 7.1.5 to 7.1.6, and
+  `@cloudflare/workers-types` from 5.20260729.1 to 5.20260730.1.
+
+## [0.3.37] - 2026-07-29
+
+### Changed
+
+- Bumped `@astrojs/cloudflare` from 14.1.4 to 14.1.6, `@astrojs/react` from 6.0.1 to 6.0.2,
+  `astro` from 7.1.3 to 7.1.5, `@astrojs/check` from 0.9.9 to 0.9.10,
+  `@cloudflare/vitest-pool-workers` from 0.18.8 to 0.19.0, `@cloudflare/workers-types` from
+  5.20260727.1 to 5.20260729.1, `@napi-rs/canvas` from 1.0.2 to 1.0.3, `@types/node` from 26.1.1
+  to 26.1.2, `jsdom` from 30.0.0 to 30.0.1, and `pdfjs-dist` from 6.1.200 to 6.2.108.
+
+## [0.3.36] - 2026-07-27
+
+### Changed
+
+- Bumped `@cloudflare/workers-types` from 4.20260702.1 to 5.20260727.1 (major version update).
+
+## [0.3.35] - 2026-07-27
+
+### Changed
+
+- Bumped `jsdom` from 29.1.1 to 30.0.0 (major version update).
+
+## [0.3.34] - 2026-07-27
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.114.0 to 0.115.0.
+
+## [0.3.33] - 2026-07-24
+
+### Changed
+
+- Bumped the transitive `postcss` dependency from 8.5.16 to 8.5.23.
+
 ## [0.3.32] - 2026-07-24
 
 ### Added

@@ -137,6 +137,23 @@ Markdown twins described below and never the human-readable originals.
   `GET /api/admin/documents`. Scanned uploads that `toMarkdown` cannot convert are flagged
   `rag_status = 'unsupported'` and can be made searchable later by the operator-run
   `scripts/ocr-scanned.ts` (rasterize + Workers AI vision; see [ADR 0010](./docs/adr/0010-ocr-scanned-documents-operator-job.md)).
+- Board-only governing-documents reports: `POST /api/admin/reports` (SSE) takes `{ template }` XOR
+  `{ topic }` (topic capped at `INPUT_LIMITS.reportTopic`; 400 on malformed/both/neither/
+  unknown-template/over-length, 500 when the Anthropic key is missing, 503 when AI Search is
+  unavailable). One of six curated templates (rentals, fences/improvements, assessments,
+  enforcement, meetings/voting, maintenance) supplies fixed retrieval sub-queries; a freeform topic
+  is instead expanded into 3-6 sub-queries by a small Claude Haiku planning call. Chunks from every
+  sub-query are retrieved, pooled, deduped, and capped at 30, then streamed through one Claude Opus
+  generation into a five-section markdown report (Summary / What the documents say / Where it
+  lives / Ambiguities and conflicts / Gaps) with `[Source N]` citations, built via the same
+  excerpt-context and pseudonymization pipeline as the chat assistant (see `src/server/ai/`
+  below). The stream emits a `sources` frame, `token` frames, then `done { id }`; a completed
+  report is inserted into the `reports` table before `done` is emitted, so a failed or
+  client-disconnected generation leaves no row. `GET /api/admin/reports` lists saved report
+  metadata newest-first, or returns one full report (`?id=`) including `contentMd` and sources;
+  `DELETE /api/admin/reports` (body `{ id }`) removes a saved report. All three verbs are
+  `requireBoard`-gated, fail-closed. See SECURITY.md for the privacy model shared with the chat
+  assistant and the saved-report exposure it does not share.
 - Homeowner verification: `/api/verify/{request,confirm}`.
 - First-board bootstrap: `POST /api/bootstrap/board`, which is fail-closed, self-disables once a
   board account exists, and requires bootstrap secret/config values.
@@ -146,7 +163,12 @@ Markdown twins described below and never the human-readable originals.
 
 - `src/lib/content.ts` handles public reads from `/api/content/*` endpoints.
 - `src/lib/admin.ts` handles board writes to `/api/admin/*` endpoints, typed document duplicate
-  errors, and duplicate-resolution helpers.
+  errors, duplicate-resolution helpers, and saved-report list/fetch/delete helpers (`fetchReports`,
+  `fetchReport`, `deleteReport`).
+- `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
+  assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
+  sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
+  the admin UI and the `/api/admin/reports` endpoint.
 - `src/lib/types.ts` contains shared shapes, `DEFAULT_*` fallbacks, `DOCUMENT_CATEGORIES`, the
   `Visibility` type, and admin-write input normalizers (`normalize{Announcement,Property,Owner}Input`,
   `INPUT_LIMITS`) that trim, cap, validate, and reject on write.
@@ -168,21 +190,34 @@ Markdown twins described below and never the human-readable originals.
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
 - `roster/` and `verification/`: homeowner verification support.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
-- `ai/`: the board-only document assistant — `search.ts` (`retrieve`, Cloudflare AI Search/autorag
-  retrieval), `pii.ts` (`buildPseudonymizer`, a reversible roster-based PII pseudonymizer with
-  streaming de-anonymization), `sources.ts` (`toSources` maps retrieved chunks back to real D1
-  document rows for citations; `docIdFromFolder` extracts a document's uuid from either R2 key shape,
-  `documents/<uuid>/…` or `rag/<uuid>.md`), `anthropic.ts` (`getAnthropic`, Anthropic client + config
-  guard), and `assistant.ts` (`answer`, `loadRosterEntries`; orchestrates retrieve -> pseudonymize ->
-  Claude generation -> de-anonymized streamed output).
+- `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
+  Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible
+  roster-based PII pseudonymizer with streaming de-anonymization), `sources.ts` (`toSources` maps
+  retrieved chunks back to real D1 document rows for citations; `docIdFromFolder` extracts a
+  document's uuid from either R2 key shape, `documents/<uuid>/…` or `rag/<uuid>.md`), `context.ts`
+  (`buildExcerptContext`, shared by the assistant and the report generator: resolves chunks to real
+  documents, drops orphan/empty chunks, and builds the pseudonymized, per-document
+  `[Source N]`-numbered excerpt text), `anthropic.ts` (`getAnthropic`, Anthropic client + config
+  guard), `assistant.ts` (`answer`, `loadRosterEntries`, and the shared `claudeTextStream`/
+  `ClaudeStream` streaming helpers; orchestrates retrieve -> pseudonymize -> Claude generation ->
+  de-anonymized streamed output), and `report.ts` (`planSubQueries`, a small Claude Haiku call that
+  expands a freeform topic into 3-6 retrieval sub-queries from the pseudonymized topic and returns
+  de-anonymized queries, degrading to a single query on any failure; `generateReport`, which uses a
+  template's fixed sub-queries or a planned freeform topic, retrieves and pools/dedupes/caps chunks
+  at 30, and streams one Claude Opus generation into a five-section governing-documents report).
 
 **Data model.** D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`,
 `documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`
 and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
 review; the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
-(key/value singletons `dues` and `site`), roster/verification tables (`properties`, `owners`,
-`user_property_links`, `property_verifications`, `manual_approval_queue`), and Better Auth tables
-(`user`, `session`, `account`, `verification`).
+(key/value singletons `dues` and `site`), `reports` (saved AI-generated governing-documents
+reports: `topic`, nullable `template_key` — null means freeform — `content_md` (final
+de-anonymized markdown), `sources_json` (a `{id, title, category}` snapshot), indexed
+`created_at`, and `created_by` as a plain-text board-user-id audit column with no FK; only a
+completed generation is saved, so a failed or client-disconnected generation leaves no row),
+roster/verification tables (`properties`, `owners`, `user_property_links`,
+`property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
+`account`, `verification`).
 
 Every document has two R2 representations keyed by its D1 uuid, per
 [ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md): the human-readable original
@@ -198,7 +233,8 @@ uniqueness constraints (`properties.address_normalized`, `user_property_links (u
 property_id)`) and hot-path indexes. Migration `0004` adds `documents.content_hash` and
 `documents_content_hash_idx` for duplicate detection. Migration `0005` reconciles foreign keys and
 enums on the roster/verification tables. Migration `0006` adds `documents.keep_verified_at` and
-`documents.keep_verified_by`. Migration `0007` adds `documents.rag_status`. Migrations are applied
+`documents.keep_verified_by`. Migration `0007` adds `documents.rag_status`. Migration `0008` adds
+the `reports` table and its `reports_created_at_idx` index. Migrations are applied
 with `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
