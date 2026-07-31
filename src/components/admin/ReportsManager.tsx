@@ -190,6 +190,13 @@ export default function ReportsManager() {
                     {r.topic}
                   </button>
                   <span> · {new Date(r.createdAt).toLocaleDateString()}</span>
+                  <button
+                    type="button"
+                    className="btn btn--outline"
+                    onClick={() => void onDelete(r.id)}
+                  >
+                    Delete
+                  </button>
                 </li>
               ))}
             </ul>

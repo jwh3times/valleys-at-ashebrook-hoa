@@ -90,7 +90,43 @@ describe('ReportsManager', () => {
     await waitFor(() =>
       expect(screen.getByText('Restricted.')).toBeInTheDocument(),
     );
-    expect(screen.getByText('CCRs')).toBeInTheDocument(); // source link
+    // Asserts the transition into the saved-report view specifically (not
+    // just that the streamed text is still on screen from `generating`):
+    // a real link with the expected href, a Delete control, and no more
+    // "Generating…" indicator.
+    const link = screen.getByRole('link', { name: 'CCRs' });
+    expect(link).toHaveAttribute('href', '/api/files/doc-1');
+    expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
+    expect(screen.queryByText(/generating…/i)).not.toBeInTheDocument();
+  });
+
+  it('deletes a report from the history list without opening it', async () => {
+    let listCalls = 0;
+    const mock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        expect(JSON.parse(init.body as string)).toEqual({ id: 'r1' });
+        return new Response(null, { status: 200 });
+      }
+      listCalls += 1;
+      return Response.json(listCalls === 1 ? LIST : []);
+    });
+    vi.stubGlobal('fetch', mock);
+    render(<ReportsManager />);
+    await waitFor(() =>
+      expect(screen.getByText('Rentals & leasing')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    await waitFor(() =>
+      expect(mock).toHaveBeenCalledWith(
+        '/api/admin/reports',
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/no reports yet/i)).toBeInTheDocument(),
+    );
+    // Stayed on the list view rather than navigating into a report view.
+    expect(screen.queryByText(/^Generated /)).not.toBeInTheDocument();
   });
 
   it('surfaces a stream error without saving UI state', async () => {
