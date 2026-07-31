@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5f329689-1018-4866-8628-125e6ca8e6ba",
+  "id": "2da588ef-cd0e-4540-b25e-ee8254479ba6",
   "prevId": "102f4ee0-a39a-4445-aaed-e6e50af9233c",
   "tables": {
     "announcements": {
@@ -568,7 +568,13 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "reports_created_at_idx": {
+          "name": "reports_created_at_idx",
+          "columns": ["created_at"],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

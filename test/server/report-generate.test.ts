@@ -52,6 +52,7 @@ vi.mock('../../src/server/ai/anthropic', () => ({
 import {
   generateReport,
   UnknownTemplateError,
+  REPORT_MODEL,
 } from '../../src/server/ai/report';
 import { loadRosterEntries } from '../../src/server/ai/assistant';
 import { buildPseudonymizer } from '../../src/server/ai/pii';
@@ -279,6 +280,7 @@ describe('generateReport', () => {
     await readAll(
       (await generateReport(env, { templateKey: 'rentals' })).textStream,
     );
+    expect((captured.genParams as { model: string }).model).toBe(REPORT_MODEL);
     const system = (captured.genParams as { system: string }).system;
     for (const heading of [
       'Summary',

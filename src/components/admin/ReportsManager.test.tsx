@@ -101,6 +101,10 @@ describe('ReportsManager', () => {
   });
 
   it('deletes a report from the history list without opening it', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
     let listCalls = 0;
     const mock = vi.fn(async (_url: unknown, init?: RequestInit) => {
       if (init?.method === 'DELETE') {
@@ -115,7 +119,13 @@ describe('ReportsManager', () => {
     await waitFor(() =>
       expect(screen.getByText('Rentals & leasing')).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    const deleteBtn = screen.getByRole('button', {
+      name: 'Delete Rentals & leasing',
+    });
+    fireEvent.click(deleteBtn);
+    expect(confirm).toHaveBeenCalledWith(
+      'Delete "Rentals & leasing"? This cannot be undone.',
+    );
     await waitFor(() =>
       expect(mock).toHaveBeenCalledWith(
         '/api/admin/reports',
@@ -127,6 +137,78 @@ describe('ReportsManager', () => {
     );
     // Stayed on the list view rather than navigating into a report view.
     expect(screen.queryByText(/^Generated /)).not.toBeInTheDocument();
+  });
+
+  it('does not delete from the history list when the confirmation is declined', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => false),
+    );
+    const mock = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        throw new Error('DELETE should not have been called');
+      }
+      return Response.json(LIST);
+    });
+    vi.stubGlobal('fetch', mock);
+    render(<ReportsManager />);
+    await waitFor(() =>
+      expect(screen.getByText('Rentals & leasing')).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Delete Rentals & leasing' }),
+    );
+    expect(confirm).toHaveBeenCalled();
+    expect(mock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(
+      false,
+    );
+    // Still on the list view with the report still present.
+    expect(screen.getByText('Rentals & leasing')).toBeInTheDocument();
+  });
+
+  it('deletes a report from the detail view after confirming', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+    let listCalls = 0;
+    const mock = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        expect(JSON.parse(init.body as string)).toEqual({ id: 'r1' });
+        return new Response(null, { status: 200 });
+      }
+      if (typeof url === 'string' && url.includes('id=r1')) {
+        return Response.json({
+          id: 'r1',
+          topic: 'Rentals & leasing',
+          templateKey: 'rentals',
+          createdAt: '2026-07-30T12:00:00.000Z',
+          createdBy: 'u1',
+          contentMd: '## Summary\nDetail body.',
+          sources: [],
+        });
+      }
+      listCalls += 1;
+      return Response.json(listCalls === 1 ? LIST : []);
+    });
+    vi.stubGlobal('fetch', mock);
+    render(<ReportsManager />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Rentals & leasing' }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Detail body.')).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    expect(confirm).toHaveBeenCalledWith(
+      'Delete "Rentals & leasing"? This cannot be undone.',
+    );
+    await waitFor(() =>
+      expect(mock).toHaveBeenCalledWith(
+        '/api/admin/reports',
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
   });
 
   it('surfaces a stream error without saving UI state', async () => {

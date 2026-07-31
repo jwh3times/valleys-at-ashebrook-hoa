@@ -7,3 +7,5 @@ CREATE TABLE `reports` (
 	`created_at` integer NOT NULL,
 	`created_by` text NOT NULL
 );
+--> statement-breakpoint
+CREATE INDEX `reports_created_at_idx` ON `reports` (`created_at`);
