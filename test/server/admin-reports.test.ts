@@ -1,54 +1,75 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
-vi.mock('../../src/server/authz/context', () => ({
-  getAuthContext: async () => ({
-    userId: 'board-1',
-    role: 'board',
-    propertyIds: [],
-  }),
-}));
-
 const captured: { params?: unknown[] } = { params: [] };
-const { retrieveMock, genState } = vi.hoisted(() => ({
-  retrieveMock: vi.fn(),
-  genState: { fail: false },
+const { retrieveMock, genState, authState, anthropicState } = vi.hoisted(
+  () => ({
+    retrieveMock: vi.fn(),
+    genState: { fail: false },
+    // Controllable stand-in for the real getAuthContext fallback that
+    // resolveAuthContext calls when `locals.authContext` is nullish (both
+    // absent `locals.authContext` and an explicit `null` fall through to
+    // this mock — `null ?? x` evaluates `x` — see src/server/authz/api-guards.ts).
+    // Defaults to a board caller so existing tests need no changes; flipped
+    // to `null` by the 401 fail-closed test below.
+    authState: {
+      ctx: { userId: 'board-1', role: 'board', propertyIds: [] } as {
+        userId: string;
+        role: string;
+        propertyIds: string[];
+      } | null,
+    },
+    anthropicState: { throwNotConfigured: false },
+  }),
+);
+vi.mock('../../src/server/authz/context', () => ({
+  getAuthContext: async () => authState.ctx,
 }));
 vi.mock('../../src/server/ai/search', async (orig) => ({
   ...(await orig<typeof import('../../src/server/ai/search')>()),
   retrieve: retrieveMock,
 }));
-vi.mock('../../src/server/ai/anthropic', () => ({
-  AssistantNotConfiguredError: class extends Error {},
-  getAnthropic: () => ({
-    messages: {
-      create: async (params: unknown) => {
-        captured.params!.push(params);
-        return {
-          content: [{ type: 'text', text: '["q one", "q two", "q three"]' }],
-        };
-      },
-      stream: (params: unknown) => {
-        captured.params!.push(params);
-        async function* gen() {
-          if (genState.fail) throw new Error('boom');
-          yield {
-            type: 'content_block_delta',
-            delta: {
-              type: 'text_delta',
-              text: '## Summary\nRentals are restricted.',
-            },
-          };
-        }
-        const it = gen();
-        return {
-          [Symbol.asyncIterator]: () => it,
-          finalMessage: async () => ({ stop_reason: 'end_turn' }),
-        };
-      },
+vi.mock('../../src/server/ai/anthropic', () => {
+  class AssistantNotConfiguredError extends Error {}
+  return {
+    AssistantNotConfiguredError,
+    getAnthropic: () => {
+      if (anthropicState.throwNotConfigured) {
+        throw new AssistantNotConfiguredError();
+      }
+      return {
+        messages: {
+          create: async (params: unknown) => {
+            captured.params!.push(params);
+            return {
+              content: [
+                { type: 'text', text: '["q one", "q two", "q three"]' },
+              ],
+            };
+          },
+          stream: (params: unknown) => {
+            captured.params!.push(params);
+            async function* gen() {
+              if (genState.fail) throw new Error('boom');
+              yield {
+                type: 'content_block_delta',
+                delta: {
+                  type: 'text_delta',
+                  text: '## Summary\nRentals are restricted.',
+                },
+              };
+            }
+            const it = gen();
+            return {
+              [Symbol.asyncIterator]: () => it,
+              finalMessage: async () => ({ stop_reason: 'end_turn' }),
+            };
+          },
+        },
+      };
     },
-  }),
-}));
+  };
+});
 
 import { POST, GET, DELETE } from '../../src/pages/api/admin/reports';
 import { getDb } from '../../src/server/db/client';
@@ -58,6 +79,7 @@ import {
   documents,
   reports,
 } from '../../src/server/db/schema';
+import { AiSearchUnavailableError } from '../../src/server/ai/search';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -136,6 +158,19 @@ describe('POST /api/admin/reports', () => {
     expect(res.status).toBe(403);
   });
 
+  it('401s an anonymous caller (fail-closed) when no auth context resolves', async () => {
+    authState.ctx = null;
+    try {
+      // `{}` has no `authContext` key, so resolveAuthContext falls through to
+      // the (mocked) getAuthContext fallback, which now resolves null —
+      // exercising requireBoard's `if (!ctx) return 401` branch for real.
+      const res = await post({ template: 'rentals' }, {});
+      expect(res.status).toBe(401);
+    } finally {
+      authState.ctx = { userId: 'board-1', role: 'board', propertyIds: [] };
+    }
+  });
+
   it('400s malformed JSON', async () => {
     expect((await post('not json')).status).toBe(400);
   });
@@ -183,6 +218,11 @@ describe('POST /api/admin/reports', () => {
   it('sends no real roster PII to Anthropic across planning and generation', async () => {
     captured.params = [];
     await (await post({ topic: 'complaints from Jane Q Homeowner' })).text();
+    // Non-vacuous: prove the pipeline actually reached Anthropic (planner
+    // create + generation stream) before trusting the absence assertions
+    // below — otherwise a broken pipeline that never called Anthropic would
+    // pass these `not.toContain` checks while proving nothing.
+    expect(captured.params!.length).toBe(2);
     const payload = JSON.stringify(captured.params);
     expect(payload).not.toContain('Jane Q Homeowner');
     expect(payload).not.toContain('123 Ashebrook Lane');
@@ -200,6 +240,26 @@ describe('POST /api/admin/reports', () => {
     } finally {
       genState.fail = false;
     }
+  });
+
+  it('maps AssistantNotConfiguredError to a 500 with a friendly message', async () => {
+    anthropicState.throwNotConfigured = true;
+    try {
+      const res = await post({ template: 'rentals' });
+      expect(res.status).toBe(500);
+      expect(await res.text()).toContain("isn't configured");
+    } finally {
+      anthropicState.throwNotConfigured = false;
+    }
+  });
+
+  it('maps AiSearchUnavailableError to a 503', async () => {
+    retrieveMock.mockImplementationOnce(async () => {
+      throw new AiSearchUnavailableError(new Error('search down'));
+    });
+    const res = await post({ template: 'rentals' });
+    expect(res.status).toBe(503);
+    expect(await res.text()).toContain('temporarily unavailable');
   });
 });
 
