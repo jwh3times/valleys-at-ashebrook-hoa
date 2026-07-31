@@ -90,18 +90,23 @@ export interface ReportGeneration {
   textStream: ReadableStream<string>; // de-anonymized markdown
 }
 
-/** Pool chunks across sub-queries: dedupe by (folder, content), best-score first, capped. */
+/** Pool chunks across sub-queries: best-score first, dedupe by (folder, content), capped. */
 function poolChunks(perQuery: AiSearchChunk[][]): AiSearchChunk[] {
+  // Sort BEFORE dedupe: a duplicate chunk can be returned at a low score by one
+  // sub-query and a high score by another (they run independent retrievals), and
+  // `perQuery.flat()` is in sub-query order, not score order. Sorting first means
+  // the first-seen (kept) copy is always the best-scored one, so a strong hit
+  // can't be discarded in favor of a weak duplicate before the cap is applied.
+  const all = perQuery.flat().sort((a, b) => b.score - a.score);
   const seen = new Set<string>();
   const pooled: AiSearchChunk[] = [];
-  for (const c of perQuery.flat()) {
+  for (const c of all) {
     const key = `${c.metadata.folder} ${c.content}`;
     if (!seen.has(key)) {
       seen.add(key);
       pooled.push(c);
     }
   }
-  pooled.sort((a, b) => b.score - a.score);
   return pooled.slice(0, REPORT_CONTEXT_CHUNK_CAP);
 }
 
