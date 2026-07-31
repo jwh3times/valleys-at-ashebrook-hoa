@@ -211,6 +211,47 @@ describe('generateReport', () => {
     expect(userText).toContain('Other text.');
   });
 
+  it('ranks a duplicate chunk by its best score, not its first-seen score, before the cap is applied', async () => {
+    // Same (folder, content) chunk returned twice: a LOW score from the FIRST
+    // sub-query, then a HIGH score from the LAST sub-query. `perQuery.flat()`
+    // is in sub-query order, not score order, so a dedupe-then-sort would
+    // keep the low-scored first-seen copy and sort it below the (higher-
+    // scored) filler chunks — where the cap can cut it. Sorting by score
+    // BEFORE dedupe must keep the high-scored copy instead. 31 unique
+    // candidates for a cap of 30 forces exactly one to be dropped.
+    const template = REPORT_TEMPLATES.find((t) => t.key === 'rentals')!;
+    retrieveMock.mockReset();
+    retrieveMock
+      .mockImplementationOnce(async () => [
+        chunk('dup-low', 0.3, 'Duplicate provision.', 'doc-1'),
+        ...Array.from({ length: 10 }, (_, i) =>
+          chunk(`filler-a-${i}`, 0.55, `Filler A ${i}.`, 'doc-1'),
+        ),
+      ])
+      .mockImplementationOnce(async () =>
+        Array.from({ length: 10 }, (_, i) =>
+          chunk(`filler-b-${i}`, 0.55, `Filler B ${i}.`, 'doc-1'),
+        ),
+      )
+      .mockImplementationOnce(async () =>
+        Array.from({ length: 10 }, (_, i) =>
+          chunk(`filler-c-${i}`, 0.55, `Filler C ${i}.`, 'doc-1'),
+        ),
+      )
+      .mockImplementationOnce(async () => [
+        chunk('dup-high', 0.95, 'Duplicate provision.', 'doc-1'),
+      ]);
+    await readAll(
+      (await generateReport(env, { templateKey: template.key })).textStream,
+    );
+    const userText = (captured.genParams as { messages: { content: string }[] })
+      .messages[0].content;
+    expect(userText).toContain('Duplicate provision.');
+    retrieveMock.mockImplementation(async (_env: unknown, query: string) => [
+      chunk(`c-${query}`, 0.9, `Provision about ${query}.`, 'doc-1'),
+    ]);
+  });
+
   it('caps pooled context at 30 chunks, keeping the top scores', async () => {
     retrieveMock.mockReset();
     retrieveMock.mockImplementation(async (_env: unknown, query: string) =>
