@@ -1,7 +1,8 @@
 import { getDb } from '../db/client';
 import { owners, properties } from '../db/schema';
 import { retrieve } from './search';
-import { toSources, docIdFromFolder, type Source } from './sources';
+import { type Source } from './sources';
+import { buildExcerptContext } from './context';
 import { buildPseudonymizer, type PiiEntry } from './pii';
 import { getAnthropic } from './anthropic';
 import { INPUT_LIMITS } from '../../lib/types';
@@ -68,11 +69,11 @@ interface DeltaEvent {
   type: string;
   delta?: { type: string; text?: string };
 }
-interface ClaudeStream extends AsyncIterable<DeltaEvent> {
+export interface ClaudeStream extends AsyncIterable<DeltaEvent> {
   finalMessage(): Promise<{ stop_reason: string | null }>;
 }
 
-function claudeTextStream(stream: ClaudeStream): ReadableStream<string> {
+export function claudeTextStream(stream: ClaudeStream): ReadableStream<string> {
   return new ReadableStream<string>({
     async start(controller) {
       try {
@@ -108,44 +109,12 @@ export async function answer(
   input: { question: string; history?: Turn[] },
 ): Promise<AnswerResult> {
   const chunks = await retrieve(env, input.question);
-  const allSources = await toSources(env, chunks);
   const pseud = buildPseudonymizer(await loadRosterEntries(env));
-
-  // Keep only chunks that resolve to a real document (drop orphan-vector chunks
-  // whose uuid has no D1 row — ADR 0009 — and any empty-content chunk). Orphan
-  // text must never reach the model, and never render as a bare [Source].
-  const bySourceId = new Map(allSources.map((s) => [s.id, s]));
-  const resolvedChunks = chunks.filter((c) => {
-    const id = docIdFromFolder(c.metadata.folder);
-    return !!id && bySourceId.has(id) && c.content.trim() !== '';
-  });
-
-  // Sources = only documents that contributed a resolved chunk, first-seen order.
-  const resolvedIds: string[] = [];
-  const seen = new Set<string>();
-  for (const c of resolvedChunks) {
-    const id = docIdFromFolder(c.metadata.folder)!;
-    if (!seen.has(id)) {
-      seen.add(id);
-      resolvedIds.push(id);
-    }
-  }
-  const sources = resolvedIds.map((id) => bySourceId.get(id)!);
-  const documentsFound = sources.length > 0;
-
-  // Number excerpts per-document (matching `sources` order). Each label carries
-  // the category (PII-free) and the pseudonymized title so the model can ground
-  // and name its citations without ever seeing a real title.
-  const indexByDocId = new Map(sources.map((s, i) => [s.id, i + 1]));
-  const context = resolvedChunks
-    .map((c) => {
-      const id = docIdFromFolder(c.metadata.folder)!;
-      const src = bySourceId.get(id)!;
-      const idx = indexByDocId.get(id)!;
-      const label = `[Source ${idx}] ${src.category} — "${pseud.anonymize(src.title)}"`;
-      return `${label}\n${pseud.anonymize(c.content)}`;
-    })
-    .join('\n\n');
+  const { sources, contextText, documentsFound } = await buildExcerptContext(
+    env,
+    chunks,
+    pseud,
+  );
 
   const history = (input.history ?? []).map((t) => ({
     role: t.role,
@@ -156,7 +125,7 @@ export async function answer(
       .slice(0, INPUT_LIMITS.assistantQuestion),
   }));
   const userText =
-    `Document excerpts:\n\n${context || '(no relevant excerpts found)'}\n\n` +
+    `Document excerpts:\n\n${contextText || '(no relevant excerpts found)'}\n\n` +
     `Question: ${pseud.anonymize(input.question)}`;
 
   const client = getAnthropic(env);
