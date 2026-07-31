@@ -173,3 +173,15 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
+
+export const reports = sqliteTable('reports', {
+  id: text('id').primaryKey(),
+  topic: text('topic').notNull(),
+  templateKey: text('template_key'),
+  contentMd: text('content_md').notNull(),
+  sourcesJson: text('sources_json').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  // Requesting board member's user id. Plain text (no FK) — audit trail only,
+  // same pattern as documents.keep_verified_by.
+  createdBy: text('created_by').notNull(),
+});
