@@ -11,6 +11,7 @@ import RosterManager from './RosterManager';
 import MembersManager from './MembersManager';
 import BoardMembersManager from './BoardMembersManager';
 import AssistantChat from './AssistantChat';
+import ReportsManager from './ReportsManager';
 
 const SECTIONS = [
   {
@@ -20,6 +21,7 @@ const SECTIONS = [
   },
   { key: 'documents', label: 'Documents', render: () => <DocumentsManager /> },
   { key: 'assistant', label: 'Assistant', render: () => <AssistantChat /> },
+  { key: 'reports', label: 'Reports', render: () => <ReportsManager /> },
   {
     key: 'duplicates',
     label: 'Duplicates',
