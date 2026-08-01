@@ -10,6 +10,7 @@ import type {
   DuplicatesView,
   BoardPersonWithTerms,
   MeetingSummary,
+  MeetingDetail,
   MeetingInput,
   MotionInput,
   VoteChoice,
@@ -358,6 +359,12 @@ export async function deleteBoardTerm(id: string): Promise<void> {
 export async function fetchMeetings(): Promise<MeetingSummary[]> {
   const res = await fetch('/api/admin/meetings');
   if (!res.ok) throw new Error(`Load meetings failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMeeting(id: string): Promise<MeetingDetail> {
+  const res = await fetch(`/api/admin/meetings?id=${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`Load meeting failed: ${res.status}`);
   return res.json();
 }
 

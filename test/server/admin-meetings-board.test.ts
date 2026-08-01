@@ -287,4 +287,60 @@ describe('meetings admin route — board', () => {
     }[];
     expect(list.find((m) => m.id === id)?.title).toBe('Rescheduled meeting');
   });
+
+  it('GET ?id= returns the detail for a DRAFT meeting', async () => {
+    const id = await createMeeting();
+    const res = await GET(req(`${url}?id=${id}`, 'GET'));
+    expect(res.status).toBe(200);
+    const detail = (await res.json()) as {
+      id: string;
+      status: string;
+      motions: unknown[];
+      attendance: unknown[];
+    };
+    expect(detail.id).toBe(id);
+    expect(detail.status).toBe('draft');
+    expect(detail.motions).toEqual([]);
+    expect(detail.attendance).toEqual([]);
+  });
+
+  it('GET ?id= nests a meeting motions, attendance, and votes', async () => {
+    const id = await createMeeting();
+    const p1 = await createPerson('A. Reyes');
+    await POST(
+      req(url, 'POST', {
+        action: 'setAttendance',
+        meetingId: id,
+        entries: [{ personId: p1, present: true }],
+      }),
+    );
+    const now = new Date();
+    await getDb(env).insert(motions).values({
+      id: crypto.randomUUID(),
+      meetingId: id,
+      sequence: 1,
+      text: 'Move to approve the budget',
+      moverPersonId: p1,
+      outcome: 'passed',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const res = await GET(req(`${url}?id=${id}`, 'GET'));
+    const detail = (await res.json()) as {
+      motions: { text: string; moverName: string | null }[];
+      attendance: { fullName: string; present: boolean }[];
+    };
+    expect(detail.motions).toHaveLength(1);
+    expect(detail.motions[0].text).toBe('Move to approve the budget');
+    expect(detail.motions[0].moverName).toBe('A. Reyes');
+    expect(detail.attendance).toEqual([
+      { personId: p1, fullName: 'A. Reyes', present: true },
+    ]);
+  });
+
+  it('GET ?id= for an unknown meeting returns 404', async () => {
+    const res = await GET(req(`${url}?id=nope`, 'GET'));
+    expect(res.status).toBe(404);
+  });
 });

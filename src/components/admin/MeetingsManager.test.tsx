@@ -11,6 +11,7 @@ const mocked = vi.mocked(admin);
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchBoardPeople.mockResolvedValue([]);
+  mocked.fetchMeeting.mockResolvedValue(meetingDetail());
 });
 
 const meeting = {
@@ -23,6 +24,23 @@ const meeting = {
   visibility: 'board' as const,
   motionCount: 3,
 };
+
+// A full MeetingDetail, matching what GET /api/admin/meetings?id= returns.
+function meetingDetail(
+  overrides: Partial<Awaited<ReturnType<typeof admin.fetchMeeting>>> = {},
+) {
+  return {
+    ...meeting,
+    startTime: null,
+    location: null,
+    summaryMd: null,
+    documentId: null,
+    quorumRequired: null,
+    attendance: [],
+    motions: [],
+    ...overrides,
+  };
+}
 
 describe('MeetingsManager', () => {
   it('shows an empty state when no meetings exist', async () => {
@@ -128,14 +146,14 @@ describe('MeetingsManager', () => {
       { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
       { id: 'p2', fullName: 'B. Ortiz', userId: null, terms: [] },
     ]);
-    const { container } = render(<MeetingsManager />);
+    render(<MeetingsManager />);
     await screen.findByText('September meeting');
     await userEvent.click(
       screen.getByRole('button', { name: /attendance & motions/i }),
     );
 
     await screen.findByLabelText('Vote — A. Reyes');
-    const tally = () => container.querySelector('.motion-tally')?.textContent;
+    const tally = () => screen.getByTestId('motion-tally').textContent;
     expect(tally()).toMatch(/0 yes/);
 
     await userEvent.selectOptions(
@@ -149,5 +167,110 @@ describe('MeetingsManager', () => {
       'no',
     );
     await waitFor(() => expect(tally()).toMatch(/1 no/));
+  });
+
+  it('lists motions loaded from the detail read', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.fetchBoardPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        motions: [
+          {
+            id: 'mo1',
+            sequence: 1,
+            text: 'Move to approve the budget',
+            moverName: 'A. Reyes',
+            secondName: null,
+            outcome: 'passed',
+            tally: {
+              yes: 1,
+              no: 0,
+              abstain: 0,
+              recused: 0,
+              absent: 0,
+              recorded: true,
+            },
+            votes: [{ personId: 'p1', fullName: 'A. Reyes', choice: 'yes' }],
+          },
+        ],
+      }),
+    );
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    expect(
+      await screen.findByText('Move to approve the budget'),
+    ).toBeInTheDocument();
+    expect(mocked.fetchMeeting).toHaveBeenCalledWith('m1');
+  });
+
+  it('a motion can be edited', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.fetchBoardPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        motions: [
+          {
+            id: 'mo1',
+            sequence: 1,
+            text: 'Move to approve the budget',
+            moverName: 'A. Reyes',
+            secondName: null,
+            outcome: 'passed',
+            tally: {
+              yes: 1,
+              no: 0,
+              abstain: 0,
+              recused: 0,
+              absent: 0,
+              recorded: true,
+            },
+            votes: [{ personId: 'p1', fullName: 'A. Reyes', choice: 'yes' }],
+          },
+        ],
+      }),
+    );
+    mocked.saveMotion.mockResolvedValue(undefined);
+    mocked.setVotes.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await screen.findByText('Move to approve the budget');
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /edit motion move to approve the budget/i,
+      }),
+    );
+    expect(screen.getByText('Edit motion')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Move to approve the budget',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /save motion/i }));
+
+    await waitFor(() =>
+      expect(mocked.saveMotion).toHaveBeenCalledWith(
+        {
+          text: 'Move to approve the budget',
+          moverPersonId: 'p1',
+          secondPersonId: null,
+          outcome: 'passed',
+        },
+        'mo1',
+      ),
+    );
+    expect(mocked.setVotes).toHaveBeenCalledWith('mo1', [
+      { personId: 'p1', choice: 'yes' },
+    ]);
+    expect(await screen.findByText(/motion updated/i)).toBeInTheDocument();
   });
 });

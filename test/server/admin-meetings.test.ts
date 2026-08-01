@@ -23,6 +23,10 @@ describe('meetings admin route — gate', () => {
     expect((await GET(req(url, 'GET'))).status).toBe(401);
   });
 
+  it('rejects an unauthenticated detail read with 401', async () => {
+    expect((await GET(req(`${url}?id=m1`, 'GET'))).status).toBe(401);
+  });
+
   it('rejects an unauthenticated create with 401', async () => {
     expect(
       (

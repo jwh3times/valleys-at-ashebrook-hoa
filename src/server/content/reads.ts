@@ -1,5 +1,6 @@
 import { inArray, desc, and, eq, asc } from 'drizzle-orm';
 import { getDb } from '../db/client';
+import type { Db } from '../db/client';
 import {
   announcements,
   documents,
@@ -135,26 +136,19 @@ async function withMotionCounts(
   return rows.map((r) => ({ ...r, motionCount: byMeeting.get(r.id) ?? 0 }));
 }
 
-/** One approved, in-tier meeting with attendance, motions, and roll calls. */
-export async function fetchMeetingFor(
-  env: Env,
-  role: Role,
-  id: string,
-): Promise<MeetingDetail | null> {
-  const db = getDb(env);
-  const found = await db
-    .select()
-    .from(meetings)
-    .where(
-      and(
-        eq(meetings.id, id),
-        eq(meetings.status, 'approved'),
-        inArray(meetings.visibility, visibleTiers(role)),
-      ),
-    )
-    .limit(1);
-  if (found.length === 0) return null;
-  const m = found[0];
+/**
+ * Assembles the MeetingDetail body (attendance, motions, roll calls, derived
+ * tallies) for one already-selected meeting row. Shared by fetchMeetingFor
+ * (public, status/tier-gated) and fetchAdminMeeting (board-only, no gate) so
+ * the two cannot drift apart. Deliberately carries NO access control of its
+ * own — the status filter and visibleTiers(role) check happen in the two
+ * callers, before this function ever runs, and must stay there.
+ */
+async function assembleMeetingDetail(
+  db: Db,
+  m: typeof meetings.$inferSelect,
+): Promise<MeetingDetail> {
+  const id = m.id;
 
   const people = await db
     .select({ id: boardPeople.id, fullName: boardPeople.fullName })
@@ -242,4 +236,51 @@ export async function fetchMeetingFor(
       };
     }),
   };
+}
+
+/**
+ * One approved, in-tier meeting with attendance, motions, and roll calls.
+ * The status AND tier gate here is the public read path's whole invariant —
+ * it stays in this function, not in the shared assembler, and is NOT relaxed
+ * for a board caller: a board member browsing /meetings sees exactly what a
+ * homeowner sees. Drafts are reachable only through fetchAdminMeeting.
+ */
+export async function fetchMeetingFor(
+  env: Env,
+  role: Role,
+  id: string,
+): Promise<MeetingDetail | null> {
+  const db = getDb(env);
+  const found = await db
+    .select()
+    .from(meetings)
+    .where(
+      and(
+        eq(meetings.id, id),
+        eq(meetings.status, 'approved'),
+        inArray(meetings.visibility, visibleTiers(role)),
+      ),
+    )
+    .limit(1);
+  if (found.length === 0) return null;
+  return assembleMeetingDetail(db, found[0]);
+}
+
+/**
+ * Board-only: one meeting including drafts, with attendance, motions, and
+ * roll calls. Carries NO status or tier gate of its own — same contract as
+ * fetchAdminMeetings — so every call site MUST be requireBoard-gated.
+ */
+export async function fetchAdminMeeting(
+  env: Env,
+  id: string,
+): Promise<MeetingDetail | null> {
+  const db = getDb(env);
+  const found = await db
+    .select()
+    .from(meetings)
+    .where(eq(meetings.id, id))
+    .limit(1);
+  if (found.length === 0) return null;
+  return assembleMeetingDetail(db, found[0]);
 }
