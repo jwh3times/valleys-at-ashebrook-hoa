@@ -84,6 +84,50 @@ describe('normalizeBoardTermInput', () => {
     const r = normalizeBoardTermInput({ personId: 'p1' }, 'create');
     expect(r.ok).toBe(false);
   });
+
+  it('rejects a malformed end date with a field-specific message', () => {
+    const r = normalizeBoardTermInput(
+      { personId: 'p1', termStart: '2026-01-01', termEnd: '12/31/2026' },
+      'create',
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/termEnd must be YYYY-MM-DD/);
+  });
+
+  it('rejects a non-calendar end date', () => {
+    const r = normalizeBoardTermInput(
+      { personId: 'p1', termStart: '2026-01-01', termEnd: '2026-02-31' },
+      'create',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('allows a patch that omits every field', () => {
+    const r = normalizeBoardTermInput({}, 'patch');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(Object.keys(r.value).length).toBe(0);
+  });
+
+  it('allows a patch that supplies only termEnd', () => {
+    const r = normalizeBoardTermInput({ termEnd: '2026-06-30' }, 'patch');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.termEnd).toBe('2026-06-30');
+    expect(r.value.termStart).toBeUndefined();
+    expect(r.value.personId).toBeUndefined();
+  });
+
+  it('treats a blank end date as null', () => {
+    const r = normalizeBoardTermInput(
+      { personId: 'p1', termStart: '2026-01-01', termEnd: '   ' },
+      'create',
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.termEnd).toBeNull();
+  });
 });
 
 describe('termRangeError', () => {
