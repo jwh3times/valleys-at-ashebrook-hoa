@@ -252,6 +252,33 @@ describe('meeting read helpers', () => {
     });
   });
 
+  it('returns an empty motions array for a meeting with no motions', async () => {
+    const db = getDb(env);
+    await db.insert(boardPeople).values({
+      id: 'p1',
+      fullName: 'A. Reyes',
+      userId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await seed('m1', 'approved', 'public');
+    await db.insert(boardAttendance).values({
+      id: 'a1',
+      meetingId: 'm1',
+      personId: 'p1',
+      present: true,
+    });
+
+    // No motions inserted at all — this must not throw when the vote query's
+    // empty-motions guard is exercised for real, not just read as correct.
+    const detail = await fetchMeetingFor(env, 'visitor', 'm1');
+    expect(detail).not.toBeNull();
+    if (!detail) return;
+    expect(detail.motions).toEqual([]);
+    expect(detail.motionCount).toBe(0);
+    expect(detail.attendance.map((a) => a.fullName)).toEqual(['A. Reyes']);
+  });
+
   it('counts motions on the summary read', async () => {
     const db = getDb(env);
     await seed('m1', 'approved', 'public', '2026-09-14');
