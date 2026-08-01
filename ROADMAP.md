@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** 2026-07-12
+**Updated:** 2026-07-31
 
 This is the current list of work that is not implemented yet. It replaces the older private review
 notes and now-removed implementation handoff docs.
@@ -128,9 +128,74 @@ Remaining work the shipped assistant does not yet cover:
   immediately on upload; triggering a sync automatically after upload is a possible
   future refinement.
 
+### 8. AI CC&R Compliance Report
+
+**Status:** Partially implemented — see `CHANGELOG.md` v0.3.39 for the shipped board-only
+governing-documents report (six curated templates plus a freeform topic, planned
+sub-query retrieval, streamed five-section report with `[Source N]` citations, and
+saved report history in the `reports` table).
+**Gate:** Dedicated spec for the remaining compliance angle
+**Likely size:** Medium
+
+The "what do our CC&Rs say about X" half is shipped. Remaining work:
+
+- The **compliance** angle — "where are our current practices out of step with the
+  governing documents" — is only covered indirectly by the report's Gaps section.
+  Real gap analysis needs a source of truth for current practice (minutes, dues
+  history, enforcement records) to compare the documents against, so it likely
+  waits on item 9.
+- Refinements deferred from the shipped build: a retention policy for the
+  PII-bearing `reports.content_md` (hang it off the existing scheduled cleanup
+  trigger), structured outputs for the sub-query planner instead of parsing JSON
+  out of the response text, pagination for the saved-report list, and a
+  short-circuit when retrieval returns nothing so no generation call is made.
+
+_Product angle: a standalone AI governing-documents report is a sellable
+artifact on its own._
+
+### 9. Minutes and Motion/Vote Records
+
+**Status:** Not implemented
+**Gate:** Dedicated spec
+**Likely size:** Medium to Large
+
+Model the board record, not the transcript: meetings, motions, movers, seconds,
+vote tallies, and a resolutions book, as new D1 tables with board CRUD in the
+admin app. Publication is tiered like all other content — approved minutes
+visible at the homeowner tier, drafts and working records board-only, enforced
+server-side.
+
+_Product angle: the durable record is the product; the data model is the moat._
+
+### 10. Election Management
+
+**Status:** Not implemented
+**Gate:** Official adoption and a board decision
+**Likely size:** Large
+
+Statutory ballots, quorum tracking, and proxy handling. Like online payments,
+this only carries weight if the board adopts the site for official HOA use, so
+it is gated the same way. Eligibility builds on the existing verified-homeowner
+roster and `user_property_links` for one-ballot-per-property rules.
+
+_Product angle: per-election pricing on top of a subscription._
+
+### 11. Reserve Planning Tracker
+
+**Status:** Not implemented
+**Gate:** Dedicated spec and board-supplied reserve study data
+**Likely size:** Large
+
+Track reserve components, useful and remaining life, and funding projections.
+This is an entirely new domain model with the least reuse of existing
+infrastructure, so it sits last in this group. It needs real reserve study data
+from the board to be more than an empty shell.
+
+_Product angle: a price-ladder module for a future product tier._
+
 ## Operations Backlog
 
-### 8. Enable HSTS at the Cloudflare Zone
+### 12. Enable HSTS at the Cloudflare Zone
 
 **Status:** Not implemented
 **Gate:** Operator action in Cloudflare
@@ -140,7 +205,7 @@ The app already sends the baseline security headers it can control. HSTS should
 be enabled at the Cloudflare zone level after confirming HTTPS is stable for the
 production domain and any subdomains that need to remain reachable.
 
-### 9. Rename GitHub and Cloudflare Resources
+### 13. Rename GitHub and Cloudflare Resources
 
 **Status:** Deferred
 **Gate:** Maintainer action
@@ -150,6 +215,27 @@ The resident rebrand is complete in the app, but some resource names still use
 the original HOA-oriented names. Renaming the GitHub repository, D1 database, or
 R2 bucket is operationally risky and should be done only when the maintainer is
 ready to coordinate dashboard changes, Wrangler config updates, and a deploy.
+
+## Product Opportunities
+
+This section records the longer-range product vision so it is not lost. Nothing
+here is backlog. This repo is the v1 pilot of a possible self-managed HOA
+governance product; Ashebrook remains a single-community deployment, and any
+multi-tenant productization requires its own decision, recorded as an ADR,
+before this repo's architecture bends toward it.
+
+- **COI tracking.** Certificate-of-insurance tracking for vendors. Weak as a
+  standalone feature but a good shared module across this product and LeaseBook.
+  The build-once-ship-twice decision belongs at the product level, not in this
+  repo's backlog.
+- **Board certification courses.** Document library plus quiz plus certificate
+  PDF. Not software revenue — treat as top-of-funnel marketing for a future
+  product. No backlog entry.
+- **Monetization notes.** Pricing observations kept here so the backlog entries
+  above stay product-neutral: election management supports per-election pricing
+  ($200–500/election) on top of a subscription and is the best-margin item;
+  the reserve planning tracker is a price-ladder module sold to the same buyer
+  under the same login.
 
 ## Completed Work
 
