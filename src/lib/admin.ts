@@ -191,6 +191,7 @@ export async function saveProperty(
     unit?: string | null;
     notes?: string | null;
     status?: 'active' | 'inactive';
+    voteWeight?: number;
   },
   id?: string,
 ): Promise<void> {

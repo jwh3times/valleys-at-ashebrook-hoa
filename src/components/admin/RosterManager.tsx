@@ -3,7 +3,7 @@ import { fetchProperties, saveProperty, saveOwner } from '../../lib/admin';
 import type { PropertyWithOwners, Owner } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
 
-const emptyHome = { address: '', unit: '', notes: '' };
+const emptyHome = { address: '', unit: '', notes: '', voteWeight: '1' };
 const emptyOwner = { fullName: '', phone: '', email: '', notes: '' };
 type Status = 'active' | 'inactive';
 
@@ -49,6 +49,7 @@ export default function RosterManager() {
       address: h.address,
       unit: h.unit ?? '',
       notes: h.notes ?? '',
+      voteWeight: String(h.voteWeight ?? 1),
     });
     setHomeStatus(h.status);
     setMsg('');
@@ -85,6 +86,7 @@ export default function RosterManager() {
             address: homeForm.address,
             unit: homeForm.unit || null,
             notes: homeForm.notes || null,
+            voteWeight: Number(homeForm.voteWeight) || 1,
             ...(editingHomeId ? { status: homeStatus } : {}),
           },
           editingHomeId ?? undefined,
@@ -186,6 +188,21 @@ export default function RosterManager() {
               }
             />
           </div>
+        </div>
+        <div className="field" style={{ marginBottom: '16px' }}>
+          <label htmlFor="home-vote-weight">
+            Vote weight (shares) — leave at 1 unless this lot votes with extra
+            weight
+          </label>
+          <input
+            id="home-vote-weight"
+            type="number"
+            min={1}
+            value={homeForm.voteWeight}
+            onChange={(e) =>
+              setHomeForm({ ...homeForm, voteWeight: e.target.value })
+            }
+          />
         </div>
         {editingHomeId && (
           <div className="field" style={{ marginBottom: '16px' }}>
@@ -329,6 +346,9 @@ export default function RosterManager() {
                   <div className="admin-row-title">
                     {h.address}
                     {h.unit ? ` · Unit ${h.unit}` : ''}
+                    {typeof h.voteWeight === 'number' && h.voteWeight !== 1
+                      ? ` · Weight ${h.voteWeight}`
+                      : ''}
                     {h.status === 'inactive' && (
                       <span className="pinned-badge"> Inactive</span>
                     )}
