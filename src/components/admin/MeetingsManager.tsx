@@ -172,6 +172,14 @@ export default function MeetingsManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The member attendance and vote editors offer only active properties —
+  // ADR 0015 makes `status = 'inactive'` the sanctioned way to pull a lot
+  // out of voting, and totalActiveWeight (the public quorum denominator) is
+  // summed over active properties only. Letting the board mark an inactive
+  // lot present or cast its vote here would inflate the numerator against a
+  // denominator that already excludes it.
+  const activeProperties = properties.filter((p) => p.status === 'active');
+
   const [meetingForm, setMeetingForm] = useState(emptyMeeting);
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
   // Set while startEditMeeting's detail fetch is in flight, so the "Edit"
@@ -251,9 +259,15 @@ export default function MeetingsManager() {
     return () => {
       cancelled = true;
     };
-    // Re-run only when the expanded meeting changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedId]);
+    // Re-run when the expanded meeting changes, and also when `properties`
+    // resolves: ownerIdByPropertyAndName reads `properties` via closure, so
+    // without this dependency, expanding a meeting before fetchProperties()
+    // resolves would close over the initial empty array, resolve every
+    // representedByOwnerId to '', and a subsequent save would write null
+    // over every recorded representative. Re-running once properties
+    // arrives re-derives memberAttendanceForm correctly; refetching the
+    // same meeting detail again is a harmless extra request.
+  }, [expandedId, properties]);
 
   async function reloadDetail(meetingId: string) {
     const d = await fetchMeeting(meetingId);
@@ -459,6 +473,16 @@ export default function MeetingsManager() {
   async function submitMotion(e: React.FormEvent, m: MeetingSummary) {
     e.preventDefault();
     const meetingId = m.id;
+    // The mover/second pickers are hidden for member meetings (see the
+    // form above) since they're drawn from the board roster, which is the
+    // wrong roster to attribute a member motion's mover to. Re-null both
+    // here too, not just hide the controls, so a value left over from
+    // editing a board motion — or any other stale motionForm state — can
+    // never actually be sent for a member meeting's motion.
+    const moverPersonId =
+      m.body === 'board' ? motionForm.moverPersonId || null : null;
+    const secondPersonId =
+      m.body === 'board' ? motionForm.secondPersonId || null : null;
     await run(
       async () => {
         let motionId: string | undefined;
@@ -466,8 +490,8 @@ export default function MeetingsManager() {
           await saveMotion(
             {
               text: motionForm.text,
-              moverPersonId: motionForm.moverPersonId || null,
-              secondPersonId: motionForm.secondPersonId || null,
+              moverPersonId,
+              secondPersonId,
               outcome: motionForm.outcome,
             },
             editingMotionId,
@@ -477,26 +501,30 @@ export default function MeetingsManager() {
           motionId = await saveMotion({
             meetingId,
             text: motionForm.text,
-            moverPersonId: motionForm.moverPersonId || null,
-            secondPersonId: motionForm.secondPersonId || null,
+            moverPersonId,
+            secondPersonId,
             outcome: motionForm.outcome,
           });
         }
         if (motionId) {
           if (m.body === 'member') {
-            // Full-replace: every property goes in, with an explicit
-            // choice — MemberVoteChoice has no "not entered" state, so an
-            // untouched property defaults to abstain rather than being
-            // silently dropped from the ballot.
-            const entries = properties.map((p) => {
-              const row = memberVoteForm[p.id];
-              return {
-                propertyId: p.id,
-                choice: row?.choice ?? ('abstain' as MemberVoteChoice),
-                castByOwnerId: row?.castByOwnerId || null,
-                viaProxy: !!row?.viaProxy,
-              };
-            });
+            // Only properties with an entered choice go in — mirrors the
+            // board roll call below (Object.entries(voteForm)). A property
+            // that was never touched has no row in memberVoteForm and is
+            // omitted here, not defaulted to abstain: an untouched lot is
+            // absent, not a recorded abstention, and MemberVoteChoice has
+            // no "not entered" state to say otherwise. The route's
+            // full-replace still deletes any previously saved row for an
+            // omitted property, so leaving one out here is how a vote gets
+            // un-recorded, same as unchecking it.
+            const entries = Object.entries(memberVoteForm).map(
+              ([propertyId, row]) => ({
+                propertyId,
+                choice: row.choice,
+                castByOwnerId: row.castByOwnerId || null,
+                viaProxy: !!row.viaProxy,
+              }),
+            );
             await setMemberVotes(motionId, entries);
           } else {
             const entries = Object.entries(voteForm).map(
@@ -871,12 +899,12 @@ export default function MeetingsManager() {
                       style={{ marginBottom: '14px' }}
                     >
                       <div className="panel-editor__title">Attendance</div>
-                      {properties.length === 0 ? (
+                      {activeProperties.length === 0 ? (
                         <p className="muted">
                           No properties yet — add homes on The Roster tab.
                         </p>
                       ) : (
-                        properties.map((p) => {
+                        activeProperties.map((p) => {
                           const row = memberAttendanceForm[p.id];
                           return (
                             <div key={p.id} style={{ marginBottom: '10px' }}>
@@ -979,7 +1007,7 @@ export default function MeetingsManager() {
                         <button
                           className="btn btn--small"
                           type="submit"
-                          disabled={busy || properties.length === 0}
+                          disabled={busy || activeProperties.length === 0}
                         >
                           {busy ? 'Saving…' : 'Save attendance'}
                         </button>
@@ -1009,55 +1037,69 @@ export default function MeetingsManager() {
                         required
                       />
                     </div>
-                    <div
-                      className="field-grid"
-                      style={{ marginBottom: '16px' }}
-                    >
-                      <div className="field" style={{ margin: 0 }}>
-                        <label htmlFor={`motion-mover-${m.id}`}>
-                          Moved by (optional)
-                        </label>
-                        <select
-                          id={`motion-mover-${m.id}`}
-                          value={motionForm.moverPersonId}
-                          onChange={(e) =>
-                            setMotionForm({
-                              ...motionForm,
-                              moverPersonId: e.target.value,
-                            })
-                          }
+                    {
+                      // Mover/second are picked from the board roster
+                      // (`people`) below, which is the only roster this
+                      // panel has for that purpose. `motions.mover_owner_id`
+                      // / `second_owner_id` exist in the schema for an
+                      // owner-attributed mover, but nothing writes or reads
+                      // them yet — that arrives with PR 4. Until then, a
+                      // member meeting's motion has no correct roster to
+                      // attribute a mover/second to, so hide the pickers
+                      // rather than let this record a board person as the
+                      // mover of a motion the members made.
+                      m.body === 'board' && (
+                        <div
+                          className="field-grid"
+                          style={{ marginBottom: '16px' }}
                         >
-                          <option value="">— none —</option>
-                          {people.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.fullName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field" style={{ margin: 0 }}>
-                        <label htmlFor={`motion-second-${m.id}`}>
-                          Seconded by (optional)
-                        </label>
-                        <select
-                          id={`motion-second-${m.id}`}
-                          value={motionForm.secondPersonId}
-                          onChange={(e) =>
-                            setMotionForm({
-                              ...motionForm,
-                              secondPersonId: e.target.value,
-                            })
-                          }
-                        >
-                          <option value="">— none —</option>
-                          {people.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.fullName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label htmlFor={`motion-mover-${m.id}`}>
+                              Moved by (optional)
+                            </label>
+                            <select
+                              id={`motion-mover-${m.id}`}
+                              value={motionForm.moverPersonId}
+                              onChange={(e) =>
+                                setMotionForm({
+                                  ...motionForm,
+                                  moverPersonId: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">— none —</option>
+                              {people.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.fullName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label htmlFor={`motion-second-${m.id}`}>
+                              Seconded by (optional)
+                            </label>
+                            <select
+                              id={`motion-second-${m.id}`}
+                              value={motionForm.secondPersonId}
+                              onChange={(e) =>
+                                setMotionForm({
+                                  ...motionForm,
+                                  secondPersonId: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">— none —</option>
+                              {people.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.fullName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )
+                    }
 
                     <div className="field" style={{ marginBottom: '16px' }}>
                       <label htmlFor={`motion-outcome-${m.id}`}>Outcome</label>
@@ -1148,10 +1190,10 @@ export default function MeetingsManager() {
                             ))}
                           </div>
                         )
-                      : properties.length > 0 && (
+                      : activeProperties.length > 0 && (
                           <div style={{ marginBottom: '16px' }}>
                             <div className="panel-editor__title">Votes</div>
-                            {properties.map((p) => {
+                            {activeProperties.map((p) => {
                               const row = memberVoteForm[p.id];
                               return (
                                 <div

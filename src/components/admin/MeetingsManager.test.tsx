@@ -457,6 +457,48 @@ describe('MeetingsManager', () => {
     expect(screen.queryByText('Roll call')).not.toBeInTheDocument();
   });
 
+  it('excludes inactive properties from the member attendance and vote editors', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+      {
+        id: 'prop2',
+        address: '16 Oak Lane',
+        unit: null,
+        status: 'inactive',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    // Active property is offered in both the attendance and votes editors.
+    expect(await screen.findByLabelText('12 Oak Lane')).toBeInTheDocument();
+    expect(screen.getByLabelText('Vote — 12 Oak Lane')).toBeInTheDocument();
+    // Inactive property is offered in neither — totalActiveWeight (the
+    // public quorum denominator) excludes it, so marking it present or
+    // casting its vote here would inflate the numerator against a
+    // denominator that already leaves it out.
+    expect(screen.queryByLabelText('16 Oak Lane')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Vote — 16 Oak Lane'),
+    ).not.toBeInTheDocument();
+  });
+
   it('shows the board editors for a board meeting, not the property ones', async () => {
     mocked.fetchMeetings.mockResolvedValue([meeting]);
     mocked.fetchBoardPeople.mockResolvedValue([
@@ -541,7 +583,7 @@ describe('MeetingsManager', () => {
     expect(await screen.findByText(/attendance saved/i)).toBeInTheDocument();
   });
 
-  it('submitting member votes sends the full property list', async () => {
+  it('submitting member votes sends only the properties with an entered choice', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
     mocked.fetchProperties.mockResolvedValue([
       {
@@ -577,8 +619,10 @@ describe('MeetingsManager', () => {
       'Approve the budget',
     );
     // Cast a vote for 12 Oak Lane; deliberately leave 14 Oak Lane
-    // untouched — the save must still send a row for it (defaulting to
-    // abstain), not omit it.
+    // untouched — the save must NOT send a row for it. An untouched lot is
+    // absent from the ballot, not a recorded abstention, and a fabricated
+    // abstain vote for every silent property is exactly the bug this test
+    // pins against.
     await userEvent.selectOptions(
       screen.getByLabelText('Vote — 12 Oak Lane'),
       'yes',
@@ -594,15 +638,85 @@ describe('MeetingsManager', () => {
           castByOwnerId: null,
           viaProxy: false,
         },
-        {
-          propertyId: 'prop2',
-          choice: 'abstain',
-          castByOwnerId: null,
-          viaProxy: false,
-        },
       ]),
     );
     expect(await screen.findByText(/motion recorded/i)).toBeInTheDocument();
+  });
+
+  it('saving a member motion with no votes entered sends no vote rows', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+      {
+        id: 'prop2',
+        address: '14 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 3,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    mocked.saveMotion.mockResolvedValue('mo1');
+    mocked.setMemberVotes.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    // No votes touched at all — every property's ballot is untouched.
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the budget',
+    );
+    await userEvent.click(screen.getByRole('button', { name: /add motion/i }));
+
+    await waitFor(() =>
+      expect(mocked.setMemberVotes).toHaveBeenCalledWith('mo1', []),
+    );
+    expect(await screen.findByText(/motion recorded/i)).toBeInTheDocument();
+  });
+
+  it("does not offer the board-roster mover/second pickers on a member meeting's motion form", async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchBoardPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await screen.findByLabelText(/^motion$/i);
+
+    // The board roster (`people`) is the only mover/second roster this
+    // panel has; a member meeting's motion has no correct roster to
+    // attribute a mover/second to until owner-attributed movers land, so
+    // neither picker should render at all.
+    expect(screen.queryByText(/moved by/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/seconded by/i)).not.toBeInTheDocument();
   });
 
   it('shows the weighted live tally for a member motion, summed per choice across differently-weighted properties', async () => {
@@ -722,7 +836,11 @@ describe('MeetingsManager', () => {
     );
     await userEvent.click(within(voteField).getByLabelText('Via proxy'));
     // Leave 14 Oak Lane (no owners, so no Cast by/Via proxy controls at
-    // all) untouched — its row must still submit at defaults.
+    // all) completely untouched — it must NOT be sent at all: touching
+    // only Cast by/Via proxy for 12 Oak Lane (never its Vote choice) still
+    // records a row for it, defaulting to abstain, because those controls
+    // themselves create the memberVoteForm entry; a property nothing was
+    // ever entered for gets no row and no default.
 
     await userEvent.click(screen.getByRole('button', { name: /add motion/i }));
 
@@ -733,12 +851,6 @@ describe('MeetingsManager', () => {
           choice: 'abstain',
           castByOwnerId: 'o1',
           viaProxy: true,
-        },
-        {
-          propertyId: 'prop2',
-          choice: 'abstain',
-          castByOwnerId: null,
-          viaProxy: false,
         },
       ]),
     );

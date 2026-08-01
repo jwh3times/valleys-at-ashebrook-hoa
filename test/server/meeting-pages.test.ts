@@ -516,11 +516,12 @@ describe('/meetings/[id]', () => {
     expect(html).not.toContain('quorum');
   });
 
-  it('renders per-property votes and the weighted tally for a member motion', async () => {
+  it('renders per-property votes and the weighted tally for a member motion, never the owner names behind them', async () => {
     const db = getDb(env);
     await seedProperty('p1', { weight: 2, status: 'active' });
     await seedProperty('p2', { weight: 1, status: 'active' });
     await seedOwner('o1', 'p1', 'A. Reyes');
+    await seedOwner('o2', 'p2', 'B. Ortiz');
     await seedMeeting({
       id: 'member-motion',
       status: 'approved',
@@ -560,6 +561,22 @@ describe('/meetings/[id]', () => {
         choice: 'no',
       },
     ]);
+    // A representedByName on the same p2 row, from a different owner, so
+    // this test also pins that this attendance-side name never leaks —
+    // castByName and representedByName are both on the payload
+    // fetchMeetingFor returns; only the template not interpolating them
+    // keeps them off the page, and that's the invariant this test exists
+    // to guard.
+    await db.insert(memberAttendance).values([
+      {
+        id: 'ma1',
+        meetingId: 'member-motion',
+        propertyId: 'p2',
+        present: true,
+        representedByOwnerId: 'o2',
+        viaProxy: false,
+      },
+    ]);
     const container = await makeContainer();
     const html = await container.renderToString(MeetingDetailPage, {
       params: { id: 'member-motion' },
@@ -573,6 +590,13 @@ describe('/meetings/[id]', () => {
     // Per-property votes, not per-person roll call.
     expect(html).toContain('p1 Oak St');
     expect(html).toContain('p2 Oak St');
+    // No resident names published — the whole privacy story this branch
+    // rests on. castByName ('A. Reyes', cast on p1's vote) and
+    // representedByName ('B. Ortiz', representing p2's attendance) are
+    // both present on the fetchMeetingFor payload; neither may reach the
+    // rendered HTML.
+    expect(html).not.toContain('A. Reyes');
+    expect(html).not.toContain('B. Ortiz');
   });
 
   it('renders "Vote not recorded" for a member motion with no member votes', async () => {

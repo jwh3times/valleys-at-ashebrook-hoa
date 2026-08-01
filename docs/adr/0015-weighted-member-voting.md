@@ -37,3 +37,21 @@ deliberately rather than forcing a union-narrowing branch into code that never a
 votes in the first place. `meetings.body` tells a consumer which pair to read; `totalActiveWeight`
 is populated for every meeting, including board ones, so a consumer must gate on `body`, never on
 that value being non-zero.
+
+**Quorum is live; the tally beside it is not, and that is intentional.** Everything above makes the
+tally a frozen snapshot: `member_votes.weight` is copied at recording time so a later weight
+correction cannot rewrite a past result. Attendance gets the opposite treatment. `member_attendance`
+has no weight column at all — the present-weight sum and `totalActiveWeight` both resolve from
+`properties.vote_weight` and `properties.status` as they stand _now_, at read time, not as they
+stood on the meeting date. So editing a property's weight, or moving it to `status = 'inactive'`,
+changes the quorum line on an already-approved, already-published meeting, while the vote tally
+next to it stays exactly as recorded. That is deliberate, not an oversight: quorum is a question
+about whether the room (or the roster) had enough weight present to act, and the roster is a live
+fact about the association, not a fact about the meeting — asking "was quorum met" with a
+five-year-old weight table would answer a question nobody is asking. A vote result is the opposite:
+it is a fact about what happened at the meeting, and must not drift when the roster changes later.
+Both halves are correct for what they represent, but they are two different temporal models sitting
+in the same published record, and a meeting can end up publishing a quorum line and a tally that
+read as inconsistent with each other after a roster edit. Do not "fix" this by making the tally live
+(the whole point above) or by snapshotting attendance (member_attendance intentionally carries no
+weight column to snapshot); the asymmetry is the design.
