@@ -53,6 +53,20 @@ describe('normalizeMeetingInput', () => {
     expect(r.error).toMatch(/status is not editable/i);
   });
 
+  it('rejects a null status — presence, not truthiness, is what is checked', () => {
+    const r = normalizeMeetingInput({ ...valid, status: null }, 'create');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/status is not editable/i);
+  });
+
+  it('rejects an explicit undefined status key on patch', () => {
+    const r = normalizeMeetingInput({ id: 'm1', status: undefined }, 'patch');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/status is not editable/i);
+  });
+
   it('treats a blank summary as null', () => {
     const r = normalizeMeetingInput({ ...valid, summaryMd: '   ' }, 'create');
     expect(r.ok).toBe(true);
@@ -62,6 +76,57 @@ describe('normalizeMeetingInput', () => {
 
   it('rejects a negative quorum', () => {
     const r = normalizeMeetingInput({ ...valid, quorumRequired: -1 }, 'create');
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a non-integer quorum', () => {
+    const r = normalizeMeetingInput(
+      { ...valid, quorumRequired: 1.5 },
+      'create',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a NaN quorum', () => {
+    const r = normalizeMeetingInput(
+      { ...valid, quorumRequired: NaN },
+      'create',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a numeric-string quorum', () => {
+    const r = normalizeMeetingInput(
+      { ...valid, quorumRequired: '4' },
+      'create',
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it('accepts a valid quorum and round-trips the value', () => {
+    const r = normalizeMeetingInput({ ...valid, quorumRequired: 4 }, 'create');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.quorumRequired).toBe(4);
+  });
+
+  it('clears the quorum with an explicit null', () => {
+    const r = normalizeMeetingInput(
+      { ...valid, quorumRequired: null },
+      'create',
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.quorumRequired).toBeNull();
+  });
+
+  it('rejects a non-string body value', () => {
+    const r = normalizeMeetingInput({ ...valid, body: 0 }, 'create');
+    expect(r.ok).toBe(false);
+  });
+
+  it('rejects a non-string kind value', () => {
+    const r = normalizeMeetingInput({ ...valid, kind: {} }, 'create');
     expect(r.ok).toBe(false);
   });
 
@@ -99,6 +164,13 @@ describe('normalizeMotionInput', () => {
 
   it('rejects a sequence field — the server assigns it', () => {
     const r = normalizeMotionInput({ ...valid, sequence: 3 }, 'create');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/sequence is not editable/i);
+  });
+
+  it('rejects a zero sequence — presence, not truthiness, is what is checked', () => {
+    const r = normalizeMotionInput({ ...valid, sequence: 0 }, 'create');
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toMatch(/sequence is not editable/i);
