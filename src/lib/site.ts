@@ -34,6 +34,7 @@ const BASE_NAV: NavLink[] = [
   { href: '/announcements', label: 'Announcements' },
   { href: '/calendar', label: 'Calendar' },
   { href: '/documents', label: 'Documents' },
+  { href: '/meetings', label: 'Meetings' },
   { href: '/dues', label: 'Dues' },
   { href: '/contact', label: 'Contact' },
 ];

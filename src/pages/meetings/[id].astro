@@ -1,0 +1,147 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ReportMarkdown from '../../components/react/ReportMarkdown.tsx';
+import { NEIGHBORHOOD } from '../../lib/site';
+import { env } from 'cloudflare:workers';
+import { fetchMeetingFor } from '../../server/content/reads';
+import { formatDate } from '../../lib/format';
+import type {
+  MeetingBody,
+  MeetingKind,
+  MotionOutcome,
+  VoteChoice,
+} from '../../lib/types';
+
+const BODY_LABELS: Record<MeetingBody, string> = {
+  board: 'Board',
+  member: 'Member',
+};
+const KIND_LABELS: Record<MeetingKind, string> = {
+  regular: 'Regular',
+  special: 'Special',
+  annual: 'Annual',
+};
+const OUTCOME_LABELS: Record<MotionOutcome, string> = {
+  passed: 'Passed',
+  failed: 'Failed',
+  withdrawn: 'Withdrawn',
+  tabled: 'Tabled',
+};
+const VOTE_LABELS: Record<VoteChoice, string> = {
+  yes: 'Yes',
+  no: 'No',
+  abstain: 'Abstain',
+  recused: 'Recused',
+  absent: 'Absent',
+};
+
+const id = Astro.params.id!;
+// fetchMeetingFor applies the unconditional approved-status gate AND the
+// visibility tier gate — same as fetchMeetingsFor, not relaxed for a board
+// caller. A null result must render the generic 404, never a 403: a 403
+// would confirm to the caller that a draft or board-only meeting exists at
+// this id.
+const role = Astro.locals.authContext?.role ?? 'visitor';
+const meeting = await fetchMeetingFor(env, role, id);
+
+if (!meeting) {
+  return Astro.rewrite('/404');
+}
+
+// Board quorum counts people because this meeting's body is "board"; a
+// future release adds the weighted property-based count for member
+// meetings. Say nothing about quorum when none is configured rather than
+// inventing a threshold.
+const present = meeting.attendance.filter((a) => a.present).length;
+const total = meeting.attendance.length;
+let attendanceLine = `${present} of ${total} board members present`;
+if (meeting.quorumRequired !== null) {
+  const met = present >= meeting.quorumRequired;
+  attendanceLine += ` — quorum of ${meeting.quorumRequired} ${met ? 'met' : 'not met'}`;
+}
+---
+
+<BaseLayout
+  title={meeting.title}
+  description={`${BODY_LABELS[meeting.body]} meeting record for the residents association at ${NEIGHBORHOOD}.`}
+>
+  <div class="page-section">
+    <p class="eyebrow">Record</p>
+    <h1 class="page-title">{meeting.title}</h1>
+    <p class="page-lead">
+      {formatDate(meeting.date)} · {BODY_LABELS[meeting.body]}{' '}
+      {KIND_LABELS[meeting.kind]} meeting
+      {meeting.startTime && <> · {meeting.startTime}</>}
+      {meeting.location && <> · {meeting.location}</>}
+    </p>
+
+    <p class="attendance-line">{attendanceLine}</p>
+
+    {
+      meeting.documentId && (
+        <p>
+          <a
+            class="btn btn--outline btn--small"
+            href={`/api/files/${meeting.documentId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Download minutes (PDF) ↓
+          </a>
+        </p>
+      )
+    }
+
+    {
+      meeting.summaryMd && (
+        <div class="card" style="margin-bottom: 24px;">
+          <ReportMarkdown text={meeting.summaryMd} />
+        </div>
+      )
+    }
+
+    <h2 class="side-h2">Motions</h2>
+    {
+      meeting.motions.length === 0 ? (
+        <p class="muted">No motions were recorded at this meeting.</p>
+      ) : (
+        <div class="motion-list">
+          {meeting.motions.map((mo) => (
+            <div class="motion card">
+              <p class="motion__text">{mo.text}</p>
+              {(mo.moverName || mo.secondName) && (
+                <p class="motion__meta">
+                  {mo.moverName && <>Moved by {mo.moverName}</>}
+                  {mo.moverName && mo.secondName && ' · '}
+                  {mo.secondName && <>Seconded by {mo.secondName}</>}
+                </p>
+              )}
+              <p class="motion__tally">
+                {mo.tally.recorded ? (
+                  <>
+                    {mo.tally.yes} yes · {mo.tally.no} no · {mo.tally.abstain}{' '}
+                    abstain · {mo.tally.recused} recused · {mo.tally.absent}{' '}
+                    absent
+                  </>
+                ) : (
+                  'Vote not recorded'
+                )}
+                {' — '}
+                {OUTCOME_LABELS[mo.outcome]}
+              </p>
+              {mo.votes.length > 0 && (
+                <ul class="motion__rollcall">
+                  {mo.votes.map((v) => (
+                    <li>
+                      {v.fullName}: {VOTE_LABELS[v.choice]}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</BaseLayout>
