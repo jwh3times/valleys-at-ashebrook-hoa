@@ -113,4 +113,36 @@ describe('RosterManager — vote weight', () => {
     expect(saveProperty.mock.calls[0][0]).toMatchObject({ voteWeight: 7 });
     expect(saveProperty.mock.calls[0][1]).toBe('p1'); // patch by id
   });
+
+  it('sends an explicit 0 through unchanged, letting the server reject it', async () => {
+    fetchProperties.mockReset().mockResolvedValue([{ ...HOME, voteWeight: 1 }]);
+    render(<RosterManager />);
+    await screen.findByText(/1 Test St/);
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]);
+    fireEvent.change(screen.getByLabelText(/vote weight/i), {
+      target: { value: '0' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save home/i }));
+    await waitFor(() => expect(saveProperty).toHaveBeenCalledTimes(1));
+    // The client must not rewrite a typed 0 to 1 — that would silently
+    // corrupt the value the server's normalizeVoteWeight rejects.
+    expect(saveProperty.mock.calls[0][0]).toMatchObject({ voteWeight: 0 });
+  });
+
+  it('surfaces the server error when saving a rejected vote weight', async () => {
+    fetchProperties.mockReset().mockResolvedValue([{ ...HOME, voteWeight: 1 }]);
+    saveProperty.mockRejectedValueOnce(
+      new Error('voteWeight must be a whole number of 1 or more'),
+    );
+    render(<RosterManager />);
+    await screen.findByText(/1 Test St/);
+    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]);
+    fireEvent.change(screen.getByLabelText(/vote weight/i), {
+      target: { value: '0' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save home/i }));
+    expect(
+      await screen.findByText(/whole number of 1 or more/i),
+    ).toBeInTheDocument();
+  });
 });

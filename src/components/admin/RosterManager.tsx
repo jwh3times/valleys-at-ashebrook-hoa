@@ -86,7 +86,10 @@ export default function RosterManager() {
             address: homeForm.address,
             unit: homeForm.unit || null,
             notes: homeForm.notes || null,
-            voteWeight: Number(homeForm.voteWeight) || 1,
+            voteWeight:
+              homeForm.voteWeight.trim() === ''
+                ? 1
+                : Number(homeForm.voteWeight),
             ...(editingHomeId ? { status: homeStatus } : {}),
           },
           editingHomeId ?? undefined,
@@ -197,7 +200,6 @@ export default function RosterManager() {
           <input
             id="home-vote-weight"
             type="number"
-            min={1}
             value={homeForm.voteWeight}
             onChange={(e) =>
               setHomeForm({ ...homeForm, voteWeight: e.target.value })
