@@ -10,6 +10,7 @@ import SiteManager from './SiteManager';
 import RosterManager from './RosterManager';
 import MembersManager from './MembersManager';
 import BoardMembersManager from './BoardMembersManager';
+import BoardPanel from './BoardPanel';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
 
@@ -29,9 +30,12 @@ const SECTIONS = [
   },
   { key: 'roster', label: 'Roster', render: () => <RosterManager /> },
   { key: 'members', label: 'Members', render: () => <MembersManager /> },
+  { key: 'board-roster', label: 'The Board', render: () => <BoardPanel /> },
   {
+    // Site sign-in access, not who serves on the board — see the
+    // "The Board" tab above for the roster of members and their terms.
     key: 'board',
-    label: 'Board members',
+    label: 'Board access',
     render: () => <BoardMembersManager />,
   },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
