@@ -86,13 +86,16 @@ over abbreviations. Use `*.test.ts` and `*.test.tsx` for tests. Keep server-only
 ## Architecture
 
 **Rendering model.** Pages are `.astro` files in `src/pages/`. The site is full SSR. Public content
-(announcements, documents, dues) is read server-side in each page's frontmatter via
-`fetchAnnouncementsFor`, `fetchDocumentsFor`, or `getDuesSettings`, using the role from
-`Astro.locals.authContext`, then passed as props to display components. Those components render
-server-side without client directives so HTML ships with real content for SEO, first paint, and
-no-JS behavior. Same-origin API endpoints under `src/pages/api/` back the admin panel and any
-client refresh. Runtime bindings and secrets are read via `import { env } from 'cloudflare:workers'`.
-Build-time `PUBLIC_*` vars are inlined by Astro from `.env`.
+(announcements, documents, dues, the meeting record) is read server-side in each page's frontmatter
+via `fetchAnnouncementsFor`, `fetchDocumentsFor`, `getDuesSettings`, or `fetchMeetingsFor`/
+`fetchMeetingFor`, using the role from `Astro.locals.authContext`, then passed as props to display
+components. Those components render server-side without client directives so HTML ships with real
+content for SEO, first paint, and no-JS behavior. When `fetchMeetingFor` returns `null` for a draft
+or out-of-tier meeting, `/meetings/[id]` renders the generic 404, never a 403, so the response
+doesn't confirm such a record exists. Same-origin API endpoints under `src/pages/api/` back the
+admin panel and any client refresh. Runtime bindings and secrets are read via
+`import { env } from 'cloudflare:workers'`. Build-time `PUBLIC_*` vars are inlined by Astro from
+`.env`.
 
 **Cloudflare bindings.** `wrangler.toml` defines `DATABASE` (D1), `KV` (app KV), `SESSION` (KV for
 Astro sessions), `DOCS` (R2 document storage), and `AI` (Workers AI / AI Search binding). `SESSION`
@@ -112,11 +115,28 @@ Markdown twins described below and never the human-readable originals.
   `GET /api/admin/board-people` returns board people with their terms nested, mirroring the
   properties/owners read. Deleting a board person who has a term of service on record returns
   `409` from `DELETE /api/admin/board-people` — ending the term is the intended action instead —
-  and a term's `person_id` cannot be reassigned via `PATCH /api/admin/board-terms`.
+  and a term's `person_id` cannot be reassigned via `PATCH /api/admin/board-terms`. The same
+  `DELETE` also returns `409` if the person appears anywhere in the meeting record (attendance, as
+  a motion's mover/second, or a roll-call vote), pre-checking all five RESTRICT foreign keys so the
+  response is deterministic rather than a raw D1 FK error.
   `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
   duplicate group resurfaces for review.
+- Board-only meeting record (board meetings only — member meetings, attendance, votes,
+  resolutions, elections, ballots, and proxies are a later phase): `/api/admin/meetings` supports
+  `GET`/`POST`/`PATCH`/`DELETE`. `GET` lists every meeting including drafts, or returns one full
+  meeting detail with `?id=`; `POST` creates a meeting, or with `{ action: 'setAttendance' }` fully
+  replaces its attendance roll, or with `{ action: 'approve' }`/`{ action: 'unapprove' }` flips
+  `status` (`approve` returns `409` if already approved; `unapprove` clears
+  `approved_at`/`approved_by`/`approved_by_motion_id`); `PATCH` updates a meeting's fields but
+  cannot write `status`; `DELETE` returns `409` on an approved meeting (unapprove first), otherwise
+  cascading its attendance, motions, and votes. `/api/admin/motions` supports
+  `POST`/`PATCH`/`DELETE`. `POST` creates a motion with a server-assigned `sequence` (unique per
+  meeting), or with `{ action: 'setVotes' }` fully replaces a motion's roll-call vote set; `PATCH`
+  updates a motion's fields but cannot write `sequence` or move it between meetings; `DELETE`
+  cascades its votes. `setAttendance` and `setVotes` each replace their full child set in one
+  `db.batch()`. All verbs on both routes are `requireBoard`-gated.
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
@@ -169,8 +189,10 @@ Markdown twins described below and never the human-readable originals.
 - `src/lib/content.ts` handles public reads from `/api/content/*` endpoints.
 - `src/lib/admin.ts` handles board writes to `/api/admin/*` endpoints, typed document duplicate
   errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
-  `fetchReport`, `deleteReport`), and board roster helpers (`fetchBoardPeople`, `saveBoardPerson`,
-  `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`).
+  `fetchReport`, `deleteReport`), board roster helpers (`fetchBoardPeople`, `saveBoardPerson`,
+  `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`), and meeting-record helpers
+  (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
+  `unapproveMeeting`, `setAttendance`, `saveMotion`, `deleteMotion`, `setVotes`).
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
@@ -191,8 +213,13 @@ Markdown twins described below and never the human-readable originals.
 - `auth/`: Better Auth config, Resend and Twilio senders.
 - `authz/`: `getAuthContext`, `resolveAuthContext` (middleware-first caller resolution with a
   fail-closed fallback), `requireRole`, `requireBoard`, and Turnstile checks.
-- `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts`, and `dedupe.ts`
-  (SHA-256 exact matching and metadata-only near-duplicate scoring).
+- `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
+  announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
+  filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
+  reachable only through the board-only `fetchAdminMeetings`/`fetchAdminMeeting`; a shared
+  `assembleMeetingDetail` builds the attendance/motions/roll-call body for both pairs and carries no
+  status or tier logic itself — see [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md)), and
+  `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring).
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
 - `roster/` and `verification/`: homeowner verification support.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
@@ -226,7 +253,23 @@ completed generation is saved, so a failed or client-disconnected generation lea
 with a nullable `user_id` link to a Better Auth `user` row kept for display only and never for
 authorization; `board_terms` records a term of service — `person_id`, nullable `title`,
 `term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
-across terms; deleting a person with a term on record is refused with `409`), roster/verification
+across terms; deleting a person with a term on record is refused with `409`), `meetings`,
+`board_attendance`, `motions`, and `board_votes` (the board meeting record — board meetings only;
+member meetings, member votes, resolutions, elections, ballots, and proxies are a later phase — per
+[ADR 0014](./docs/adr/0014-meeting-record-status-gate.md): `meetings` has `body` (`board`/`member`,
+the column that decides which voter model applies — only `board` is implemented here), `kind`
+(`regular`/`special`/`annual`), `date`, `start_time`, `location`, `title`, `summary_md`,
+`document_id` referencing `documents` on delete-set-null, `quorum_required`, `status`
+(`draft`/`approved`, default `draft`), `visibility` (default `board`), approval provenance
+`approved_at`/`approved_by`/`approved_by_motion_id`, and `created_by`; `board_attendance` is one
+present/absent row per meeting per `board_people` row, unique per pair; `motions` records one
+motion per meeting with a server-assigned `sequence` unique per meeting, mover/second referencing
+`board_people` on delete-restrict, and a board-entered `outcome`
+(`passed`/`failed`/`withdrawn`/`tabled`); `board_votes` is one roll-call vote per motion per
+`board_people` row (`choice`: `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair. A
+motion's displayed tally is always derived from `board_votes` by `tallyVotes` in
+`src/lib/types.ts`; `motions.outcome` itself is board-entered and never computed, because passage
+thresholds vary and quorum is not modelled), roster/verification
 tables (`properties`, `owners`, `user_property_links`,
 `property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
 `account`, `verification`).
@@ -248,7 +291,10 @@ enums on the roster/verification tables. Migration `0006` adds `documents.keep_v
 `documents.keep_verified_by`. Migration `0007` adds `documents.rag_status`. Migration `0008` adds
 the `reports` table and its `reports_created_at_idx` index. Migration `0009` adds the
 `board_people` and `board_terms` tables, with indexes on `board_terms.person_id` and
-`board_terms.term_end`. Migrations are applied
+`board_terms.term_end`. Migration `0010` adds the `meetings`, `board_attendance`, `motions`, and
+`board_votes` tables, with `meetings_status_date_idx`, `meetings_body_idx`, and
+`motions_meeting_id_idx`, plus unique indexes enforcing one attendance row per meeting per person,
+one vote per motion per person, and one motion per meeting per `sequence`. Migrations are applied
 with `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
@@ -309,7 +355,15 @@ snapshots unless the UI is intentionally static.
 `npm test` uses `vitest.config.ts` and covers files under `test/unit/**` plus component
 `*.test.tsx` files. `npm run test:server` uses `@cloudflare/vitest-pool-workers` with
 `vitest.workers.config.ts` for files under `test/server/**`; these tests import `{ env,
-applyD1Migrations }` from `cloudflare:test` and invoke handlers directly.
+applyD1Migrations }` from `cloudflare:test` and mostly invoke handlers directly. That config also
+merges Astro's own Vite plugins (minus its Cloudflare adapter plugin, which collides with
+`cloudflareTest`'s own Cloudflare Vite plugin) into the Workers test pool, so `.astro` pages can
+also be rendered directly through the Astro Container API inside the real Workers runtime — see
+`test/server/meeting-pages.test.ts`. A shared `isCloudflarePlugin` predicate in the new
+`vitest.shared.ts` identifies that plugin for both `vitest.config.ts` (which strips it, since it's
+incompatible with the jsdom/node test environments) and `vitest.workers.config.ts` (which strips
+Astro's copy in favor of `cloudflareTest`'s own), so the two configs can't drift on what counts as
+"a Cloudflare plugin."
 
 ## Deploy
 
