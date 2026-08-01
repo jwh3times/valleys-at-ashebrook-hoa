@@ -8,7 +8,11 @@ import {
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import type { Db } from '../../../server/db/client';
-import { meetings, boardAttendance } from '../../../server/db/schema';
+import {
+  meetings,
+  boardAttendance,
+  memberAttendance,
+} from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
 import {
   fetchAdminMeetings,
@@ -57,12 +61,16 @@ async function setAttendance(db: Db, body: unknown): Promise<Response> {
   if (!parsedEntries.ok)
     return new Response(parsedEntries.error, { status: 400 });
   const existing = await db
-    .select({ id: meetings.id })
+    .select({ id: meetings.id, body: meetings.body })
     .from(meetings)
     .where(eq(meetings.id, meetingId))
     .limit(1);
   if (existing.length === 0)
     return new Response('Meeting not found', { status: 404 });
+  // Board attendance against a member meeting (or vice versa) would silently
+  // produce a meeting with both kinds of attendance and an incoherent quorum.
+  if (existing[0].body !== 'board')
+    return new Response('Meeting is not a board meeting', { status: 409 });
   const rows = parsedEntries.value.map((e) => ({
     id: crypto.randomUUID(),
     meetingId,
@@ -76,6 +84,104 @@ async function setAttendance(db: Db, body: unknown): Promise<Response> {
   await db.batch([
     db.delete(boardAttendance).where(eq(boardAttendance.meetingId, meetingId)),
     ...(rows.length > 0 ? [db.insert(boardAttendance).values(rows)] : []),
+  ] as never);
+  return new Response(null, { status: 204 });
+}
+
+interface MemberAttendanceEntry {
+  propertyId: string;
+  present: boolean;
+  representedByOwnerId: string | null;
+  viaProxy: boolean;
+}
+
+/** Validate the raw `entries` payload for `setMemberAttendance`. */
+function parseMemberAttendanceEntries(
+  body: unknown,
+): { ok: true; value: MemberAttendanceEntry[] } | { ok: false; error: string } {
+  const raw = (body as Record<string, unknown> | null | undefined)?.entries;
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: 'entries must be an array' };
+  }
+  const entries: MemberAttendanceEntry[] = [];
+  for (const item of raw) {
+    const record = item as Record<string, unknown> | null;
+    const propertyId = record?.propertyId;
+    const present = record?.present;
+    const representedByOwnerId = record?.representedByOwnerId;
+    const viaProxy = record?.viaProxy;
+    if (
+      typeof propertyId !== 'string' ||
+      propertyId.trim() === '' ||
+      typeof present !== 'boolean'
+    ) {
+      return {
+        ok: false,
+        error: 'Each attendance entry needs a propertyId and a present boolean',
+      };
+    }
+    if (
+      representedByOwnerId !== undefined &&
+      representedByOwnerId !== null &&
+      typeof representedByOwnerId !== 'string'
+    ) {
+      return {
+        ok: false,
+        error: 'representedByOwnerId must be a string when present',
+      };
+    }
+    if (viaProxy !== undefined && typeof viaProxy !== 'boolean') {
+      return { ok: false, error: 'viaProxy must be a boolean when present' };
+    }
+    entries.push({
+      propertyId,
+      present,
+      representedByOwnerId:
+        typeof representedByOwnerId === 'string' ? representedByOwnerId : null,
+      viaProxy: viaProxy === true,
+    });
+  }
+  return { ok: true, value: entries };
+}
+
+async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
+  const meetingId = stringField(body, 'meetingId');
+  if (!meetingId) return new Response('meetingId is required', { status: 400 });
+  const parsedEntries = parseMemberAttendanceEntries(body);
+  if (!parsedEntries.ok)
+    return new Response(parsedEntries.error, { status: 400 });
+  const existing = await db
+    .select({ id: meetings.id, body: meetings.body })
+    .from(meetings)
+    .where(eq(meetings.id, meetingId))
+    .limit(1);
+  if (existing.length === 0)
+    return new Response('Meeting not found', { status: 404 });
+  // Recording member attendance against a board meeting would silently
+  // produce a meeting with both kinds of attendance and an incoherent quorum.
+  if (existing[0].body !== 'member')
+    return new Response('Meeting is not a member meeting', { status: 409 });
+  const rows = parsedEntries.value.map((e) => ({
+    id: crypto.randomUUID(),
+    meetingId,
+    propertyId: e.propertyId,
+    present: e.present,
+    representedByOwnerId: e.representedByOwnerId,
+    viaProxy: e.viaProxy,
+  }));
+  // Full replace, atomically: a property omitted from `entries` is removed,
+  // not left at its previous value. Weight is intentionally not stamped here
+  // — member_attendance has no weight column, and attendance weight is
+  // resolved live from properties.vote_weight at read time, because quorum
+  // is a question about the roster as it stands today. db.batch() requires a
+  // non-empty array, and clearing attendance entirely (rows.length === 0) is
+  // legitimate, so the insert statement is only included when there is
+  // something to insert.
+  await db.batch([
+    db
+      .delete(memberAttendance)
+      .where(eq(memberAttendance.meetingId, meetingId)),
+    ...(rows.length > 0 ? [db.insert(memberAttendance).values(rows)] : []),
   ] as never);
   return new Response(null, { status: 204 });
 }
@@ -160,6 +266,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   switch (action) {
     case 'setAttendance':
       return setAttendance(db, parsed.value);
+    case 'setMemberAttendance':
+      return setMemberAttendance(db, parsed.value);
     case 'approve':
       return approveMeeting(db, parsed.value, locals, request);
     case 'unapprove':
