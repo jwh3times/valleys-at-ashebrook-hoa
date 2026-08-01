@@ -7,7 +7,7 @@ import {
 import type { MemberUser } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
 
-export default function BoardMembersManager() {
+export default function BoardAccessManager() {
   const {
     data: board,
     loading,
