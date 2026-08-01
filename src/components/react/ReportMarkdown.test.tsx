@@ -70,6 +70,25 @@ describe('ReportMarkdown', () => {
   it('refuses a protocol-relative href', () => {
     render(<ReportMarkdown text="[x](//evil.example.com)" />);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/\[x\]\(\/\/evil\.example\.com\)/),
+    ).toBeInTheDocument();
+  });
+
+  it('refuses a backslash-prefixed href that browsers normalize off-site', () => {
+    render(<ReportMarkdown text="[Click here](/\evil.example.com)" />);
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/\[Click here\]\(\/\\evil\.example\.com\)/),
+    ).toBeInTheDocument();
+  });
+
+  it('refuses a doubled backslash-prefixed href that browsers normalize off-site', () => {
+    render(<ReportMarkdown text="[Click here](/\/evil.example.com)" />);
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/\[Click here\]\(\/\\\/evil\.example\.com\)/),
+    ).toBeInTheDocument();
   });
 
   it('still renders bold inside a paragraph containing a link', () => {
