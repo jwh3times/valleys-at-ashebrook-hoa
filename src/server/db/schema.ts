@@ -117,6 +117,43 @@ export const manualApprovalQueue = sqliteTable(
   (t) => [index('manual_approval_queue_status_idx').on(t.status)],
 );
 
+// The board record's identity layer. A person and a term of service are
+// separate rows: votes, motions, and attendance (PR 2) reference the *person*,
+// so a member who serves, leaves, and returns keeps one identity and one
+// voting history across both terms. Deliberately independent of Better Auth
+// `user` rows — demoting a site account must not rewrite who served, and a
+// member may serve with no login at all.
+export const boardPeople = sqliteTable('board_people', {
+  id: text('id').primaryKey(),
+  fullName: text('full_name').notNull(),
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const boardTerms = sqliteTable(
+  'board_terms',
+  {
+    id: text('id').primaryKey(),
+    personId: text('person_id')
+      .notNull()
+      // Service history is the record; deleting a person who has served is
+      // refused. The route pre-checks and 409s, with this as defense in depth.
+      .references(() => boardPeople.id, { onDelete: 'restrict' }),
+    title: text('title'),
+    termStart: text('term_start').notNull(),
+    termEnd: text('term_end'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  // Terms are read per person (roster nesting); the open-term lookup is
+  // "who is serving now" = WHERE term_end IS NULL.
+  (t) => [
+    index('board_terms_person_id_idx').on(t.personId),
+    index('board_terms_term_end_idx').on(t.termEnd),
+  ],
+);
+
 export const documents = sqliteTable(
   'documents',
   {
