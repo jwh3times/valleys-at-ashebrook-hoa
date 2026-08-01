@@ -91,7 +91,7 @@ export async function fetchMeetingsFor(
         inArray(meetings.visibility, visibleTiers(role)),
       ),
     )
-    .orderBy(desc(meetings.date));
+    .orderBy(desc(meetings.date), desc(meetings.createdAt));
   return withMotionCounts(env, rows);
 }
 
@@ -108,7 +108,7 @@ export async function fetchAdminMeetings(env: Env): Promise<MeetingSummary[]> {
       visibility: meetings.visibility,
     })
     .from(meetings)
-    .orderBy(desc(meetings.date));
+    .orderBy(desc(meetings.date), desc(meetings.createdAt));
   return withMotionCounts(env, rows);
 }
 
@@ -117,9 +117,18 @@ async function withMotionCounts(
   rows: Omit<MeetingSummary, 'motionCount'>[],
 ): Promise<MeetingSummary[]> {
   if (rows.length === 0) return [];
+  // Scoped to the meetings already selected by the caller's tier/status
+  // filter — an unscoped read would pull every motion in the archive,
+  // including ones that belong to draft or out-of-tier meetings.
   const counts = await getDb(env)
     .select({ meetingId: motions.meetingId, id: motions.id })
-    .from(motions);
+    .from(motions)
+    .where(
+      inArray(
+        motions.meetingId,
+        rows.map((r) => r.id),
+      ),
+    );
   const byMeeting = new Map<string, number>();
   for (const m of counts)
     byMeeting.set(m.meetingId, (byMeeting.get(m.meetingId) ?? 0) + 1);
@@ -166,13 +175,25 @@ export async function fetchMeetingFor(
     .where(eq(motions.meetingId, id))
     .orderBy(asc(motions.sequence));
 
-  const voteRows = await db
-    .select({
-      motionId: boardVotes.motionId,
-      personId: boardVotes.personId,
-      choice: boardVotes.choice,
-    })
-    .from(boardVotes);
+  // Scoped to this meeting's own motions — an unscoped read would pull every
+  // roll call in the archive, including ones cast at draft or board-tier
+  // meetings this caller has no access to.
+  const voteRows =
+    motionRows.length === 0
+      ? []
+      : await db
+          .select({
+            motionId: boardVotes.motionId,
+            personId: boardVotes.personId,
+            choice: boardVotes.choice,
+          })
+          .from(boardVotes)
+          .where(
+            inArray(
+              boardVotes.motionId,
+              motionRows.map((mo) => mo.id),
+            ),
+          );
   const votesByMotion = new Map<string, typeof voteRows>();
   for (const v of voteRows) {
     const list = votesByMotion.get(v.motionId) ?? [];
