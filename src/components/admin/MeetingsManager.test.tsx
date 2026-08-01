@@ -605,7 +605,7 @@ describe('MeetingsManager', () => {
     expect(await screen.findByText(/motion recorded/i)).toBeInTheDocument();
   });
 
-  it('shows the weighted live tally for a member motion, not a row count', async () => {
+  it('shows the weighted live tally for a member motion, summed per choice across differently-weighted properties', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
     mocked.fetchProperties.mockResolvedValue([
       {
@@ -615,6 +615,15 @@ describe('MeetingsManager', () => {
         status: 'active',
         notes: null,
         voteWeight: 5,
+        owners: [],
+      },
+      {
+        id: 'prop2',
+        address: '14 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 3,
         owners: [],
       },
     ]);
@@ -629,12 +638,110 @@ describe('MeetingsManager', () => {
     await screen.findByLabelText('Vote — 12 Oak Lane');
     expect(tally()).toMatch(/0 yes/);
 
+    // Two properties with DIFFERENT weights (5 and 3), both voting yes —
+    // an implementation that used only the last-touched row's weight, or
+    // ignored all but one row, would also produce a plausible-looking
+    // number for a single property; the combined total (8) is what
+    // actually proves summation across rows.
     await userEvent.selectOptions(
       screen.getByLabelText('Vote — 12 Oak Lane'),
       'yes',
     );
-    // Weight 5, one property — the tally must reflect the weight (5), not
-    // the number of properties voted (1).
+    await userEvent.selectOptions(
+      screen.getByLabelText('Vote — 14 Oak Lane'),
+      'yes',
+    );
+    await waitFor(() => expect(tally()).toMatch(/8 yes/));
+
+    // Flip the weight-3 property to "no" — pins the per-choice bucketing:
+    // weight 5 stays under yes, weight 3 moves to no, rather than both
+    // landing in one combined bucket.
+    await userEvent.selectOptions(
+      screen.getByLabelText('Vote — 14 Oak Lane'),
+      'no',
+    );
     await waitFor(() => expect(tally()).toMatch(/5 yes/));
+    expect(tally()).toMatch(/3 no/);
+  });
+
+  it('submitting member votes sends the chosen castByOwnerId and viaProxy per property', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [
+          {
+            id: 'o1',
+            propertyId: 'prop1',
+            fullName: 'Jane Doe',
+            phone: null,
+            email: null,
+            status: 'active',
+            notes: null,
+          },
+        ],
+      },
+      {
+        id: 'prop2',
+        address: '14 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    mocked.saveMotion.mockResolvedValue('mo1');
+    mocked.setMemberVotes.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the budget',
+    );
+
+    // Scope to 12 Oak Lane's own field container — "Via proxy" also labels
+    // a checkbox in the attendance editor above, so an unscoped query would
+    // be ambiguous.
+    const voteField = screen
+      .getByLabelText('Vote — 12 Oak Lane')
+      .closest('.field') as HTMLElement;
+    await userEvent.selectOptions(
+      within(voteField).getByLabelText('Cast by — 12 Oak Lane'),
+      'o1',
+    );
+    await userEvent.click(within(voteField).getByLabelText('Via proxy'));
+    // Leave 14 Oak Lane (no owners, so no Cast by/Via proxy controls at
+    // all) untouched — its row must still submit at defaults.
+
+    await userEvent.click(screen.getByRole('button', { name: /add motion/i }));
+
+    await waitFor(() =>
+      expect(mocked.setMemberVotes).toHaveBeenCalledWith('mo1', [
+        {
+          propertyId: 'prop1',
+          choice: 'abstain',
+          castByOwnerId: 'o1',
+          viaProxy: true,
+        },
+        {
+          propertyId: 'prop2',
+          choice: 'abstain',
+          castByOwnerId: null,
+          viaProxy: false,
+        },
+      ]),
+    );
+    expect(await screen.findByText(/motion recorded/i)).toBeInTheDocument();
   });
 });
