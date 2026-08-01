@@ -46,13 +46,14 @@ export default function BoardMembersManager() {
   return (
     <div className="admin-panel">
       <div className="admin-bar">
-        <h1>Board members</h1>
+        <h1>Board access</h1>
       </div>
       <p className="admin-panel__intro">
-        Promote an existing account to the board or demote a board member. For a
-        handoff, the outgoing member promotes the incoming one, then the
-        incoming member demotes the outgoing one. The last remaining board
-        member can't be demoted.
+        Manage board admin sign-in access. Promote an existing account to board
+        admin status, or demote a current board admin. For a handoff, the
+        outgoing admin promotes the incoming one, then the incoming admin
+        demotes the outgoing one. The last remaining board admin can't be
+        demoted.
       </p>
 
       {msg && <div className="form-message form-message--success">{msg}</div>}
