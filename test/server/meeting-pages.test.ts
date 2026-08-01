@@ -64,12 +64,13 @@ async function seedMeeting(opts: {
   visibility: 'public' | 'homeowner' | 'board';
   title?: string;
   quorumRequired?: number | null;
+  body?: 'board' | 'member';
 }) {
   await getDb(env)
     .insert(meetings)
     .values({
       id: opts.id,
-      body: 'board',
+      body: opts.body ?? 'board',
       kind: 'regular',
       date: '2026-09-14',
       title: opts.title ?? `T-${opts.id}`,
@@ -225,7 +226,7 @@ describe('/meetings/[id]', () => {
     expect(html).toContain('1 yes');
   });
 
-  it('shows the quorum-met attendance line when quorumRequired is set', async () => {
+  it('renders no attendance or quorum text when no attendance rows exist, even with quorumRequired set', async () => {
     await seedMeeting({
       id: 'pub3',
       status: 'approved',
@@ -238,9 +239,12 @@ describe('/meetings/[id]', () => {
       params: { id: 'pub3' },
       request: new Request('http://localhost/meetings/pub3'),
     });
-    // No attendance rows were seeded — 0 of 0 present, below the quorum of 2.
-    expect(html).toContain('0 of 0 board members present');
-    expect(html).toContain('quorum of 2 not met');
+    // No attendance rows were seeded — the normal state when a board pastes
+    // minutes and approves them. Absence of data is not evidence of an empty
+    // room, so this must render nothing about attendance or quorum, never a
+    // fabricated "0 of 0" line or a quorum verdict.
+    expect(html).not.toContain('board members present');
+    expect(html).not.toContain('quorum');
   });
 
   it('derives the present/total count from real seeded attendance rows, pinning both quorum branches', async () => {
@@ -323,7 +327,7 @@ describe('/meetings/[id]', () => {
     expect(metHtml).not.toContain('not met');
   });
 
-  it('says nothing about quorum when quorumRequired is null', async () => {
+  it('says nothing about attendance or quorum when quorumRequired is null and no attendance rows exist', async () => {
     await seedMeeting({
       id: 'pub4',
       status: 'approved',
@@ -336,7 +340,46 @@ describe('/meetings/[id]', () => {
       params: { id: 'pub4' },
       request: new Request('http://localhost/meetings/pub4'),
     });
-    expect(html).toContain('0 of 0 board members present');
+    expect(html).not.toContain('board members present');
+    expect(html).not.toContain('quorum');
+  });
+
+  it('says nothing about attendance or quorum for a member-body meeting, even with attendance rows and quorumRequired set', async () => {
+    // MeetingsManager only records attendance/motions for body: 'board'
+    // meetings — member meetings show a "future release" note instead — but
+    // a member-body meeting is still creatable, approvable, and publishable
+    // in this PR. The public page must not hardcode "board members" copy for
+    // a body it has no real attendance model for, even if stray attendance
+    // rows exist (e.g. left over from the meeting being re-typed as member).
+    const db = getDb(env);
+    await db.insert(boardPeople).values({
+      id: 'p1',
+      fullName: 'A. Reyes',
+      userId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await seedMeeting({
+      id: 'member1',
+      status: 'approved',
+      visibility: 'public',
+      title: 'Annual Member Meeting',
+      quorumRequired: 2,
+      body: 'member',
+    });
+    await db.insert(boardAttendance).values({
+      id: 'a1',
+      meetingId: 'member1',
+      personId: 'p1',
+      present: true,
+    });
+    const container = await makeContainer();
+    const html = await container.renderToString(MeetingDetailPage, {
+      params: { id: 'member1' },
+      request: new Request('http://localhost/meetings/member1'),
+    });
+    expect(html).toContain('Annual Member Meeting');
+    expect(html).not.toContain('board members present');
     expect(html).not.toContain('quorum');
   });
 });

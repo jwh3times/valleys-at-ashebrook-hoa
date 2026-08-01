@@ -1,4 +1,4 @@
-import { inArray, desc, and, eq, asc } from 'drizzle-orm';
+import { inArray, desc, and, eq, asc, count } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import type { Db } from '../db/client';
 import {
@@ -120,19 +120,22 @@ async function withMotionCounts(
   if (rows.length === 0) return [];
   // Scoped to the meetings already selected by the caller's tier/status
   // filter — an unscoped read would pull every motion in the archive,
-  // including ones that belong to draft or out-of-tier meetings.
+  // including ones that belong to draft or out-of-tier meetings. Counted in
+  // SQL with GROUP BY rather than selecting every motion row and tallying in
+  // JS, so a meeting with many motions doesn't ship one row per motion over
+  // the wire just to be counted client-side. Also the shape PR 3 needs when
+  // this COUNT(*) becomes a SUM(weight) over property-weighted member votes.
   const counts = await getDb(env)
-    .select({ meetingId: motions.meetingId, id: motions.id })
+    .select({ meetingId: motions.meetingId, motionCount: count() })
     .from(motions)
     .where(
       inArray(
         motions.meetingId,
         rows.map((r) => r.id),
       ),
-    );
-  const byMeeting = new Map<string, number>();
-  for (const m of counts)
-    byMeeting.set(m.meetingId, (byMeeting.get(m.meetingId) ?? 0) + 1);
+    )
+    .groupBy(motions.meetingId);
+  const byMeeting = new Map(counts.map((c) => [c.meetingId, c.motionCount]));
   return rows.map((r) => ({ ...r, motionCount: byMeeting.get(r.id) ?? 0 }));
 }
 
