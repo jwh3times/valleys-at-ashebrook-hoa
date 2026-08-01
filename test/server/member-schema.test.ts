@@ -280,4 +280,45 @@ describe('member meeting schema', () => {
     expect(rows[0].moverOwnerId).toBe('o1');
     expect(rows[0].moverPersonId).toBeNull();
   });
+
+  // Pins the live database's actual delete-rejection behavior on
+  // motions.mover_owner_id. drizzle-kit's SQLite ALTER TABLE ADD COLUMN path
+  // drops the onDelete action from this migration, so the schema's declared
+  // 'restrict' is not literally what's enforced — the column lands with
+  // SQLite's default NO ACTION instead (see the comment on moverOwnerId in
+  // schema.ts). Under this codebase's non-deferred foreign keys, NO ACTION
+  // and RESTRICT reject an in-use-row delete identically, so this test
+  // should pass today regardless of which action is actually in force. If it
+  // ever starts failing, deferred constraints have likely been introduced
+  // somewhere and that equivalence no longer holds.
+  it('refuses to delete an owner who moved a motion', async () => {
+    const db = getDb(env);
+    await seedProperty('p1');
+    await db.insert(owners).values({
+      id: 'o1',
+      propertyId: 'p1',
+      fullName: 'A. Reyes',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await seedMeeting('m1');
+    await db.insert(motions).values({
+      id: 'mo1',
+      meetingId: 'm1',
+      sequence: 1,
+      text: 'X',
+      moverPersonId: null,
+      secondPersonId: null,
+      moverOwnerId: 'o1',
+      secondOwnerId: null,
+      outcome: 'passed',
+      createdBy: 'u1',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await expect(
+      db.delete(owners).where(eq(owners.id, 'o1')),
+    ).rejects.toThrow();
+    expect((await db.select().from(owners)).length).toBe(1);
+  });
 });

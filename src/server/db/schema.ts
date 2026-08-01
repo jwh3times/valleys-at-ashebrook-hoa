@@ -248,6 +248,20 @@ export const motions = sqliteTable(
     // A member meeting's mover is an owner, not a board person. The parent
     // meeting's `body` disambiguates which pair is populated, so these stay
     // nullable rather than forming a checked constraint.
+    //
+    // NOTE: drizzle-kit's SQLite `ALTER TABLE ADD COLUMN` generator drops the
+    // `onDelete` action — only its `CREATE TABLE` path emits FK actions. The
+    // migration this produced (0011) adds these two columns with a bare
+    // `REFERENCES owners(id)`, so the live database enforces SQLite's default
+    // `NO ACTION` here, not `RESTRICT`, even though this declaration says
+    // `restrict`. Do not trust this annotation as ground truth for these two
+    // columns. In practice it is behaviorally inert: every FK in this
+    // codebase is non-deferred (no `PRAGMA defer_foreign_keys` anywhere), and
+    // `NO ACTION` vs `RESTRICT` reject an in-use-row delete identically under
+    // non-deferred constraints. That equivalence would break if deferred
+    // constraints were ever introduced — see the "refuses to delete an owner
+    // who moved a motion" test in member-schema.test.ts, which pins today's
+    // actual (NO ACTION) behavior rather than the declared one.
     moverOwnerId: text('mover_owner_id').references(() => owners.id, {
       onDelete: 'restrict',
     }),
