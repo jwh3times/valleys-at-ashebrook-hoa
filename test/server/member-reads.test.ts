@@ -181,9 +181,16 @@ describe('member meeting assembly', () => {
   });
 
   it('returns memberTally summing weight, not counting rows', async () => {
+    // Deliberately mismatched: each property's CURRENT voteWeight (99, 42)
+    // is nothing like the vote's STORED weight (3, 5). An implementation
+    // that resolved weight via weightOf.get(propertyId) instead of reading
+    // the row's own `weight` column would sum to 141, not 8 — this is the
+    // seed shape that actually exercises the snapshot invariant
+    // (schema.ts:355-358: correcting a property's weight later must not
+    // rewrite past tallies).
     const db = getDb(env);
-    await seedProperty('p1', { weight: 3 });
-    await seedProperty('p2', { weight: 5 });
+    await seedProperty('p1', { weight: 99 });
+    await seedProperty('p2', { weight: 42 });
     await seedMeeting('m1');
     await seedMotion('mo1', 'm1');
     await db.insert(memberVotes).values([
@@ -304,7 +311,7 @@ describe('member meeting assembly', () => {
 
   it('returns empty member arrays for a board meeting', async () => {
     const db = getDb(env);
-    await seedProperty('p1');
+    await seedProperty('p1', { weight: 4, status: 'active' });
     await seedMeeting('m1', 'board');
     await seedMotion('mo1', 'm1');
     // A board meeting still tolerates member rows existing (defense in
@@ -317,6 +324,23 @@ describe('member meeting assembly', () => {
     expect(detail.memberAttendance).toEqual([]);
     expect(detail.motions[0].memberVotes).toEqual([]);
     expect(detail.motions[0].memberTally.recorded).toBe(false);
+    // totalActiveWeight is computed unconditionally, not gated on `body` —
+    // it is populated here too, not zeroed for a board meeting. Consumers
+    // must gate display on body === 'member', not on this value.
+    expect(detail.totalActiveWeight).toBe(4);
+  });
+
+  it('coalesces totalActiveWeight to 0 when there are no active properties', async () => {
+    await seedProperty('p1', { weight: 10, status: 'inactive' });
+    await seedMeeting('m1');
+
+    const detail = await fetchAdminMeeting(env, 'm1');
+    expect(detail).not.toBeNull();
+    if (!detail) return;
+    // SQLite's SUM() returns NULL over zero matching rows; if the coalesce
+    // in reads.ts were dropped this would be `null` at runtime despite the
+    // `number` type, a silent type lie reaching callers.
+    expect(detail.totalActiveWeight).toBe(0);
   });
 
   it('still hides drafts from a board caller after these additions', async () => {

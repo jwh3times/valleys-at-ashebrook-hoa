@@ -707,7 +707,11 @@ export interface MeetingDetail extends MeetingSummary {
   memberAttendance: MemberAttendanceRow[];
   /**
    * Summed vote_weight of every ACTIVE property, the denominator for member
-   * quorum. Zero for a board meeting, where quorum counts people.
+   * quorum. Computed unconditionally — the same aggregate regardless of
+   * `body` — so it is populated (non-zero, given any active roster) on a
+   * board meeting too. It is meaningful only for member meetings; consumers
+   * must gate display on `body === 'member'`, never on this value being
+   * zero or non-zero.
    */
   totalActiveWeight: number;
   motions: MotionDetail[];
