@@ -17,3 +17,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0009: RAG Index Corpus Separate from the Download Library](./0009-rag-index-separate-from-download-library.md)
 - [ADR 0010: OCR of Scanned Documents Runs as an Operator Offline Job](./0010-ocr-scanned-documents-operator-job.md)
 - [ADR 0011: Claude-Sourced Agent Assets, Generated Mirror for Codex](./0011-claude-sourced-agent-assets-mirrored-for-codex.md)
+- [ADR 0012: Board Record Modeled as Structured Rows, Separate from Auth Users](./0012-board-record-as-structured-rows.md)

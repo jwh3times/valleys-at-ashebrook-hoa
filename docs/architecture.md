@@ -54,11 +54,12 @@ and `SECURITY.md` for the constraints this design must preserve.
 ## Admin Surface
 
 Board members manage content, documents, duplicates, dues, site settings, roster records, homeowner
-access, and board membership through `/admin`.
+access, and board admin sign-in access through `/admin`. A separate roster of who serves on the
+board and their terms of service is also recorded there, independent of site sign-in access.
 
-The first board account is created through a fail-closed bootstrap endpoint. Later board handoff is
-managed through the Board members admin section. Board sessions are not granted Better Auth
-impersonation, ban, or generic set-role capabilities.
+The first board account is created through a fail-closed bootstrap endpoint. Later handoff of board
+admin sign-in access is managed through the Board access admin section. Board sessions are not
+granted Better Auth impersonation, ban, or generic set-role capabilities.
 
 ## Operations
 

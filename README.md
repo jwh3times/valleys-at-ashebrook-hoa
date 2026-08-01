@@ -118,14 +118,15 @@ src/server/db/migrations/   D1 migration files
 
 Board members go to `/admin`, sign in with their email + password (Better Auth), and
 manage announcements, documents, duplicate document cleanup, dues, and site text through on-screen forms. Board
-membership itself is also managed in the admin app, under **Board members**: a board
-member can promote another account to `board` and demote a board member (the last
-remaining board member can't be demoted), which supports handing the site off to a new
-board over time. A board member can't escalate their own access beyond `board`, and
+admin sign-in access itself is also managed in the admin app, under **Board access**: a board
+admin can promote another account to `board` and demote a board admin (the last
+remaining board admin can't be demoted), which supports handing the site off to a new
+board over time. A board admin can't escalate their own access beyond `board`, and
 the Better Auth admin plugin's impersonation/ban/set-role endpoints are not granted to
-board sessions. The _first_ board account is bootstrapped through a permanent, fail-closed
-`POST /api/bootstrap/board` endpoint that self-disables once any board account exists — see
-SETUP.md §6.
+board sessions. A separate **The Board** tab records who serves on the board and their terms of
+service, independent of who can sign in. The _first_ board account is bootstrapped through a
+permanent, fail-closed `POST /api/bootstrap/board` endpoint that self-disables once any board
+account exists — see SETUP.md §6.
 
 ## Contributing & support
 
