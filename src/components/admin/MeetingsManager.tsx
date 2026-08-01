@@ -723,9 +723,9 @@ export default function MeetingsManager() {
           </select>
           {meetingForm.body === 'member' && (
             <p className="muted" style={{ marginTop: '6px' }}>
-              Member meeting attendance lists each property&rsquo;s address and
-              any attendee names — setting Visibility to Public publishes that
-              roster to anyone, not just homeowners.
+              A member meeting&rsquo;s motion records list each property&rsquo;s
+              address alongside how it voted — setting Visibility to Public
+              makes that visible to anyone, not just homeowners.
             </p>
           )}
         </div>
