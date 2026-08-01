@@ -109,6 +109,81 @@ describe('MeetingsManager', () => {
     expect(await screen.findByText(/meeting added/i)).toBeInTheDocument();
   });
 
+  it('editing an existing meeting round-trips a changed summaryMd and quorumRequired', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        startTime: '7:00 PM',
+        location: 'Clubhouse',
+        summaryMd: 'Old minutes.',
+        documentId: 'doc-1',
+        quorumRequired: 3,
+      }),
+    );
+    mocked.saveMeeting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+
+    const summary = await screen.findByLabelText(/^minutes/i);
+    expect(summary).toHaveValue('Old minutes.');
+    await userEvent.clear(summary);
+    await userEvent.type(summary, 'Approved minutes for September.');
+
+    const quorum = screen.getByLabelText(/quorum required/i);
+    await userEvent.clear(quorum);
+    await userEvent.type(quorum, '5');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /save meeting/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.saveMeeting).toHaveBeenCalledWith(
+        {
+          body: 'board',
+          kind: 'special',
+          date: '2026-09-14',
+          title: 'September meeting',
+          startTime: '7:00 PM',
+          location: 'Clubhouse',
+          summaryMd: 'Approved minutes for September.',
+          documentId: 'doc-1',
+          quorumRequired: 5,
+          visibility: 'board',
+        },
+        'm1',
+      ),
+    );
+    expect(await screen.findByText(/meeting updated/i)).toBeInTheDocument();
+  });
+
+  it('emptying summaryMd on an existing meeting persists as cleared, not silently ignored', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({ summaryMd: 'Old minutes.' }),
+    );
+    mocked.saveMeeting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+
+    const summary = await screen.findByLabelText(/^minutes/i);
+    expect(summary).toHaveValue('Old minutes.');
+    await userEvent.clear(summary);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /save meeting/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.saveMeeting).toHaveBeenCalledWith(
+        expect.objectContaining({ summaryMd: null }),
+        'm1',
+      ),
+    );
+  });
+
   it('declining the delete confirmation does not call deleteMeeting', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     mocked.fetchMeetings.mockResolvedValue([meeting]);

@@ -123,6 +123,13 @@ export default function MeetingsManager() {
 
   const [meetingForm, setMeetingForm] = useState(emptyMeeting);
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
+  // Set while startEditMeeting's detail fetch is in flight, so the "Edit"
+  // button can show feedback without flashing blank fields into edit mode
+  // before the meeting's real startTime/location/summaryMd/documentId/
+  // quorumRequired — which MeetingSummary doesn't carry — have loaded.
+  const [editDetailLoadingId, setEditDetailLoadingId] = useState<string | null>(
+    null,
+  );
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // The full MeetingDetail (attendance, motions, roll calls) for whichever
@@ -184,18 +191,38 @@ export default function MeetingsManager() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function startEditMeeting(m: MeetingSummary) {
-    setEditingMeetingId(m.id);
-    setMeetingForm({
-      ...emptyMeeting,
-      body: m.body,
-      kind: m.kind,
-      date: m.date,
-      title: m.title,
-      visibility: m.visibility,
-    });
+  async function startEditMeeting(m: MeetingSummary) {
     setMsg('');
-    toTop();
+    setEditDetailLoadingId(m.id);
+    try {
+      // Prefill from the real MeetingDetail, not the summary row, so
+      // startTime/location/summaryMd/documentId/quorumRequired — none of
+      // which MeetingSummary carries — round-trip correctly on save instead
+      // of being silently cleared.
+      const full = await fetchMeeting(m.id);
+      setEditingMeetingId(m.id);
+      setMeetingForm({
+        body: full.body,
+        kind: full.kind,
+        date: full.date,
+        title: full.title,
+        startTime: full.startTime ?? '',
+        location: full.location ?? '',
+        summaryMd: full.summaryMd ?? '',
+        documentId: full.documentId ?? '',
+        quorumRequired:
+          full.quorumRequired === null ? '' : String(full.quorumRequired),
+        visibility: full.visibility,
+      });
+      toTop();
+    } catch (err: unknown) {
+      const message =
+        (err as { message?: string } | null)?.message ??
+        'could not load the meeting.';
+      setMsg('Error: ' + message);
+    } finally {
+      setEditDetailLoadingId(null);
+    }
   }
 
   function resetMotion() {
@@ -238,34 +265,26 @@ export default function MeetingsManager() {
     e.preventDefault();
     await run(
       async () => {
-        // Editing only re-sends the fields the summary list actually carries.
-        // Sending blank startTime/location/summaryMd/quorumRequired on a PATCH
-        // would null them out — the normalizer treats a present-but-blank key
-        // as "clear this field", and the summary read has no way to know their
-        // current values to round-trip them.
+        // Both create and edit send the full field set. On edit, the form was
+        // seeded from the real MeetingDetail (see startEditMeeting), so a
+        // blank field here means the board actually cleared it — that must
+        // reach the server as an explicit null, not be dropped, or clearing
+        // summaryMd (the minutes /meetings/[id] renders) would silently no-op.
         await saveMeeting(
-          editingMeetingId
-            ? {
-                body: meetingForm.body,
-                kind: meetingForm.kind,
-                date: meetingForm.date,
-                title: meetingForm.title,
-                visibility: meetingForm.visibility,
-              }
-            : {
-                body: meetingForm.body,
-                kind: meetingForm.kind,
-                date: meetingForm.date,
-                title: meetingForm.title,
-                startTime: meetingForm.startTime || null,
-                location: meetingForm.location || null,
-                summaryMd: meetingForm.summaryMd || null,
-                documentId: meetingForm.documentId || null,
-                quorumRequired: meetingForm.quorumRequired
-                  ? Number(meetingForm.quorumRequired)
-                  : null,
-                visibility: meetingForm.visibility,
-              },
+          {
+            body: meetingForm.body,
+            kind: meetingForm.kind,
+            date: meetingForm.date,
+            title: meetingForm.title,
+            startTime: meetingForm.startTime || null,
+            location: meetingForm.location || null,
+            summaryMd: meetingForm.summaryMd || null,
+            documentId: meetingForm.documentId || null,
+            quorumRequired: meetingForm.quorumRequired
+              ? Number(meetingForm.quorumRequired)
+              : null,
+            visibility: meetingForm.visibility,
+          },
           editingMeetingId ?? undefined,
         );
         resetMeeting();
@@ -461,93 +480,85 @@ export default function MeetingsManager() {
             />
           </div>
         </div>
-        {!editingMeetingId && (
-          <>
-            <div className="field-grid" style={{ marginBottom: '16px' }}>
-              <div className="field" style={{ margin: 0 }}>
-                <label htmlFor="meeting-start-time">
-                  Start time (optional)
-                </label>
-                <input
-                  id="meeting-start-time"
-                  type="text"
-                  value={meetingForm.startTime}
-                  onChange={(e) =>
-                    setMeetingForm({
-                      ...meetingForm,
-                      startTime: e.target.value,
-                    })
-                  }
-                  placeholder="7:00 PM"
-                />
-              </div>
-              <div className="field" style={{ margin: 0 }}>
-                <label htmlFor="meeting-location">Location (optional)</label>
-                <input
-                  id="meeting-location"
-                  type="text"
-                  value={meetingForm.location}
-                  onChange={(e) =>
-                    setMeetingForm({
-                      ...meetingForm,
-                      location: e.target.value,
-                    })
-                  }
-                />
-              </div>
-            </div>
-            <div className="field" style={{ marginBottom: '16px' }}>
-              <label htmlFor="meeting-summary">Minutes (optional)</label>
-              <textarea
-                id="meeting-summary"
-                value={meetingForm.summaryMd}
-                onChange={(e) =>
-                  setMeetingForm({
-                    ...meetingForm,
-                    summaryMd: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div className="field-grid" style={{ marginBottom: '16px' }}>
-              <div className="field" style={{ margin: 0 }}>
-                <label htmlFor="meeting-document">
-                  Linked minutes document ID (optional)
-                </label>
-                <input
-                  id="meeting-document"
-                  type="text"
-                  value={meetingForm.documentId}
-                  onChange={(e) =>
-                    setMeetingForm({
-                      ...meetingForm,
-                      documentId: e.target.value,
-                    })
-                  }
-                  placeholder="From the Documents tab"
-                />
-              </div>
-              <div className="field" style={{ margin: 0 }}>
-                <label htmlFor="meeting-quorum">
-                  Quorum required (optional)
-                </label>
-                <input
-                  id="meeting-quorum"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={meetingForm.quorumRequired}
-                  onChange={(e) =>
-                    setMeetingForm({
-                      ...meetingForm,
-                      quorumRequired: e.target.value,
-                    })
-                  }
-                />
-              </div>
-            </div>
-          </>
-        )}
+        <div className="field-grid" style={{ marginBottom: '16px' }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor="meeting-start-time">Start time (optional)</label>
+            <input
+              id="meeting-start-time"
+              type="text"
+              value={meetingForm.startTime}
+              onChange={(e) =>
+                setMeetingForm({
+                  ...meetingForm,
+                  startTime: e.target.value,
+                })
+              }
+              placeholder="7:00 PM"
+            />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor="meeting-location">Location (optional)</label>
+            <input
+              id="meeting-location"
+              type="text"
+              value={meetingForm.location}
+              onChange={(e) =>
+                setMeetingForm({
+                  ...meetingForm,
+                  location: e.target.value,
+                })
+              }
+            />
+          </div>
+        </div>
+        <div className="field" style={{ marginBottom: '16px' }}>
+          <label htmlFor="meeting-summary">Minutes (optional)</label>
+          <textarea
+            id="meeting-summary"
+            value={meetingForm.summaryMd}
+            onChange={(e) =>
+              setMeetingForm({
+                ...meetingForm,
+                summaryMd: e.target.value,
+              })
+            }
+          />
+        </div>
+        <div className="field-grid" style={{ marginBottom: '16px' }}>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor="meeting-document">
+              Linked minutes document ID (optional)
+            </label>
+            <input
+              id="meeting-document"
+              type="text"
+              value={meetingForm.documentId}
+              onChange={(e) =>
+                setMeetingForm({
+                  ...meetingForm,
+                  documentId: e.target.value,
+                })
+              }
+              placeholder="From the Documents tab"
+            />
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <label htmlFor="meeting-quorum">Quorum required (optional)</label>
+            <input
+              id="meeting-quorum"
+              type="number"
+              min="0"
+              step="1"
+              value={meetingForm.quorumRequired}
+              onChange={(e) =>
+                setMeetingForm({
+                  ...meetingForm,
+                  quorumRequired: e.target.value,
+                })
+              }
+            />
+          </div>
+        </div>
         <div className="field" style={{ marginBottom: '16px' }}>
           <label htmlFor="meeting-visibility">Visibility</label>
           <select
@@ -616,9 +627,10 @@ export default function MeetingsManager() {
                 <div className="row-actions">
                   <button
                     className="row-link"
+                    disabled={editDetailLoadingId === m.id}
                     onClick={() => startEditMeeting(m)}
                   >
-                    Edit
+                    {editDetailLoadingId === m.id ? 'Loading…' : 'Edit'}
                   </button>
                   {m.body === 'board' && (
                     <button
