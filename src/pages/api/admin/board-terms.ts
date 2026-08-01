@@ -70,10 +70,12 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   };
   const rangeError = termRangeError(merged.termStart, merged.termEnd);
   if (rangeError) return new Response(rangeError, { status: 400 });
-  await db
-    .update(boardTerms)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(boardTerms.id, id));
+  // A term is not reassigned to a different person via PATCH — only these fields.
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (patch.title !== undefined) set.title = patch.title;
+  if (patch.termStart !== undefined) set.termStart = patch.termStart;
+  if (patch.termEnd !== undefined) set.termEnd = patch.termEnd;
+  await db.update(boardTerms).set(set).where(eq(boardTerms.id, id));
   return new Response(null, { status: 204 });
 };
 

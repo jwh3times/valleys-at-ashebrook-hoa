@@ -286,6 +286,7 @@ export const INPUT_LIMITS = {
   reportTopic: 200,
   officeTitle: 100,
   userId: 100,
+  personId: 100,
 } as const;
 
 export type InputResult<T> =
@@ -550,7 +551,7 @@ export function normalizeBoardTermInput(
   const personId = coreString(
     r,
     'personId',
-    INPUT_LIMITS.propertyId,
+    INPUT_LIMITS.personId,
     'personId',
     mode,
   );

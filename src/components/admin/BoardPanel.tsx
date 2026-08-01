@@ -112,6 +112,7 @@ export default function BoardPanel() {
   }
 
   async function removePerson(p: BoardPersonWithTerms) {
+    if (!confirm(`Delete ${p.fullName}? This cannot be undone.`)) return;
     await run(async () => {
       await deleteBoardPerson(p.id);
       await reload();
@@ -119,6 +120,12 @@ export default function BoardPanel() {
   }
 
   async function removeTerm(t: BoardTerm) {
+    if (
+      !confirm(
+        `Delete the term starting ${t.termStart}${t.title ? ` (${t.title})` : ''}? This cannot be undone.`,
+      )
+    )
+      return;
     await run(async () => {
       await deleteBoardTerm(t.id);
       await reload();
