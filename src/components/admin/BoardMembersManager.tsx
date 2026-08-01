@@ -80,12 +80,12 @@ export default function BoardMembersManager() {
         </div>
       </form>
 
-      <div className="panel-editor__title">Current board</div>
+      <div className="panel-editor__title">Current board admins</div>
       <div className="panel-list">
         {loading ? (
           <p className="loading panel-pad">Loading…</p>
         ) : board.length === 0 ? (
-          <p className="muted panel-pad">No board members.</p>
+          <p className="muted panel-pad">No board admins.</p>
         ) : (
           board.map((u) => (
             <div key={u.id} className="list-row">

@@ -82,6 +82,7 @@ describe('BoardPanel', () => {
   });
 
   it('surfaces the 409 message as readable text when a delete is refused', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mocked.fetchBoardPeople.mockResolvedValue([
       {
         id: 'p1',
@@ -112,5 +113,26 @@ describe('BoardPanel', () => {
       await screen.findByText(/remove their terms first/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/409/)).not.toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it('does not delete a person when the confirmation is declined', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mocked.fetchBoardPeople.mockResolvedValue([
+      {
+        id: 'p1',
+        fullName: 'A. Reyes',
+        userId: null,
+        terms: [],
+      },
+    ]);
+    render(<BoardPanel />);
+    await screen.findByText('A. Reyes');
+    await userEvent.click(
+      screen.getByRole('button', { name: /delete a\. reyes/i }),
+    );
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mocked.deleteBoardPerson).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });
