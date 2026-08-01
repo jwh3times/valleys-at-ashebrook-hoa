@@ -19,3 +19,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0011: Claude-Sourced Agent Assets, Generated Mirror for Codex](./0011-claude-sourced-agent-assets-mirrored-for-codex.md)
 - [ADR 0012: Board Record Modeled as Structured Rows, Separate from Auth Users](./0012-board-record-as-structured-rows.md)
 - [ADR 0013: The Admin API Is Gated in Middleware, Not Only Per Route](./0013-admin-api-gated-in-middleware.md)
+- [ADR 0014: Meeting Approval Is a Status Gate, Not a Visibility Tier](./0014-meeting-record-status-gate.md)

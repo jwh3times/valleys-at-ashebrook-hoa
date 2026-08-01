@@ -287,6 +287,9 @@ export const INPUT_LIMITS = {
   officeTitle: 100,
   userId: 100,
   personId: 100,
+  motionText: 2_000,
+  meetingLocation: 200,
+  summaryMd: 20_000,
 } as const;
 
 export type InputResult<T> =
@@ -379,6 +382,36 @@ function visibilityField(
   if (v !== 'public' && v !== 'homeowner' && v !== 'board')
     return fail('visibility must be public, homeowner, or board');
   return { ok: true, value: v };
+}
+
+/** Required enum field. Absent on create fails; absent on patch is skipped. */
+function enumField<T extends string>(
+  raw: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+  mode: WriteMode,
+): InputResult<T | undefined> {
+  if (!(key in raw))
+    return mode === 'create'
+      ? fail(`${key} is required`)
+      : { ok: true, value: undefined };
+  const v = raw[key];
+  if (typeof v !== 'string' || !allowed.includes(v as T))
+    return fail(`${key} must be one of: ${allowed.join(', ')}`);
+  return { ok: true, value: v as T };
+}
+
+/** Non-negative integer, or undefined when absent. Explicit null clears it. */
+function nonNegativeInt(
+  raw: Record<string, unknown>,
+  key: string,
+): InputResult<number | null | undefined> {
+  if (!(key in raw)) return { ok: true, value: undefined };
+  if (raw[key] === null) return { ok: true, value: null };
+  const n = raw[key];
+  if (typeof n !== 'number' || !Number.isInteger(n) || n < 0)
+    return fail(`${key} must be a non-negative whole number`);
+  return { ok: true, value: n };
 }
 
 function isoDate(
@@ -572,5 +605,231 @@ export function normalizeBoardTermInput(
     const err = termRangeError(out.termStart, out.termEnd);
     if (err) return fail(err);
   }
+  return { ok: true, value: out };
+}
+
+export type MeetingBody = 'board' | 'member';
+export type MeetingKind = 'regular' | 'special' | 'annual';
+export type MeetingStatus = 'draft' | 'approved';
+export type MotionOutcome = 'passed' | 'failed' | 'withdrawn' | 'tabled';
+export type VoteChoice = 'yes' | 'no' | 'abstain' | 'recused' | 'absent';
+
+export const MEETING_BODIES = ['board', 'member'] as const;
+export const MEETING_KINDS = ['regular', 'special', 'annual'] as const;
+export const MOTION_OUTCOMES = [
+  'passed',
+  'failed',
+  'withdrawn',
+  'tabled',
+] as const;
+export const VOTE_CHOICES = [
+  'yes',
+  'no',
+  'abstain',
+  'recused',
+  'absent',
+] as const;
+
+export interface Tally {
+  yes: number;
+  no: number;
+  abstain: number;
+  recused: number;
+  absent: number;
+  /** False when no roll call was entered — never render a 0–0 tally instead. */
+  recorded: boolean;
+}
+
+export interface VoteRow {
+  personId: string;
+  fullName: string;
+  choice: VoteChoice;
+}
+export interface AttendanceRow {
+  personId: string;
+  fullName: string;
+  present: boolean;
+}
+export interface MotionDetail {
+  id: string;
+  sequence: number;
+  text: string;
+  moverName: string | null;
+  secondName: string | null;
+  outcome: MotionOutcome;
+  tally: Tally;
+  votes: VoteRow[];
+}
+export interface MeetingSummary {
+  id: string;
+  body: MeetingBody;
+  kind: MeetingKind;
+  date: string;
+  title: string;
+  status: MeetingStatus;
+  visibility: Visibility;
+  motionCount: number;
+}
+export interface MeetingDetail extends MeetingSummary {
+  startTime: string | null;
+  location: string | null;
+  summaryMd: string | null;
+  documentId: string | null;
+  quorumRequired: number | null;
+  attendance: AttendanceRow[];
+  motions: MotionDetail[];
+}
+
+export interface MeetingInput {
+  body?: MeetingBody;
+  kind?: MeetingKind;
+  date?: string;
+  title?: string;
+  startTime?: string | null;
+  location?: string | null;
+  summaryMd?: string | null;
+  documentId?: string | null;
+  quorumRequired?: number | null;
+  visibility?: Visibility;
+}
+export interface MotionInput {
+  meetingId?: string;
+  text?: string;
+  moverPersonId?: string | null;
+  secondPersonId?: string | null;
+  outcome?: MotionOutcome;
+}
+
+export function tallyVotes(votes: { choice: VoteChoice }[]): Tally {
+  const t: Tally = {
+    yes: 0,
+    no: 0,
+    abstain: 0,
+    recused: 0,
+    absent: 0,
+    recorded: votes.length > 0,
+  };
+  for (const v of votes) t[v.choice] += 1;
+  return t;
+}
+
+export function normalizeMeetingInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<MeetingInput> {
+  const r = asRecord(raw);
+  const out: MeetingInput = {};
+  // Status is transition-only: approve/unapprove are explicit actions so the
+  // approval provenance columns are always written together with the flip.
+  if ('status' in r)
+    return fail('status is not editable — use the approve or unapprove action');
+
+  const body = enumField(r, 'body', MEETING_BODIES, mode);
+  if (!body.ok) return body;
+  if (body.value !== undefined) out.body = body.value;
+
+  const kind = enumField(r, 'kind', MEETING_KINDS, mode);
+  if (!kind.ok) return kind;
+  if (kind.value !== undefined) out.kind = kind.value;
+
+  const date = isoDate(r, 'date', 'date', mode);
+  if (!date.ok) return date;
+  if (date.value !== undefined) out.date = date.value;
+
+  const title = coreString(r, 'title', INPUT_LIMITS.title, 'title', mode);
+  if (!title.ok) return title;
+  if (title.value !== undefined) out.title = title.value;
+
+  const startTime = nullableString(r, 'startTime', 20, 'startTime');
+  if (!startTime.ok) return startTime;
+  if (startTime.value !== undefined) out.startTime = startTime.value;
+
+  const location = nullableString(
+    r,
+    'location',
+    INPUT_LIMITS.meetingLocation,
+    'location',
+  );
+  if (!location.ok) return location;
+  if (location.value !== undefined) out.location = location.value;
+
+  const summaryMd = nullableString(
+    r,
+    'summaryMd',
+    INPUT_LIMITS.summaryMd,
+    'summaryMd',
+  );
+  if (!summaryMd.ok) return summaryMd;
+  if (summaryMd.value !== undefined) out.summaryMd = summaryMd.value;
+
+  const documentId = nullableString(
+    r,
+    'documentId',
+    INPUT_LIMITS.propertyId,
+    'documentId',
+  );
+  if (!documentId.ok) return documentId;
+  if (documentId.value !== undefined) out.documentId = documentId.value;
+
+  const quorum = nonNegativeInt(r, 'quorumRequired');
+  if (!quorum.ok) return quorum;
+  if (quorum.value !== undefined) out.quorumRequired = quorum.value;
+
+  const visibility = visibilityField(r, 'visibility');
+  if (!visibility.ok) return visibility;
+  if (visibility.value !== undefined) out.visibility = visibility.value;
+
+  return { ok: true, value: out };
+}
+
+export function normalizeMotionInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<MotionInput> {
+  const r = asRecord(raw);
+  const out: MotionInput = {};
+  // The server assigns sequence as max + 1 on create; there is no reorder
+  // action, so a gap left by deleting a motion (e.g. 1, 3 after deleting 2)
+  // is not backfilled. Accepting sequence here would let a client create
+  // duplicate positions, so it stays server-only.
+  if ('sequence' in r)
+    return fail('sequence is not editable — the server assigns it');
+
+  const meetingId = coreString(
+    r,
+    'meetingId',
+    INPUT_LIMITS.propertyId,
+    'meetingId',
+    mode,
+  );
+  if (!meetingId.ok) return meetingId;
+  if (meetingId.value !== undefined) out.meetingId = meetingId.value;
+
+  const text = coreString(r, 'text', INPUT_LIMITS.motionText, 'text', mode);
+  if (!text.ok) return text;
+  if (text.value !== undefined) out.text = text.value;
+
+  const mover = nullableString(
+    r,
+    'moverPersonId',
+    INPUT_LIMITS.propertyId,
+    'moverPersonId',
+  );
+  if (!mover.ok) return mover;
+  if (mover.value !== undefined) out.moverPersonId = mover.value;
+
+  const second = nullableString(
+    r,
+    'secondPersonId',
+    INPUT_LIMITS.propertyId,
+    'secondPersonId',
+  );
+  if (!second.ok) return second;
+  if (second.value !== undefined) out.secondPersonId = second.value;
+
+  const outcome = enumField(r, 'outcome', MOTION_OUTCOMES, mode);
+  if (!outcome.ok) return outcome;
+  if (outcome.value !== undefined) out.outcome = outcome.value;
+
   return { ok: true, value: out };
 }

@@ -154,6 +154,125 @@ export const boardTerms = sqliteTable(
   ],
 );
 
+// A meeting of one of the association's two deliberative bodies. `body` is the
+// load-bearing column: it decides which voter model applies (board members cast
+// roll-call votes; members vote one per property, PR 3). `kind` is descriptive
+// and orthogonal — an annual *member* meeting and a special *board* meeting are
+// both real combinations.
+export const meetings = sqliteTable(
+  'meetings',
+  {
+    id: text('id').primaryKey(),
+    body: text('body', { enum: ['board', 'member'] }).notNull(),
+    kind: text('kind', { enum: ['regular', 'special', 'annual'] }).notNull(),
+    date: text('date').notNull(),
+    startTime: text('start_time'),
+    location: text('location'),
+    title: text('title').notNull(),
+    summaryMd: text('summary_md'),
+    documentId: text('document_id').references(() => documents.id, {
+      onDelete: 'set null',
+    }),
+    // Declared for this meeting rather than computed: quorum rules vary by body
+    // and by the association's own bylaws, so the number is entered, not derived.
+    quorumRequired: integer('quorum_required'),
+    status: text('status', { enum: ['draft', 'approved'] })
+      .notNull()
+      .default('draft'),
+    visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] })
+      .notNull()
+      .default('board'),
+    approvedAt: integer('approved_at', { mode: 'timestamp' }),
+    approvedBy: text('approved_by'),
+    // Minutes are approved by a motion at the FOLLOWING meeting. Circular
+    // reference with `motions` is fine — SQLite resolves FK targets at DML time,
+    // not at CREATE TABLE time, and both tables land in this migration.
+    approvedByMotionId: text('approved_by_motion_id'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  // Public reads filter on status then order by date; the admin list filters by body.
+  (t) => [
+    index('meetings_status_date_idx').on(t.status, t.date),
+    index('meetings_body_idx').on(t.body),
+  ],
+);
+
+export const boardAttendance = sqliteTable(
+  'board_attendance',
+  {
+    id: text('id').primaryKey(),
+    meetingId: text('meeting_id')
+      .notNull()
+      .references(() => meetings.id, { onDelete: 'cascade' }),
+    personId: text('person_id')
+      .notNull()
+      .references(() => boardPeople.id, { onDelete: 'restrict' }),
+    present: integer('present', { mode: 'boolean' }).notNull(),
+  },
+  // One attendance row per person per meeting; also serves the per-meeting read.
+  (t) => [
+    uniqueIndex('board_attendance_meeting_person_unq').on(
+      t.meetingId,
+      t.personId,
+    ),
+  ],
+);
+
+export const motions = sqliteTable(
+  'motions',
+  {
+    id: text('id').primaryKey(),
+    meetingId: text('meeting_id')
+      .notNull()
+      .references(() => meetings.id, { onDelete: 'cascade' }),
+    sequence: integer('sequence').notNull(),
+    text: text('text').notNull(),
+    // A board meeting's mover is a board person. PR 3 adds nullable owner
+    // counterparts for member meetings; the parent meeting's `body` disambiguates.
+    moverPersonId: text('mover_person_id').references(() => boardPeople.id, {
+      onDelete: 'restrict',
+    }),
+    secondPersonId: text('second_person_id').references(() => boardPeople.id, {
+      onDelete: 'restrict',
+    }),
+    outcome: text('outcome', {
+      enum: ['passed', 'failed', 'withdrawn', 'tabled'],
+    }).notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  // Motions are read per meeting in order; the unique constraint stops a partial
+  // reorder from silently leaving two motions at the same position.
+  (t) => [
+    index('motions_meeting_id_idx').on(t.meetingId),
+    uniqueIndex('motions_meeting_sequence_unq').on(t.meetingId, t.sequence),
+  ],
+);
+
+export const boardVotes = sqliteTable(
+  'board_votes',
+  {
+    id: text('id').primaryKey(),
+    motionId: text('motion_id')
+      .notNull()
+      .references(() => motions.id, { onDelete: 'cascade' }),
+    personId: text('person_id')
+      .notNull()
+      .references(() => boardPeople.id, { onDelete: 'restrict' }),
+    choice: text('choice', {
+      enum: ['yes', 'no', 'abstain', 'recused', 'absent'],
+    }).notNull(),
+  },
+  // One vote per person per motion — re-recording a roll call must replace, not
+  // accumulate. Also the leftmost prefix for the per-motion tally read.
+  (t) => [
+    uniqueIndex('board_votes_motion_person_unq').on(t.motionId, t.personId),
+  ],
+);
+
 export const documents = sqliteTable(
   'documents',
   {

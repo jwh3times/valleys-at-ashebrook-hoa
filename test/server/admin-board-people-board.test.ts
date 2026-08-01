@@ -17,7 +17,14 @@ import {
   DELETE as termDelete,
 } from '../../src/pages/api/admin/board-terms';
 import { getDb } from '../../src/server/db/client';
-import { boardPeople, boardTerms } from '../../src/server/db/schema';
+import {
+  boardPeople,
+  boardTerms,
+  meetings,
+  boardAttendance,
+  motions,
+  boardVotes,
+} from '../../src/server/db/schema';
 import type { BoardPersonWithTerms } from '../../src/lib/types';
 
 beforeAll(async () => {
@@ -26,9 +33,55 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   const db = getDb(env);
+  await db.delete(boardVotes);
+  await db.delete(motions);
+  await db.delete(boardAttendance);
+  await db.delete(meetings);
   await db.delete(boardTerms);
   await db.delete(boardPeople);
 });
+
+async function createMeeting(): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env).insert(meetings).values({
+    id,
+    body: 'board',
+    kind: 'regular',
+    date: '2026-01-01',
+    title: 'January meeting',
+    status: 'draft',
+    visibility: 'board',
+    createdBy: 'b',
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
+async function createMotion(
+  meetingId: string,
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env)
+    .insert(motions)
+    .values({
+      id,
+      meetingId,
+      sequence: 1,
+      text: 'A motion',
+      moverPersonId: null,
+      secondPersonId: null,
+      outcome: 'passed',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
+  return id;
+}
 
 const url = 'http://localhost/api/admin/board-people';
 const termUrl = 'http://localhost/api/admin/board-terms';
@@ -120,6 +173,50 @@ describe('board roster — board', () => {
     const res = await DELETE(req(url, 'DELETE', { id }));
     expect(res.status).toBe(409);
     expect(await res.text()).toMatch(/term of service/i);
+    const rows = await getDb(env).select().from(boardPeople);
+    expect(rows.length).toBe(1);
+  });
+
+  it('refuses to delete a person who only appears in the meeting record via attendance, with 409', async () => {
+    const id = await createPerson('A. Reyes');
+    const meetingId = await createMeeting();
+    await getDb(env).insert(boardAttendance).values({
+      id: crypto.randomUUID(),
+      meetingId,
+      personId: id,
+      present: true,
+    });
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/meeting record/i);
+    const rows = await getDb(env).select().from(boardPeople);
+    expect(rows.length).toBe(1);
+  });
+
+  it('refuses to delete a person who only appears in the meeting record via a roll-call vote, with 409', async () => {
+    const id = await createPerson('A. Reyes');
+    const meetingId = await createMeeting();
+    const motionId = await createMotion(meetingId);
+    await getDb(env).insert(boardVotes).values({
+      id: crypto.randomUUID(),
+      motionId,
+      personId: id,
+      choice: 'yes',
+    });
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/meeting record/i);
+    const rows = await getDb(env).select().from(boardPeople);
+    expect(rows.length).toBe(1);
+  });
+
+  it('refuses to delete a person who only appears in the meeting record as a motion mover, with 409', async () => {
+    const id = await createPerson('A. Reyes');
+    const meetingId = await createMeeting();
+    await createMotion(meetingId, { moverPersonId: id });
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/meeting record/i);
     const rows = await getDb(env).select().from(boardPeople);
     expect(rows.length).toBe(1);
   });
