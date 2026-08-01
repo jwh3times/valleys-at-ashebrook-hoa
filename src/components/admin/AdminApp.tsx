@@ -9,7 +9,7 @@ import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
 import RosterManager from './RosterManager';
 import MembersManager from './MembersManager';
-import BoardMembersManager from './BoardMembersManager';
+import BoardAccessManager from './BoardAccessManager';
 import BoardPanel from './BoardPanel';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
@@ -36,7 +36,7 @@ const SECTIONS = [
     // "The Board" tab above for the roster of members and their terms.
     key: 'board',
     label: 'Board access',
-    render: () => <BoardMembersManager />,
+    render: () => <BoardAccessManager />,
   },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
   { key: 'site', label: 'Site Settings', render: () => <SiteManager /> },

@@ -10,9 +10,9 @@ vi.mock('../../lib/admin', () => ({
   demoteFromBoard: (...a: unknown[]) => demoteFromBoard(...a),
 }));
 
-import BoardMembersManager from './BoardMembersManager';
+import BoardAccessManager from './BoardAccessManager';
 
-describe('BoardMembersManager', () => {
+describe('BoardAccessManager', () => {
   beforeEach(() => {
     fetchBoardMembers.mockReset().mockResolvedValue([
       {
@@ -27,7 +27,7 @@ describe('BoardMembersManager', () => {
   });
 
   it('lists board members and promotes by email', async () => {
-    render(<BoardMembersManager />);
+    render(<BoardAccessManager />);
     expect(await screen.findByText('alice@example.com')).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/person@example.com/i), {
       target: { value: 'bob@example.com' },
@@ -39,7 +39,7 @@ describe('BoardMembersManager', () => {
   });
 
   it('demotes a board member', async () => {
-    render(<BoardMembersManager />);
+    render(<BoardAccessManager />);
     fireEvent.click(await screen.findByRole('button', { name: /demote/i }));
     await waitFor(() => expect(demoteFromBoard).toHaveBeenCalledWith('u1'));
   });

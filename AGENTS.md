@@ -254,6 +254,22 @@ Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` sn
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
 so `npm run db:generate` should diff cleanly for future changes.
 
+**Glossary — "board" names three separate things.** They are deliberately distinct; conflating them
+in code or copy is the mistake this table exists to prevent. Use these words in that sense.
+
+| Term              | Is                                                                     | Lives in              | Has history?                                                    |
+| ----------------- | ---------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------- |
+| **board admin**   | An access level. Grants admin writes _and_ the top content tier.       | `user.role = 'board'` | No — current state only. Demoting rewrites "now", never "then". |
+| **board member**  | A person who serves on the board. What motions and votes reference.    | `board_people`        | Yes — the record is the point.                                  |
+| **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms`         | Yes — a person may hold several, with gaps.                     |
+
+The two are managed in separate admin panels — **Board access** (`BoardAccessManager`) for sign-in
+access, **The Board** (`BoardPanel`) for the roster — and neither writes the other's data. A board
+member need not be a board admin, and a board admin need not be a board member. The content
+visibility tier `board` is a fourth use of the word and follows the access sense: it means "visible
+to a board admin". See [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md) for why the
+record is independent of `user` rows.
+
 **Roles and access.** Roles are `visitor`, `homeowner`, and `board`; content visibility tiers are
 `public`, `homeowner`, and `board`. Access is enforced server-side and fail-closed: anonymous users
 resolve to visitor, unknown states resolve to the most restrictive behavior. A user's role is a
