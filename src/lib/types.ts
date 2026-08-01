@@ -198,6 +198,8 @@ export interface Property {
   unit: string | null;
   status: 'active' | 'inactive';
   notes: string | null;
+  /** Vote "shares" at member meetings. Always present, defaults to 1. */
+  voteWeight: number;
 }
 
 export interface Owner {
@@ -308,6 +310,7 @@ export interface PropertyInput {
   unit?: string | null;
   status?: 'active' | 'inactive';
   notes?: string | null;
+  voteWeight?: number;
 }
 
 export interface OwnerInput {
@@ -515,6 +518,9 @@ export function normalizePropertyInput(
   const status = statusField(r, 'status');
   if (!status.ok) return status;
   if (status.value !== undefined) out.status = status.value;
+  const voteWeight = normalizeVoteWeight(raw);
+  if (!voteWeight.ok) return voteWeight;
+  if (voteWeight.value !== undefined) out.voteWeight = voteWeight.value;
   return { ok: true, value: out };
 }
 
