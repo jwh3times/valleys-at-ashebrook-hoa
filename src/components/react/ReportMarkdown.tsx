@@ -1,8 +1,19 @@
 import type { ReactNode } from 'react';
 
-/** Allow-list of href schemes. Anything else renders as literal text. */
+/**
+ * Allow-list of href schemes. Anything else renders as literal text.
+ *
+ * Relies on the caller's link regex (`[^)\s]+` in `inline` below) to have
+ * already excluded whitespace from the captured href — this function does
+ * not itself reject tabs, CR, or LF. Do not widen that regex to allow
+ * whitespace without revisiting this function.
+ */
 function safeHref(href: string): string | null {
   const h = href.trim();
+  // A literal backslash never belongs in a URL we emit — browsers normalize it
+  // to '/' for http(s), so "/\evil.example.com" would resolve off-site despite
+  // looking site-root-relative. Percent-encoded %5C is unaffected by this check.
+  if (h.includes('\\')) return null;
   if (h.startsWith('//')) return null; // protocol-relative — not site-root
   if (h.startsWith('/')) return h;
   if (/^https?:\/\//i.test(h)) return h;
