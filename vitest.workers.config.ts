@@ -19,20 +19,28 @@ import {
 import { defineConfig } from 'vitest/config';
 import { getViteConfig } from 'astro/config';
 import type { PluginOption } from 'vite';
+import { isCloudflarePlugin } from './vitest.shared';
 
 export default defineConfig(async (ctx) => {
   const migrations = await readD1Migrations('./src/server/db/migrations');
   const astroConfig = await getViteConfig({})(ctx);
-  const astroPlugins = ((astroConfig.plugins ?? []) as PluginOption[])
+  const allAstroPlugins = ((astroConfig.plugins ?? []) as PluginOption[])
     .flat()
-    .filter(Boolean)
-    .filter(
-      (p: any) =>
-        !(
-          typeof p?.name === 'string' &&
-          p.name.toLowerCase().includes('cloudflare')
-        ),
+    .filter(Boolean);
+  const astroPlugins = allAstroPlugins.filter((p) => !isCloudflarePlugin(p));
+  // If the filter above matched nothing, either Astro stopped shipping a
+  // Cloudflare plugin (unlikely — the adapter is in astro.config.mjs) or
+  // @cloudflare/vite-plugin / @astrojs/cloudflare renamed its plugins out
+  // from under isCloudflarePlugin's "name contains 'cloudflare'" check. Fail
+  // loudly here rather than letting it surface later as the much more
+  // opaque "environment options are incompatible with the Cloudflare Vite
+  // plugin" config-resolve error this filter exists to prevent.
+  if (astroPlugins.length === allAstroPlugins.length) {
+    throw new Error(
+      'Cloudflare plugin filter matched 0 plugins — @cloudflare/vite-plugin or ' +
+        '@astrojs/cloudflare likely renamed its plugins; see the comment above',
     );
+  }
   return {
     resolve: {
       alias: {
