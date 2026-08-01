@@ -62,6 +62,11 @@ describe('board roster — board', () => {
 
   it('nests terms under their person, oldest first', async () => {
     const id = await createPerson('A. Reyes');
+    // Insert the later term first so termStart ordering has to do real work —
+    // insertion order alone must not already match expected order.
+    await termPost(
+      req(termUrl, 'POST', { personId: id, termStart: '2027-01-01' }),
+    );
     await termPost(
       req(termUrl, 'POST', {
         personId: id,
@@ -69,9 +74,6 @@ describe('board roster — board', () => {
         termStart: '2024-01-01',
         termEnd: '2025-12-31',
       }),
-    );
-    await termPost(
-      req(termUrl, 'POST', { personId: id, termStart: '2027-01-01' }),
     );
     const list = (await (
       await GET(req(url, 'GET'))
@@ -82,6 +84,20 @@ describe('board roster — board', () => {
     ]);
     expect(list[0].terms[0].title).toBe('Treasurer');
     expect(list[0].terms[1].termEnd).toBeNull();
+  });
+
+  it('lists people alphabetically by full name', async () => {
+    await createPerson('C. Nguyen');
+    await createPerson('A. Reyes');
+    await createPerson('B. Ortiz');
+    const list = (await (
+      await GET(req(url, 'GET'))
+    ).json()) as BoardPersonWithTerms[];
+    expect(list.map((p) => p.fullName)).toEqual([
+      'A. Reyes',
+      'B. Ortiz',
+      'C. Nguyen',
+    ]);
   });
 
   it('renames a person', async () => {
@@ -133,6 +149,41 @@ describe('board roster — board', () => {
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/termEnd must not be before termStart/);
+  });
+
+  it('reopens a closed term while moving its start past the old end', async () => {
+    const id = await createPerson('A. Reyes');
+    const created = await termPost(
+      req(termUrl, 'POST', {
+        personId: id,
+        termStart: '2026-01-01',
+        termEnd: '2026-12-31',
+      }),
+    );
+    const termId = ((await created.json()) as { id: string }).id;
+    // Under a `??` merge (rather than `!== undefined`), an explicit
+    // termEnd: null would fall back to the stored '2026-12-31' and this
+    // would wrongly 400 against the new, later termStart.
+    const res = await termPatch(
+      req(termUrl, 'PATCH', {
+        id: termId,
+        termStart: '2027-01-01',
+        termEnd: null,
+      }),
+    );
+    expect(res.status).toBe(204);
+    const list = (await (
+      await GET(req(url, 'GET'))
+    ).json()) as BoardPersonWithTerms[];
+    expect(list[0].terms[0].termStart).toBe('2027-01-01');
+    expect(list[0].terms[0].termEnd).toBeNull();
+  });
+
+  it('rejects a patch to a term that does not exist, with 404', async () => {
+    const res = await termPatch(
+      req(termUrl, 'PATCH', { id: 'nope', termEnd: '2026-01-01' }),
+    );
+    expect(res.status).toBe(404);
   });
 
   it('closes an open term', async () => {
