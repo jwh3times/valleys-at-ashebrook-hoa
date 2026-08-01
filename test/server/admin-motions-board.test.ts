@@ -101,6 +101,19 @@ describe('motions admin route — board', () => {
     expect(bySeq[id3]).toBe(3);
   });
 
+  it('scopes sequence numbering per meeting, not globally', async () => {
+    const meetingA = await createMeeting();
+    const meetingB = await createMeeting({ title: 'February meeting' });
+    const a1 = await createMotion(meetingA);
+    const b1 = await createMotion(meetingB);
+    const a2 = await createMotion(meetingA);
+    const rows = await getDb(env).select().from(motions);
+    const bySeq = Object.fromEntries(rows.map((r) => [r.id, r.sequence]));
+    expect(bySeq[a1]).toBe(1);
+    expect(bySeq[a2]).toBe(2);
+    expect(bySeq[b1]).toBe(1);
+  });
+
   it('creating against a nonexistent meeting returns 404', async () => {
     const res = await POST(
       req(url, 'POST', {
@@ -239,6 +252,25 @@ describe('motions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(204);
+    const rows = await getDb(env)
+      .select()
+      .from(boardVotes)
+      .where(eq(boardVotes.motionId, id));
+    expect(rows.length).toBe(0);
+  });
+
+  it('setVotes rejects an invalid choice with 400 and writes nothing', async () => {
+    const meetingId = await createMeeting();
+    const id = await createMotion(meetingId);
+    const p1 = await createPerson('A. Reyes');
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setVotes',
+        motionId: id,
+        entries: [{ personId: p1, choice: 'maybe' }],
+      }),
+    );
+    expect(res.status).toBe(400);
     const rows = await getDb(env)
       .select()
       .from(boardVotes)
