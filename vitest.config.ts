@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { getViteConfig } from 'astro/config';
 import type { ConfigEnv, PluginOption } from 'vite';
+import { isCloudflarePlugin } from './vitest.shared';
 
 // Reuse Astro's Vite config so tests can import .astro files and TSX/JSX with
 // the same resolution as the app. We must strip the Cloudflare vite plugins —
@@ -27,19 +28,11 @@ const baseConfig = getViteConfig({
   },
 });
 
-const isCloudflare = (p: PluginOption): boolean =>
-  !!p &&
-  typeof p === 'object' &&
-  !Array.isArray(p) &&
-  'name' in p &&
-  typeof p.name === 'string' &&
-  p.name.toLowerCase().includes('cloudflare');
-
 export default async (ctx: ConfigEnv) => {
   const config = await baseConfig(ctx);
   // Strip Cloudflare plugins — incompatible with vitest jsdom/node environments.
   config.plugins = ((config.plugins ?? []) as PluginOption[])
     .flat()
-    .filter((p) => !isCloudflare(p));
+    .filter((p) => !isCloudflarePlugin(p));
   return config;
 };
