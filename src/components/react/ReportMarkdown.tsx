@@ -1,13 +1,46 @@
 import type { ReactNode } from 'react';
 
-/** Inline pass: only **bold** is supported; everything else is literal text. */
+/** Allow-list of href schemes. Anything else renders as literal text. */
+function safeHref(href: string): string | null {
+  const h = href.trim();
+  if (h.startsWith('//')) return null; // protocol-relative — not site-root
+  if (h.startsWith('/')) return h;
+  if (/^https?:\/\//i.test(h)) return h;
+  if (/^mailto:/i.test(h)) return h;
+  return null;
+}
+
+/**
+ * Inline pass: **bold** and [text](href). Builds React elements only (no
+ * dangerouslySetInnerHTML), so neither model output nor board-authored prose
+ * can inject markup. Hrefs go through safeHref, so a javascript: URL renders
+ * as the literal source text rather than becoming a link.
+ */
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const parts = text.split(/\*\*([^*]+)\*\*/g);
-  parts.forEach((part, i) => {
-    if (part === '') return;
-    out.push(i % 2 === 1 ? <strong key={i}>{part}</strong> : part);
-  });
+  const pattern = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) out.push(text.slice(last, match.index));
+    if (match[1] !== undefined) {
+      out.push(<strong key={key++}>{match[1]}</strong>);
+    } else {
+      const href = safeHref(match[3]);
+      out.push(
+        href ? (
+          <a key={key++} href={href}>
+            {match[2]}
+          </a>
+        ) : (
+          match[0]
+        ),
+      );
+    }
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
   return out;
 }
 

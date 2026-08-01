@@ -7,7 +7,7 @@ import {
   type ReportSource,
 } from '../../lib/reports';
 import { INPUT_LIMITS } from '../../lib/types';
-import ReportMarkdown from './ReportMarkdown';
+import ReportMarkdown from '../react/ReportMarkdown';
 
 type View =
   | { kind: 'list' }
