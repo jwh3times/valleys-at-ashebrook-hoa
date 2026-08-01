@@ -7,6 +7,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.42] - 2026-08-01
+
+### Security
+
+- **The board-only API surface is now gated in middleware**, not only by a guard repeated by hand in
+  every route handler. Requests to `/api/admin/*` are rejected before they reach a route — `401` for
+  an anonymous caller, `403` for an authenticated non-board one, matching the codes `requireBoard`
+  already returned. Previously `src/middleware.ts` protected the `/admin` pages but not the API
+  behind them, so an admin route shipped without its guard would have been live and no existing test
+  would have failed. Every handler keeps its own `requireBoard` call as the enforced layer; the
+  middleware gate is a backstop.
+- Added a structural test that enumerates every module under `src/pages/api/admin/` and asserts each
+  exported verb rejects an anonymous caller. Per-resource gate tests only cover routes someone
+  remembered to write a test for; this one fails when the _route_ is added, so a new endpoint cannot
+  ship ungated.
+
+See [ADR 0013](docs/adr/0013-admin-api-gated-in-middleware.md).
+
 ## [0.3.41] - 2026-08-01
 
 ### Added
