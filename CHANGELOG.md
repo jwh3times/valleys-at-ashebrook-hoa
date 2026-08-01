@@ -7,6 +7,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.43] - 2026-08-01
+
+### Added
+
+- **Board meetings, motions, and roll-call votes are now a structured record**, with new public
+  pages, `/meetings` and `/meetings/[id]`, listing and detailing approved meetings: attendance,
+  each motion's text, mover and second, and how every board member voted, alongside a derived tally
+  and the board's recorded outcome.
+- A new **Meetings** tab in the admin panel creates and edits meetings (body, kind, date, time,
+  location, a linked minutes document, a written summary), records board attendance, and manages
+  each meeting's motions and roll-call votes.
+- Four new tables (migration `0010`): `meetings`, `board_attendance`, `motions`, and `board_votes`.
+  New board-only endpoints `/api/admin/meetings` (create, edit, attendance, approve, unapprove,
+  delete) and `/api/admin/motions` (create, edit, votes, delete).
+
+### Changed
+
+- **A meeting only appears on the public pages once a board member explicitly approves it.**
+  Publication now asks two questions instead of one: has this meeting been approved, and who may
+  see it. Approving and unapproving are explicit actions, each recording (or clearing) who approved
+  the meeting and when. See [ADR 0014](docs/adr/0014-meeting-record-status-gate.md).
+- `ReportMarkdown` moved from the admin components to `src/components/react/`, gaining a safe-link
+  allow-list so links inside a generated report render only when they point somewhere expected.
+
 ## [0.3.42] - 2026-08-01
 
 ### Security
