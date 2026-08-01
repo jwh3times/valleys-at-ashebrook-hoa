@@ -23,8 +23,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   and unknown states resolve to the most restrictive tier. Document downloads are tier-checked on
   the server before the R2 object is served.
 - **`board` is never self-grantable, and board handoff is a supported workflow.** A user's role is
-  a column on the user record. A board member can promote another account to `board` and demote a
-  board member from the admin panel's **Board members** section (the last remaining board member
+  a column on the user record. A board admin can promote another account to `board` and demote a
+  board admin from the admin panel's **Board access** section (the last remaining board admin
   can't be demoted), but cannot escalate their own access beyond `board`. These are direct database
   writes: the Better Auth admin plugin's impersonation, ban, and set-role endpoints are deliberately
   not granted to board sessions. The first board account is bootstrapped through a permanent,
