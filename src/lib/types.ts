@@ -234,6 +234,36 @@ export interface MembersView {
   queue: ManualApprovalItem[];
 }
 
+export interface BoardPerson {
+  id: string;
+  fullName: string;
+  userId: string | null;
+}
+
+export interface BoardTerm {
+  id: string;
+  personId: string;
+  title: string | null;
+  termStart: string;
+  termEnd: string | null;
+}
+
+export interface BoardPersonWithTerms extends BoardPerson {
+  terms: BoardTerm[];
+}
+
+export interface BoardPersonInput {
+  fullName?: string;
+  userId?: string | null;
+}
+
+export interface BoardTermInput {
+  personId?: string;
+  title?: string | null;
+  termStart?: string;
+  termEnd?: string | null;
+}
+
 // ---------- Admin write-input validation ----------
 // The site/dues settings normalizers above coerce-and-default (they never reject).
 // Board content writes instead validate loudly: trim, cap length, check enums,
@@ -254,6 +284,8 @@ export const INPUT_LIMITS = {
   propertyId: 100,
   assistantQuestion: 2_000,
   reportTopic: 200,
+  officeTitle: 100,
+  userId: 100,
 } as const;
 
 export type InputResult<T> =
@@ -351,19 +383,53 @@ function visibilityField(
 function isoDate(
   raw: Record<string, unknown>,
   key: string,
+  label: string,
   mode: WriteMode,
 ): InputResult<string | undefined> {
   if (!(key in raw))
     return mode === 'create'
-      ? fail('date is required')
+      ? fail(`${label} is required`)
       : { ok: true, value: undefined };
   const s = (typeof raw[key] === 'string' ? (raw[key] as string) : '').trim();
-  if (!s) return fail('date is required');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return fail('date must be YYYY-MM-DD');
+  if (!s) return fail(`${label} is required`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
+    return fail(`${label} must be YYYY-MM-DD`);
   const d = new Date(`${s}T00:00:00Z`);
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
-    return fail('date is not a valid calendar date');
+    return fail(`${label} is not a valid calendar date`);
   return { ok: true, value: s };
+}
+
+/** Optional ISO date. Absent → undefined; explicit null or blank → null. */
+function nullableIsoDate(
+  raw: Record<string, unknown>,
+  key: string,
+  label: string,
+): InputResult<string | null | undefined> {
+  if (!(key in raw)) return { ok: true, value: undefined };
+  if (raw[key] === null) return { ok: true, value: null };
+  const s = (typeof raw[key] === 'string' ? (raw[key] as string) : '').trim();
+  if (!s) return { ok: true, value: null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
+    return fail(`${label} must be YYYY-MM-DD`);
+  const d = new Date(`${s}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
+    return fail(`${label} is not a valid calendar date`);
+  return { ok: true, value: s };
+}
+
+/**
+ * Term ranges are validated in two places — the normalizer when a write
+ * carries both ends, and the PATCH route after merging one end with the
+ * stored row — so the rule lives in one exported function.
+ * ISO YYYY-MM-DD strings compare correctly with `<`.
+ */
+export function termRangeError(
+  start: string,
+  end: string | null,
+): string | null {
+  if (end === null) return null;
+  return end < start ? 'termEnd must not be before termStart' : null;
 }
 
 export function normalizeAnnouncementInput(
@@ -378,7 +444,7 @@ export function normalizeAnnouncementInput(
   const body = coreString(r, 'body', INPUT_LIMITS.body, 'body', mode);
   if (!body.ok) return body;
   if (body.value !== undefined) out.body = body.value;
-  const date = isoDate(r, 'date', mode);
+  const date = isoDate(r, 'date', 'date', mode);
   if (!date.ok) return date;
   if (date.value !== undefined) out.date = date.value;
   if ('pinned' in r) {
@@ -451,5 +517,59 @@ export function normalizeOwnerInput(
   const status = statusField(r, 'status');
   if (!status.ok) return status;
   if (status.value !== undefined) out.status = status.value;
+  return { ok: true, value: out };
+}
+
+export function normalizeBoardPersonInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<BoardPersonInput> {
+  const r = asRecord(raw);
+  const out: BoardPersonInput = {};
+  const fullName = coreString(
+    r,
+    'fullName',
+    INPUT_LIMITS.fullName,
+    'fullName',
+    mode,
+  );
+  if (!fullName.ok) return fullName;
+  if (fullName.value !== undefined) out.fullName = fullName.value;
+  const userId = nullableString(r, 'userId', INPUT_LIMITS.userId, 'userId');
+  if (!userId.ok) return userId;
+  if (userId.value !== undefined) out.userId = userId.value;
+  return { ok: true, value: out };
+}
+
+export function normalizeBoardTermInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<BoardTermInput> {
+  const r = asRecord(raw);
+  const out: BoardTermInput = {};
+  const personId = coreString(
+    r,
+    'personId',
+    INPUT_LIMITS.propertyId,
+    'personId',
+    mode,
+  );
+  if (!personId.ok) return personId;
+  if (personId.value !== undefined) out.personId = personId.value;
+  const title = nullableString(r, 'title', INPUT_LIMITS.officeTitle, 'title');
+  if (!title.ok) return title;
+  if (title.value !== undefined) out.title = title.value;
+  const termStart = isoDate(r, 'termStart', 'termStart', mode);
+  if (!termStart.ok) return termStart;
+  if (termStart.value !== undefined) out.termStart = termStart.value;
+  const termEnd = nullableIsoDate(r, 'termEnd', 'termEnd');
+  if (!termEnd.ok) return termEnd;
+  if (termEnd.value !== undefined) out.termEnd = termEnd.value;
+  // Only checkable here when the write carries both ends; a PATCH supplying
+  // one end is re-checked against the stored row in the route.
+  if (out.termStart !== undefined && out.termEnd !== undefined) {
+    const err = termRangeError(out.termStart, out.termEnd);
+    if (err) return fail(err);
+  }
   return { ok: true, value: out };
 }
