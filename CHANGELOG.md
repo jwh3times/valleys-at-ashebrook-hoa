@@ -7,6 +7,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.40] - 2026-07-31
+
+### Changed
+
+- **Roadmap refreshed after the governing-documents report shipped.** The AI CC&R Compliance
+  Report item is now marked partially implemented, pointing at the report feature released in
+  0.3.39 and naming what it does not yet cover: the compliance angle proper — where current
+  practice diverges from the governing documents — which needs a record of current practice to
+  compare against, plus deferred refinements (a retention policy for saved report content, a
+  structured-output query planner, saved-report list pagination, and skipping generation when
+  retrieval returns nothing).
+- Recorded three further product backlog items — minutes and motion/vote records, election
+  management, and a reserve planning tracker — each gated on its own spec or a board decision, and
+  added a Product Opportunities section that keeps longer-range product vision out of the backlog
+  proper. No code or architecture changes accompany this; nothing here is scheduled work.
+
 ## [0.3.39] - 2026-07-31
 
 ### Added
