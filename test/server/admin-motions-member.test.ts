@@ -258,6 +258,28 @@ describe('motions admin route — member votes', () => {
     expect(rows.length).toBe(0);
   });
 
+  it('rejects an unknown propertyId with 400 and writes nothing, including the valid entry', async () => {
+    const meetingId = await createMeeting();
+    const id = await createMotion(meetingId);
+    const p1 = await createProperty('1 Oak St');
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setMemberVotes',
+        motionId: id,
+        entries: [
+          { propertyId: p1, choice: 'yes' },
+          { propertyId: 'nope', choice: 'no' },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const rows = await getDb(env)
+      .select()
+      .from(memberVotes)
+      .where(eq(memberVotes.motionId, id));
+    expect(rows.length).toBe(0);
+  });
+
   it('rejects choice "recused" with 400 and writes nothing', async () => {
     const meetingId = await createMeeting();
     const id = await createMotion(meetingId);
