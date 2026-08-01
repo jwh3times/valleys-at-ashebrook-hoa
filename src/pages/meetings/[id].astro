@@ -48,25 +48,40 @@ if (!meeting) {
   return Astro.rewrite('/404');
 }
 
-// Board quorum counts people because this meeting's body is "board"; a
-// future release adds the weighted property-based count for member
-// meetings. Say nothing about quorum when none is configured rather than
-// inventing a threshold. Two more conditions suppress the whole line rather
-// than render a fabricated fact:
+// Board quorum counts people; member quorum counts weighted votes
+// represented (each property's vote_weight, summed, against
+// totalActiveWeight — the same aggregate `assembleMeetingDetail` computes
+// unconditionally for every meeting, so it must be gated on `body`, not on
+// its own value being non-zero). Say nothing about quorum when none is
+// configured rather than inventing a threshold. Two more conditions
+// suppress the whole line rather than render a fabricated fact:
 //   - No attendance rows at all is the normal state when a board pastes
-//     minutes and approves them — absence of data is not evidence of an
-//     empty room, so this must not render "0 of 0 present".
-//   - `body !== 'board'` — the copy below hardcodes "board members", but
-//     member-body meetings don't record per-person attendance the same way
-//     (MeetingsManager gates attendance behind body === 'board' with a
-//     "future release" note), so this page must not claim it either.
+//     minutes and approves them, or when a member meeting's attendance
+//     hasn't been entered yet — absence of data is not evidence of an
+//     empty room, so this must not render "0 of 0 present" or "0 of 0
+//     votes represented".
+//   - The wrong attendance model for this meeting's `body` — a board
+//     meeting's per-person rows never drive the member line and vice
+//     versa, so stray rows left over from re-typing a meeting's body can't
+//     leak into copy that doesn't apply to it.
 const present = meeting.attendance.filter((a) => a.present).length;
 const total = meeting.attendance.length;
+// Summed from the rows, not counted — a property's representation is its
+// weight, and with weights other than 1 the two differ.
+const presentWeight = meeting.memberAttendance
+  .filter((a) => a.present)
+  .reduce((sum, a) => sum + a.weight, 0);
 let attendanceLine: string | null = null;
 if (meeting.body === 'board' && total > 0) {
   attendanceLine = `${present} of ${total} board members present`;
   if (meeting.quorumRequired !== null) {
     const met = present >= meeting.quorumRequired;
+    attendanceLine += ` — quorum of ${meeting.quorumRequired} ${met ? 'met' : 'not met'}`;
+  }
+} else if (meeting.body === 'member' && meeting.memberAttendance.length > 0) {
+  attendanceLine = `${presentWeight} of ${meeting.totalActiveWeight} votes represented`;
+  if (meeting.quorumRequired !== null) {
+    const met = presentWeight >= meeting.quorumRequired;
     attendanceLine += ` — quorum of ${meeting.quorumRequired} ${met ? 'met' : 'not met'}`;
   }
 }
@@ -117,40 +132,68 @@ if (meeting.body === 'board' && total > 0) {
         <p class="muted">No motions were recorded at this meeting.</p>
       ) : (
         <div class="motion-list">
-          {meeting.motions.map((mo) => (
-            <div class="motion card">
-              <p class="motion__text">{mo.text}</p>
-              {(mo.moverName || mo.secondName) && (
-                <p class="motion__meta">
-                  {mo.moverName && <>Moved by {mo.moverName}</>}
-                  {mo.moverName && mo.secondName && ' · '}
-                  {mo.secondName && <>Seconded by {mo.secondName}</>}
-                </p>
-              )}
-              <p class="motion__tally">
-                {mo.tally.recorded ? (
-                  <>
-                    {mo.tally.yes} yes · {mo.tally.no} no · {mo.tally.abstain}{' '}
-                    abstain · {mo.tally.recused} recused · {mo.tally.absent}{' '}
-                    absent
-                  </>
-                ) : (
-                  'Vote not recorded'
+          {meeting.motions.map((mo) => {
+            // Per motion, render the tally and roll call for THIS meeting's
+            // body only — a board meeting's per-person tally/votes for a
+            // member meeting (or vice versa) is never the right one to show,
+            // same reasoning as the attendance line above. A tally whose
+            // `recorded` is false must render "Vote not recorded", never a
+            // fabricated 0–0, regardless of which body this is.
+            const tally = meeting.body === 'board' ? mo.tally : mo.memberTally;
+            return (
+              <div class="motion card">
+                <p class="motion__text">{mo.text}</p>
+                {(mo.moverName || mo.secondName) && (
+                  <p class="motion__meta">
+                    {mo.moverName && <>Moved by {mo.moverName}</>}
+                    {mo.moverName && mo.secondName && ' · '}
+                    {mo.secondName && <>Seconded by {mo.secondName}</>}
+                  </p>
                 )}
-                {' — '}
-                {OUTCOME_LABELS[mo.outcome]}
-              </p>
-              {mo.votes.length > 0 && (
-                <ul class="motion__rollcall">
-                  {mo.votes.map((v) => (
-                    <li>
-                      {v.fullName}: {VOTE_LABELS[v.choice]}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+                <p class="motion__tally">
+                  {tally.recorded ? (
+                    meeting.body === 'board' ? (
+                      <>
+                        {tally.yes} yes · {tally.no} no · {tally.abstain}{' '}
+                        abstain · {tally.recused} recused · {tally.absent}{' '}
+                        absent
+                      </>
+                    ) : (
+                      <>
+                        weighted {tally.yes} yes · {tally.no} no ·{' '}
+                        {tally.abstain} abstain
+                      </>
+                    )
+                  ) : (
+                    'Vote not recorded'
+                  )}
+                  {' — '}
+                  {OUTCOME_LABELS[mo.outcome]}
+                </p>
+                {meeting.body === 'board'
+                  ? mo.votes.length > 0 && (
+                      <ul class="motion__rollcall">
+                        {mo.votes.map((v) => (
+                          <li>
+                            {v.fullName}: {VOTE_LABELS[v.choice]}
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  : mo.memberVotes.length > 0 && (
+                      <ul class="motion__rollcall">
+                        {mo.memberVotes.map((v) => (
+                          <li>
+                            {v.address}: {VOTE_LABELS[v.choice]} ({v.weight}{' '}
+                            {v.weight === 1 ? 'vote' : 'votes'})
+                            {v.viaProxy && ' — via proxy'}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+              </div>
+            );
+          })}
         </div>
       )
     }
