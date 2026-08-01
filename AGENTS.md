@@ -273,7 +273,18 @@ record is independent of `user` rows.
 **Roles and access.** Roles are `visitor`, `homeowner`, and `board`; content visibility tiers are
 `public`, `homeowner`, and `board`. Access is enforced server-side and fail-closed: anonymous users
 resolve to visitor, unknown states resolve to the most restrictive behavior. A user's role is a
-column on the user record. Site sign-in access for board admins is managed in the admin app's
+column on the user record.
+
+The board-only API is gated in **two** places, deliberately. `src/middleware.ts` rejects
+`/api/admin/*` before the route runs (401 anonymous, 403 authenticated non-board), and every handler
+under `src/pages/api/admin/` additionally opens with `requireBoard`. The per-route call is the
+**enforced and tested** layer — the Workers test pool invokes handlers directly and never runs
+middleware — while the middleware gate is the production backstop for a route shipped without its
+guard. `test/server/admin-routes-all-gated.test.ts` enumerates every admin route module and asserts
+each exported verb rejects an anonymous caller, so a new endpoint cannot ship ungated. Do not remove
+the per-route guards in favor of the middleware: that would leave the behavior untested. See
+[ADR 0013](./docs/adr/0013-admin-api-gated-in-middleware.md). `/api/bootstrap/board` sits outside the
+gated prefix on purpose — it is the fail-closed first-board bootstrap and must stay reachable. Site sign-in access for board admins is managed in the admin app's
 **Board access** panel: a board admin can promote another account to `board` and demote a board
 admin, except the last remaining board admin cannot be demoted. A board admin cannot escalate their
 own access beyond `board`. This is distinct from the admin app's **The Board** panel, which records
