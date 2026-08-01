@@ -14,6 +14,9 @@ It provides:
   with Google Meet links for virtual meetings
 - 📄 **Governing documents** — bylaws, CC&Rs, minutes, and forms, with board-side
   duplicate detection and cleanup tools
+- 🗳️ **Meeting record** — board-authored, board-approved minutes at `/meetings`: date,
+  attendance, motions, and roll-call votes for board meetings (member meetings and voting
+  are a later phase)
 - 🤖 **Board-only AI document assistant** — ask natural-language questions about the
   document library and get a streamed, cited answer (Cloudflare AI Search + Claude),
   with known resident PII pseudonymized before anything reaches the model
