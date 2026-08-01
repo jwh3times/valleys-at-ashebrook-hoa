@@ -253,6 +253,14 @@ async function assembleMeetingDetail(
               motionRows.map((mo) => mo.id),
             ),
           );
+  // This grouping, not the `where` above, is what actually prevents another
+  // meeting's votes from leaking into this meeting's motions: motion ids are
+  // unique across the whole table, so grouping by motionId and then reading
+  // only `motionRows`' own ids back out of the map is isolation on its own.
+  // The `where inArray(...)` is an overfetch guard (skip the round trip when
+  // there are no motions to match) layered on top of that, not the thing
+  // doing the scoping — do not remove this grouping believing the `where`
+  // alone covers it.
   const memberVotesByMotion = new Map<string, typeof memberVoteRows>();
   for (const v of memberVoteRows) {
     const list = memberVotesByMotion.get(v.motionId) ?? [];
