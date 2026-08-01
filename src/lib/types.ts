@@ -650,6 +650,28 @@ export interface AttendanceRow {
   fullName: string;
   present: boolean;
 }
+
+export type MemberVoteChoice = 'yes' | 'no' | 'abstain';
+export const MEMBER_VOTE_CHOICES = ['yes', 'no', 'abstain'] as const;
+
+export interface MemberAttendanceRow {
+  propertyId: string;
+  address: string;
+  present: boolean;
+  weight: number;
+  representedByName: string | null;
+  viaProxy: boolean;
+}
+
+export interface MemberVoteRow {
+  propertyId: string;
+  address: string;
+  choice: MemberVoteChoice;
+  weight: number;
+  castByName: string | null;
+  viaProxy: boolean;
+}
+
 export interface MotionDetail {
   id: string;
   sequence: number;
@@ -658,7 +680,12 @@ export interface MotionDetail {
   secondName: string | null;
   outcome: MotionOutcome;
   tally: Tally;
+  /** Board roll call. Populated when the parent meeting's body is 'board'. */
   votes: VoteRow[];
+  /** Per-property votes. Populated when the parent meeting's body is 'member'. */
+  memberVotes: MemberVoteRow[];
+  /** Weighted tally over memberVotes; `recorded` false when none exist. */
+  memberTally: Tally;
 }
 export interface MeetingSummary {
   id: string;
@@ -677,6 +704,12 @@ export interface MeetingDetail extends MeetingSummary {
   documentId: string | null;
   quorumRequired: number | null;
   attendance: AttendanceRow[];
+  memberAttendance: MemberAttendanceRow[];
+  /**
+   * Summed vote_weight of every ACTIVE property, the denominator for member
+   * quorum. Zero for a board meeting, where quorum counts people.
+   */
+  totalActiveWeight: number;
   motions: MotionDetail[];
 }
 
@@ -700,7 +733,19 @@ export interface MotionInput {
   outcome?: MotionOutcome;
 }
 
-export function tallyVotes(votes: { choice: VoteChoice }[]): Tally {
+/**
+ * Derive a tally from a roll call. Weight defaults to 1, so board votes (which
+ * carry none) count exactly as before, while member votes sum their per-property
+ * weight. There is deliberately no unweighted mode — SUM(weight) equals
+ * COUNT(*) when every weight is 1.
+ *
+ * `recorded` tracks whether any roll call exists at all, independent of the
+ * weights: a zero-weight vote was still cast, and a motion with no roll call
+ * must never render as a 0–0 tally.
+ */
+export function tallyVotes(
+  votes: { choice: VoteChoice; weight?: number }[],
+): Tally {
   const t: Tally = {
     yes: 0,
     no: 0,
@@ -709,7 +754,7 @@ export function tallyVotes(votes: { choice: VoteChoice }[]): Tally {
     absent: 0,
     recorded: votes.length > 0,
   };
-  for (const v of votes) t[v.choice] += 1;
+  for (const v of votes) t[v.choice] += v.weight ?? 1;
   return t;
 }
 
@@ -832,4 +877,22 @@ export function normalizeMotionInput(
   if (outcome.value !== undefined) out.outcome = outcome.value;
 
   return { ok: true, value: out };
+}
+
+/**
+ * Vote weight on a property. Positive integer only — zero is rejected because
+ * a property that should not vote belongs at status 'inactive', not weight 0,
+ * and a silent zero would distort quorum denominators without appearing in any
+ * list. Absent means "leave unchanged"; null is refused because the column is
+ * NOT NULL with a default and has no cleared state.
+ */
+export function normalizeVoteWeight(
+  raw: unknown,
+): InputResult<number | undefined> {
+  const r = asRecord(raw);
+  if (!('voteWeight' in r)) return { ok: true, value: undefined };
+  const v = r.voteWeight;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1)
+    return fail('voteWeight must be a whole number of 1 or more');
+  return { ok: true, value: v };
 }
