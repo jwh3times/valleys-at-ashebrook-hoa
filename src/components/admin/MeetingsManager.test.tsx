@@ -3,6 +3,7 @@ import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MeetingsManager from './MeetingsManager';
 import * as admin from '../../lib/admin';
+import { tallyVotes } from '../../lib/types';
 
 vi.mock('../../lib/admin');
 
@@ -37,6 +38,8 @@ function meetingDetail(
     documentId: null,
     quorumRequired: null,
     attendance: [],
+    memberAttendance: [],
+    totalActiveWeight: 0,
     motions: [],
     ...overrides,
   };
@@ -268,6 +271,8 @@ describe('MeetingsManager', () => {
               recorded: true,
             },
             votes: [{ personId: 'p1', fullName: 'A. Reyes', choice: 'yes' }],
+            memberVotes: [],
+            memberTally: tallyVotes([]),
           },
         ],
       }),
@@ -307,6 +312,8 @@ describe('MeetingsManager', () => {
               recorded: true,
             },
             votes: [{ personId: 'p1', fullName: 'A. Reyes', choice: 'yes' }],
+            memberVotes: [],
+            memberTally: tallyVotes([]),
           },
         ],
       }),

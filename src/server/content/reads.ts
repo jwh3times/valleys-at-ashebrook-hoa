@@ -217,6 +217,10 @@ async function assembleMeetingDetail(
       fullName: nameOf.get(a.personId) ?? 'Unknown',
       present: a.present,
     })),
+    // Filled in by the member-assembly queries in the next task; empty here so
+    // the required fields are satisfied without inventing data.
+    memberAttendance: [],
+    totalActiveWeight: 0,
     motions: motionRows.map((mo) => {
       const votes = votesByMotion.get(mo.id) ?? [];
       return {
@@ -236,6 +240,8 @@ async function assembleMeetingDetail(
           fullName: nameOf.get(v.personId) ?? 'Unknown',
           choice: v.choice,
         })),
+        memberVotes: [],
+        memberTally: tallyVotes([]),
       };
     }),
   };
