@@ -12,6 +12,7 @@ const mocked = vi.mocked(admin);
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchBoardPeople.mockResolvedValue([]);
+  mocked.fetchProperties.mockResolvedValue([]);
   mocked.fetchMeeting.mockResolvedValue(meetingDetail());
 });
 
@@ -24,6 +25,17 @@ const meeting = {
   status: 'draft' as const,
   visibility: 'board' as const,
   motionCount: 3,
+};
+
+const memberMeeting = {
+  id: 'm2',
+  body: 'member' as const,
+  kind: 'annual' as const,
+  date: '2026-10-01',
+  title: 'Annual member meeting',
+  status: 'draft' as const,
+  visibility: 'board' as const,
+  motionCount: 0,
 };
 
 // A full MeetingDetail, matching what GET /api/admin/meetings?id= returns.
@@ -418,5 +430,211 @@ describe('MeetingsManager', () => {
       ]),
     );
     expect(await screen.findByText(/attendance saved/i)).toBeInTheDocument();
+  });
+
+  it('shows the property-based editors for a member meeting, not the board ones', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    expect(await screen.findByLabelText('12 Oak Lane')).toBeInTheDocument();
+    expect(screen.queryByText(/no board roster yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Roll call')).not.toBeInTheDocument();
+  });
+
+  it('shows the board editors for a board meeting, not the property ones', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.fetchBoardPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+    ]);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    expect(await screen.findByLabelText('A. Reyes')).toBeInTheDocument();
+    expect(screen.queryByText('12 Oak Lane')).not.toBeInTheDocument();
+  });
+
+  it('submitting member attendance sends a row for every property, present or not', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+      {
+        id: 'prop2',
+        address: '14 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 2,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    mocked.setMemberAttendance.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    // Check 12 Oak Lane present; deliberately leave 14 Oak Lane unchecked —
+    // the save must still send a row for it, present: false, not omit it.
+    const oakLaneCheckbox = await screen.findByLabelText('12 Oak Lane');
+    await userEvent.click(oakLaneCheckbox);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /save attendance/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setMemberAttendance).toHaveBeenCalledWith('m2', [
+        {
+          propertyId: 'prop1',
+          present: true,
+          representedByOwnerId: null,
+          viaProxy: false,
+        },
+        {
+          propertyId: 'prop2',
+          present: false,
+          representedByOwnerId: null,
+          viaProxy: false,
+        },
+      ]),
+    );
+    expect(await screen.findByText(/attendance saved/i)).toBeInTheDocument();
+  });
+
+  it('submitting member votes sends the full property list', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [],
+      },
+      {
+        id: 'prop2',
+        address: '14 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 3,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    mocked.saveMotion.mockResolvedValue('mo1');
+    mocked.setMemberVotes.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the budget',
+    );
+    // Cast a vote for 12 Oak Lane; deliberately leave 14 Oak Lane
+    // untouched — the save must still send a row for it (defaulting to
+    // abstain), not omit it.
+    await userEvent.selectOptions(
+      screen.getByLabelText('Vote — 12 Oak Lane'),
+      'yes',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /add motion/i }));
+
+    await waitFor(() =>
+      expect(mocked.setMemberVotes).toHaveBeenCalledWith('mo1', [
+        {
+          propertyId: 'prop1',
+          choice: 'yes',
+          castByOwnerId: null,
+          viaProxy: false,
+        },
+        {
+          propertyId: 'prop2',
+          choice: 'abstain',
+          castByOwnerId: null,
+          viaProxy: false,
+        },
+      ]),
+    );
+    expect(await screen.findByText(/motion recorded/i)).toBeInTheDocument();
+  });
+
+  it('shows the weighted live tally for a member motion, not a row count', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 5,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    const tally = () => screen.getByTestId('motion-tally').textContent;
+    await screen.findByLabelText('Vote — 12 Oak Lane');
+    expect(tally()).toMatch(/0 yes/);
+
+    await userEvent.selectOptions(
+      screen.getByLabelText('Vote — 12 Oak Lane'),
+      'yes',
+    );
+    // Weight 5, one property — the tally must reflect the weight (5), not
+    // the number of properties voted (1).
+    await waitFor(() => expect(tally()).toMatch(/5 yes/));
   });
 });
