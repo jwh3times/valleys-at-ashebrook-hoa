@@ -83,6 +83,18 @@ describe('AdminApp', () => {
     expect(await screen.findByText('None yet.')).toBeInTheDocument();
   });
 
+  it('offers a Meetings tab', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    expect(
+      screen.getByRole('button', { name: 'Meetings' }),
+    ).toBeInTheDocument();
+  });
+
   it('offers The Board and Board access as separate tabs', () => {
     vi.mocked(useAuth).mockReturnValue({
       loading: false,

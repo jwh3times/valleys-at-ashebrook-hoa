@@ -11,6 +11,7 @@ import RosterManager from './RosterManager';
 import MembersManager from './MembersManager';
 import BoardAccessManager from './BoardAccessManager';
 import BoardPanel from './BoardPanel';
+import MeetingsManager from './MeetingsManager';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
 
@@ -31,6 +32,11 @@ const SECTIONS = [
   { key: 'roster', label: 'Roster', render: () => <RosterManager /> },
   { key: 'members', label: 'Members', render: () => <MembersManager /> },
   { key: 'board-roster', label: 'The Board', render: () => <BoardPanel /> },
+  {
+    key: 'meetings',
+    label: 'Meetings',
+    render: () => <MeetingsManager />,
+  },
   {
     // Site sign-in access, not who serves on the board — see the
     // "The Board" tab above for the roster of members and their terms.

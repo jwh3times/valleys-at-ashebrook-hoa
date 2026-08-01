@@ -9,6 +9,11 @@ import type {
   MemberUser,
   DuplicatesView,
   BoardPersonWithTerms,
+  MeetingSummary,
+  MeetingDetail,
+  MeetingInput,
+  MotionInput,
+  VoteChoice,
 } from './types';
 import type { ReportListItem, ReportDetail } from './reports';
 
@@ -345,4 +350,131 @@ export async function deleteBoardTerm(id: string): Promise<void> {
   });
   if (!res.ok)
     throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+}
+
+// ---------- Meetings ----------
+// Named fetchMeetings, not fetchAdminMeetings: that name already belongs to the
+// server-side read helper in src/server/content/reads.ts, and this module is
+// entirely admin-scoped, so the prefix would carry no information here.
+export async function fetchMeetings(): Promise<MeetingSummary[]> {
+  const res = await fetch('/api/admin/meetings');
+  if (!res.ok) throw new Error(`Load meetings failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchMeeting(id: string): Promise<MeetingDetail> {
+  const res = await fetch(`/api/admin/meetings?id=${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error(`Load meeting failed: ${res.status}`);
+  return res.json();
+}
+
+export async function saveMeeting(
+  data: MeetingInput,
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/meetings', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save meeting failed: ${res.status}`);
+}
+
+export async function deleteMeeting(id: string): Promise<void> {
+  const res = await fetch('/api/admin/meetings', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+}
+
+export async function approveMeeting(meetingId: string): Promise<void> {
+  const res = await fetch('/api/admin/meetings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'approve', meetingId }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Approve failed: ${res.status}`);
+}
+
+export async function unapproveMeeting(meetingId: string): Promise<void> {
+  const res = await fetch('/api/admin/meetings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'unapprove', meetingId }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Unapprove failed: ${res.status}`);
+}
+
+export async function setAttendance(
+  meetingId: string,
+  entries: { personId: string; present: boolean }[],
+): Promise<void> {
+  const res = await fetch('/api/admin/meetings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'setAttendance', meetingId, entries }),
+  });
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Save attendance failed: ${res.status}`,
+    );
+}
+
+// ---------- Motions ----------
+export async function saveMotion(
+  data: MotionInput,
+  id?: string,
+): Promise<string | undefined> {
+  if (id) {
+    const res = await fetch('/api/admin/motions', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, ...data }),
+    });
+    if (!res.ok)
+      throw new Error(
+        (await res.text()) || `Save motion failed: ${res.status}`,
+      );
+    return undefined;
+  }
+  const res = await fetch('/api/admin/motions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save motion failed: ${res.status}`);
+  // Create returns { id } — the caller needs it right away to record the
+  // roll call for the motion it just created.
+  const body = (await res.json()) as { id: string };
+  return body.id;
+}
+
+export async function deleteMotion(id: string): Promise<void> {
+  const res = await fetch('/api/admin/motions', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+}
+
+export async function setVotes(
+  motionId: string,
+  entries: { personId: string; choice: VoteChoice }[],
+): Promise<void> {
+  const res = await fetch('/api/admin/motions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'setVotes', motionId, entries }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save votes failed: ${res.status}`);
 }

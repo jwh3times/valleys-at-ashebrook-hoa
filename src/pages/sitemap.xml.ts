@@ -6,7 +6,9 @@ export const prerender = false;
 // /verify-property, /reset-password), the officialMode-conditional /dues, and
 // everything under /admin and /api are deliberately omitted. Generated per
 // request because the site is full SSR — @astrojs/sitemap only emits for
-// statically built routes, so it comes up empty here.
+// statically built routes, so it comes up empty here. /meetings/[id] is
+// deliberately NOT listed here — those are per-record and tier-dependent,
+// same reasoning as why /documents/[id] downloads aren't listed either.
 const PUBLIC_PATHS = [
   '/',
   '/about',
@@ -14,6 +16,7 @@ const PUBLIC_PATHS = [
   '/calendar',
   '/contact',
   '/documents',
+  '/meetings',
 ];
 
 export const GET: APIRoute = ({ site, url }) => {
