@@ -8,6 +8,7 @@ import type {
   MembersView,
   MemberUser,
   DuplicatesView,
+  BoardPersonWithTerms,
 } from './types';
 import type { ReportListItem, ReportDetail } from './reports';
 
@@ -286,4 +287,62 @@ export async function deleteReport(id: string): Promise<void> {
     body: JSON.stringify({ id }),
   });
   if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+}
+
+// ---------- Board roster ----------
+export async function fetchBoardPeople(): Promise<BoardPersonWithTerms[]> {
+  const res = await fetch('/api/admin/board-people');
+  if (!res.ok) throw new Error(`Load board failed: ${res.status}`);
+  return res.json();
+}
+
+export async function saveBoardPerson(
+  data: { fullName?: string; userId?: string | null },
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/board-people', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save person failed: ${res.status}`);
+}
+
+export async function deleteBoardPerson(id: string): Promise<void> {
+  const res = await fetch('/api/admin/board-people', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+}
+
+export async function saveBoardTerm(
+  data: {
+    personId?: string;
+    title?: string | null;
+    termStart?: string;
+    termEnd?: string | null;
+  },
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/board-terms', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save term failed: ${res.status}`);
+}
+
+export async function deleteBoardTerm(id: string): Promise<void> {
+  const res = await fetch('/api/admin/board-terms', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
 }
