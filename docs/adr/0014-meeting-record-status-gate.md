@@ -23,14 +23,17 @@ through the separate `fetchAdminMeetings`/`fetchAdminMeeting` path behind `/api/
 `assembleMeetingDetail`, shared by both paths, holds no status or tier logic itself; filtering
 happens once, in the two callers.
 
-`status` is transition-only. `PATCH /api/admin/meetings` cannot write `status` or `sequence` — the
-input normalizer rejects those keys outright rather than silently ignoring them. Moving between
-draft and approved goes through two explicit actions, `approve` and `unapprove`, which maintain
-`approved_at`/`approved_by`/`approved_by_motion_id` alongside the flip: `approve` 409s if the
-meeting is already approved, and `unapprove` clears all three provenance columns, because
+`status` is transition-only. `PATCH /api/admin/meetings` cannot write `status`, because approval is
+a transition that must maintain `approved_at`/`approved_by`/`approved_by_motion_id` alongside the
+flip, not a field a general edit can silently move. Moving between draft and approved goes through
+two explicit actions, `approve` and `unapprove`, which maintain those three provenance columns:
+`approve` 409s if the meeting is already approved, and `unapprove` clears all three, because
 provenance describing an approval that no longer holds would be a false record. Deleting an
 approved meeting is refused (409) for the same reason a document library keeps published content
-around — an approved record is not a draft that can simply be discarded.
+around — an approved record is not a draft that can simply be discarded. The same discipline
+applies one level down: `PATCH /api/admin/motions` cannot write `sequence`, because the server
+assigns it as `max + 1` scoped to the meeting, and a client-supplied value would let two motions
+occupy the same position.
 
 Roll-call tallies are always derived from the stored `board_votes` rows; a motion's `outcome` is
 board-entered and never computed, because passage thresholds vary by motion type and bylaw, and
