@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   fetchMeetings,
+  fetchMeeting,
   saveMeeting,
   deleteMeeting,
   approveMeeting,
@@ -20,6 +21,7 @@ import {
 } from '../../lib/types';
 import type {
   MeetingSummary,
+  MeetingDetail,
   MeetingBody,
   MeetingKind,
   MotionOutcome,
@@ -78,8 +80,17 @@ const emptyMotion = {
   outcome: 'passed' as MotionOutcome,
 };
 
-function personName(id: string, people: BoardPersonWithTerms[]): string | null {
-  return people.find((p) => p.id === id)?.fullName ?? null;
+/**
+ * Reverse lookup used only to pre-select a motion's mover/second when
+ * opening it for edit: MotionDetail (the same shape the public read
+ * returns) carries names, not ids. Votes don't need this — VoteRow already
+ * carries personId directly.
+ */
+function personIdByName(
+  name: string,
+  people: BoardPersonWithTerms[],
+): string | null {
+  return people.find((p) => p.fullName === name)?.id ?? null;
 }
 
 export default function MeetingsManager() {
@@ -114,18 +125,56 @@ export default function MeetingsManager() {
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // The full MeetingDetail (attendance, motions, roll calls) for whichever
+  // meeting is expanded, loaded via GET /api/admin/meetings?id= — the admin
+  // detail read added alongside this panel so existing motions are editable,
+  // not just visible-as-a-count.
+  const [detail, setDetail] = useState<MeetingDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [attendanceForm, setAttendanceForm] = useState<Record<string, boolean>>(
     {},
   );
-  // Motions created this session, kept for display since there is no admin
-  // read that returns a meeting's existing motions — GET /api/admin/meetings
-  // returns summaries with a motionCount only. A freshly loaded page shows the
-  // count but not the motions themselves until a public detail read exists.
-  const [sessionMotions, setSessionMotions] = useState<
-    Record<string, MotionDetail[]>
-  >({});
   const [motionForm, setMotionForm] = useState(emptyMotion);
+  const [editingMotionId, setEditingMotionId] = useState<string | null>(null);
   const [voteForm, setVoteForm] = useState<Record<string, VoteChoice>>({});
+
+  useEffect(() => {
+    if (!expandedId) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    fetchMeeting(expandedId)
+      .then((d) => {
+        if (cancelled) return;
+        setDetail(d);
+        setAttendanceForm(
+          Object.fromEntries(d.attendance.map((a) => [a.personId, a.present])),
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message =
+          (err as { message?: string } | null)?.message ??
+          'could not load the meeting.';
+        setMsg('Error: ' + message);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Re-run only when the expanded meeting changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedId]);
+
+  async function reloadDetail(meetingId: string) {
+    const d = await fetchMeeting(meetingId);
+    setDetail(d);
+    return d;
+  }
 
   function resetMeeting() {
     setEditingMeetingId(null);
@@ -149,11 +198,39 @@ export default function MeetingsManager() {
     toTop();
   }
 
+  function resetMotion() {
+    setEditingMotionId(null);
+    setMotionForm(emptyMotion);
+    setVoteForm({});
+  }
+
   function toggleExpand(meetingId: string) {
     setExpandedId((prev) => (prev === meetingId ? null : meetingId));
     setAttendanceForm({});
-    setMotionForm(emptyMotion);
-    setVoteForm({});
+    resetMotion();
+    setMsg('');
+  }
+
+  function startEditMotion(motion: MotionDetail) {
+    setEditingMotionId(motion.id);
+    setMotionForm({
+      text: motion.text,
+      // MotionDetail carries names, not ids (it's the same shape the public
+      // read returns) — the roll call's votes DO carry personId directly, so
+      // only mover/second fall back to a name match against the roster. Board
+      // rosters are small and names are effectively unique in practice; if a
+      // match fails the field just starts blank rather than guessing wrong.
+      moverPersonId: motion.moverName
+        ? (personIdByName(motion.moverName, people) ?? '')
+        : '',
+      secondPersonId: motion.secondName
+        ? (personIdByName(motion.secondName, people) ?? '')
+        : '',
+      outcome: motion.outcome,
+    });
+    setVoteForm(
+      Object.fromEntries(motion.votes.map((v) => [v.personId, v.choice])),
+    );
     setMsg('');
   }
 
@@ -229,6 +306,7 @@ export default function MeetingsManager() {
         present: !!attendanceForm[p.id],
       }));
       await setAttendance(meetingId, entries);
+      await reloadDetail(meetingId);
     }, 'Attendance saved.');
   }
 
@@ -238,47 +316,39 @@ export default function MeetingsManager() {
 
   async function submitMotion(e: React.FormEvent, meetingId: string) {
     e.preventDefault();
-    await run(async () => {
-      const id = await saveMotion({
-        meetingId,
-        text: motionForm.text,
-        moverPersonId: motionForm.moverPersonId || null,
-        secondPersonId: motionForm.secondPersonId || null,
-        outcome: motionForm.outcome,
-      });
-      const entries = Object.entries(voteForm).map(([personId, choice]) => ({
-        personId,
-        choice,
-      }));
-      if (id) {
-        await setVotes(id, entries);
-        const recorded: MotionDetail = {
-          id,
-          sequence: (sessionMotions[meetingId]?.length ?? 0) + 1,
-          text: motionForm.text,
-          moverName: motionForm.moverPersonId
-            ? personName(motionForm.moverPersonId, people)
-            : null,
-          secondName: motionForm.secondPersonId
-            ? personName(motionForm.secondPersonId, people)
-            : null,
-          outcome: motionForm.outcome,
-          tally: tallyVotes(entries),
-          votes: entries.map((v) => ({
-            personId: v.personId,
-            fullName: personName(v.personId, people) ?? 'Unknown',
-            choice: v.choice,
-          })),
-        };
-        setSessionMotions((prev) => ({
-          ...prev,
-          [meetingId]: [...(prev[meetingId] ?? []), recorded],
+    await run(
+      async () => {
+        const entries = Object.entries(voteForm).map(([personId, choice]) => ({
+          personId,
+          choice,
         }));
-      }
-      setMotionForm(emptyMotion);
-      setVoteForm({});
-      await reload();
-    }, 'Motion recorded.');
+        if (editingMotionId) {
+          await saveMotion(
+            {
+              text: motionForm.text,
+              moverPersonId: motionForm.moverPersonId || null,
+              secondPersonId: motionForm.secondPersonId || null,
+              outcome: motionForm.outcome,
+            },
+            editingMotionId,
+          );
+          await setVotes(editingMotionId, entries);
+        } else {
+          const id = await saveMotion({
+            meetingId,
+            text: motionForm.text,
+            moverPersonId: motionForm.moverPersonId || null,
+            secondPersonId: motionForm.secondPersonId || null,
+            outcome: motionForm.outcome,
+          });
+          if (id) await setVotes(id, entries);
+        }
+        resetMotion();
+        await reload();
+        await reloadDetail(meetingId);
+      },
+      editingMotionId ? 'Motion updated.' : 'Motion recorded.',
+    );
   }
 
   async function removeMotion(meetingId: string, motion: MotionDetail) {
@@ -286,11 +356,9 @@ export default function MeetingsManager() {
       return;
     await run(async () => {
       await deleteMotion(motion.id);
-      setSessionMotions((prev) => ({
-        ...prev,
-        [meetingId]: (prev[meetingId] ?? []).filter((m) => m.id !== motion.id),
-      }));
+      if (editingMotionId === motion.id) resetMotion();
       await reload();
+      await reloadDetail(meetingId);
     }, 'Motion removed.');
   }
 
@@ -650,7 +718,9 @@ export default function MeetingsManager() {
                     onSubmit={(e) => submitMotion(e, m.id)}
                     style={{ marginBottom: '14px' }}
                   >
-                    <div className="panel-editor__title">Add motion</div>
+                    <div className="panel-editor__title">
+                      {editingMotionId ? 'Edit motion' : 'Add motion'}
+                    </div>
                     <div className="field" style={{ marginBottom: '16px' }}>
                       <label htmlFor={`motion-text-${m.id}`}>Motion</label>
                       <textarea
@@ -740,6 +810,7 @@ export default function MeetingsManager() {
                           the server does not enforce that they agree. */}
                       <p
                         className="muted motion-tally"
+                        data-testid="motion-tally"
                         style={{ marginTop: '6px' }}
                       >
                         Tally: {liveTally.yes} yes · {liveTally.no} no ·{' '}
@@ -792,17 +863,32 @@ export default function MeetingsManager() {
                         type="submit"
                         disabled={busy}
                       >
-                        {busy ? 'Saving…' : 'Add motion'}
+                        {busy
+                          ? 'Saving…'
+                          : editingMotionId
+                            ? 'Save motion'
+                            : 'Add motion'}
                       </button>
+                      {editingMotionId && (
+                        <button
+                          type="button"
+                          className="btn btn--outline btn--small"
+                          onClick={resetMotion}
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
                   </form>
 
-                  {(sessionMotions[m.id]?.length ?? 0) > 0 && (
-                    <div className="panel-card">
-                      <div className="panel-editor__title">
-                        Recorded this session
-                      </div>
-                      {sessionMotions[m.id].map((mo) => (
+                  <div className="panel-card">
+                    <div className="panel-editor__title">Motions</div>
+                    {detailLoading && !detail ? (
+                      <p className="muted">Loading motions…</p>
+                    ) : (detail?.motions.length ?? 0) === 0 ? (
+                      <p className="muted">No motions recorded yet.</p>
+                    ) : (
+                      detail!.motions.map((mo) => (
                         <div key={mo.id} className="list-row">
                           <div className="admin-row-main">
                             <div className="admin-row-title">{mo.text}</div>
@@ -811,9 +897,17 @@ export default function MeetingsManager() {
                               · {mo.tally.no} no · {mo.tally.abstain} abstain ·{' '}
                               {mo.tally.recused} recused · {mo.tally.absent}{' '}
                               absent
+                              {!mo.tally.recorded && ' (no roll call recorded)'}
                             </div>
                           </div>
                           <div className="row-actions">
+                            <button
+                              className="row-link"
+                              aria-label={`Edit motion ${mo.text}`}
+                              onClick={() => startEditMotion(mo)}
+                            >
+                              Edit
+                            </button>
                             <button
                               className="row-link row-link--danger"
                               aria-label={`Delete motion ${mo.text}`}
@@ -823,9 +917,9 @@ export default function MeetingsManager() {
                             </button>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>

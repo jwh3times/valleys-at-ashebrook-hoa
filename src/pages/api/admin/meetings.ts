@@ -10,7 +10,10 @@ import { getDb } from '../../../server/db/client';
 import type { Db } from '../../../server/db/client';
 import { meetings, boardAttendance } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
-import { fetchAdminMeetings } from '../../../server/content/reads';
+import {
+  fetchAdminMeetings,
+  fetchAdminMeeting,
+} from '../../../server/content/reads';
 
 export const prerender = false;
 
@@ -137,6 +140,12 @@ async function unapproveMeeting(db: Db, body: unknown): Promise<Response> {
 export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
+  const id = new URL(request.url).searchParams.get('id');
+  if (id) {
+    const meeting = await fetchAdminMeeting(env, id);
+    if (!meeting) return new Response('Meeting not found', { status: 404 });
+    return Response.json(meeting);
+  }
   return Response.json(await fetchAdminMeetings(env));
 };
 

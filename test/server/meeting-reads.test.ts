@@ -12,6 +12,7 @@ import {
   fetchMeetingsFor,
   fetchMeetingFor,
   fetchAdminMeetings,
+  fetchAdminMeeting,
 } from '../../src/server/content/reads';
 
 beforeAll(async () => {
@@ -336,5 +337,93 @@ describe('meeting read helpers', () => {
       'm1',
       'm2',
     ]);
+  });
+
+  describe('fetchAdminMeeting', () => {
+    it('returns a DRAFT meeting — the whole point of the admin read', async () => {
+      await seed('m1', 'draft', 'board');
+      const detail = await fetchAdminMeeting(env, 'm1');
+      expect(detail).not.toBeNull();
+      expect(detail?.status).toBe('draft');
+    });
+
+    it('returns a board-visibility meeting regardless of status', async () => {
+      await seed('m1', 'approved', 'board');
+      const detail = await fetchAdminMeeting(env, 'm1');
+      expect(detail).not.toBeNull();
+      expect(detail?.visibility).toBe('board');
+    });
+
+    it('returns null for an unknown id', async () => {
+      expect(await fetchAdminMeeting(env, 'nope')).toBeNull();
+    });
+
+    it('nests motions, attendance, and votes with derived tallies', async () => {
+      const db = getDb(env);
+      await db.insert(boardPeople).values([
+        {
+          id: 'p1',
+          fullName: 'A. Reyes',
+          userId: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'p2',
+          fullName: 'B. Ortiz',
+          userId: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+      await seed('m1', 'draft', 'board');
+      await db.insert(boardAttendance).values([
+        { id: 'a1', meetingId: 'm1', personId: 'p1', present: true },
+        { id: 'a2', meetingId: 'm1', personId: 'p2', present: false },
+      ]);
+      await db.insert(motions).values({
+        id: 'mo1',
+        meetingId: 'm1',
+        sequence: 1,
+        text: 'First motion',
+        moverPersonId: 'p1',
+        secondPersonId: 'p2',
+        outcome: 'passed',
+        createdBy: 'u1',
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.insert(boardVotes).values([
+        { id: 'v1', motionId: 'mo1', personId: 'p1', choice: 'yes' },
+        { id: 'v2', motionId: 'mo1', personId: 'p2', choice: 'no' },
+      ]);
+
+      const detail = await fetchAdminMeeting(env, 'm1');
+      expect(detail).not.toBeNull();
+      if (!detail) return;
+      expect(detail.motions[0].moverName).toBe('A. Reyes');
+      expect(detail.motions[0].secondName).toBe('B. Ortiz');
+      expect(detail.motions[0].tally).toEqual({
+        yes: 1,
+        no: 1,
+        abstain: 0,
+        recused: 0,
+        absent: 0,
+        recorded: true,
+      });
+      expect(detail.attendance.map((a) => a.fullName).sort()).toEqual([
+        'A. Reyes',
+        'B. Ortiz',
+      ]);
+    });
+  });
+
+  // The shared-assembly extraction behind fetchMeetingFor/fetchAdminMeeting is
+  // exactly the kind of refactor that could leak the public gate — this must
+  // keep failing a draft/board-tier request after that change, not just once
+  // before it.
+  it('fetchMeetingFor still hides drafts after the shared-assembly refactor', async () => {
+    await seed('m1', 'draft', 'board');
+    expect(await fetchMeetingFor(env, 'board', 'm1')).toBeNull();
   });
 });
