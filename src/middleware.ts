@@ -30,6 +30,16 @@ const CSP = [
   "form-action 'self'",
 ].join('; ');
 
+/**
+ * True for the board-only API surface. Matched exactly rather than by bare
+ * prefix so a future sibling like /api/administrators is not silently gated
+ * (and, more importantly, so nobody assumes a prefix match is enough and names
+ * a public route into the trap).
+ */
+function isAdminApi(path: string): boolean {
+  return path === '/api/admin' || path.startsWith('/api/admin/');
+}
+
 function applySecurityHeaders(headers: Headers): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -53,7 +63,21 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     : await getSiteSettings(env);
 
   let response: Response;
-  if (path.startsWith('/admin') && ctx?.role !== 'board') {
+  if (isAdminApi(path)) {
+    // Production backstop for the whole board-only API surface. Every handler
+    // under src/pages/api/admin/ also calls requireBoard itself, and that stays
+    // the tested layer — the Workers pool invokes handlers directly and never
+    // runs middleware. This exists so a route shipped without its guard is not
+    // exposed in the meantime. Mirrors requireBoard's codes exactly: anonymous
+    // is 401, an authenticated non-board caller is 403.
+    if (!ctx) {
+      response = new Response('Unauthorized', { status: 401 });
+    } else if (ctx.role !== 'board') {
+      response = new Response('Forbidden', { status: 403 });
+    } else {
+      response = await next();
+    }
+  } else if (path.startsWith('/admin') && ctx?.role !== 'board') {
     response = context.redirect('/login', 302);
   } else if (
     path.startsWith('/homeowner') &&
