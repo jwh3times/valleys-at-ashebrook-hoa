@@ -51,13 +51,24 @@ if (!meeting) {
 // Board quorum counts people because this meeting's body is "board"; a
 // future release adds the weighted property-based count for member
 // meetings. Say nothing about quorum when none is configured rather than
-// inventing a threshold.
+// inventing a threshold. Two more conditions suppress the whole line rather
+// than render a fabricated fact:
+//   - No attendance rows at all is the normal state when a board pastes
+//     minutes and approves them — absence of data is not evidence of an
+//     empty room, so this must not render "0 of 0 present".
+//   - `body !== 'board'` — the copy below hardcodes "board members", but
+//     member-body meetings don't record per-person attendance the same way
+//     (MeetingsManager gates attendance behind body === 'board' with a
+//     "future release" note), so this page must not claim it either.
 const present = meeting.attendance.filter((a) => a.present).length;
 const total = meeting.attendance.length;
-let attendanceLine = `${present} of ${total} board members present`;
-if (meeting.quorumRequired !== null) {
-  const met = present >= meeting.quorumRequired;
-  attendanceLine += ` — quorum of ${meeting.quorumRequired} ${met ? 'met' : 'not met'}`;
+let attendanceLine: string | null = null;
+if (meeting.body === 'board' && total > 0) {
+  attendanceLine = `${present} of ${total} board members present`;
+  if (meeting.quorumRequired !== null) {
+    const met = present >= meeting.quorumRequired;
+    attendanceLine += ` — quorum of ${meeting.quorumRequired} ${met ? 'met' : 'not met'}`;
+  }
 }
 ---
 
@@ -75,7 +86,7 @@ if (meeting.quorumRequired !== null) {
       {meeting.location && <> · {meeting.location}</>}
     </p>
 
-    <p class="attendance-line">{attendanceLine}</p>
+    {attendanceLine && <p class="attendance-line">{attendanceLine}</p>}
 
     {
       meeting.documentId && (

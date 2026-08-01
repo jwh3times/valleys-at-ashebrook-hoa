@@ -788,8 +788,10 @@ export function normalizeMotionInput(
 ): InputResult<MotionInput> {
   const r = asRecord(raw);
   const out: MotionInput = {};
-  // The server assigns sequence (max + 1) and reorders through its own action,
-  // so accepting it here would let a client create duplicate positions.
+  // The server assigns sequence as max + 1 on create; there is no reorder
+  // action, so a gap left by deleting a motion (e.g. 1, 3 after deleting 2)
+  // is not backfilled. Accepting sequence here would let a client create
+  // duplicate positions, so it stays server-only.
   if ('sequence' in r)
     return fail('sequence is not editable — the server assigns it');
 

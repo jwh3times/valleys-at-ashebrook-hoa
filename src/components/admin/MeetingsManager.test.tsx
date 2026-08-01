@@ -348,4 +348,68 @@ describe('MeetingsManager', () => {
     ]);
     expect(await screen.findByText(/motion updated/i)).toBeInTheDocument();
   });
+
+  it('approving a draft meeting calls approveMeeting and reloads', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.approveMeeting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+
+    await userEvent.click(screen.getByRole('button', { name: /^approve$/i }));
+
+    await waitFor(() =>
+      expect(mocked.approveMeeting).toHaveBeenCalledWith('m1'),
+    );
+    // reload() re-fetches the list — the mount call plus this one.
+    await waitFor(() => expect(mocked.fetchMeetings).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/meeting approved/i)).toBeInTheDocument();
+  });
+
+  it('unapproving an approved meeting calls unapproveMeeting and reloads', async () => {
+    mocked.fetchMeetings.mockResolvedValue([
+      { ...meeting, status: 'approved' },
+    ]);
+    mocked.unapproveMeeting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+
+    await userEvent.click(screen.getByRole('button', { name: /^unapprove$/i }));
+
+    await waitFor(() =>
+      expect(mocked.unapproveMeeting).toHaveBeenCalledWith('m1'),
+    );
+    await waitFor(() => expect(mocked.fetchMeetings).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/meeting unapproved/i)).toBeInTheDocument();
+  });
+
+  it('submitting attendance sends a row for every roster person, present or not', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.fetchBoardPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+      { id: 'p2', fullName: 'B. Ortiz', userId: null, terms: [] },
+    ]);
+    mocked.setAttendance.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    // Check A. Reyes present; deliberately leave B. Ortiz unchecked — the
+    // save must still send a row for her, present: false, not omit her.
+    const reyesCheckbox = await screen.findByLabelText('A. Reyes');
+    await userEvent.click(reyesCheckbox);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /save attendance/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setAttendance).toHaveBeenCalledWith('m1', [
+        { personId: 'p1', present: true },
+        { personId: 'p2', present: false },
+      ]),
+    );
+    expect(await screen.findByText(/attendance saved/i)).toBeInTheDocument();
+  });
 });
