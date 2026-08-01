@@ -82,4 +82,22 @@ describe('AdminApp', () => {
     // Flush the announcements manager's initial load.
     expect(await screen.findByText('None yet.')).toBeInTheDocument();
   });
+
+  it('offers The Board and Board access as separate tabs', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    expect(
+      screen.getByRole('button', { name: 'The Board' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Board access' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Board members' }),
+    ).not.toBeInTheDocument();
+  });
 });

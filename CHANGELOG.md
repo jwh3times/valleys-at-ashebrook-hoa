@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.41] - 2026-08-01
+
+### Added
+
+- Board roster in the admin panel: board members with their offices and terms of service, on a new
+  **The Board** tab. A person who leaves and returns keeps one entry with multiple terms.
+- `board_people` and `board_terms` tables (migration `0009`), plus board-only
+  `/api/admin/board-people` and `/api/admin/board-terms` endpoints.
+- [ADR 0012](docs/adr/0012-board-record-as-structured-rows.md) — the board record is modeled as
+  structured rows, a person and a term are separate entities, and board membership is independent
+  of site accounts.
+
+### Changed
+
+- The admin **Board members** tab is now labeled **Board access**, since it manages who can sign in
+  to the admin panel rather than who serves on the board.
+
 ## [0.3.40] - 2026-07-31
 
 ### Changed

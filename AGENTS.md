@@ -107,11 +107,16 @@ Markdown twins described below and never the human-readable originals.
 
 - Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`.
 - Gated document download from R2 with tier checks: `GET /api/files/[id]`.
-- Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
-  `/api/admin/{properties,owners,members}`. `POST /api/admin/documents` hashes uploads, blocks exact
-  duplicates, warns on near duplicates, and stores `content_hash` on success; a confirmed
-  near-duplicate upload also clears `keep_verified_at`/`keep_verified_by` on the existing documents
-  it near-matches, so that duplicate group resurfaces for review.
+- Board-only writes: `/api/admin/{documents,announcements,dues,site}`,
+  `/api/admin/{properties,owners,members}`, and `/api/admin/{board-people,board-terms}`.
+  `GET /api/admin/board-people` returns board people with their terms nested, mirroring the
+  properties/owners read. Deleting a board person who has a term of service on record returns
+  `409` from `DELETE /api/admin/board-people` — ending the term is the intended action instead —
+  and a term's `person_id` cannot be reassigned via `PATCH /api/admin/board-terms`.
+  `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
+  and stores `content_hash` on success; a confirmed near-duplicate upload also clears
+  `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
+  duplicate group resurfaces for review.
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
@@ -163,8 +168,9 @@ Markdown twins described below and never the human-readable originals.
 
 - `src/lib/content.ts` handles public reads from `/api/content/*` endpoints.
 - `src/lib/admin.ts` handles board writes to `/api/admin/*` endpoints, typed document duplicate
-  errors, duplicate-resolution helpers, and saved-report list/fetch/delete helpers (`fetchReports`,
-  `fetchReport`, `deleteReport`).
+  errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
+  `fetchReport`, `deleteReport`), and board roster helpers (`fetchBoardPeople`, `saveBoardPerson`,
+  `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`).
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
@@ -215,7 +221,13 @@ reports: `topic`, nullable `template_key` — null means freeform — `content_m
 de-anonymized markdown), `sources_json` (a `{id, title, category}` snapshot), indexed
 `created_at`, and `created_by` as a plain-text board-user-id audit column with no FK; only a
 completed generation is saved, so a failed or client-disconnected generation leaves no row),
-roster/verification tables (`properties`, `owners`, `user_property_links`,
+`board_people` and `board_terms` (the board roster's identity layer, per
+[ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md): `board_people` records a person,
+with a nullable `user_id` link to a Better Auth `user` row kept for display only and never for
+authorization; `board_terms` records a term of service — `person_id`, nullable `title`,
+`term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
+across terms; deleting a person with a term on record is refused with `409`), roster/verification
+tables (`properties`, `owners`, `user_property_links`,
 `property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
 `account`, `verification`).
 
@@ -234,19 +246,42 @@ property_id)`) and hot-path indexes. Migration `0004` adds `documents.content_ha
 `documents_content_hash_idx` for duplicate detection. Migration `0005` reconciles foreign keys and
 enums on the roster/verification tables. Migration `0006` adds `documents.keep_verified_at` and
 `documents.keep_verified_by`. Migration `0007` adds `documents.rag_status`. Migration `0008` adds
-the `reports` table and its `reports_created_at_idx` index. Migrations are applied
+the `reports` table and its `reports_created_at_idx` index. Migration `0009` adds the
+`board_people` and `board_terms` tables, with indexes on `board_terms.person_id` and
+`board_terms.term_end`. Migrations are applied
 with `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
 so `npm run db:generate` should diff cleanly for future changes.
 
+**Glossary — "board" names three separate things.** They are deliberately distinct; conflating them
+in code or copy is the mistake this table exists to prevent. Use these words in that sense.
+
+| Term              | Is                                                                     | Lives in              | Has history?                                                    |
+| ----------------- | ---------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------- |
+| **board admin**   | An access level. Grants admin writes _and_ the top content tier.       | `user.role = 'board'` | No — current state only. Demoting rewrites "now", never "then". |
+| **board member**  | A person who serves on the board. What motions and votes reference.    | `board_people`        | Yes — the record is the point.                                  |
+| **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms`         | Yes — a person may hold several, with gaps.                     |
+
+The two are managed in separate admin panels — **Board access** (`BoardAccessManager`) for sign-in
+access, **The Board** (`BoardPanel`) for the roster — and neither writes the other's data. A board
+member need not be a board admin, and a board admin need not be a board member. The content
+visibility tier `board` is a fourth use of the word and follows the access sense: it means "visible
+to a board admin". See [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md) for why the
+record is independent of `user` rows.
+
 **Roles and access.** Roles are `visitor`, `homeowner`, and `board`; content visibility tiers are
 `public`, `homeowner`, and `board`. Access is enforced server-side and fail-closed: anonymous users
 resolve to visitor, unknown states resolve to the most restrictive behavior. A user's role is a
-column on the user record. Board membership is managed in the admin app's **Board members** panel:
-board members can promote another account to `board` and demote a board member, except the last
-remaining board member cannot be demoted. A board member cannot escalate their own access beyond
-`board`. The first board account is bootstrapped through the permanent fail-closed
+column on the user record. Site sign-in access for board admins is managed in the admin app's
+**Board access** panel: a board admin can promote another account to `board` and demote a board
+admin, except the last remaining board admin cannot be demoted. A board admin cannot escalate their
+own access beyond `board`. This is distinct from the admin app's **The Board** panel, which records
+who serves on the board and their terms of service (`board_people`/`board_terms`, see **Data
+model** above) and is deliberately independent of `user` rows — promoting or demoting a site
+account has no effect on the roster, and a person can be recorded there with no site login at all;
+see [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md). The first board account is
+bootstrapped through the permanent fail-closed
 `POST /api/bootstrap/board` endpoint, which self-disables once a board exists; guard logic lives in
 `src/server/auth/seed-board.ts` and is re-exported as `seedBoard` from `scripts/seed-board.ts`.
 These role changes are direct D1 writes, not Better Auth admin API calls. The Better Auth admin
