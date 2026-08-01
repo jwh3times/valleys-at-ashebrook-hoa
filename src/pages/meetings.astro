@@ -1,0 +1,58 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { NEIGHBORHOOD } from '../lib/site';
+import { env } from 'cloudflare:workers';
+import { fetchMeetingsFor } from '../server/content/reads';
+import { formatDate } from '../lib/format';
+import type { MeetingBody, MeetingKind } from '../lib/types';
+
+const BODY_LABELS: Record<MeetingBody, string> = {
+  board: 'Board',
+  member: 'Member',
+};
+const KIND_LABELS: Record<MeetingKind, string> = {
+  regular: 'Regular',
+  special: 'Special',
+  annual: 'Annual',
+};
+
+// Read tier-filtered, approved-only meetings server-side (SEO / first paint /
+// no-JS) — fetchMeetingsFor already excludes drafts unconditionally, even for
+// a board caller, so no extra filtering belongs here.
+const role = Astro.locals.authContext?.role ?? 'visitor';
+const meetings = await fetchMeetingsFor(env, role);
+---
+
+<BaseLayout
+  title="Residents Association Meetings"
+  description={`Meeting record for the residents association at ${NEIGHBORHOOD} — dates, attendance, and motions.`}
+>
+  <div class="page-section">
+    <p class="eyebrow">Record</p>
+    <h1 class="page-title">Residents Association Meetings</h1>
+    <p class="page-lead">
+      Meetings recorded by the residents association board, newest first.
+    </p>
+
+    {
+      meetings.length === 0 ? (
+        <p class="muted">No meetings have been recorded yet.</p>
+      ) : (
+        <ul class="meeting-list">
+          {meetings.map((m) => (
+            <li class="meeting-list__item">
+              <a class="meeting-list__link" href={`/meetings/${m.id}`}>
+                <div class="meeting-list__title">{m.title}</div>
+                <div class="meeting-list__meta">
+                  {formatDate(m.date)} · {BODY_LABELS[m.body]}{' '}
+                  {KIND_LABELS[m.kind]} meeting · {m.motionCount}{' '}
+                  {m.motionCount === 1 ? 'motion' : 'motions'}
+                </div>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </div>
+</BaseLayout>
