@@ -14,6 +14,7 @@ import {
   boardVotes,
   memberVotes,
   properties,
+  resolutions,
 } from '../../../server/db/schema';
 import {
   normalizeMotionInput,
@@ -320,7 +321,24 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
   const id = stringField(parsed.value, 'id');
   if (!id) return new Response('id is required', { status: 400 });
+  const db = getDb(env);
+  // resolutions.adopted_by_motion_id is ON DELETE SET NULL, so without this
+  // pre-check deleting a cited motion would silently blank an in-force
+  // resolution's adoption provenance instead of refusing — and PATCH
+  // deliberately cannot write that column back, so the loss would be
+  // unrecoverable through the API. Pre-checking gives a readable message
+  // instead of a silent SET NULL. See ADR 0016.
+  const cited = await db
+    .select({ id: resolutions.id })
+    .from(resolutions)
+    .where(eq(resolutions.adoptedByMotionId, id))
+    .limit(1);
+  if (cited.length > 0)
+    return new Response(
+      "This motion is cited as a resolution's adopting motion — it cannot be deleted while that citation stands.",
+      { status: 409 },
+    );
   // Deleting a motion cascades its votes via FK.
-  await getDb(env).delete(motions).where(eq(motions.id, id));
+  await db.delete(motions).where(eq(motions.id, id));
   return new Response(null, { status: 204 });
 };

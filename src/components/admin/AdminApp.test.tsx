@@ -95,6 +95,18 @@ describe('AdminApp', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers a Resolutions tab', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    expect(
+      screen.getByRole('button', { name: 'Resolutions' }),
+    ).toBeInTheDocument();
+  });
+
   it('offers The Board and Board access as separate tabs', () => {
     vi.mocked(useAuth).mockReturnValue({
       loading: false,

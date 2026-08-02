@@ -23,6 +23,13 @@ describe('site branding helpers', () => {
     expect(navLinks(true).some((l) => l.href === '/dues')).toBe(true);
   });
 
+  it('includes the Resolutions nav link, right after Meetings', () => {
+    const hrefs = navLinks(false).map((l) => l.href);
+    const meetingsIndex = hrefs.indexOf('/meetings');
+    expect(meetingsIndex).toBeGreaterThanOrEqual(0);
+    expect(hrefs[meetingsIndex + 1]).toBe('/resolutions');
+  });
+
   it('brandTag reflects the mode', () => {
     expect(brandTag(false)).toBe('Residents');
     expect(brandTag(true)).toBe('Homeowners Association');

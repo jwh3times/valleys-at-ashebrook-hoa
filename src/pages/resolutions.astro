@@ -1,0 +1,93 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ReportMarkdown from '../components/react/ReportMarkdown.tsx';
+import { NEIGHBORHOOD } from '../lib/site';
+import { env } from 'cloudflare:workers';
+import { fetchResolutionsFor } from '../server/content/reads';
+import { formatDate } from '../lib/format';
+
+// Read tier-filtered, non-draft resolutions server-side (SEO / first paint /
+// no-JS) — fetchResolutionsFor already excludes drafts unconditionally, even
+// for a board caller, so no extra filtering belongs here. Never
+// fetchAdminResolutions: that helper is board-only by call-site contract,
+// returns drafts, and applies no tier filter at all.
+const role = Astro.locals.authContext?.role ?? 'visitor';
+const includeHistoric = Astro.url.searchParams.get('status') === 'all';
+const resolutionList = await fetchResolutionsFor(env, role, {
+  includeHistoric,
+});
+
+const toggleHref = includeHistoric ? '/resolutions' : '/resolutions?status=all';
+const toggleLabel = includeHistoric
+  ? 'Show in-force resolutions only'
+  : 'Show superseded and repealed resolutions too';
+---
+
+<BaseLayout
+  title="Residents Association Resolutions"
+  description={`Standing resolutions adopted by the residents association board at ${NEIGHBORHOOD}.`}
+>
+  <div class="page-section">
+    <p class="eyebrow">Record</p>
+    <h1 class="page-title">Residents Association Resolutions</h1>
+    <p class="page-lead">
+      Standing rules adopted by the residents association board. In force by
+      default — superseded and repealed resolutions are kept for the record.
+    </p>
+
+    <p>
+      <a href={toggleHref}>{toggleLabel}</a>
+    </p>
+
+    {
+      resolutionList.length === 0 ? (
+        <p class="muted">No resolutions have been recorded yet.</p>
+      ) : (
+        <div class="resolution-list">
+          {resolutionList.map((r) => (
+            <div class="resolution card">
+              <h2 class="resolution__title">
+                {r.number} — {r.title}
+              </h2>
+              {r.effectiveDate && (
+                <p class="resolution__meta">
+                  Effective {formatDate(r.effectiveDate)}
+                </p>
+              )}
+
+              {r.status === 'repealed' && (
+                <p class="resolution__status">Repealed</p>
+              )}
+              {r.status === 'superseded' && (
+                <p class="resolution__status">
+                  Superseded
+                  {r.supersededByNumber ? (
+                    <> by {r.supersededByNumber}</>
+                  ) : null}
+                </p>
+              )}
+
+              <div class="resolution__body">
+                <ReportMarkdown text={r.bodyMd} />
+              </div>
+
+              {r.chain.length > 0 && (
+                <p class="resolution__chain">
+                  Supersedes:{' '}
+                  {r.chain.map((link, i) => (
+                    <>
+                      {i > 0 && ', '}
+                      {link.visible
+                        ? `${link.number} — ${link.title}`
+                        : 'an earlier resolution'}
+                    </>
+                  ))}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</BaseLayout>
