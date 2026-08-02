@@ -13,11 +13,19 @@ import {
   owners,
   memberAttendance,
   memberVotes,
+  resolutions,
 } from '../db/schema';
 import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
 import { tallyVotes } from '../../lib/types';
-import type { MeetingSummary, MeetingDetail } from '../../lib/types';
+import type {
+  MeetingSummary,
+  MeetingDetail,
+  ResolutionDetail,
+  ResolutionChainLink,
+  ResolutionStatus,
+  Visibility,
+} from '../../lib/types';
 
 export async function fetchDocumentsFor(env: Env, role: Role) {
   // Project only the DocumentItem contract columns. A bare .select() would ship
@@ -392,4 +400,156 @@ export async function fetchAdminMeeting(
     .limit(1);
   if (found.length === 0) return null;
   return assembleMeetingDetail(db, found[0]);
+}
+
+// Every visibility tier — used by fetchAdminResolutions to share the masking
+// helpers below without actually masking anything, since the admin read has
+// no tier gate of its own.
+const ALL_VISIBILITIES: Visibility[] = ['public', 'homeowner', 'board'];
+
+type ResolutionRow = typeof resolutions.$inferSelect;
+
+/**
+ * Walks `row`'s supersession chain backwards through `supersedesId`,
+ * newest-predecessor-first / oldest-last, re-applying the tier filter at
+ * every step: a predecessor outside `tiers` is emitted as
+ * `{ id: null, number: null, title: null, visible: false }` so the chain's
+ * true length is still visible without leaking the hidden record's identity.
+ * The walk still follows a masked link's OWN supersedesId — the point of the
+ * masked entry is that the chain doesn't read as shorter than it actually
+ * is, not that it gets truncated at the first hidden link.
+ *
+ * Carries a visited-set and stops on a repeat: `resolutions.supersedes_id`
+ * is unique and RESTRICT-guarded, so cycles cannot arise through the admin
+ * API (Task 4), but this function must not trust that from the read side —
+ * bad data reachable only by direct DB access must still render, not hang.
+ */
+function buildChain(
+  row: ResolutionRow,
+  tiers: Visibility[],
+  byId: Map<string, ResolutionRow>,
+): ResolutionChainLink[] {
+  const chain: ResolutionChainLink[] = [];
+  const visited = new Set<string>([row.id]);
+  let nextId = row.supersedesId;
+  while (nextId) {
+    if (visited.has(nextId)) break;
+    visited.add(nextId);
+    const pred = byId.get(nextId);
+    if (!pred) break;
+    chain.push(
+      tiers.includes(pred.visibility)
+        ? {
+            id: pred.id,
+            number: pred.number,
+            title: pred.title,
+            visible: true,
+          }
+        : { id: null, number: null, title: null, visible: false },
+    );
+    nextId = pred.supersedesId;
+  }
+  return chain;
+}
+
+/**
+ * Assembles one ResolutionDetail from an already-selected row, given the
+ * caller's tiers, a lookup of every resolution by id (for the chain walk),
+ * and a reverse supersedesId index (for supersededByNumber). `byId` and
+ * `supersededBy` are built once per call site over the full table — cheap
+ * at this table's dozens-of-rows volume — rather than re-queried per row.
+ */
+function toResolutionDetail(
+  row: ResolutionRow,
+  tiers: Visibility[],
+  byId: Map<string, ResolutionRow>,
+  supersededBy: Map<string, ResolutionRow>,
+): ResolutionDetail {
+  const successor = supersededBy.get(row.id);
+  // Subject to the same tier filter as everything else: an out-of-tier
+  // successor must not leak its number here either, or the chain-walk
+  // masking above would be pointless from the other direction.
+  const supersededByNumber =
+    successor && tiers.includes(successor.visibility) ? successor.number : null;
+  return {
+    id: row.id,
+    number: row.number,
+    title: row.title,
+    status: row.status,
+    visibility: row.visibility,
+    effectiveDate: row.effectiveDate,
+    bodyMd: row.bodyMd,
+    adoptedByMotionId: row.adoptedByMotionId,
+    supersedesId: row.supersedesId,
+    supersededByNumber,
+    chain: buildChain(row, tiers, byId),
+  };
+}
+
+/**
+ * Non-draft resolutions visible to `role`, each with its full body and
+ * supersession chain. `status != 'draft'` is UNCONDITIONAL and is
+ * deliberately NOT relaxed for a board caller — mirrors ADR 0014 for
+ * meetings: a draft resolution is not a record of anything adopted yet, so
+ * the public read path must never surface one regardless of who asks.
+ * Drafts are reachable only through fetchAdminResolutions. By default only
+ * `in_force` resolutions are returned; `includeHistoric: true` adds
+ * `superseded` and `repealed` for the "?status=all" view — `draft` is never
+ * included by either mode.
+ *
+ * Returns full ResolutionDetail rather than a summary: the resolutions book
+ * renders each entry's body and chain inline on one page, and resolutions
+ * are few enough in number and short enough in body that this costs
+ * nothing. There is deliberately no single-resolution fetch — see the
+ * task brief for why a fetchResolutionFor would have no consumer.
+ */
+export async function fetchResolutionsFor(
+  env: Env,
+  role: Role,
+  opts?: { includeHistoric?: boolean },
+): Promise<ResolutionDetail[]> {
+  const db = getDb(env);
+  const tiers = visibleTiers(role);
+  const statuses: ResolutionStatus[] = opts?.includeHistoric
+    ? ['in_force', 'superseded', 'repealed']
+    : ['in_force'];
+
+  // The full table is read once so the chain walk and supersededByNumber can
+  // resolve any predecessor/successor by id, even one excluded from this
+  // call's own status/tier filter (e.g. a superseded predecessor of an
+  // in_force resolution, when includeHistoric is false).
+  const all = await db.select().from(resolutions);
+  const byId = new Map(all.map((r) => [r.id, r]));
+  const supersededBy = new Map<string, ResolutionRow>();
+  for (const r of all) {
+    if (r.supersedesId) supersededBy.set(r.supersedesId, r);
+  }
+
+  return all
+    .filter((r) => statuses.includes(r.status) && tiers.includes(r.visibility))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((r) => toResolutionDetail(r, tiers, byId, supersededBy));
+}
+
+/**
+ * Board-only: every resolution including drafts, with no tier filter — same
+ * contract as fetchAdminMeetings — so every call site MUST be
+ * requireBoard-gated. Chain links and supersededByNumber are never masked
+ * here since ALL_VISIBILITIES includes every tier.
+ */
+export async function fetchAdminResolutions(
+  env: Env,
+): Promise<ResolutionDetail[]> {
+  const db = getDb(env);
+  const all = await db.select().from(resolutions);
+  const byId = new Map(all.map((r) => [r.id, r]));
+  const supersededBy = new Map<string, ResolutionRow>();
+  for (const r of all) {
+    if (r.supersedesId) supersededBy.set(r.supersedesId, r);
+  }
+
+  return all
+    .slice()
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map((r) => toResolutionDetail(r, ALL_VISIBILITIES, byId, supersededBy));
 }
