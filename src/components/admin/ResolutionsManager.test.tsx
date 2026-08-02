@@ -12,6 +12,10 @@ const mocked = vi.mocked(admin);
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // The motion picker fetches meetings (and, for any with motions, their
+  // detail) on every mount — default to none so tests that don't care about
+  // the picker aren't forced to mock it.
+  mocked.fetchMeetings.mockResolvedValue([]);
 });
 
 function resolution(
@@ -29,6 +33,63 @@ function resolution(
     supersedesId: null,
     supersededByNumber: null,
     chain: [],
+    ...overrides,
+  };
+}
+
+// A meeting with one motion, used by the motion-picker tests below.
+const meetingWithMotion = {
+  id: 'm1',
+  body: 'board' as const,
+  kind: 'regular' as const,
+  date: '2026-09-14',
+  title: 'September meeting',
+  status: 'approved' as const,
+  visibility: 'board' as const,
+  motionCount: 1,
+};
+
+function meetingDetailWithMotion(
+  overrides: Partial<Awaited<ReturnType<typeof admin.fetchMeeting>>> = {},
+) {
+  return {
+    ...meetingWithMotion,
+    startTime: null,
+    location: null,
+    summaryMd: null,
+    documentId: null,
+    quorumRequired: null,
+    attendance: [],
+    memberAttendance: [],
+    totalActiveWeight: 0,
+    motions: [
+      {
+        id: 'mo1',
+        sequence: 1,
+        text: 'Approve the budget',
+        moverName: null,
+        secondName: null,
+        outcome: 'passed' as const,
+        tally: {
+          yes: 0,
+          no: 0,
+          abstain: 0,
+          recused: 0,
+          absent: 0,
+          recorded: false,
+        },
+        votes: [],
+        memberVotes: [],
+        memberTally: {
+          yes: 0,
+          no: 0,
+          abstain: 0,
+          recused: 0,
+          absent: 0,
+          recorded: false,
+        },
+      },
+    ],
     ...overrides,
   };
 }
@@ -265,5 +326,211 @@ describe('ResolutionsManager', () => {
         expect(optionText).not.toContain(status.replace('_', ' '));
       }
     }
+  });
+
+  it('the motion picker lists motions from fetched meetings, and adopting with one selected calls adoptResolution with its id', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
+    ]);
+    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.adoptResolution.mockResolvedValue(undefined);
+    render(<ResolutionsManager />);
+    await screen.findByText('2024-01 — Pool Hours');
+
+    await userEvent.click(screen.getByRole('button', { name: /^adopt$/i }));
+    const motionSelect = await screen.findByLabelText(/^motion \(optional\)$/i);
+    await screen.findByRole('option', {
+      name: '2026-09-14 — Approve the budget',
+    });
+    await userEvent.selectOptions(motionSelect, 'mo1');
+    await userEvent.type(
+      screen.getByLabelText(/^effective date$/i),
+      '2026-09-01',
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: /confirm adopt/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.adoptResolution).toHaveBeenCalledWith(
+        'r1',
+        '2026-09-01',
+        'mo1',
+      ),
+    );
+  });
+
+  it('adopting with no motion selected calls adoptResolution with undefined, not empty string', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
+    ]);
+    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.adoptResolution.mockResolvedValue(undefined);
+    render(<ResolutionsManager />);
+    await screen.findByText('2024-01 — Pool Hours');
+
+    await userEvent.click(screen.getByRole('button', { name: /^adopt$/i }));
+    // Wait for the picker to finish loading so its default ("— no motion —")
+    // is the settled value, not a race against the fetch.
+    await screen.findByRole('option', {
+      name: '2026-09-14 — Approve the budget',
+    });
+    await userEvent.type(
+      screen.getByLabelText(/^effective date$/i),
+      '2026-09-01',
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: /confirm adopt/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.adoptResolution).toHaveBeenCalledWith(
+        'r1',
+        '2026-09-01',
+        undefined,
+      ),
+    );
+    const [, , motionArg] = mocked.adoptResolution.mock.calls[0];
+    expect(motionArg).not.toBe('');
+  });
+
+  it('the motion picker is offered for supersede too, and superseding with one selected calls supersedeResolution with its id', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r-draft', number: '2024-02', status: 'draft' }),
+      resolution({
+        id: 'r-old',
+        number: '2024-01',
+        title: 'Old Pool Hours',
+        status: 'in_force',
+        effectiveDate: '2023-01-01',
+      }),
+    ]);
+    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.supersedeResolution.mockResolvedValue(undefined);
+    render(<ResolutionsManager />);
+    await screen.findByText('2024-02 — Pool Hours');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /^supersede…$/i }),
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText(/^supersedes$/i),
+      'r-old',
+    );
+    const motionSelect = await screen.findByLabelText(/^motion \(optional\)$/i);
+    await screen.findByRole('option', {
+      name: '2026-09-14 — Approve the budget',
+    });
+    await userEvent.selectOptions(motionSelect, 'mo1');
+    await userEvent.type(
+      screen.getByLabelText(/^effective date$/i),
+      '2026-09-01',
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: /confirm supersede/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.supersedeResolution).toHaveBeenCalledWith(
+        'r-draft',
+        'r-old',
+        '2026-09-01',
+        'mo1',
+      ),
+    );
+  });
+
+  it('superseding with no motion selected calls supersedeResolution with undefined, not empty string', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r-draft', number: '2024-02', status: 'draft' }),
+      resolution({
+        id: 'r-old',
+        number: '2024-01',
+        title: 'Old Pool Hours',
+        status: 'in_force',
+        effectiveDate: '2023-01-01',
+      }),
+    ]);
+    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.supersedeResolution.mockResolvedValue(undefined);
+    render(<ResolutionsManager />);
+    await screen.findByText('2024-02 — Pool Hours');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /^supersede…$/i }),
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText(/^supersedes$/i),
+      'r-old',
+    );
+    await screen.findByRole('option', {
+      name: '2026-09-14 — Approve the budget',
+    });
+    await userEvent.type(
+      screen.getByLabelText(/^effective date$/i),
+      '2026-09-01',
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: /confirm supersede/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.supersedeResolution).toHaveBeenCalledWith(
+        'r-draft',
+        'r-old',
+        '2026-09-01',
+        undefined,
+      ),
+    );
+    const [, , , motionArg] = mocked.supersedeResolution.mock.calls[0];
+    expect(motionArg).not.toBe('');
+  });
+
+  it('a resolution with adoptedByMotionId set renders its motion reference, not a bare UUID', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({
+        id: 'r1',
+        number: '2024-01',
+        status: 'in_force',
+        effectiveDate: '2024-01-01',
+        adoptedByMotionId: 'mo1',
+      }),
+    ]);
+    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    render(<ResolutionsManager />);
+
+    expect(
+      await screen.findByText(/2026-09-14 — Approve the budget/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('mo1')).not.toBeInTheDocument();
+  });
+
+  it('editing an existing resolution calls saveResolution with its id', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
+    ]);
+    mocked.saveResolution.mockResolvedValue(undefined);
+    render(<ResolutionsManager />);
+    await screen.findByText('2024-01 — Pool Hours');
+
+    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    const titleInput = screen.getByLabelText(/^title$/i);
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, 'Updated Pool Hours');
+    await userEvent.click(
+      screen.getByRole('button', { name: /save resolution/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.saveResolution).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Updated Pool Hours' }),
+        'r1',
+      ),
+    );
   });
 });
