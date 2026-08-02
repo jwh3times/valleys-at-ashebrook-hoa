@@ -12,6 +12,7 @@ import MembersManager from './MembersManager';
 import BoardAccessManager from './BoardAccessManager';
 import BoardPanel from './BoardPanel';
 import MeetingsManager from './MeetingsManager';
+import ResolutionsManager from './ResolutionsManager';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
 
@@ -36,6 +37,11 @@ const SECTIONS = [
     key: 'meetings',
     label: 'Meetings',
     render: () => <MeetingsManager />,
+  },
+  {
+    key: 'resolutions',
+    label: 'Resolutions',
+    render: () => <ResolutionsManager />,
   },
   {
     // Site sign-in access, not who serves on the board — see the

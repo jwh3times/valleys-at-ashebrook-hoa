@@ -292,6 +292,8 @@ export const INPUT_LIMITS = {
   motionText: 2_000,
   meetingLocation: 200,
   summaryMd: 20_000,
+  resolutionNumber: 40,
+  resolutionBody: 20_000,
 } as const;
 
 export type InputResult<T> =
@@ -417,6 +419,27 @@ function nonNegativeInt(
   return { ok: true, value: n };
 }
 
+/**
+ * Validates a non-blank ISO date string: YYYY-MM-DD shape and a real
+ * calendar date, checked by round-tripping through `Date` (so
+ * `2026-02-31` is rejected, not silently normalized to March 3rd).
+ * Exported so callers outside the declarative `normalize*Input` path can
+ * share this exact check instead of duplicating it — notably the
+ * resolutions route's `adopt`/`supersede` transitions, which read
+ * `effectiveDate` as a transition argument via `stringField` rather than
+ * a general field write, so they never pass through `isoDate` below. This
+ * module stays pure (no server-only imports) so it can also be unit
+ * tested and used from client code.
+ */
+export function isoDateOrError(s: string, label: string): InputResult<string> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
+    return fail(`${label} must be YYYY-MM-DD`);
+  const d = new Date(`${s}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
+    return fail(`${label} is not a valid calendar date`);
+  return { ok: true, value: s };
+}
+
 function isoDate(
   raw: Record<string, unknown>,
   key: string,
@@ -429,12 +452,7 @@ function isoDate(
       : { ok: true, value: undefined };
   const s = (typeof raw[key] === 'string' ? (raw[key] as string) : '').trim();
   if (!s) return fail(`${label} is required`);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
-    return fail(`${label} must be YYYY-MM-DD`);
-  const d = new Date(`${s}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
-    return fail(`${label} is not a valid calendar date`);
-  return { ok: true, value: s };
+  return isoDateOrError(s, label);
 }
 
 /** Optional ISO date. Absent → undefined; explicit null or blank → null. */
@@ -447,12 +465,7 @@ function nullableIsoDate(
   if (raw[key] === null) return { ok: true, value: null };
   const s = (typeof raw[key] === 'string' ? (raw[key] as string) : '').trim();
   if (!s) return { ok: true, value: null };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
-    return fail(`${label} must be YYYY-MM-DD`);
-  const d = new Date(`${s}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
-    return fail(`${label} is not a valid calendar date`);
-  return { ok: true, value: s };
+  return isoDateOrError(s, label);
 }
 
 /**
@@ -743,6 +756,54 @@ export interface MotionInput {
   outcome?: MotionOutcome;
 }
 
+export type ResolutionStatus = 'draft' | 'in_force' | 'superseded' | 'repealed';
+export const RESOLUTION_STATUSES = [
+  'draft',
+  'in_force',
+  'superseded',
+  'repealed',
+] as const;
+
+export interface ResolutionSummary {
+  id: string;
+  number: string;
+  title: string;
+  status: ResolutionStatus;
+  visibility: Visibility;
+  effectiveDate: string | null;
+}
+
+/**
+ * A predecessor/successor link in a resolution's supersession chain. `visible`
+ * is false when the linked resolution is out of the viewer's tier: the public
+ * page still needs to render "an earlier resolution" so the chain doesn't read
+ * as shorter than it is, but must not leak the hidden record's identity, so
+ * `id`/`number`/`title` are null in that case rather than the link being
+ * omitted.
+ */
+export interface ResolutionChainLink {
+  id: string | null;
+  number: string | null;
+  title: string | null;
+  visible: boolean;
+}
+
+export interface ResolutionDetail extends ResolutionSummary {
+  bodyMd: string;
+  adoptedByMotionId: string | null;
+  supersedesId: string | null;
+  supersededByNumber: string | null;
+  chain: ResolutionChainLink[];
+}
+
+export interface ResolutionInput {
+  number?: string;
+  title?: string;
+  bodyMd?: string;
+  effectiveDate?: string | null;
+  visibility?: Visibility;
+}
+
 /**
  * Derive a tally from a roll call. Weight defaults to 1, so board votes (which
  * carry none) count exactly as before, while member votes sum their per-property
@@ -885,6 +946,60 @@ export function normalizeMotionInput(
   const outcome = enumField(r, 'outcome', MOTION_OUTCOMES, mode);
   if (!outcome.ok) return outcome;
   if (outcome.value !== undefined) out.outcome = outcome.value;
+
+  return { ok: true, value: out };
+}
+
+export function normalizeResolutionInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<ResolutionInput> {
+  const r = asRecord(raw);
+  const out: ResolutionInput = {};
+  // Status and the two relationship columns are transition-only: `adopt`,
+  // `supersede`, and `repeal` maintain them together with their preconditions
+  // and their batched multi-row writes. If a plain PATCH could set any of
+  // them, every chain invariant becomes bypassable — you could mark a row
+  // superseded with no successor, or point two rows at one predecessor.
+  if ('status' in r)
+    return fail('status is not editable — use adopt, supersede, or repeal');
+  if ('supersedesId' in r)
+    return fail('supersedesId is not editable — use the supersede action');
+  if ('adoptedByMotionId' in r)
+    return fail('adoptedByMotionId is not editable — use the adopt action');
+
+  const number = coreString(
+    r,
+    'number',
+    INPUT_LIMITS.resolutionNumber,
+    'number',
+    mode,
+  );
+  if (!number.ok) return number;
+  if (number.value !== undefined) out.number = number.value;
+
+  const title = coreString(r, 'title', INPUT_LIMITS.title, 'title', mode);
+  if (!title.ok) return title;
+  if (title.value !== undefined) out.title = title.value;
+
+  const bodyMd = coreString(
+    r,
+    'bodyMd',
+    INPUT_LIMITS.resolutionBody,
+    'bodyMd',
+    mode,
+  );
+  if (!bodyMd.ok) return bodyMd;
+  if (bodyMd.value !== undefined) out.bodyMd = bodyMd.value;
+
+  const effectiveDate = nullableIsoDate(r, 'effectiveDate', 'effectiveDate');
+  if (!effectiveDate.ok) return effectiveDate;
+  if (effectiveDate.value !== undefined)
+    out.effectiveDate = effectiveDate.value;
+
+  const visibility = visibilityField(r, 'visibility');
+  if (!visibility.ok) return visibility;
+  if (visibility.value !== undefined) out.visibility = visibility.value;
 
   return { ok: true, value: out };
 }

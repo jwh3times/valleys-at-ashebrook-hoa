@@ -12,6 +12,7 @@ import {
   boardAttendance,
   boardPeople,
   motions,
+  resolutions,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -21,6 +22,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   const db = getDb(env);
+  await db.delete(resolutions);
   await db.delete(motions);
   await db.delete(boardAttendance);
   await db.delete(meetings);
@@ -59,6 +61,29 @@ async function createPerson(fullName: string): Promise<string> {
   await getDb(env)
     .insert(boardPeople)
     .values({ id, fullName, userId: null, createdAt: now, updatedAt: now });
+  return id;
+}
+
+async function createResolutionCiting(
+  motionId: string | null,
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env)
+    .insert(resolutions)
+    .values({
+      id,
+      number: `R-${id.slice(0, 8)}`,
+      title: 'Pool hours',
+      bodyMd: 'The pool is open 9am to 9pm.',
+      status: motionId ? 'in_force' : 'draft',
+      effectiveDate: motionId ? '2026-01-01' : null,
+      adoptedByMotionId: motionId,
+      visibility: 'board',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+    });
   return id;
 }
 
@@ -181,6 +206,65 @@ describe('meetings admin route — board', () => {
       .from(motions)
       .where(eq(motions.meetingId, id));
     expect(motionRows.length).toBe(0);
+  });
+
+  it('DELETE refuses a draft meeting whose motion is cited by a resolution, with 409, and both survive', async () => {
+    const id = await createMeeting();
+    const now = new Date();
+    const motionId = crypto.randomUUID();
+    await getDb(env).insert(motions).values({
+      id: motionId,
+      meetingId: id,
+      sequence: 1,
+      text: 'Move to adopt the resolution',
+      outcome: 'passed',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const resolutionId = await createResolutionCiting(motionId);
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/cited as a resolution/i);
+    const meetingRows = await getDb(env)
+      .select()
+      .from(meetings)
+      .where(eq(meetings.id, id));
+    expect(meetingRows.length).toBe(1);
+    const resolutionRows = await getDb(env)
+      .select()
+      .from(resolutions)
+      .where(eq(resolutions.id, resolutionId));
+    expect(resolutionRows[0].adoptedByMotionId).toBe(motionId);
+  });
+
+  it('DELETE still removes an unrelated draft meeting with 204 (control for the resolution-citation guard)', async () => {
+    // A meeting containing a motion cited by a resolution exists elsewhere,
+    // but this meeting is unrelated — the guard must not be so broad that
+    // any resolution's existence blocks deleting any meeting.
+    const citedMeetingId = await createMeeting();
+    const now = new Date();
+    const citedMotionId = crypto.randomUUID();
+    await getDb(env).insert(motions).values({
+      id: citedMotionId,
+      meetingId: citedMeetingId,
+      sequence: 1,
+      text: 'Move to adopt the resolution',
+      outcome: 'passed',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await createResolutionCiting(citedMotionId);
+
+    const id = await createMeeting();
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(204);
+    const meetingRows = await getDb(env)
+      .select()
+      .from(meetings)
+      .where(eq(meetings.id, id));
+    expect(meetingRows.length).toBe(0);
   });
 
   it('setAttendance replaces the whole set — an omitted person is removed', async () => {
