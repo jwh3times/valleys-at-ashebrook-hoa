@@ -12,6 +12,8 @@ import {
   candidates,
   ballots,
   properties,
+  owners,
+  meetings,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -24,7 +26,9 @@ beforeEach(async () => {
   await db.delete(ballots);
   await db.delete(candidates);
   await db.delete(elections);
+  await db.delete(owners);
   await db.delete(properties);
+  await db.delete(meetings);
 });
 
 const url = 'http://localhost/api/admin/elections';
@@ -97,6 +101,39 @@ async function createProperty(
     createdAt: now,
     updatedAt: now,
   });
+  return id;
+}
+
+async function createMeeting(
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
+  const id = crypto.randomUUID();
+  await getDb(env)
+    .insert(meetings)
+    .values({
+      id,
+      body: 'board',
+      kind: 'regular',
+      date: '2026-01-01',
+      title: 'January meeting',
+      status: 'draft',
+      visibility: 'board',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
+  return id;
+}
+
+async function createOwner(
+  propertyId: string,
+  fullName = 'A. Reyes',
+): Promise<string> {
+  const id = crypto.randomUUID();
+  await getDb(env)
+    .insert(owners)
+    .values({ id, propertyId, fullName, createdAt: now, updatedAt: now });
   return id;
 }
 
@@ -192,6 +229,40 @@ describe('elections admin route — board', () => {
       .from(elections)
       .where(eq(elections.title, 'X'));
     expect(rows.length).toBe(0);
+  });
+
+  it('rejects a create with an unknown meetingId, with 404', async () => {
+    const res = await POST(
+      req(url, 'POST', {
+        title: 'X',
+        seats: 2,
+        electionDate: '2026-03-01',
+        meetingId: 'nope',
+      }),
+    );
+    expect(res.status).toBe(404);
+    expect(await res.text()).toMatch(/meeting not found/i);
+    const rows = await getDb(env)
+      .select()
+      .from(elections)
+      .where(eq(elections.title, 'X'));
+    expect(rows.length).toBe(0);
+  });
+
+  it('creates an election with a valid meetingId', async () => {
+    const meetingId = await createMeeting();
+    const res = await POST(
+      req(url, 'POST', {
+        title: 'X',
+        seats: 2,
+        electionDate: '2026-03-01',
+        meetingId,
+      }),
+    );
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    const row = await getElection(id);
+    expect(row.meetingId).toBe(meetingId);
   });
 
   it('close moves draft to closed', async () => {
@@ -318,6 +389,21 @@ describe('elections admin route — board', () => {
     expect((await getCandidate(c1)).votes).toBeNull();
   });
 
+  it('setTallies rejects non-integer votes with 400', async () => {
+    const electionId = await createElection();
+    const c1 = await createCandidate(electionId, 1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setTallies',
+        electionId,
+        entries: [{ candidateId: c1, votes: 1.5 }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/non-negative integer/i);
+    expect((await getCandidate(c1)).votes).toBeNull();
+  });
+
   it('setTallies rejects the same candidateId twice with 409', async () => {
     const electionId = await createElection();
     const c1 = await createCandidate(electionId, 1);
@@ -433,6 +519,37 @@ describe('elections admin route — board', () => {
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/unknown property/i);
     expect((await getBallotsFor(electionId)).length).toBe(0);
+  });
+
+  it('setBallots rejects an unknown castByOwnerId with 400', async () => {
+    const electionId = await createElection();
+    const p1 = await createProperty('1 Oak St', 1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setBallots',
+        electionId,
+        entries: [{ propertyId: p1, castByOwnerId: 'nope' }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/unknown castByOwnerId/i);
+    expect((await getBallotsFor(electionId)).length).toBe(0);
+  });
+
+  it('setBallots accepts a valid castByOwnerId', async () => {
+    const electionId = await createElection();
+    const p1 = await createProperty('1 Oak St', 1);
+    const owner1 = await createOwner(p1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setBallots',
+        electionId,
+        entries: [{ propertyId: p1, castByOwnerId: owner1 }],
+      }),
+    );
+    expect(res.status).toBe(204);
+    const rows = await getBallotsFor(electionId);
+    expect(rows[0].castByOwnerId).toBe(owner1);
   });
 
   it('setBallots rejects the same propertyId twice with 409, not a raw D1 error', async () => {
@@ -554,9 +671,44 @@ describe('elections admin route — board', () => {
     expect(row.title).not.toBe('X');
   });
 
+  it('PATCH on a void election returns 409', async () => {
+    const id = await createElection({ status: 'void' });
+    const res = await PATCH(req(url, 'PATCH', { id, title: 'X' }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/certified or void/i);
+    const row = await getElection(id);
+    expect(row.title).not.toBe('X');
+  });
+
   it('PATCH on a nonexistent election returns 404', async () => {
     const res = await PATCH(req(url, 'PATCH', { id: 'nope', title: 'X' }));
     expect(res.status).toBe(404);
+    expect(await res.text()).toMatch(/election not found/i);
+  });
+
+  it('PATCH with no fields to update returns 400', async () => {
+    const id = await createElection();
+    const res = await PATCH(req(url, 'PATCH', { id }));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/no fields to update/i);
+  });
+
+  it('PATCH rejects an unknown meetingId, with 404', async () => {
+    const id = await createElection();
+    const res = await PATCH(req(url, 'PATCH', { id, meetingId: 'nope' }));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toMatch(/meeting not found/i);
+    const row = await getElection(id);
+    expect(row.meetingId).toBeNull();
+  });
+
+  it('PATCH accepts a valid meetingId', async () => {
+    const id = await createElection();
+    const meetingId = await createMeeting();
+    const res = await PATCH(req(url, 'PATCH', { id, meetingId }));
+    expect(res.status).toBe(204);
+    const row = await getElection(id);
+    expect(row.meetingId).toBe(meetingId);
   });
 
   it('DELETE removes a draft election', async () => {
@@ -567,11 +719,33 @@ describe('elections admin route — board', () => {
     expect(row).toBeUndefined();
   });
 
-  it('DELETE refuses a closed election with 409', async () => {
+  it('DELETE refuses a closed election with 409, naming closed', async () => {
     const id = await createElection({ status: 'closed' });
     const res = await DELETE(req(url, 'DELETE', { id }));
     expect(res.status).toBe(409);
-    expect(await res.text()).toMatch(/part of the record/i);
+    expect(await res.text()).toMatch(/already closed/i);
+    const row = await getElection(id);
+    expect(row).toBeDefined();
+  });
+
+  it('DELETE refuses a certified election with 409, naming certified', async () => {
+    const id = await createElection();
+    await getDb(env)
+      .update(elections)
+      .set({ status: 'certified' })
+      .where(eq(elections.id, id));
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/already certified/i);
+    const row = await getElection(id);
+    expect(row).toBeDefined();
+  });
+
+  it('DELETE refuses a void election with 409, naming void', async () => {
+    const id = await createElection({ status: 'void' });
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/already void/i);
     const row = await getElection(id);
     expect(row).toBeDefined();
   });
