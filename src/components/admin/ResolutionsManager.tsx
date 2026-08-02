@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   fetchResolutions,
   saveResolution,
@@ -6,6 +6,8 @@ import {
   adoptResolution,
   supersedeResolution,
   repealResolution,
+  fetchMeetings,
+  fetchMeeting,
 } from '../../lib/admin';
 import type {
   ResolutionDetail,
@@ -72,6 +74,50 @@ export default function ResolutionsManager() {
   // draft or already-closed resolution can't be a legal predecessor, and
   // the route would reject anything else with a 409 anyway.
   const inForce = resolutions.filter((r) => r.status === 'in_force');
+
+  // Flattened motion picker for the adopt/supersede transitions and for
+  // resolving an already-recorded adoptedByMotionId back to something
+  // human. There is no bulk "every motion" read, so this fetches the
+  // meeting list, then — for meetings that actually have motions — their
+  // full detail, and flattens. fetchMeetings already returns newest-first
+  // (see fetchAdminMeetings), so this preserves that order without
+  // re-sorting.
+  const [motionOptions, setMotionOptions] = useState<
+    { id: string; label: string }[]
+  >([]);
+  useEffect(() => {
+    fetchMeetings()
+      .then(async (meetingList) => {
+        const withMotions = meetingList.filter((m) => m.motionCount > 0);
+        const details = await Promise.all(
+          withMotions.map((m) => fetchMeeting(m.id)),
+        );
+        setMotionOptions(
+          details.flatMap((d) =>
+            d.motions.map((mo) => ({
+              id: mo.id,
+              label: `${d.date} — ${mo.text}`,
+            })),
+          ),
+        );
+      })
+      .catch((err: unknown) => {
+        const message =
+          (err as { message?: string } | null)?.message ??
+          'could not load motions.';
+        setMsg('Error: ' + message);
+      });
+    // Load once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resolves a resolution's adoptedByMotionId to the same "date — motion
+  // text" shape the picker uses, never the bare id — a board member reading
+  // the list has no use for a UUID.
+  function motionLabel(motionId: string | null): string | null {
+    if (!motionId) return null;
+    return motionOptions.find((o) => o.id === motionId)?.label ?? null;
+  }
 
   function resetForm() {
     setEditingId(null);
@@ -349,10 +395,9 @@ export default function ResolutionsManager() {
               />
             </div>
             <div className="field" style={{ margin: 0 }}>
-              <label htmlFor="transition-motion">Motion ID (optional)</label>
-              <input
+              <label htmlFor="transition-motion">Motion (optional)</label>
+              <select
                 id="transition-motion"
-                type="text"
                 value={transitionForm.motionId}
                 onChange={(e) =>
                   setTransitionForm({
@@ -360,8 +405,14 @@ export default function ResolutionsManager() {
                     motionId: e.target.value,
                   })
                 }
-                placeholder="From the Meetings tab"
-              />
+              >
+                <option value="">— no motion —</option>
+                {motionOptions.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="btn-row">
@@ -414,6 +465,13 @@ export default function ResolutionsManager() {
                             r.supersededByNumber &&
                             ` · superseded by ${r.supersededByNumber}`}
                         </div>
+                        {r.adoptedByMotionId && (
+                          <div className="admin-row-sub">
+                            Adopted by motion:{' '}
+                            {motionLabel(r.adoptedByMotionId) ??
+                              'motion record unavailable'}
+                          </div>
+                        )}
                       </div>
                       <div className="row-actions">
                         <button
