@@ -719,7 +719,8 @@ async function fetchBallotRowsFor(
       castByOwnerId: ballots.castByOwnerId,
     })
     .from(ballots)
-    .where(eq(ballots.electionId, electionId));
+    .where(eq(ballots.electionId, electionId))
+    .orderBy(asc(ballots.propertyId));
   if (rows.length === 0) return [];
   const propertyRows = await db
     .select({ id: properties.id, address: properties.address })
