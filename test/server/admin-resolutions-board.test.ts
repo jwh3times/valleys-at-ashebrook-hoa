@@ -211,6 +211,41 @@ describe('resolutions admin route — board', () => {
     expect(row.effectiveDate).toBe('2026-01-01');
   });
 
+  it('adopt with a malformed effectiveDate returns 400', async () => {
+    const id = await createResolution();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'adopt',
+        id,
+        effectiveDate: 'not a date',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/effectiveDate must be YYYY-MM-DD/);
+    const row = await getResolution(id);
+    expect(row.status).toBe('draft');
+    expect(row.effectiveDate).toBeNull();
+  });
+
+  it('adopt with a non-calendar effectiveDate returns 400', async () => {
+    // 2026-02-31 matches the YYYY-MM-DD shape but isn't a real day — this
+    // only fails against the calendar-round-trip check, not a bare regex,
+    // which is the point of this test.
+    const id = await createResolution();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'adopt',
+        id,
+        effectiveDate: '2026-02-31',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/not a valid calendar date/);
+    const row = await getResolution(id);
+    expect(row.status).toBe('draft');
+    expect(row.effectiveDate).toBeNull();
+  });
+
   it('adopt with an unknown motionId returns 404', async () => {
     const id = await createResolution();
     const res = await POST(
@@ -264,6 +299,55 @@ describe('resolutions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(400);
+    const newRow = await getResolution(newId);
+    const oldRow = await getResolution(oldId);
+    expect(newRow.status).toBe('draft');
+    expect(newRow.supersedesId).toBeNull();
+    expect(oldRow.status).toBe('in_force');
+  });
+
+  it('supersede with a malformed effectiveDate returns 400', async () => {
+    const oldId = await createResolution({
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const newId = await createResolution();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'supersede',
+        id: newId,
+        supersedesId: oldId,
+        effectiveDate: 'not a date',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/effectiveDate must be YYYY-MM-DD/);
+    const newRow = await getResolution(newId);
+    const oldRow = await getResolution(oldId);
+    expect(newRow.status).toBe('draft');
+    expect(newRow.supersedesId).toBeNull();
+    expect(oldRow.status).toBe('in_force');
+  });
+
+  it('supersede with a non-calendar effectiveDate returns 400', async () => {
+    // 2026-02-31 matches the YYYY-MM-DD shape but isn't a real day — this
+    // only fails against the calendar-round-trip check, not a bare regex,
+    // which is the point of this test.
+    const oldId = await createResolution({
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const newId = await createResolution();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'supersede',
+        id: newId,
+        supersedesId: oldId,
+        effectiveDate: '2026-02-31',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/not a valid calendar date/);
     const newRow = await getResolution(newId);
     const oldRow = await getResolution(oldId);
     expect(newRow.status).toBe('draft');

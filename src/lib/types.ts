@@ -419,6 +419,27 @@ function nonNegativeInt(
   return { ok: true, value: n };
 }
 
+/**
+ * Validates a non-blank ISO date string: YYYY-MM-DD shape and a real
+ * calendar date, checked by round-tripping through `Date` (so
+ * `2026-02-31` is rejected, not silently normalized to March 3rd).
+ * Exported so callers outside the declarative `normalize*Input` path can
+ * share this exact check instead of duplicating it — notably the
+ * resolutions route's `adopt`/`supersede` transitions, which read
+ * `effectiveDate` as a transition argument via `stringField` rather than
+ * a general field write, so they never pass through `isoDate` below. This
+ * module stays pure (no server-only imports) so it can also be unit
+ * tested and used from client code.
+ */
+export function isoDateOrError(s: string, label: string): InputResult<string> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
+    return fail(`${label} must be YYYY-MM-DD`);
+  const d = new Date(`${s}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
+    return fail(`${label} is not a valid calendar date`);
+  return { ok: true, value: s };
+}
+
 function isoDate(
   raw: Record<string, unknown>,
   key: string,
@@ -431,12 +452,7 @@ function isoDate(
       : { ok: true, value: undefined };
   const s = (typeof raw[key] === 'string' ? (raw[key] as string) : '').trim();
   if (!s) return fail(`${label} is required`);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
-    return fail(`${label} must be YYYY-MM-DD`);
-  const d = new Date(`${s}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
-    return fail(`${label} is not a valid calendar date`);
-  return { ok: true, value: s };
+  return isoDateOrError(s, label);
 }
 
 /** Optional ISO date. Absent → undefined; explicit null or blank → null. */
@@ -449,12 +465,7 @@ function nullableIsoDate(
   if (raw[key] === null) return { ok: true, value: null };
   const s = (typeof raw[key] === 'string' ? (raw[key] as string) : '').trim();
   if (!s) return { ok: true, value: null };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s))
-    return fail(`${label} must be YYYY-MM-DD`);
-  const d = new Date(`${s}T00:00:00Z`);
-  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s)
-    return fail(`${label} is not a valid calendar date`);
-  return { ok: true, value: s };
+  return isoDateOrError(s, label);
 }
 
 /**

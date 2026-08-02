@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -12,6 +12,8 @@ import {
   meetings,
   boardAttendance,
   memberAttendance,
+  motions,
+  resolutions,
 } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
 import {
@@ -351,6 +353,33 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       'Approved meetings cannot be deleted — unapprove first.',
       { status: 409 },
     );
+  // motions.meeting_id is ON DELETE CASCADE, which routes straight around a
+  // motions-only precondition: deleting this meeting deletes its motions,
+  // and resolutions.adopted_by_motion_id (ON DELETE SET NULL) would then
+  // silently blank any resolution's adoption provenance that cited one of
+  // them. Pre-check every motion this meeting owns, not just the meeting
+  // row. See ADR 0016 and the matching guard in motions.ts's DELETE.
+  const meetingMotions = await db
+    .select({ id: motions.id })
+    .from(motions)
+    .where(eq(motions.meetingId, id));
+  if (meetingMotions.length > 0) {
+    const cited = await db
+      .select({ id: resolutions.id })
+      .from(resolutions)
+      .where(
+        inArray(
+          resolutions.adoptedByMotionId,
+          meetingMotions.map((m) => m.id),
+        ),
+      )
+      .limit(1);
+    if (cited.length > 0)
+      return new Response(
+        "A motion in this meeting is cited as a resolution's adopting motion — it cannot be deleted while that citation stands.",
+        { status: 409 },
+      );
+  }
   // Deleting a draft cascades its attendance, motions, and votes via FK.
   await db.delete(meetings).where(eq(meetings.id, id));
   return new Response(null, { status: 204 });
