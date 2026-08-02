@@ -213,9 +213,19 @@ export default function ElectionsManager() {
     e.preventDefault();
     await run(
       async () => {
+        // Distinguish blank from zero: `Number(x) || 1` would silently turn a
+        // typed 0 into 1, which means the server never sees the bad value and
+        // never gets the chance to explain why it's bad — the same class of
+        // bug as an earlier PR's `Number(form) || 1` silently substituting a
+        // vote weight nobody typed. A blank field sends `undefined` (dropped
+        // by JSON.stringify, so create's own "seats is required" guard fires
+        // and edit leaves the value unchanged); a typed 0 sends the real 0 so
+        // the server's "seats must be at least 1" 400 reaches the board.
+        const trimmedSeats = electionForm.seats.trim();
+        const seats = trimmedSeats === '' ? undefined : Number(trimmedSeats);
         const data: ElectionInput = {
           title: electionForm.title,
-          seats: Number(electionForm.seats) || 1,
+          seats,
           electionDate: electionForm.electionDate,
           meetingId: electionForm.meetingId || null,
           visibility: electionForm.visibility,
@@ -860,24 +870,27 @@ export default function ElectionsManager() {
                                         Ballot returned — {p.address}
                                         {p.unit ? ` ${p.unit}` : ''}
                                       </label>
-                                      {row?.selected && p.owners.length > 0 && (
+                                      {row?.selected && (
                                         <div
                                           style={{
                                             display: 'flex',
                                             alignItems: 'center',
+                                            flexWrap: 'wrap',
                                             gap: '8px',
                                             paddingLeft: '26px',
                                             marginTop: '4px',
                                           }}
                                         >
                                           <label
-                                            htmlFor={`ballot-cast-by-${e.id}-${p.id}`}
+                                            htmlFor={`ballot-weight-${e.id}-${p.id}`}
                                           >
-                                            Cast by — {p.address}
+                                            Weight override (optional) —{' '}
+                                            {p.address}
                                           </label>
-                                          <select
-                                            id={`ballot-cast-by-${e.id}-${p.id}`}
-                                            value={row?.castByOwnerId ?? ''}
+                                          <input
+                                            id={`ballot-weight-${e.id}-${p.id}`}
+                                            type="number"
+                                            value={row?.weight ?? ''}
                                             onChange={(evt) =>
                                               setBallotForm((prev) => ({
                                                 ...prev,
@@ -885,54 +898,93 @@ export default function ElectionsManager() {
                                                   selected:
                                                     prev[p.id]?.selected ??
                                                     true,
-                                                  weight:
-                                                    prev[p.id]?.weight ?? '',
+                                                  weight: evt.target.value,
                                                   viaProxy:
                                                     prev[p.id]?.viaProxy ??
                                                     false,
                                                   castByOwnerId:
-                                                    evt.target.value,
+                                                    prev[p.id]?.castByOwnerId ??
+                                                    '',
                                                 },
                                               }))
                                             }
-                                          >
-                                            <option value="">— none —</option>
-                                            {p.owners.map((o) => (
-                                              <option key={o.id} value={o.id}>
-                                                {o.fullName}
-                                              </option>
-                                            ))}
-                                          </select>
-                                          <label
-                                            style={{
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '4px',
-                                            }}
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={!!row?.viaProxy}
-                                              onChange={(evt) =>
-                                                setBallotForm((prev) => ({
-                                                  ...prev,
-                                                  [p.id]: {
-                                                    selected:
-                                                      prev[p.id]?.selected ??
-                                                      true,
-                                                    weight:
-                                                      prev[p.id]?.weight ?? '',
-                                                    viaProxy:
-                                                      evt.target.checked,
-                                                    castByOwnerId:
-                                                      prev[p.id]
-                                                        ?.castByOwnerId ?? '',
-                                                  },
-                                                }))
-                                              }
-                                            />
-                                            Via proxy
-                                          </label>
+                                            placeholder={String(p.voteWeight)}
+                                          />
+                                          {p.owners.length > 0 && (
+                                            <>
+                                              <label
+                                                htmlFor={`ballot-cast-by-${e.id}-${p.id}`}
+                                              >
+                                                Cast by — {p.address}
+                                              </label>
+                                              <select
+                                                id={`ballot-cast-by-${e.id}-${p.id}`}
+                                                value={row?.castByOwnerId ?? ''}
+                                                onChange={(evt) =>
+                                                  setBallotForm((prev) => ({
+                                                    ...prev,
+                                                    [p.id]: {
+                                                      selected:
+                                                        prev[p.id]?.selected ??
+                                                        true,
+                                                      weight:
+                                                        prev[p.id]?.weight ??
+                                                        '',
+                                                      viaProxy:
+                                                        prev[p.id]?.viaProxy ??
+                                                        false,
+                                                      castByOwnerId:
+                                                        evt.target.value,
+                                                    },
+                                                  }))
+                                                }
+                                              >
+                                                <option value="">
+                                                  — none —
+                                                </option>
+                                                {p.owners.map((o) => (
+                                                  <option
+                                                    key={o.id}
+                                                    value={o.id}
+                                                  >
+                                                    {o.fullName}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                              <label
+                                                style={{
+                                                  display: 'flex',
+                                                  alignItems: 'center',
+                                                  gap: '4px',
+                                                }}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={!!row?.viaProxy}
+                                                  onChange={(evt) =>
+                                                    setBallotForm((prev) => ({
+                                                      ...prev,
+                                                      [p.id]: {
+                                                        selected:
+                                                          prev[p.id]
+                                                            ?.selected ?? true,
+                                                        weight:
+                                                          prev[p.id]?.weight ??
+                                                          '',
+                                                        viaProxy:
+                                                          evt.target.checked,
+                                                        castByOwnerId:
+                                                          prev[p.id]
+                                                            ?.castByOwnerId ??
+                                                          '',
+                                                      },
+                                                    }))
+                                                  }
+                                                />
+                                                Via proxy
+                                              </label>
+                                            </>
+                                          )}
                                         </div>
                                       )}
                                     </div>

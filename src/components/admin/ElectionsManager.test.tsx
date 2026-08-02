@@ -4,7 +4,11 @@ import userEvent from '@testing-library/user-event';
 import ElectionsManager from './ElectionsManager';
 import * as admin from '../../lib/admin';
 import { ELECTION_STATUSES } from '../../lib/types';
-import type { ElectionDetail, CandidateSummary } from '../../lib/types';
+import type {
+  ElectionDetail,
+  CandidateSummary,
+  PropertyWithOwners,
+} from '../../lib/types';
 
 vi.mock('../../lib/admin');
 
@@ -28,6 +32,21 @@ function candidate(
     votes: null,
     won: false,
     withdrawn: false,
+    ...overrides,
+  };
+}
+
+function property(
+  overrides: Partial<PropertyWithOwners> = {},
+): PropertyWithOwners {
+  return {
+    id: 'p1',
+    address: '100 Main St',
+    unit: null,
+    status: 'active',
+    notes: null,
+    voteWeight: 1,
+    owners: [],
     ...overrides,
   };
 }
@@ -357,5 +376,167 @@ describe('ElectionsManager', () => {
         'e1',
       ),
     );
+  });
+
+  it('adding a candidate calls saveCandidate with the election id and candidate fields, and no id', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'draft' }),
+    ]);
+    mocked.saveCandidate.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    await userEvent.type(screen.getByLabelText(/^full name$/i), 'Alice');
+    await userEvent.click(
+      screen.getByRole('button', { name: /^add candidate$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.saveCandidate).toHaveBeenCalledWith(
+        'e1',
+        { fullName: 'Alice', statementMd: null, boardPersonId: null },
+        undefined,
+      ),
+    );
+  });
+
+  it('editing an existing candidate calls saveCandidate with its id', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        id: 'e1',
+        title: 'Board Election 2026',
+        status: 'draft',
+        candidates: [candidate({ id: 'c1', fullName: 'Alice' })],
+      }),
+    ]);
+    mocked.saveCandidate.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit candidate alice/i }),
+    );
+    const nameInput = screen.getByLabelText(/^full name$/i);
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Alice Updated');
+    await userEvent.click(
+      screen.getByRole('button', { name: /^save candidate$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.saveCandidate).toHaveBeenCalledWith(
+        'e1',
+        { fullName: 'Alice Updated', statementMd: null, boardPersonId: null },
+        'c1',
+      ),
+    );
+  });
+
+  it('recording ballots calls setBallots with weight, viaProxy, and castByOwnerId per checked property', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      property({ id: 'p1', address: '100 Main St', owners: [] }),
+      property({
+        id: 'p2',
+        address: '200 Oak St',
+        owners: [
+          {
+            id: 'o2',
+            propertyId: 'p2',
+            fullName: 'Owner Two',
+            phone: null,
+            email: null,
+            status: 'active',
+            notes: null,
+          },
+        ],
+      }),
+    ]);
+    mocked.setBallots.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    // p1: returned a ballot, weight left untouched, no owner to cast by.
+    await userEvent.click(
+      screen.getByLabelText(/ballot returned — 100 main st/i),
+    );
+    // p2: returned a ballot, weight explicitly overridden, cast by its owner,
+    // via proxy.
+    await userEvent.click(
+      screen.getByLabelText(/ballot returned — 200 oak st/i),
+    );
+    await userEvent.type(
+      screen.getByLabelText(/weight override.*200 oak st/i),
+      '3',
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText(/cast by — 200 oak st/i),
+      'o2',
+    );
+    await userEvent.click(screen.getByLabelText(/via proxy/i));
+    await userEvent.click(
+      screen.getByRole('button', { name: /^save ballots$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setBallots).toHaveBeenCalledWith('e1', [
+        {
+          propertyId: 'p1',
+          weight: undefined,
+          viaProxy: false,
+          castByOwnerId: null,
+        },
+        {
+          propertyId: 'p2',
+          weight: 3,
+          viaProxy: true,
+          castByOwnerId: 'o2',
+        },
+      ]),
+    );
+  });
+
+  it('typing 0 seats surfaces the server error instead of silently defaulting to 1', async () => {
+    mocked.fetchElections.mockResolvedValue([]);
+    mocked.saveElection.mockRejectedValue(
+      new Error('seats must be at least 1'),
+    );
+    render(<ElectionsManager />);
+    await screen.findByText(/no elections yet/i);
+
+    await userEvent.type(
+      screen.getByLabelText(/^title$/i),
+      'Board Election 2026',
+    );
+    const seatsInput = screen.getByLabelText(/^seats$/i);
+    await userEvent.clear(seatsInput);
+    await userEvent.type(seatsInput, '0');
+    const dateInput = screen.getByLabelText(/^election date$/i);
+    await userEvent.clear(dateInput);
+    await userEvent.type(dateInput, '2026-01-15');
+    await userEvent.click(
+      screen.getByRole('button', { name: /^add election$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.saveElection).toHaveBeenCalledWith(
+        expect.objectContaining({ seats: 0 }),
+        undefined,
+      ),
+    );
+    expect(
+      await screen.findByText(/seats must be at least 1/i),
+    ).toBeInTheDocument();
   });
 });
