@@ -842,6 +842,14 @@ export function normalizeMeetingInput(
   if ('status' in r)
     return fail('status is not editable — use the approve or unapprove action');
 
+  // Body decides which voter model applies — board roll-call vs per-property
+  // weighted. Changing it on a meeting that already has attendance or votes
+  // recorded produces an incoherent record, so it is fixed at creation.
+  if (mode === 'patch' && 'body' in r)
+    return fail(
+      'body is not editable — create the meeting again with the right body',
+    );
+
   const body = enumField(r, 'body', MEETING_BODIES, mode);
   if (!body.ok) return body;
   if (body.value !== undefined) out.body = body.value;
