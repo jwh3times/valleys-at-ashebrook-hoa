@@ -47,6 +47,9 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   against the voter model that `body` selects — silently producing a meeting record whose attendance
   and vote rows no longer matched what the meeting claimed to be. `body` is now fixed at creation;
   changing it requires creating the meeting again with the right value.
+- Deleting a board person linked to a candidacy previously raised a raw, uncaught D1 foreign key
+  error instead of a clear response. The `board_people` delete pre-check now covers that case too,
+  alongside the meeting-record references it already checked, and returns a `409` naming it.
 
 ## [0.3.45] - 2026-08-02
 

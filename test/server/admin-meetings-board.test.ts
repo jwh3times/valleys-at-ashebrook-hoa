@@ -13,6 +13,7 @@ import {
   boardPeople,
   motions,
   resolutions,
+  elections,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -23,6 +24,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   const db = getDb(env);
   await db.delete(resolutions);
+  await db.delete(elections);
   await db.delete(motions);
   await db.delete(boardAttendance);
   await db.delete(meetings);
@@ -84,6 +86,25 @@ async function createResolutionCiting(
       createdAt: now,
       updatedAt: now,
     });
+  return id;
+}
+
+async function createElectionFor(meetingId: string | null): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env).insert(elections).values({
+    id,
+    meetingId,
+    title: '2026 Board Election',
+    seats: 1,
+    electionDate: '2026-03-01',
+    source: 'recorded',
+    status: 'draft',
+    visibility: 'board',
+    createdBy: 'b',
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 
@@ -236,6 +257,41 @@ describe('meetings admin route — board', () => {
       .from(resolutions)
       .where(eq(resolutions.id, resolutionId));
     expect(resolutionRows[0].adoptedByMotionId).toBe(motionId);
+  });
+
+  it('DELETE refuses a draft meeting referenced by an election, with 409, and both survive', async () => {
+    const id = await createMeeting();
+    const electionId = await createElectionFor(id);
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/election/i);
+    const meetingRows = await getDb(env)
+      .select()
+      .from(meetings)
+      .where(eq(meetings.id, id));
+    expect(meetingRows.length).toBe(1);
+    const electionRows = await getDb(env)
+      .select()
+      .from(elections)
+      .where(eq(elections.id, electionId));
+    expect(electionRows[0].meetingId).toBe(id);
+  });
+
+  it('DELETE still removes an unreferenced draft meeting with 204 (control for the election-citation guard)', async () => {
+    // An election referencing a different meeting exists elsewhere, but this
+    // meeting is unrelated — the guard must not be so broad that any
+    // election's existence blocks deleting any meeting.
+    const citedMeetingId = await createMeeting();
+    await createElectionFor(citedMeetingId);
+
+    const id = await createMeeting();
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(204);
+    const meetingRows = await getDb(env)
+      .select()
+      .from(meetings)
+      .where(eq(meetings.id, id));
+    expect(meetingRows.length).toBe(0);
   });
 
   it('DELETE still removes an unrelated draft meeting with 204 (control for the resolution-citation guard)', async () => {

@@ -123,10 +123,13 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   if (existing.length === 0)
     return new Response('Candidate not found', { status: 404 });
   const election = await loadElectionStatus(db, existing[0].electionId);
-  if (
-    election.found &&
-    (election.status === 'certified' || election.status === 'void')
-  )
+  // Fail closed: an election that cannot be resolved must refuse the write,
+  // not allow it. Unreachable today since candidates.election_id is a
+  // NOT NULL FK to a real election row, but matching POST's existing 404
+  // guards against this ever becoming fail-open.
+  if (!election.found)
+    return new Response('Election not found', { status: 404 });
+  if (election.status === 'certified' || election.status === 'void')
     return new Response(CERTIFIED_OR_VOID('this candidate'), { status: 409 });
   const boardPersonCheck = await checkBoardPersonExists(
     db,
@@ -163,7 +166,11 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   if (existing.length === 0)
     return new Response('Candidate not found', { status: 404 });
   const election = await loadElectionStatus(db, existing[0].electionId);
-  if (election.found && election.status !== 'draft')
+  // Fail closed, matching the PATCH guard above: an unresolvable election
+  // must refuse the delete, not allow it.
+  if (!election.found)
+    return new Response('Election not found', { status: 404 });
+  if (election.status !== 'draft')
     return new Response(
       'Only a candidate on a draft election can be deleted — once the election is closed its candidate list is part of the record; mark them withdrawn instead.',
       { status: 409 },

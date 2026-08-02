@@ -1022,6 +1022,8 @@ export const ELECTION_STATUSES = [
   'certified',
   'void',
 ] as const;
+// 'conducted' is reserved for PR 6 (live casting); normalizeElectionInput
+// rejects `source` outright today, so no `enumField` call reads this yet.
 export const ELECTION_SOURCES = ['recorded', 'conducted'] as const;
 
 export interface CandidateSummary {

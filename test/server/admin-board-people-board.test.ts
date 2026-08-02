@@ -312,6 +312,60 @@ describe('board roster — board', () => {
     expect(rows.length).toBe(1);
   });
 
+  it('refuses to delete a certify-created term, with 409, leaving the certification intact', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const candidateId = await createCandidate(electionId);
+    const certifyRes = await electionsPost(
+      req('http://localhost/api/admin/elections', 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId, termStart: '2026-01-01' }],
+      }),
+    );
+    expect(certifyRes.status).toBe(204);
+    const candidateRows = await getDb(env)
+      .select()
+      .from(candidates)
+      .where(eq(candidates.id, candidateId));
+    const personId = candidateRows[0].boardPersonId!;
+    const termRows = await getDb(env)
+      .select()
+      .from(boardTerms)
+      .where(eq(boardTerms.personId, personId));
+    expect(termRows.length).toBe(1);
+
+    const res = await termDelete(
+      req(termUrl, 'DELETE', { id: termRows[0].id }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/uncertify/i);
+    const survivingTerms = await getDb(env)
+      .select()
+      .from(boardTerms)
+      .where(eq(boardTerms.personId, personId));
+    expect(survivingTerms.length).toBe(1);
+    const electionRows = await getDb(env)
+      .select()
+      .from(elections)
+      .where(eq(elections.id, electionId));
+    expect(electionRows[0].status).toBe('certified');
+  });
+
+  it('deletes a hand-entered term with no election_id, with 204', async () => {
+    const id = await createPerson('A. Reyes');
+    const created = await termPost(
+      req(termUrl, 'POST', { personId: id, termStart: '2026-01-01' }),
+    );
+    const termId = ((await created.json()) as { id: string }).id;
+    const res = await termDelete(req(termUrl, 'DELETE', { id: termId }));
+    expect(res.status).toBe(204);
+    const rows = await getDb(env)
+      .select()
+      .from(boardTerms)
+      .where(eq(boardTerms.id, termId));
+    expect(rows.length).toBe(0);
+  });
+
   it('deletes a person who has no terms', async () => {
     const id = await createPerson('Typo Person');
     const res = await DELETE(req(url, 'DELETE', { id }));
