@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -15,8 +15,15 @@ import {
   properties,
   owners,
   meetings,
+  boardPeople,
+  boardTerms,
 } from '../../../server/db/schema';
-import { normalizeElectionInput } from '../../../lib/types';
+import {
+  normalizeElectionInput,
+  isoDateOrError,
+  termRangeError,
+  INPUT_LIMITS,
+} from '../../../lib/types';
 import { fetchAdminElections } from '../../../server/content/reads';
 
 export const prerender = false;
@@ -340,6 +347,303 @@ async function voidElection(db: Db, body: unknown): Promise<Response> {
   return new Response(null, { status: 204 });
 }
 
+interface WinnerCandidate {
+  id: string;
+  electionId: string;
+  withdrawn: boolean;
+  boardPersonId: string | null;
+  fullName: string;
+}
+
+interface Winner {
+  candidateId: string;
+  termStart: string;
+  termEnd: string | null;
+  title: string | null;
+  boardPersonId: string | null;
+  fullName: string;
+}
+
+async function certifyElection(
+  db: Db,
+  body: unknown,
+  locals: App.Locals | undefined,
+  request: Request,
+): Promise<Response> {
+  const id = stringField(body, 'id');
+  if (!id) return new Response('id is required', { status: 400 });
+
+  // 1. 404
+  const existing = await db
+    .select({ status: elections.status, seats: elections.seats })
+    .from(elections)
+    .where(eq(elections.id, id))
+    .limit(1);
+  if (existing.length === 0)
+    return new Response('Election not found', { status: 404 });
+  const election = existing[0];
+
+  // 2. 409 unless closed — covers both a draft (never closed) and an
+  // already-certified election with the same message, since both simply
+  // are not in the one state certify may act on.
+  if (election.status !== 'closed')
+    return new Response('Close the election before certifying it', {
+      status: 409,
+    });
+
+  // 3. winners must be a non-empty array
+  const rawWinners = (body as Record<string, unknown> | null | undefined)
+    ?.winners;
+  if (!Array.isArray(rawWinners) || rawWinners.length === 0)
+    return new Response('winners must be a non-empty array', { status: 400 });
+
+  // 4. more winners than seats — fewer is legal, a seat may go unfilled
+  if (rawWinners.length > election.seats)
+    return new Response('More winners than seats', { status: 400 });
+
+  // Structural extraction: every entry needs at least a candidateId to look
+  // anything up. Date/title validation (precondition 6) happens in a later
+  // pass so a candidateId problem (precondition 5) is always reported first.
+  interface RawWinner {
+    candidateId: string;
+    termStart: unknown;
+    termEnd: unknown;
+    title: unknown;
+  }
+  const rawEntries: RawWinner[] = [];
+  for (const item of rawWinners) {
+    const record = item as Record<string, unknown> | null;
+    const candidateId = record?.candidateId;
+    if (typeof candidateId !== 'string' || candidateId.trim() === '')
+      return new Response('Each winner needs a candidateId', { status: 400 });
+    rawEntries.push({
+      candidateId,
+      termStart: record?.termStart,
+      termEnd: record?.termEnd,
+      title: record?.title,
+    });
+  }
+
+  // 5a. repeated candidateId
+  const candidateIds = rawEntries.map((w) => w.candidateId);
+  if (new Set(candidateIds).size !== candidateIds.length)
+    return new Response('The same candidate cannot win twice', {
+      status: 400,
+    });
+
+  // 5b. candidateId must belong to this election and must not be withdrawn
+  const candidateRows: WinnerCandidate[] = await db
+    .select({
+      id: candidates.id,
+      electionId: candidates.electionId,
+      withdrawn: candidates.withdrawn,
+      boardPersonId: candidates.boardPersonId,
+      fullName: candidates.fullName,
+    })
+    .from(candidates)
+    .where(inArray(candidates.id, candidateIds));
+  const candidateById = new Map(candidateRows.map((c) => [c.id, c]));
+  for (const w of rawEntries) {
+    const c = candidateById.get(w.candidateId);
+    if (!c || c.electionId !== id)
+      return new Response('Unknown candidate in winners', { status: 400 });
+    if (c.withdrawn)
+      return new Response('Cannot certify a withdrawn candidate', {
+        status: 400,
+      });
+  }
+
+  // 6. termStart/termEnd must be valid ISO dates, termEnd must not precede
+  // termStart (same rule board-terms.ts enforces on every write), and title
+  // is capped the same way normalizeBoardTermInput caps it.
+  const winners: Winner[] = [];
+  for (const w of rawEntries) {
+    const c = candidateById.get(w.candidateId)!;
+    const termStartRaw =
+      typeof w.termStart === 'string' ? w.termStart.trim() : '';
+    if (!termStartRaw)
+      return new Response('termStart is required', { status: 400 });
+    const startResult = isoDateOrError(termStartRaw, 'termStart');
+    if (!startResult.ok)
+      return new Response(startResult.error, { status: 400 });
+
+    let termEnd: string | null = null;
+    if (w.termEnd !== undefined && w.termEnd !== null) {
+      if (typeof w.termEnd !== 'string')
+        return new Response('termEnd must be a string', { status: 400 });
+      const trimmedEnd = w.termEnd.trim();
+      if (trimmedEnd) {
+        const endResult = isoDateOrError(trimmedEnd, 'termEnd');
+        if (!endResult.ok)
+          return new Response(endResult.error, { status: 400 });
+        termEnd = endResult.value;
+      }
+    }
+    const rangeError = termRangeError(startResult.value, termEnd);
+    if (rangeError) return new Response(rangeError, { status: 400 });
+
+    let title: string | null = null;
+    if (w.title !== undefined && w.title !== null) {
+      if (typeof w.title !== 'string')
+        return new Response('title must be a string', { status: 400 });
+      const trimmedTitle = w.title.trim();
+      if (trimmedTitle.length > INPUT_LIMITS.officeTitle)
+        return new Response(
+          `title must be ${INPUT_LIMITS.officeTitle} characters or fewer`,
+          { status: 400 },
+        );
+      title = trimmedTitle || null;
+    }
+
+    winners.push({
+      candidateId: w.candidateId,
+      termStart: startResult.value,
+      termEnd,
+      title,
+      boardPersonId: c.boardPersonId,
+      fullName: c.fullName,
+    });
+  }
+
+  // 7. two winners resolving to the same non-null board_person_id — a
+  // repeated candidateId (5a) does not catch this, since two distinct
+  // candidate rows may carry the same boardPersonId.
+  const linkedPersonIds = winners
+    .map((w) => w.boardPersonId)
+    .filter((pid): pid is string => pid !== null);
+  if (new Set(linkedPersonIds).size !== linkedPersonIds.length)
+    return new Response('Two winners resolve to the same board person', {
+      status: 400,
+    });
+
+  // 8. a winner already holding an open term (term_end IS NULL) — only
+  // winners whose candidate already carries a boardPersonId can possibly
+  // hold one; a candidate with none is a new person by definition.
+  if (linkedPersonIds.length > 0) {
+    const openTerms = await db
+      .select({ personId: boardTerms.personId })
+      .from(boardTerms)
+      .where(
+        and(
+          inArray(boardTerms.personId, linkedPersonIds),
+          isNull(boardTerms.termEnd),
+        ),
+      );
+    if (openTerms.length > 0) {
+      const openPersonId = openTerms[0].personId;
+      const winner = winners.find((w) => w.boardPersonId === openPersonId)!;
+      return new Response(
+        `${winner.fullName} already holds an open term — end it before certifying`,
+        { status: 409 },
+      );
+    }
+  }
+
+  // Effects, all in one batch. Every new id is pre-generated in JS — a D1
+  // batch cannot thread a RETURNING value from one statement into the next,
+  // so the board_terms rows below must reference person ids that already
+  // exist as JS values before the batch is built.
+  const ctx = await resolveAuthContext(locals, request, env);
+  const now = new Date();
+  const statements: unknown[] = [];
+  for (const w of winners) {
+    if (w.boardPersonId === null) {
+      const personId = crypto.randomUUID();
+      statements.push(
+        db.insert(boardPeople).values({
+          id: personId,
+          fullName: w.fullName,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+      // Backfilled so a re-run cannot mint a second identity for the same
+      // human — ADR 0012's whole point is one identity across terms.
+      statements.push(
+        db
+          .update(candidates)
+          .set({ boardPersonId: personId })
+          .where(eq(candidates.id, w.candidateId)),
+      );
+      w.boardPersonId = personId;
+    }
+  }
+  for (const w of winners) {
+    statements.push(
+      db.insert(boardTerms).values({
+        id: crypto.randomUUID(),
+        personId: w.boardPersonId!,
+        title: w.title,
+        termStart: w.termStart,
+        termEnd: w.termEnd,
+        electionId: id,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+  }
+  statements.push(
+    db
+      .update(candidates)
+      .set({ won: true })
+      .where(
+        inArray(
+          candidates.id,
+          winners.map((w) => w.candidateId),
+        ),
+      ),
+  );
+  statements.push(
+    db
+      .update(elections)
+      .set({
+        status: 'certified',
+        certifiedAt: now,
+        certifiedBy: ctx?.userId ?? 'unknown',
+        updatedAt: now,
+      })
+      .where(eq(elections.id, id)),
+  );
+  await db.batch(statements as never);
+  return new Response(null, { status: 204 });
+}
+
+async function uncertifyElection(db: Db, body: unknown): Promise<Response> {
+  const id = stringField(body, 'id');
+  if (!id) return new Response('id is required', { status: 400 });
+  const existing = await db
+    .select({ status: elections.status })
+    .from(elections)
+    .where(eq(elections.id, id))
+    .limit(1);
+  if (existing.length === 0)
+    return new Response('Election not found', { status: 404 });
+  if (existing[0].status !== 'certified')
+    return new Response('Only a certified election can be uncertified', {
+      status: 409,
+    });
+  // board_people rows created by certify are left alone — they may by now be
+  // referenced elsewhere, and the roster panel already refuses deletion of a
+  // person anything references.
+  await db.batch([
+    db.delete(boardTerms).where(eq(boardTerms.electionId, id)),
+    db
+      .update(candidates)
+      .set({ won: false })
+      .where(eq(candidates.electionId, id)),
+    db
+      .update(elections)
+      .set({
+        status: 'closed',
+        certifiedAt: null,
+        certifiedBy: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(elections.id, id)),
+  ] as never);
+  return new Response(null, { status: 204 });
+}
+
 export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
@@ -363,6 +667,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return setTallies(db, parsed.value);
     case 'setBallots':
       return setBallots(db, parsed.value);
+    case 'certify':
+      return certifyElection(db, parsed.value, locals, request);
+    case 'uncertify':
+      return uncertifyElection(db, parsed.value);
     case '':
       break;
     default:
