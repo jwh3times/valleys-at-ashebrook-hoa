@@ -22,3 +22,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0014: Meeting Approval Is a Status Gate, Not a Visibility Tier](./0014-meeting-record-status-gate.md)
 - [ADR 0015: Vote Weight Is Always Present and Always Summed](./0015-weighted-member-voting.md)
 - [ADR 0016: A Resolution Is a Durable Record with an Enforced Supersession Chain](./0016-resolutions-supersession-chain.md)
+- [ADR 0017: Elections Are Secret by Construction, and What That Does and Does Not Mean](./0017-elections-secret-by-construction.md)

@@ -1,0 +1,80 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ReportMarkdown from '../components/react/ReportMarkdown.tsx';
+import { NEIGHBORHOOD } from '../lib/site';
+import { env } from 'cloudflare:workers';
+import { fetchElectionsFor } from '../server/content/reads';
+import { formatDate } from '../lib/format';
+
+// Read tier-filtered, recorded-only (closed/certified) elections server-side
+// (SEO / first paint / no-JS) — fetchElectionsFor already excludes drafts and
+// void elections unconditionally, even for a board caller, so no extra
+// filtering belongs here. Never fetchAdminElections: that helper is
+// board-only by call-site contract, returns drafts, void elections, and the
+// per-lot ballot list, and it sits in the same module one line away.
+//
+// `ballots` is always null on this read (see ElectionDetail's own doc
+// comment) — this page renders aggregate turnout only and must never reach
+// for `ballots`, even defensively.
+const role = Astro.locals.authContext?.role ?? 'visitor';
+const electionList = await fetchElectionsFor(env, role);
+---
+
+<BaseLayout
+  title="Residents Association Elections"
+  description={`Board election record for the residents association at ${NEIGHBORHOOD} — candidates, results, and turnout.`}
+>
+  <div class="page-section">
+    <p class="eyebrow">Record</p>
+    <h1 class="page-title">Residents Association Elections</h1>
+    <p class="page-lead">
+      Board elections recorded by the residents association, newest first.
+      Ballots are secret by construction — this record shows candidates,
+      results, and turnout, never how any individual lot voted.
+    </p>
+
+    {
+      electionList.length === 0 ? (
+        <p class="muted">No elections have been recorded yet.</p>
+      ) : (
+        <div class="election-list">
+          {electionList.map((e) => (
+            <div class="election card">
+              <h2 class="election__title">{e.title}</h2>
+              <p class="election__meta">
+                {formatDate(e.electionDate)} · {e.seats}{' '}
+                {e.seats === 1 ? 'seat' : 'seats'}
+              </p>
+
+              <ul class="election__candidates">
+                {e.candidates.map((c) => (
+                  <li class="candidate">
+                    <span class="candidate__name">{c.fullName}</span>
+                    {c.won && <span class="candidate__badge">Winner</span>}
+                    {c.withdrawn && (
+                      <span class="candidate__status">Withdrawn</span>
+                    )}
+                    <span class="candidate__votes">
+                      {c.votes === null ? 'not recorded' : `${c.votes} votes`}
+                    </span>
+                    {c.statementMd && (
+                      <div class="candidate__statement">
+                        <ReportMarkdown text={c.statementMd} />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+
+              <p class="election__turnout">
+                Turnout: {e.turnout.ballotsCast} of {e.turnout.eligibleCount}{' '}
+                lots, {e.turnout.weightCast} of {e.turnout.eligibleWeight} vote
+                weight
+              </p>
+            </div>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</BaseLayout>

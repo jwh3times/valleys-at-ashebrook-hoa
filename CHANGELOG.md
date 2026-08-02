@@ -7,6 +7,47 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.46] - 2026-08-02
+
+### Added
+
+- **An elections book records the outcome of board elections held on paper**, distinct from the
+  meeting record's motions and from the resolutions book's standing rules: an election has its own
+  title, seat count, election date, and a roster of candidates, each with a name, an optional
+  statement, and a per-candidate tally. The ballot itself is never linked to a candidate anywhere
+  in the record — only that a lot returned a ballot is stored, which is what makes the aggregate
+  turnout figure answerable while individual choice stays unrecorded, not merely hidden. See
+  [ADR 0017](docs/adr/0017-elections-secret-by-construction.md).
+- An election moves through four board-driven transitions: **close** ends voting and locks in the
+  candidate roster and turnout as recorded; **certify** declares winners from the closed election's
+  candidates and writes the board's official acceptance of the result; **uncertify** reverses a
+  certification that needs correction; **void** abandons an election that should not stand as a
+  record at all. A closed or certified election is a settled fact and is never surfaced to the
+  public while still a draft or once voided, regardless of who is asking.
+- **Certifying an election opens a term of service** for each winner on the board roster: a winner
+  who already has a board-person record gets a new term starting from the date the board supplies,
+  and a first-time winner gets a new board-person record created alongside it. A candidate cannot
+  be certified into a term while they already hold one that hasn't ended, and the same candidate
+  cannot win the same election twice.
+- A new **Elections** tab in the admin panel creates elections, manages their candidates, records
+  each candidate's tally and the per-lot ballots that produced the turnout figure, and drives all
+  four transitions from the closed/certified/void state machine.
+- A new public page, `/elections`, lists closed and certified elections with each candidate's
+  tally, winners marked, and turnout stated only in aggregate — lots and vote weight, both against
+  their eligible totals — never the per-lot list of who returned a ballot. A visibility tier applied
+  per election controls who sees it, the same as resolutions and meetings.
+- Migration `0013` adds the `elections`, `candidates`, and `ballots` tables, with a unique index
+  preventing two ballots from the same lot on one election and another preventing two candidates
+  from sharing a sequence position within one election.
+
+### Fixed
+
+- A meeting's `body` (board vs. member) could previously be changed after creation through the
+  general-purpose `PATCH` endpoint, even once the meeting already had attendance or votes recorded
+  against the voter model that `body` selects — silently producing a meeting record whose attendance
+  and vote rows no longer matched what the meeting claimed to be. `body` is now fixed at creation;
+  changing it requires creating the meeting again with the right value.
+
 ## [0.3.45] - 2026-08-02
 
 ### Added
