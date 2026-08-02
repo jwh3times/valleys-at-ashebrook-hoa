@@ -4,6 +4,7 @@ import {
   integer,
   index,
   uniqueIndex,
+  foreignKey,
 } from 'drizzle-orm/sqlite-core';
 import { users } from './auth-schema';
 
@@ -441,4 +442,61 @@ export const reports = sqliteTable(
   },
   // History list reads order by createdAt desc.
   (t) => [index('reports_created_at_idx').on(t.createdAt)],
+);
+
+// A standing resolution. First-class and durable rather than a flag on a
+// motion: amending creates a NEW resolution that supersedes the old one, which
+// makes "what rule is in force today" a single indexed query instead of a
+// replay of every motion ever passed. Keeping motions separate also preserves
+// what the board DECLINED to do, which a resolutions-only model discards.
+export const resolutions = sqliteTable(
+  'resolutions',
+  {
+    id: text('id').primaryKey(),
+    // Board-entered, e.g. R-2026-03. Unique catches collisions; the admin form
+    // suggests the next number as a hint. Auto-generation would need a counter
+    // row and a race story for no real benefit at this volume.
+    number: text('number').notNull(),
+    title: text('title').notNull(),
+    bodyMd: text('body_md').notNull(),
+    // Null while draft — a resolution being typed up before adoption has no
+    // effective date to invent.
+    effectiveDate: text('effective_date'),
+    status: text('status', {
+      enum: ['draft', 'in_force', 'superseded', 'repealed'],
+    })
+      .notNull()
+      .default('draft'),
+    adoptedByMotionId: text('adopted_by_motion_id').references(
+      () => motions.id,
+      { onDelete: 'set null' },
+    ),
+    // Self-reference. RESTRICT, not SET NULL: a resolution that something else
+    // supersedes must not be deletable out from under the chain, because the
+    // chain is what makes the history readable. Declared as a plain column
+    // here; the FK itself is added below via foreignKey() because Drizzle
+    // cannot express a self-reference inline in the same table literal.
+    supersedesId: text('supersedes_id'),
+    visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] })
+      .notNull()
+      .default('board'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  // `number` unique: two resolutions cannot share a citation.
+  // `supersedes_id` unique: two resolutions cannot both claim to replace the
+  // same predecessor, which would fork the chain. SQLite treats NULLs as
+  // distinct, so unlinked resolutions are unaffected.
+  // `status` indexed: the public read and "what's in force" both filter on it.
+  (t) => [
+    uniqueIndex('resolutions_number_unq').on(t.number),
+    uniqueIndex('resolutions_supersedes_unq').on(t.supersedesId),
+    index('resolutions_status_idx').on(t.status),
+    foreignKey({
+      columns: [t.supersedesId],
+      foreignColumns: [t.id],
+      name: 'resolutions_supersedes_id_resolutions_id_fk',
+    }).onDelete('restrict'),
+  ],
 );
