@@ -294,6 +294,8 @@ export const INPUT_LIMITS = {
   summaryMd: 20_000,
   resolutionNumber: 40,
   resolutionBody: 20_000,
+  candidateStatement: 4_000,
+  electionTitle: 200,
 } as const;
 
 export type InputResult<T> =
@@ -1000,6 +1002,219 @@ export function normalizeResolutionInput(
   const visibility = visibilityField(r, 'visibility');
   if (!visibility.ok) return visibility;
   if (visibility.value !== undefined) out.visibility = visibility.value;
+
+  return { ok: true, value: out };
+}
+
+export type ElectionStatus = 'draft' | 'closed' | 'certified' | 'void';
+export type ElectionSource = 'recorded' | 'conducted';
+export const ELECTION_STATUSES = [
+  'draft',
+  'closed',
+  'certified',
+  'void',
+] as const;
+export const ELECTION_SOURCES = ['recorded', 'conducted'] as const;
+
+export interface CandidateSummary {
+  id: string;
+  fullName: string;
+  boardPersonId: string | null;
+  statementMd: string | null;
+  sequence: number;
+  votes: number | null;
+  won: boolean;
+  withdrawn: boolean;
+}
+
+export interface ElectionSummary {
+  id: string;
+  meetingId: string | null;
+  title: string;
+  seats: number;
+  electionDate: string;
+  source: ElectionSource;
+  status: ElectionStatus;
+  visibility: Visibility;
+}
+
+export interface ElectionTurnout {
+  ballotsCast: number;
+  weightCast: number;
+  /** COUNT of ACTIVE properties — the lot denominator. */
+  eligibleCount: number;
+  /** SUM(vote_weight) over ACTIVE properties — the weight denominator. */
+  eligibleWeight: number;
+}
+
+export interface ElectionDetail extends ElectionSummary {
+  candidates: CandidateSummary[];
+  turnout: ElectionTurnout;
+  /** Board-only. Null on every public read — see Task 3. */
+  ballots: BallotRow[] | null;
+}
+
+export interface BallotRow {
+  propertyId: string;
+  address: string;
+  weight: number;
+  viaProxy: boolean;
+  castByOwnerId: string | null;
+}
+
+export interface ElectionInput {
+  title?: string;
+  seats?: number;
+  electionDate?: string;
+  meetingId?: string | null;
+  visibility?: Visibility;
+}
+
+export interface CandidateInput {
+  fullName?: string;
+  boardPersonId?: string | null;
+  statementMd?: string | null;
+  sequence?: number;
+  withdrawn?: boolean;
+}
+
+/** Required, positive integer seat count. Absent → required on create. */
+function seatsField(
+  raw: Record<string, unknown>,
+  mode: WriteMode,
+): InputResult<number | undefined> {
+  if (!('seats' in raw))
+    return mode === 'create'
+      ? fail('seats is required')
+      : { ok: true, value: undefined };
+  const v = raw.seats;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1)
+    return fail('seats must be at least 1');
+  return { ok: true, value: v };
+}
+
+/** Required, non-negative integer ballot-order position. */
+function candidateSequenceField(
+  raw: Record<string, unknown>,
+  mode: WriteMode,
+): InputResult<number | undefined> {
+  if (!('sequence' in raw))
+    return mode === 'create'
+      ? fail('sequence is required')
+      : { ok: true, value: undefined };
+  const v = raw.sequence;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0)
+    return fail('sequence must be a non-negative whole number');
+  return { ok: true, value: v };
+}
+
+export function normalizeElectionInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<ElectionInput> {
+  const r = asRecord(raw);
+  const out: ElectionInput = {};
+  // Status is transition-only: close/certify/uncertify/void maintain it
+  // together with their preconditions and batched writes.
+  if ('status' in r)
+    return fail(
+      'status is not editable — use close, certify, uncertify, or void',
+    );
+  // Create-immutable. Every guard in this feature tests `source`; if `source`
+  // itself were patchable, flipping it would BE the bypass — one PATCH turns
+  // "the board can never type a tally" into "the board can type any tally".
+  if ('source' in r)
+    return fail(
+      'source is not editable — it is fixed when the election is created',
+    );
+  if ('certifiedAt' in r || 'certifiedBy' in r)
+    return fail(
+      'certification provenance is not editable — use certify or uncertify',
+    );
+
+  const title = coreString(
+    r,
+    'title',
+    INPUT_LIMITS.electionTitle,
+    'title',
+    mode,
+  );
+  if (!title.ok) return title;
+  if (title.value !== undefined) out.title = title.value;
+
+  const seats = seatsField(r, mode);
+  if (!seats.ok) return seats;
+  if (seats.value !== undefined) out.seats = seats.value;
+
+  const electionDate = isoDate(r, 'electionDate', 'electionDate', mode);
+  if (!electionDate.ok) return electionDate;
+  if (electionDate.value !== undefined) out.electionDate = electionDate.value;
+
+  const meetingId = nullableString(
+    r,
+    'meetingId',
+    INPUT_LIMITS.propertyId,
+    'meetingId',
+  );
+  if (!meetingId.ok) return meetingId;
+  if (meetingId.value !== undefined) out.meetingId = meetingId.value;
+
+  const visibility = visibilityField(r, 'visibility');
+  if (!visibility.ok) return visibility;
+  if (visibility.value !== undefined) out.visibility = visibility.value;
+
+  return { ok: true, value: out };
+}
+
+export function normalizeCandidateInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<CandidateInput> {
+  const r = asRecord(raw);
+  const out: CandidateInput = {};
+  if ('votes' in r)
+    return fail('votes is not editable here — use the setTallies action');
+  if ('won' in r)
+    return fail('won is not editable — it is written by the certify action');
+
+  const fullName = coreString(
+    r,
+    'fullName',
+    INPUT_LIMITS.fullName,
+    'fullName',
+    mode,
+  );
+  if (!fullName.ok) return fullName;
+  if (fullName.value !== undefined) out.fullName = fullName.value;
+
+  const boardPersonId = nullableString(
+    r,
+    'boardPersonId',
+    INPUT_LIMITS.personId,
+    'boardPersonId',
+  );
+  if (!boardPersonId.ok) return boardPersonId;
+  if (boardPersonId.value !== undefined)
+    out.boardPersonId = boardPersonId.value;
+
+  const statementMd = nullableString(
+    r,
+    'statementMd',
+    INPUT_LIMITS.candidateStatement,
+    'statementMd',
+  );
+  if (!statementMd.ok) return statementMd;
+  if (statementMd.value !== undefined) out.statementMd = statementMd.value;
+
+  const sequence = candidateSequenceField(r, mode);
+  if (!sequence.ok) return sequence;
+  if (sequence.value !== undefined) out.sequence = sequence.value;
+
+  if ('withdrawn' in r) {
+    if (typeof r.withdrawn !== 'boolean')
+      return fail('withdrawn must be a boolean');
+    out.withdrawn = r.withdrawn;
+  }
 
   return { ok: true, value: out };
 }
