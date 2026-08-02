@@ -92,3 +92,13 @@ The only resolution that can be deleted is a `draft`. Anything that has ever bee
 history: even a repealed resolution stays in the table permanently, because deleting it would
 break any successor's `supersedes_id` link (prevented by the RESTRICT foreign key regardless) and
 would erase the record of a rule that genuinely governed the association for some period of time.
+
+`adopted_by_motion_id` is `ON DELETE SET NULL`, deliberately more permissive than the self-
+referencing chain link — a resolution must not become undeletable forever just because a motion
+once adopted it. But `SET NULL` on its own would let `DELETE /api/admin/motions` (and, by
+cascade, `DELETE /api/admin/meetings` on a draft meeting) silently blank an `in_force`
+resolution's adoption provenance, with no way to restore it afterward: `PATCH` deliberately cannot
+write `adopted_by_motion_id`, so the loss would be unrecoverable through the API. Both delete
+routes therefore refuse with `409` while a resolution still cites the motion (or, for a meeting,
+any motion it owns) — a motion a resolution cites cannot be deleted while that citation stands, so
+adoption provenance is durable rather than silently detachable.

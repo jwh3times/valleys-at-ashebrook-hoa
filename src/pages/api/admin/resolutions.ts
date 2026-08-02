@@ -9,7 +9,7 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import type { Db } from '../../../server/db/client';
 import { resolutions, motions } from '../../../server/db/schema';
-import { normalizeResolutionInput } from '../../../lib/types';
+import { normalizeResolutionInput, isoDateOrError } from '../../../lib/types';
 import { fetchAdminResolutions } from '../../../server/content/reads';
 
 export const prerender = false;
@@ -40,6 +40,14 @@ async function adopt(db: Db, body: unknown): Promise<Response> {
   const effectiveDate = stringField(body, 'effectiveDate');
   if (!effectiveDate)
     return new Response('effectiveDate is required', { status: 400 });
+  // Same format+calendar check the create/patch path runs via
+  // normalizeResolutionInput -> nullableIsoDate; adopt/supersede read this
+  // field as a transition argument via stringField instead, so without this
+  // call they would skip validation entirely and write garbage straight to
+  // the column (see ADR 0016 — a resolution that has ever been in_force is
+  // supposed to have a real effective date).
+  const dateCheck = isoDateOrError(effectiveDate, 'effectiveDate');
+  if (!dateCheck.ok) return new Response(dateCheck.error, { status: 400 });
   const motionId = stringField(body, 'motionId') || null;
 
   const existing = await db
@@ -82,6 +90,9 @@ async function supersede(db: Db, body: unknown): Promise<Response> {
   const effectiveDate = stringField(body, 'effectiveDate');
   if (!effectiveDate)
     return new Response('effectiveDate is required', { status: 400 });
+  // Same format+calendar check as adopt — see the comment there.
+  const dateCheck = isoDateOrError(effectiveDate, 'effectiveDate');
+  if (!dateCheck.ok) return new Response(dateCheck.error, { status: 400 });
 
   // Preconditions are checked in this exact order so the returned status
   // code is deterministic: a self-supersession on a missing row must read as

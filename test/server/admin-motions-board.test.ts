@@ -12,6 +12,7 @@ import {
   motions,
   boardVotes,
   boardPeople,
+  resolutions,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -22,6 +23,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   const db = getDb(env);
   await db.delete(boardVotes);
+  await db.delete(resolutions);
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(boardPeople);
@@ -83,6 +85,29 @@ async function createMotion(
   );
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
+}
+
+async function createResolutionCiting(
+  motionId: string | null,
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env)
+    .insert(resolutions)
+    .values({
+      id,
+      number: `R-${id.slice(0, 8)}`,
+      title: 'Pool hours',
+      bodyMd: 'The pool is open 9am to 9pm.',
+      status: motionId ? 'in_force' : 'draft',
+      effectiveDate: motionId ? '2026-01-01' : null,
+      adoptedByMotionId: motionId,
+      visibility: 'board',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+    });
+  return id;
 }
 
 describe('motions admin route — board', () => {
@@ -332,5 +357,40 @@ describe('motions admin route — board', () => {
       .from(boardVotes)
       .where(eq(boardVotes.motionId, id));
     expect(voteRows.length).toBe(0);
+  });
+
+  it('DELETE refuses a motion cited by a resolution, with 409, and the motion survives', async () => {
+    const meetingId = await createMeeting();
+    const id = await createMotion(meetingId);
+    const resolutionId = await createResolutionCiting(id);
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/cited as a resolution/i);
+    const motionRows = await getDb(env)
+      .select()
+      .from(motions)
+      .where(eq(motions.id, id));
+    expect(motionRows.length).toBe(1);
+    const resolutionRows = await getDb(env)
+      .select()
+      .from(resolutions)
+      .where(eq(resolutions.id, resolutionId));
+    expect(resolutionRows[0].adoptedByMotionId).toBe(id);
+  });
+
+  it('DELETE still removes an uncited motion with 204 (control for the resolution-citation guard)', async () => {
+    const meetingId = await createMeeting();
+    const id = await createMotion(meetingId);
+    // An unrelated resolution exists but does not cite this motion — the
+    // guard must not be so broad that any resolution's existence blocks
+    // deletion.
+    await createResolutionCiting(null);
+    const res = await DELETE(req(url, 'DELETE', { id }));
+    expect(res.status).toBe(204);
+    const motionRows = await getDb(env)
+      .select()
+      .from(motions)
+      .where(eq(motions.id, id));
+    expect(motionRows.length).toBe(0);
   });
 });
