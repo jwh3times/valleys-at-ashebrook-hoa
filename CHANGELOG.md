@@ -7,6 +7,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.45] - 2026-08-01
+
+### Added
+
+- **A resolutions book records the board's standing rules** — pool hours, parking, architectural
+  guidelines, and similar policies adopted outside individual meeting motions. Each resolution is
+  its own durable record with a citation number, title, body, and effective date, distinct from the
+  meeting record's motions: a motion that fails still happened and stays in the meeting record, but
+  only an adopted resolution appears in the book. Amending a resolution creates a new one that
+  supersedes the old rather than editing it in place, so "what's in force today" is always a single
+  lookup and the full history stays traceable back through the chain of replacements. See
+  [ADR 0016](docs/adr/0016-resolutions-supersession-chain.md).
+- A resolution moves through three board-driven transitions: **adopt** brings a drafted resolution
+  into force with an effective date and, optionally, the motion that authorized it; **supersede**
+  brings a new resolution into force while retiring its predecessor as superseded, both in one
+  atomic write so the two can never land out of step; **repeal** retires an in-force resolution
+  without replacing it, leaving its place in the chain intact for anyone tracing the history later.
+- A new **Resolutions** tab in the admin panel creates and edits resolutions and drives all three
+  transitions. A resolution can be deleted only while still a draft; anything that has ever taken
+  effect is permanent history.
+- A new public page, `/resolutions`, lists in-force resolutions by default, with a toggle to include
+  superseded and repealed ones, each with its full text and a rendered chain of what it supersedes.
+  A visibility tier applied per resolution controls who sees it, and the chain itself respects that
+  tier in both directions: an out-of-tier predecessor or successor shows only that a link exists,
+  never its number or title.
+- Migration `0012` adds the `resolutions` table, with unique indexes preventing two resolutions from
+  sharing a citation number or both claiming to supersede the same predecessor.
+
 ## [0.3.44] - 2026-08-01
 
 ### Added
