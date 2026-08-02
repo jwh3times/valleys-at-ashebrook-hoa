@@ -150,6 +150,18 @@ export const boardTerms = sqliteTable(
       // refused. The route pre-checks and 409s, with this as defense in depth.
       .references(() => boardPeople.id, { onDelete: 'restrict' }),
     title: text('title'),
+    // Provenance: which election produced this term. Null for a term entered
+    // by hand. This is also how `uncertify` finds the terms certification
+    // created.
+    //
+    // TRAP: this is an ALTER TABLE ADD COLUMN, and drizzle-kit emits FK
+    // actions only on CREATE TABLE. The live column will get NO ACTION
+    // regardless of the annotation below. Inert without deferred constraints,
+    // but do not trust the annotation for this column. Pinned by a test in
+    // test/server/election-schema.test.ts rather than hand-patched.
+    electionId: text('election_id').references(() => elections.id, {
+      onDelete: 'set null',
+    }),
     termStart: text('term_start').notNull(),
     termEnd: text('term_end'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
@@ -498,5 +510,120 @@ export const resolutions = sqliteTable(
       foreignColumns: [t.id],
       name: 'resolutions_supersedes_id_resolutions_id_fk',
     }).onDelete('restrict'),
+  ],
+);
+
+export const elections = sqliteTable(
+  'elections',
+  {
+    id: text('id').primaryKey(),
+    // SET NULL, never CASCADE: an election may stand alone, and deleting a
+    // draft meeting must never destroy a certified election.
+    meetingId: text('meeting_id').references(() => meetings.id, {
+      onDelete: 'set null',
+    }),
+    title: text('title').notNull(),
+    seats: integer('seats').notNull(),
+    electionDate: text('election_date').notNull(),
+    // Decides which tally write path is legal. `recorded`: the board types
+    // tallies from a paper count. `conducted` (PR 6): tallies are
+    // increment-only and the board can never type one. Create-immutable —
+    // mutating it would BE the bypass of every guard built on it.
+    source: text('source', { enum: ['recorded', 'conducted'] })
+      .notNull()
+      .default('recorded'),
+    status: text('status', {
+      enum: ['draft', 'closed', 'certified', 'void'],
+    })
+      .notNull()
+      .default('draft'),
+    visibility: text('visibility', { enum: ['public', 'homeowner', 'board'] })
+      .notNull()
+      .default('board'),
+    certifiedAt: integer('certified_at', { mode: 'timestamp' }),
+    certifiedBy: text('certified_by'),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (t) => [
+    index('elections_status_idx').on(t.status),
+    index('elections_meeting_id_idx').on(t.meetingId),
+  ],
+);
+
+export const candidates = sqliteTable(
+  'candidates',
+  {
+    id: text('id').primaryKey(),
+    electionId: text('election_id')
+      .notNull()
+      .references(() => elections.id, { onDelete: 'cascade' }),
+    // Required: a first-time candidate has no board_people row yet.
+    fullName: text('full_name').notNull(),
+    // Nullable, and BACKFILLED BY CERTIFY when a winner had none — without
+    // that backfill a re-run mints a duplicate identity, violating ADR 0012's
+    // rule that a member who serves, leaves, and returns keeps one identity.
+    boardPersonId: text('board_person_id').references(() => boardPeople.id, {
+      onDelete: 'restrict',
+    }),
+    statementMd: text('statement_md'),
+    sequence: integer('sequence').notNull(),
+    // NULLABLE ON PURPOSE. NULL = not recorded; 0 = recorded as zero. Same
+    // distinction tallyVotes.recorded protects for motions, where a motion
+    // with no roll call must never render as a 0-0 tally.
+    votes: integer('votes'),
+    // Written by certify. Without it a certified election cannot answer "who
+    // won" — and deriving winners from tallies is illegitimate here, since
+    // this design refuses to derive them (tie-break rules vary by bylaws).
+    won: integer('won', { mode: 'boolean' }).notNull().default(false),
+    // A withdrawal is part of the record; deleting the candidate would erase
+    // both it and any votes already tallied for them.
+    withdrawn: integer('withdrawn', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    // NOTE: there is deliberately NO updatedAt on this table, breaking the
+    // convention every other table follows. In PR 6, casting increments
+    // `votes`; if that touched an updatedAt, the last ballot's choice would be
+    // recoverable from persisted data alone by matching it against the newest
+    // ballots.recorded_at. Do not "fix" this omission.
+  },
+  (t) => [
+    index('candidates_election_id_idx').on(t.electionId),
+    uniqueIndex('candidates_election_sequence_unq').on(
+      t.electionId,
+      t.sequence,
+    ),
+  ],
+);
+
+export const ballots = sqliteTable(
+  'ballots',
+  {
+    id: text('id').primaryKey(),
+    electionId: text('election_id')
+      .notNull()
+      .references(() => elections.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    // Snapshot of properties.vote_weight, per ADR 0015, so correcting a lot's
+    // weight later cannot rewrite a past turnout figure.
+    weight: integer('weight').notNull(),
+    viaProxy: integer('via_proxy', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
+      onDelete: 'set null',
+    }),
+    recordedAt: integer('recorded_at', { mode: 'timestamp' }).notNull(),
+  },
+  // One ballot per lot per election. This row records ONLY that a lot returned
+  // a ballot — it is turnout, and nothing else. There is no link from here to
+  // a candidate, and none may ever be added.
+  (t) => [
+    uniqueIndex('ballots_election_property_unq').on(t.electionId, t.propertyId),
+    index('ballots_election_id_idx').on(t.electionId),
   ],
 );
