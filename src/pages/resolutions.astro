@@ -49,11 +49,11 @@ const toggleLabel = includeHistoric
               <h2 class="resolution__title">
                 {r.number} — {r.title}
               </h2>
-              <p class="resolution__meta">
-                {r.effectiveDate && (
-                  <>Effective {formatDate(r.effectiveDate)}</>
-                )}
-              </p>
+              {r.effectiveDate && (
+                <p class="resolution__meta">
+                  Effective {formatDate(r.effectiveDate)}
+                </p>
+              )}
 
               {r.status === 'repealed' && (
                 <p class="resolution__status">Repealed</p>

@@ -143,6 +143,12 @@ describe('/resolutions', () => {
     expect(defaultHtml).toContain('R-2026-CURRENT');
     expect(defaultHtml).not.toContain('R-2025-OLD');
     expect(defaultHtml).not.toContain('R-2024-GONE');
+    // The plain-link, no-JS toggle to the ?status=all view — pins that the
+    // link itself exists on the default render, not just that the target
+    // URL behaves correctly once reached by hand.
+    expect(defaultHtml).toContain(
+      'Show superseded and repealed resolutions too',
+    );
 
     const allHtml = await renderAs(
       container,
@@ -171,8 +177,26 @@ describe('/resolutions', () => {
     const container = await makeContainer();
     const html = await renderAs(container, 'visitor');
     expect(html).toContain('an earlier resolution');
+    // These two are cheap regression insurance against a call-site swap
+    // (e.g. back to fetchAdminResolutions), NOT proof the page masks a
+    // visible chain link correctly: fetchResolutionsFor already nulled
+    // `number`/`title` on this link at the read layer (reads.ts) before the
+    // page ever saw it, so a page that concatenated the masked (null) fields
+    // straight into the "an earlier resolution" string would still pass
+    // both of these. The positive control below is what actually proves the
+    // masking, by rendering the SAME fixture to a caller who is in tier for
+    // it.
     expect(html).not.toContain('R-2020-HIDDEN');
     expect(html).not.toContain('Secret Board Rule');
+
+    // Positive control: the hidden fixture's identity is real and DOES
+    // render for a caller in tier, so the visitor assertions above are the
+    // absence of a present value, not the absence of an empty fixture. This
+    // also exercises the chain's visible=true branch, which no other test
+    // covers.
+    const boardHtml = await renderAs(container, 'board');
+    expect(boardHtml).toContain('R-2020-HIDDEN — Secret Board Rule');
+    expect(boardHtml).not.toContain('an earlier resolution');
   });
 
   it('renders bodyMd through ReportMarkdown', async () => {
