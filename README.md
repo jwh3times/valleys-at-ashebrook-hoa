@@ -16,9 +16,12 @@ It provides:
   duplicate detection and cleanup tools
 - 🗳️ **Meeting record** — board-authored, board-approved minutes at `/meetings`: date,
   attendance, motions, and roll-call votes for board meetings, plus weighted per-property
-  attendance and votes for member meetings (elections, ballots, and proxies are a later phase)
+  attendance and votes for member meetings (proxies and live-conducted elections are a later phase)
 - 📜 **Resolutions book** — standing rules the board adopts, published at `/resolutions`;
   amending a resolution creates a new one that supersedes the old, forming a walkable chain
+- 🏛️ **Elections** — the record of a board election that already happened on paper, published at
+  `/elections`: candidates, board-entered tallies, winners, and turnout; ballots are secret by
+  construction — no record ever links which candidate a lot voted for
 - 🤖 **Board-only AI document assistant** — ask natural-language questions about the
   document library and get a streamed, cited answer (Cloudflare AI Search + Claude),
   with known resident PII pseudonymized before anything reaches the model

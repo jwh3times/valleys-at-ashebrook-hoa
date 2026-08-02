@@ -47,6 +47,23 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   the admin panel's visibility control. Board meetings are unaffected: `board_attendance`/
   `board_votes` reference `board_people`, not addresses, and a board meeting's roll call has always
   named board members, never homeowners.
+- **Elections are secret by construction: no table links a ballot to a candidate.** `ballots`
+  records only that a lot returned a ballot for an election — `election_id`, `property_id`, a
+  `vote_weight` snapshot, and cast-by/proxy provenance — and there is deliberately no
+  `ballot_id -> candidate_id` table, so "did lot 42 vote" is answerable and "who did lot 42 vote
+  for" is not recorded anywhere, by anyone, at any tier. `candidates.votes` holds only the
+  board-entered aggregate tally per candidate, typed in from a paper count rather than derived from
+  any per-ballot row, and is nullable so "not yet tallied" is distinguishable from "tallied at
+  zero." `candidates` deliberately carries no `updated_at`, unlike every other table in this
+  schema, because a later phase that increments `votes` as ballots are cast would otherwise let the
+  last ballot's choice be paired to the newest `ballots.recorded_at`. The public `/elections` page
+  and `fetchElectionsFor` publish only aggregate turnout (`ballotsCast`, `weightCast`,
+  `eligibleCount`, `eligibleWeight`) alongside candidates and results — the per-lot ballot list
+  (`ElectionDetail.ballots`) is board-only, since publishing it beside per-candidate tallies is
+  exactly what would make an individual's choice deducible in a small race. This guarantee, and its
+  limits once a later phase lets residents cast ballots through the system itself, are documented
+  in full in [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md); refer to it rather
+  than restating those limits here.
 - **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
   owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
   by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in
