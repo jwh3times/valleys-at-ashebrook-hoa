@@ -385,7 +385,11 @@ async function certifyElection(
 
   // 2. 409 unless closed — covers both a draft (never closed) and an
   // already-certified election with the same message, since both simply
-  // are not in the one state certify may act on.
+  // are not in the one state certify may act on. A void election gets its
+  // own message: "close it first" is actionable advice for draft/certified,
+  // but a void election cannot be reopened at all.
+  if (election.status === 'void')
+    return new Response('Cannot certify a void election', { status: 409 });
   if (election.status !== 'closed')
     return new Response('Close the election before certifying it', {
       status: 409,

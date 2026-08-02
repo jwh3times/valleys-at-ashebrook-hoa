@@ -173,6 +173,9 @@ describe('elections admin route — certify/uncertify', () => {
     expect(election.certifiedBy).toBe('b');
     expect((await getCandidate(c1)).won).toBe(true);
     expect((await getCandidate(c2)).won).toBe(false);
+    // One-batch property: the status flip alone is not enough — a batch that
+    // flipped status but skipped the term insert must also fail this test.
+    expect((await getTermsFor(electionId)).length).toBe(1);
   });
 
   it('certify creates a board person for a winner who had none', async () => {
@@ -286,6 +289,24 @@ describe('elections admin route — certify/uncertify', () => {
     expect((await getElection(electionId)).status).toBe('draft');
   });
 
+  it('certify on a draft election with a malformed termStart still returns 409 close-first, not 400', async () => {
+    // Precondition ordering collision: status (2) must be checked before
+    // date validation (6). A malformed termStart on a draft election must
+    // still report "close it first," not the date error.
+    const electionId = await createElection({ seats: 1, status: 'draft' });
+    const c1 = await createCandidate(electionId, 1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId: c1, termStart: 'not-a-date' }],
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/close the election before certifying/i);
+    expect((await getElection(electionId)).status).toBe('draft');
+  });
+
   it('certify on an already-certified election returns 409', async () => {
     const electionId = await createElection({ seats: 1, status: 'certified' });
     const c1 = await createCandidate(electionId, 1);
@@ -298,6 +319,37 @@ describe('elections admin route — certify/uncertify', () => {
     );
     expect(res.status).toBe(409);
     expect(await res.text()).toMatch(/close the election before certifying/i);
+  });
+
+  it('certify with an empty winners array returns 400', async () => {
+    const electionId = await createElection({ seats: 2 });
+    const c1 = await createCandidate(electionId, 1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/winners must be a non-empty array/i);
+    expect((await getElection(electionId)).status).toBe('closed');
+    expect((await getCandidate(c1)).won).toBe(false);
+  });
+
+  it('certify on a void election returns 409, naming void rather than close-first advice', async () => {
+    const electionId = await createElection({ seats: 1, status: 'void' });
+    const c1 = await createCandidate(electionId, 1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId: c1, termStart: '2026-01-01' }],
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/cannot certify a void election/i);
+    expect((await getElection(electionId)).status).toBe('void');
   });
 
   it('certify with more winners than seats returns 400', async () => {
@@ -402,6 +454,49 @@ describe('elections admin route — certify/uncertify', () => {
     expect((await getElection(electionId)).status).toBe('closed');
   });
 
+  it('certify with a malformed termEnd returns 400', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const c1 = await createCandidate(electionId, 1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [
+          {
+            candidateId: c1,
+            termStart: '2026-01-01',
+            termEnd: '2028/01/01',
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/termEnd must be YYYY-MM-DD/i);
+    expect((await getElection(electionId)).status).toBe('closed');
+  });
+
+  it('certify rejects a title over the length cap with 400', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const c1 = await createCandidate(electionId, 1);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [
+          {
+            candidateId: c1,
+            termStart: '2026-01-01',
+            title: 'P'.repeat(101),
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/title must be 100 characters or fewer/i);
+    expect((await getElection(electionId)).status).toBe('closed');
+    expect((await getTermsFor(electionId)).length).toBe(0);
+  });
+
   it('certify with a termEnd before its termStart returns 400', async () => {
     const electionId = await createElection({ seats: 1 });
     const c1 = await createCandidate(electionId, 1);
@@ -444,6 +539,31 @@ describe('elections admin route — certify/uncertify', () => {
     );
     expect((await getElection(electionId)).status).toBe('closed');
     expect((await getCandidate(c1)).won).toBe(false);
+  });
+
+  it('certify prioritizes the withdrawn check over the open-term check, with 400', async () => {
+    // Precondition ordering collision: candidate validity (5, including
+    // withdrawn) must be checked before the open-term lookup (8). A
+    // withdrawn candidate whose linked person also holds an open term must
+    // report "withdrawn," not "already holds an open term."
+    const electionId = await createElection({ seats: 1 });
+    const personId = await createBoardPerson('Incumbent Withdrawn');
+    await createBoardTerm(personId, { termEnd: null });
+    const c1 = await createCandidate(electionId, 1, {
+      fullName: 'Incumbent Withdrawn',
+      boardPersonId: personId,
+      withdrawn: true,
+    });
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId: c1, termStart: '2026-01-01' }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/withdrawn candidate/i);
+    expect((await getElection(electionId)).status).toBe('closed');
   });
 
   it('certify refuses two winners resolving to the same board person, with 400', async () => {
@@ -516,6 +636,39 @@ describe('elections admin route — certify/uncertify', () => {
     expect(await getPerson(personId)).toBeDefined();
     await POST(req(url, 'POST', { action: 'uncertify', id: electionId }));
     expect(await getPerson(personId)).toBeDefined();
+  });
+
+  it('certify -> uncertify -> certify reuses the same board person identity', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const c1 = await createCandidate(electionId, 1);
+    await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId: c1, termStart: '2026-01-01' }],
+      }),
+    );
+    const firstPersonId = (await getCandidate(c1)).boardPersonId;
+    expect(firstPersonId).not.toBeNull();
+
+    await POST(req(url, 'POST', { action: 'uncertify', id: electionId }));
+    // uncertify already returns the election to 'closed', which is exactly
+    // the state certify requires — no separate close step is needed.
+    expect((await getElection(electionId)).status).toBe('closed');
+
+    await POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId: c1, termStart: '2026-02-01' }],
+      }),
+    );
+    const secondPersonId = (await getCandidate(c1)).boardPersonId;
+    expect(secondPersonId).toBe(firstPersonId);
+    const terms = await getTermsFor(electionId);
+    expect(terms.length).toBe(1);
+    expect(terms[0].personId).toBe(firstPersonId);
+    expect(terms[0].termStart).toBe('2026-02-01');
   });
 
   it('uncertify on a closed election returns 409', async () => {
