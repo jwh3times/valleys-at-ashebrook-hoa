@@ -1074,7 +1074,6 @@ export interface CandidateInput {
   fullName?: string;
   boardPersonId?: string | null;
   statementMd?: string | null;
-  sequence?: number;
   withdrawn?: boolean;
 }
 
@@ -1090,21 +1089,6 @@ function seatsField(
   const v = raw.seats;
   if (typeof v !== 'number' || !Number.isInteger(v) || v < 1)
     return fail('seats must be at least 1');
-  return { ok: true, value: v };
-}
-
-/** Required, non-negative integer ballot-order position. */
-function candidateSequenceField(
-  raw: Record<string, unknown>,
-  mode: WriteMode,
-): InputResult<number | undefined> {
-  if (!('sequence' in raw))
-    return mode === 'create'
-      ? fail('sequence is required')
-      : { ok: true, value: undefined };
-  const v = raw.sequence;
-  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0)
-    return fail('sequence must be a non-negative whole number');
   return { ok: true, value: v };
 }
 
@@ -1176,6 +1160,16 @@ export function normalizeCandidateInput(
     return fail('votes is not editable here — use the setTallies action');
   if ('won' in r)
     return fail('won is not editable — it is written by the certify action');
+  // Server-assigned as MAX(sequence)+1 within the election, and
+  // candidates_election_sequence_unq is a UNIQUE index — a client-supplied
+  // value could collide with an existing candidate and surface as a raw D1
+  // error instead of a readable one. Reordering would need a whole-set
+  // rewrite in one batch, which this PR doesn't need. Motions resolved the
+  // identical tension the same way (see normalizeMotionInput).
+  if ('sequence' in r)
+    return fail(
+      'sequence is not editable — it is assigned when the candidate is added',
+    );
 
   const fullName = coreString(
     r,
@@ -1205,10 +1199,6 @@ export function normalizeCandidateInput(
   );
   if (!statementMd.ok) return statementMd;
   if (statementMd.value !== undefined) out.statementMd = statementMd.value;
-
-  const sequence = candidateSequenceField(r, mode);
-  if (!sequence.ok) return sequence;
-  if (sequence.value !== undefined) out.sequence = sequence.value;
 
   if ('withdrawn' in r) {
     if (typeof r.withdrawn !== 'boolean')
