@@ -7,6 +7,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.44] - 2026-08-01
+
+### Added
+
+- **Member meetings now record per-property attendance and votes**, alongside the existing board
+  attendance and roll-call votes on the same meeting record. The admin panel's Meetings tab gains
+  property-based editors for both; the public meeting page renders a weighted "N of M votes
+  represented" attendance line and each property's vote on a motion.
+- **Properties carry a vote weight** (defaulting to 1, one vote per lot), editable from the roster
+  admin panel; a weight of zero is rejected, since a property that should not vote belongs at
+  inactive status instead. Every member tally and quorum figure sums weight rather than counting
+  properties, so associations that vote one-lot-one-vote see identical results to a simple count,
+  and associations that weight by lot size or ownership share need no separate mode. See
+  [ADR 0015](docs/adr/0015-weighted-member-voting.md).
+- Migration `0011` adds `properties.vote_weight`, `member_attendance`, `member_votes`, and nullable
+  mover/seconder property references on `motions`.
+
+### Changed
+
+- **Publishing a member meeting exposes each property's address alongside how it voted.** No
+  resident names are published, but the admin panel now warns about this at the visibility
+  control before a board member makes a member meeting public.
+
 ## [0.3.43] - 2026-08-01
 
 ### Added

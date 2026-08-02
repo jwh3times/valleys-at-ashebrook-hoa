@@ -290,6 +290,25 @@ describe('motions admin route — board', () => {
     expect(res.status).toBe(404);
   });
 
+  it('setVotes on a member-body meeting returns 409 and writes nothing', async () => {
+    const meetingId = await createMeeting({ body: 'member', kind: 'annual' });
+    const id = await createMotion(meetingId);
+    const p1 = await createPerson('A. Reyes');
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setVotes',
+        motionId: id,
+        entries: [{ personId: p1, choice: 'yes' }],
+      }),
+    );
+    expect(res.status).toBe(409);
+    const rows = await getDb(env)
+      .select()
+      .from(boardVotes)
+      .where(eq(boardVotes.motionId, id));
+    expect(rows.length).toBe(0);
+  });
+
   it('DELETE removes the motion and cascades its votes', async () => {
     const meetingId = await createMeeting();
     const id = await createMotion(meetingId);

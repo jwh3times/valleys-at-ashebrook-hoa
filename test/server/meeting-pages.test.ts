@@ -20,6 +20,10 @@ import {
   boardVotes,
   boardPeople,
   boardAttendance,
+  properties,
+  owners,
+  memberAttendance,
+  memberVotes,
 } from '../../src/server/db/schema';
 import MeetingsPage from '../../src/pages/meetings.astro';
 import MeetingDetailPage from '../../src/pages/meetings/[id].astro';
@@ -33,11 +37,15 @@ const now = new Date();
 
 beforeEach(async () => {
   const db = getDb(env);
+  await db.delete(memberVotes);
   await db.delete(boardVotes);
+  await db.delete(memberAttendance);
   await db.delete(boardAttendance);
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(boardPeople);
+  await db.delete(owners);
+  await db.delete(properties);
 });
 
 /**
@@ -81,6 +89,33 @@ async function seedMeeting(opts: {
       createdAt: now,
       updatedAt: now,
     });
+}
+
+async function seedProperty(
+  id: string,
+  opts: { weight?: number; status?: 'active' | 'inactive' } = {},
+) {
+  await getDb(env)
+    .insert(properties)
+    .values({
+      id,
+      address: `${id} Oak St`,
+      addressNormalized: `${id} oak st`,
+      ...(opts.weight === undefined ? {} : { voteWeight: opts.weight }),
+      ...(opts.status === undefined ? {} : { status: opts.status }),
+      createdAt: now,
+      updatedAt: now,
+    });
+}
+
+async function seedOwner(id: string, propertyId: string, fullName: string) {
+  await getDb(env).insert(owners).values({
+    id,
+    propertyId,
+    fullName,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 describe('/meetings', () => {
@@ -381,5 +416,216 @@ describe('/meetings/[id]', () => {
     expect(html).toContain('Annual Member Meeting');
     expect(html).not.toContain('board members present');
     expect(html).not.toContain('quorum');
+  });
+
+  it('renders the weighted votes-represented line and quorum verdict for a member meeting', async () => {
+    const db = getDb(env);
+    await seedProperty('p1', { weight: 2, status: 'active' });
+    await seedProperty('p2', { weight: 3, status: 'active' });
+    await seedMeeting({
+      id: 'member-quorum-met',
+      status: 'approved',
+      visibility: 'public',
+      title: 'Annual Meeting Met',
+      quorumRequired: 2,
+      body: 'member',
+    });
+    await db.insert(memberAttendance).values([
+      {
+        id: 'ma1',
+        meetingId: 'member-quorum-met',
+        propertyId: 'p1',
+        present: true,
+        representedByOwnerId: null,
+        viaProxy: false,
+      },
+      {
+        id: 'ma2',
+        meetingId: 'member-quorum-met',
+        propertyId: 'p2',
+        present: false,
+        representedByOwnerId: null,
+        viaProxy: false,
+      },
+    ]);
+    const container = await makeContainer();
+    const metHtml = await container.renderToString(MeetingDetailPage, {
+      params: { id: 'member-quorum-met' },
+      request: new Request('http://localhost/meetings/member-quorum-met'),
+    });
+    // Present weight (2, from p1 only) of totalActiveWeight (5, both active
+    // properties) — "votes", never "properties", because weights make the
+    // two counts differ.
+    expect(metHtml).toContain('2 of 5 votes represented');
+    expect(metHtml).toContain('quorum of 2 met');
+    expect(metHtml).not.toContain('not met');
+    expect(metHtml).not.toContain('board members present');
+
+    await seedMeeting({
+      id: 'member-quorum-not-met',
+      status: 'approved',
+      visibility: 'public',
+      title: 'Annual Meeting Not Met',
+      quorumRequired: 4,
+      body: 'member',
+    });
+    await db.insert(memberAttendance).values([
+      {
+        id: 'ma3',
+        meetingId: 'member-quorum-not-met',
+        propertyId: 'p1',
+        present: true,
+        representedByOwnerId: null,
+        viaProxy: false,
+      },
+      {
+        id: 'ma4',
+        meetingId: 'member-quorum-not-met',
+        propertyId: 'p2',
+        present: false,
+        representedByOwnerId: null,
+        viaProxy: false,
+      },
+    ]);
+    const notMetHtml = await container.renderToString(MeetingDetailPage, {
+      params: { id: 'member-quorum-not-met' },
+      request: new Request('http://localhost/meetings/member-quorum-not-met'),
+    });
+    expect(notMetHtml).toContain('2 of 5 votes represented');
+    expect(notMetHtml).toContain('quorum of 4 not met');
+  });
+
+  it('renders no attendance or quorum text for a member meeting with no member attendance rows', async () => {
+    await seedProperty('p1', { weight: 2, status: 'active' });
+    await seedMeeting({
+      id: 'member-no-attendance',
+      status: 'approved',
+      visibility: 'public',
+      title: 'Member Meeting No Attendance',
+      quorumRequired: 2,
+      body: 'member',
+    });
+    const container = await makeContainer();
+    const html = await container.renderToString(MeetingDetailPage, {
+      params: { id: 'member-no-attendance' },
+      request: new Request('http://localhost/meetings/member-no-attendance'),
+    });
+    // No memberAttendance rows were seeded — absence of data is not evidence
+    // of an empty room, same rule as the board-meeting case above.
+    expect(html).not.toContain('votes represented');
+    expect(html).not.toContain('quorum');
+  });
+
+  it('renders per-property votes and the weighted tally for a member motion, never the owner names behind them', async () => {
+    const db = getDb(env);
+    await seedProperty('p1', { weight: 2, status: 'active' });
+    await seedProperty('p2', { weight: 1, status: 'active' });
+    await seedOwner('o1', 'p1', 'A. Reyes');
+    await seedOwner('o2', 'p2', 'B. Ortiz');
+    await seedMeeting({
+      id: 'member-motion',
+      status: 'approved',
+      visibility: 'public',
+      title: 'Member Motion Meeting',
+      body: 'member',
+    });
+    await getDb(env).insert(motions).values({
+      id: 'mmo1',
+      meetingId: 'member-motion',
+      sequence: 1,
+      text: 'Approve the special assessment',
+      moverPersonId: null,
+      secondPersonId: null,
+      outcome: 'passed',
+      createdBy: 'u1',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(memberVotes).values([
+      {
+        id: 'mv1',
+        motionId: 'mmo1',
+        propertyId: 'p1',
+        castByOwnerId: 'o1',
+        viaProxy: false,
+        weight: 2,
+        choice: 'yes',
+      },
+      {
+        id: 'mv2',
+        motionId: 'mmo1',
+        propertyId: 'p2',
+        castByOwnerId: null,
+        viaProxy: false,
+        weight: 1,
+        choice: 'no',
+      },
+    ]);
+    // A representedByName on the same p2 row, from a different owner, so
+    // this test also pins that this attendance-side name never leaks —
+    // castByName and representedByName are both on the payload
+    // fetchMeetingFor returns; only the template not interpolating them
+    // keeps them off the page, and that's the invariant this test exists
+    // to guard.
+    await db.insert(memberAttendance).values([
+      {
+        id: 'ma1',
+        meetingId: 'member-motion',
+        propertyId: 'p2',
+        present: true,
+        representedByOwnerId: 'o2',
+        viaProxy: false,
+      },
+    ]);
+    const container = await makeContainer();
+    const html = await container.renderToString(MeetingDetailPage, {
+      params: { id: 'member-motion' },
+      request: new Request('http://localhost/meetings/member-motion'),
+    });
+    expect(html).toContain('Approve the special assessment');
+    expect(html).not.toContain('Vote not recorded');
+    // The weighted tally: 2 yes (from p1's weight-2 vote), 1 no.
+    expect(html).toContain('2 yes');
+    expect(html).toContain('1 no');
+    // Per-property votes, not per-person roll call.
+    expect(html).toContain('p1 Oak St');
+    expect(html).toContain('p2 Oak St');
+    // No resident names published — the whole privacy story this branch
+    // rests on. castByName ('A. Reyes', cast on p1's vote) and
+    // representedByName ('B. Ortiz', representing p2's attendance) are
+    // both present on the fetchMeetingFor payload; neither may reach the
+    // rendered HTML.
+    expect(html).not.toContain('A. Reyes');
+    expect(html).not.toContain('B. Ortiz');
+  });
+
+  it('renders "Vote not recorded" for a member motion with no member votes', async () => {
+    await seedProperty('p1', { weight: 1, status: 'active' });
+    await seedMeeting({
+      id: 'member-motion-novotes',
+      status: 'approved',
+      visibility: 'public',
+      title: 'Member Motion No Votes',
+      body: 'member',
+    });
+    await getDb(env).insert(motions).values({
+      id: 'mmo2',
+      meetingId: 'member-motion-novotes',
+      sequence: 1,
+      text: 'Approve the reserve study',
+      moverPersonId: null,
+      secondPersonId: null,
+      outcome: 'passed',
+      createdBy: 'u1',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const container = await makeContainer();
+    const html = await container.renderToString(MeetingDetailPage, {
+      params: { id: 'member-motion-novotes' },
+      request: new Request('http://localhost/meetings/member-motion-novotes'),
+    });
+    expect(html).toContain('Approve the reserve study');
+    expect(html).toContain('Vote not recorded');
   });
 });

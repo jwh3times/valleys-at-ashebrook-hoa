@@ -55,6 +55,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         unit: input.unit ?? null,
         status: input.status ?? 'active',
         notes: input.notes ?? null,
+        ...(input.voteWeight !== undefined
+          ? { voteWeight: input.voteWeight }
+          : {}),
         createdAt: now,
         updatedAt: now,
       });
@@ -87,6 +90,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   if (input.unit !== undefined) patch.unit = input.unit;
   if (input.status !== undefined) patch.status = input.status;
   if (input.notes !== undefined) patch.notes = input.notes;
+  if (input.voteWeight !== undefined) patch.voteWeight = input.voteWeight;
   try {
     await getDb(env).update(properties).set(patch).where(eq(properties.id, id));
   } catch (err) {
