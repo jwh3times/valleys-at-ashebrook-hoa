@@ -172,22 +172,30 @@ describe('election read helpers', () => {
 
   it('computes turnout from the ballot set', async () => {
     await seedElection('e1', { status: 'closed', visibility: 'public' });
+    // Three ACTIVE lots (p1, p2, p3) and one inactive one (p4), so
+    // eligibleCount (3) and eligibleWeight (7 = 1+2+4) are both distinct
+    // from ballotsCast and weightCast below — a mutation aliasing a
+    // numerator to its denominator would be caught, not accidentally pass.
     await seedProperty('p1', { voteWeight: 1 });
     await seedProperty('p2', { voteWeight: 2 });
-    await seedProperty('p3', { voteWeight: 3, status: 'inactive' });
+    await seedProperty('p3', { voteWeight: 4 });
+    await seedProperty('p4', { voteWeight: 100, status: 'inactive' });
+    // p1's ballot matches its live weight; p2's ballot is recorded at 5,
+    // deliberately different from p2's CURRENT voteWeight of 2 — this is
+    // the snapshot ADR 0015 exists to protect. weightCast must come from
+    // the stored ballots.weight (1 + 5 = 6), never from re-reading
+    // properties.voteWeight live (which would wrongly sum to 1 + 2 = 3).
     await seedBallot('b1', 'e1', 'p1', { weight: 1 });
-    await seedBallot('b2', 'e1', 'p2', { weight: 2 });
+    await seedBallot('b2', 'e1', 'p2', { weight: 5 });
 
     const rows = await fetchElectionsFor(env, 'visitor');
     const e1 = rows.find((r) => r.id === 'e1');
     expect(e1).toBeDefined();
     expect(e1?.turnout).toEqual({
       ballotsCast: 2,
-      weightCast: 3,
-      // Only p1 and p2 are ACTIVE; p3 is inactive and must not count toward
-      // either eligible denominator.
-      eligibleCount: 2,
-      eligibleWeight: 3,
+      weightCast: 6,
+      eligibleCount: 3,
+      eligibleWeight: 7,
     });
   });
 
@@ -204,9 +212,13 @@ describe('election read helpers', () => {
 
   it('returns the per-lot ballot list on the admin read', async () => {
     // Same fixture as the previous test — the positive control proving the
-    // lot is real, not that the fixture happened to be empty.
+    // lot is real, not that the fixture happened to be empty. A second
+    // ballot, inserted in reverse property-id order, also pins the list's
+    // ordering rather than leaving it to unspecified SQLite row order.
     await seedElection('e1', { status: 'closed', visibility: 'public' });
     await seedProperty('p1');
+    await seedProperty('p2');
+    await seedBallot('b2', 'e1', 'p2');
     await seedBallot('b1', 'e1', 'p1');
 
     const rows = await fetchAdminElections(env);
@@ -216,6 +228,13 @@ describe('election read helpers', () => {
       {
         propertyId: 'p1',
         address: 'p1 Ashebrook Lane',
+        weight: 1,
+        viaProxy: false,
+        castByOwnerId: null,
+      },
+      {
+        propertyId: 'p2',
+        address: 'p2 Ashebrook Lane',
         weight: 1,
         viaProxy: false,
         castByOwnerId: null,
