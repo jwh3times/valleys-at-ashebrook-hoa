@@ -57,11 +57,15 @@ describe('resolution read helpers', () => {
   });
 
   it('hides drafts even when includeHistoric is set', async () => {
+    // A single-draft fixture with a bare not.toContain assertion would also
+    // pass against a broken includeHistoric that returns nothing at all —
+    // seed a non-draft sibling and assert the exact returned set instead.
     await seed('a', { status: 'draft', visibility: 'board' });
+    await seed('b', { status: 'superseded', visibility: 'board' });
     const rows = await fetchResolutionsFor(env, 'board', {
       includeHistoric: true,
     });
-    expect(rows.map((r) => r.id)).not.toContain('a');
+    expect(rows.map((r) => r.id)).toEqual(['b']);
   });
 
   it('returns only in-force resolutions by default', async () => {
@@ -170,10 +174,11 @@ describe('resolution read helpers', () => {
     const rows = await fetchResolutionsFor(env, 'visitor');
     const x = rows.find((r) => r.id === 'x');
     expect(x).toBeDefined();
-    // Must terminate rather than hang/stack-overflow; exact truncation point
-    // is an implementation detail as long as it stops.
-    expect(x!.chain.length).toBeGreaterThan(0);
-    expect(x!.chain.length).toBeLessThan(10);
+    // Exactly one entry (y): the walk visits y, then sees x again (the
+    // starting row) and stops. `0 < length < 10` would also pass a walk
+    // that stops after a single arbitrary hop for the wrong reason — pin
+    // the exact, correct length instead.
+    expect(x!.chain.length).toBe(1);
   });
 
   it('shows drafts to the admin read', async () => {
@@ -181,5 +186,119 @@ describe('resolution read helpers', () => {
     await seed('b', { status: 'in_force', visibility: 'public' });
     const rows = await fetchAdminResolutions(env);
     expect(rows.map((r) => r.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('masks supersededByNumber when the successor is out of tier', async () => {
+    await seed('old', { status: 'superseded', visibility: 'public' });
+    await seed('newer', {
+      status: 'in_force',
+      visibility: 'board',
+      supersedesId: 'old',
+    });
+
+    const visitorRows = await fetchResolutionsFor(env, 'visitor', {
+      includeHistoric: true,
+    });
+    const oldAsVisitor = visitorRows.find((r) => r.id === 'old');
+    expect(oldAsVisitor).toBeDefined();
+    expect(oldAsVisitor?.supersededByNumber).toBeNull();
+
+    const boardRows = await fetchResolutionsFor(env, 'board', {
+      includeHistoric: true,
+    });
+    const oldAsBoard = boardRows.find((r) => r.id === 'old');
+    expect(oldAsBoard).toBeDefined();
+    expect(oldAsBoard?.supersededByNumber).toBe('R-2026-newer');
+  });
+
+  it('masks the immediate predecessor and supersedesId when it alone is out of tier', async () => {
+    // The 2-row shape the brief's prose actually describes — a public
+    // resolution DIRECTLY superseding a board-only one, so the masked link
+    // is chain[0] itself, not a deeper link behind a visible one. Also the
+    // exact fixture Task 4's `supersede` action produces.
+    await seed('pred', { status: 'superseded', visibility: 'board' });
+    await seed('succ', {
+      status: 'in_force',
+      visibility: 'public',
+      supersedesId: 'pred',
+    });
+
+    const visitorRows = await fetchResolutionsFor(env, 'visitor');
+    const succAsVisitor = visitorRows.find((r) => r.id === 'succ');
+    expect(succAsVisitor).toBeDefined();
+    expect(succAsVisitor?.chain).toEqual([
+      { id: null, number: null, title: null, visible: false },
+    ]);
+    // supersedesId must not hand a visitor the same hidden identity chain[0]
+    // just masked, from the other direction.
+    expect(succAsVisitor?.supersedesId).toBeNull();
+
+    const boardRows = await fetchResolutionsFor(env, 'board');
+    const succAsBoard = boardRows.find((r) => r.id === 'succ');
+    expect(succAsBoard).toBeDefined();
+    expect(succAsBoard?.supersedesId).toBe('pred');
+  });
+
+  it('does not truncate a later chain in the same call using leftover state from an earlier one', async () => {
+    // Reuses the out-of-tier fixture: `current` -> `mid` -> `hidden`. With
+    // includeHistoric, BOTH `current` and `mid` come back as their own
+    // top-level entries in ONE call, and both chains pass through `hidden`.
+    // A `visited` set that is not freshly created per buildChain call (e.g.
+    // hoisted to module scope, since a Worker isolate reuses one module
+    // instance across many requests) would have `hidden` already marked
+    // "seen" by the time mid's own walk reaches it, from processing
+    // current's walk first, and wrongly truncate mid's chain to nothing.
+    await seed('hidden', { status: 'superseded', visibility: 'board' });
+    await seed('mid', {
+      status: 'superseded',
+      visibility: 'public',
+      supersedesId: 'hidden',
+    });
+    await seed('current', {
+      status: 'in_force',
+      visibility: 'public',
+      supersedesId: 'mid',
+    });
+
+    const rows = await fetchResolutionsFor(env, 'visitor', {
+      includeHistoric: true,
+    });
+    const current = rows.find((r) => r.id === 'current');
+    const mid = rows.find((r) => r.id === 'mid');
+    expect(current).toBeDefined();
+    expect(mid).toBeDefined();
+    expect(current?.chain.length).toBe(2);
+    expect(mid?.chain.length).toBe(1);
+    expect(mid?.chain[0]).toEqual({
+      id: null,
+      number: null,
+      title: null,
+      visible: false,
+    });
+  });
+
+  it('does not mask any tier on the admin read, even the out-of-tier fixture', async () => {
+    await seed('hidden', { status: 'superseded', visibility: 'board' });
+    await seed('mid', {
+      status: 'superseded',
+      visibility: 'public',
+      supersedesId: 'hidden',
+    });
+    await seed('current', {
+      status: 'in_force',
+      visibility: 'public',
+      supersedesId: 'mid',
+    });
+
+    const rows = await fetchAdminResolutions(env);
+    const current = rows.find((r) => r.id === 'current');
+    expect(current).toBeDefined();
+    expect(current?.chain[1]).toEqual({
+      id: 'hidden',
+      number: 'R-2026-hidden',
+      title: 'Resolution hidden',
+      visible: true,
+    });
+    expect(current?.supersedesId).toBe('mid');
   });
 });
