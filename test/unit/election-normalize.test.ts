@@ -212,6 +212,49 @@ describe('normalizeCandidateInput', () => {
     expect(r.error).toMatch(/won is not editable/i);
   });
 
+  it('rejects a falsy-but-present won key on candidate input', () => {
+    const onCreate = normalizeCandidateInput(
+      { ...validCandidate, won: null },
+      'create',
+    );
+    expect(onCreate.ok).toBe(false);
+    if (!onCreate.ok) expect(onCreate.error).toMatch(/won is not editable/i);
+
+    const onPatch = normalizeCandidateInput(
+      { fullName: 'Renamed', won: undefined },
+      'patch',
+    );
+    expect(onPatch.ok).toBe(false);
+    if (!onPatch.ok) expect(onPatch.error).toMatch(/won is not editable/i);
+  });
+
+  it('rejects a sequence key on candidate input', () => {
+    const r = normalizeCandidateInput(
+      { ...validCandidate, sequence: 1 },
+      'create',
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/sequence is not editable/i);
+  });
+
+  it('rejects a falsy-but-present sequence key', () => {
+    const onCreate = normalizeCandidateInput(
+      { ...validCandidate, sequence: null },
+      'create',
+    );
+    expect(onCreate.ok).toBe(false);
+    if (!onCreate.ok)
+      expect(onCreate.error).toMatch(/sequence is not editable/i);
+
+    const onPatch = normalizeCandidateInput(
+      { fullName: 'Renamed', sequence: undefined },
+      'patch',
+    );
+    expect(onPatch.ok).toBe(false);
+    if (!onPatch.ok) expect(onPatch.error).toMatch(/sequence is not editable/i);
+  });
+
   it('caps an over-length candidate statement', () => {
     const r = normalizeCandidateInput(
       { ...validCandidate, statementMd: 'x'.repeat(4001) },
