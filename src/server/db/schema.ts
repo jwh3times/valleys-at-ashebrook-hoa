@@ -156,8 +156,13 @@ export const boardTerms = sqliteTable(
     //
     // TRAP: this is an ALTER TABLE ADD COLUMN, and drizzle-kit emits FK
     // actions only on CREATE TABLE. The live column will get NO ACTION
-    // regardless of the annotation below. Inert without deferred constraints,
-    // but do not trust the annotation for this column. Pinned by a test in
+    // regardless of the annotation below — which is not inert the way
+    // deferred constraints would make it, since NO ACTION *errors* on a
+    // referenced-row delete where SET NULL would silently null this column
+    // instead; that's why two test files must clear it in `beforeEach`.
+    // Unreachable in production regardless: only draft elections are
+    // deletable, and a draft election has no terms. Do not trust the
+    // annotation for this column. Pinned by a test in
     // test/server/election-schema.test.ts rather than hand-patched.
     electionId: text('election_id').references(() => elections.id, {
       onDelete: 'set null',

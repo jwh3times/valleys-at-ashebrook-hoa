@@ -325,10 +325,21 @@ export default function ElectionsManager() {
   async function submitTallies(evt: React.FormEvent, e: ElectionDetail) {
     evt.preventDefault();
     await run(async () => {
-      const entries = e.candidates.map((c) => ({
-        candidateId: c.id,
-        votes: Number(tallyForm[c.id] ?? '') || 0,
-      }));
+      // Blank means omit, not zero: `votes` is nullable so NULL ("not
+      // recorded") stays distinguishable from a recorded 0. A candidate left
+      // blank is dropped from `entries` entirely — the server restores NULL
+      // for any candidate it doesn't see — rather than defaulting to 0 the
+      // way `Number(x) || 0` would, which would silently record a tally
+      // nobody typed. A non-numeric entry (e.g. "1o") is still sent through
+      // as `Number(x.raw)` so the server's own validation rejects it with a
+      // readable 400 instead of the client swallowing it into a false zero.
+      const entries = e.candidates
+        .map((c) => ({
+          candidateId: c.id,
+          raw: (tallyForm[c.id] ?? '').trim(),
+        }))
+        .filter((x) => x.raw !== '')
+        .map((x) => ({ candidateId: x.candidateId, votes: Number(x.raw) }));
       await setTallies(e.id, entries);
       await reload();
     }, 'Tallies saved.');
@@ -554,6 +565,7 @@ export default function ElectionsManager() {
                           {editable && (
                             <button
                               className="row-link"
+                              aria-label={`Edit ${e.title}`}
                               onClick={() => startEdit(e)}
                             >
                               Edit
@@ -561,6 +573,11 @@ export default function ElectionsManager() {
                           )}
                           <button
                             className="row-link"
+                            aria-label={
+                              expandedId === e.id
+                                ? `Hide candidates & ballots for ${e.title}`
+                                : `Candidates & ballots for ${e.title}`
+                            }
                             onClick={() => toggleExpand(e.id)}
                           >
                             {expandedId === e.id

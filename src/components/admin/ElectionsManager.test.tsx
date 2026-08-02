@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  within,
+  waitFor,
+  fireEvent,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ElectionsManager from './ElectionsManager';
 import * as admin from '../../lib/admin';
@@ -278,6 +284,90 @@ describe('ElectionsManager', () => {
     );
   });
 
+  it('leaving a tally blank omits that candidate from the payload rather than recording a zero', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        id: 'e1',
+        title: 'Board Election 2026',
+        status: 'closed',
+        candidates: [
+          candidate({ id: 'c1', fullName: 'Alice' }),
+          candidate({ id: 'c2', fullName: 'Bob' }),
+        ],
+      }),
+    ]);
+    mocked.setTallies.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    // Alice gets a real tally; Bob's field is left untouched (blank), the
+    // same as a board member who has not yet counted Bob's ballots.
+    const aliceTally = screen.getByLabelText(/tally — alice/i);
+    await userEvent.clear(aliceTally);
+    await userEvent.type(aliceTally, '42');
+    await userEvent.click(
+      screen.getByRole('button', { name: /^save tallies$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setTallies).toHaveBeenCalledWith('e1', [
+        { candidateId: 'c1', votes: 42 },
+      ]),
+    );
+    // Bob must be absent from the payload entirely — not present with
+    // votes: 0 — since the server restores NULL ("not recorded") for any
+    // candidate it doesn't see in `entries`.
+    const [, entries] = mocked.setTallies.mock.calls[0];
+    expect(entries.some((e) => e.candidateId === 'c2')).toBe(false);
+  });
+
+  it('a non-numeric tally surfaces the server error instead of being silently recorded as zero', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        id: 'e1',
+        title: 'Board Election 2026',
+        status: 'closed',
+        candidates: [candidate({ id: 'c1', fullName: 'Alice' })],
+      }),
+    ]);
+    mocked.setTallies.mockRejectedValue(
+      new Error('votes must be a non-negative integer'),
+    );
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    const aliceTally = screen.getByLabelText(
+      /tally — alice/i,
+    ) as HTMLInputElement;
+    // <input type="number"> sanitizes any non-numeric string to "" on both
+    // typing and direct value assignment — jsdom does this the same as real
+    // browsers — so a literal "1o" can never land in this field through
+    // normal interaction. Force the DOM node's type to "text" for this one
+    // change so the test can still exercise the client's Number(...) mapping
+    // and confirm the server's own validation is what actually catches a bad
+    // value, rather than relying entirely on the browser to prevent it.
+    aliceTally.type = 'text';
+    fireEvent.change(aliceTally, { target: { value: '1o' } });
+    await userEvent.click(
+      screen.getByRole('button', { name: /^save tallies$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setTallies).toHaveBeenCalledWith('e1', [
+        { candidateId: 'c1', votes: NaN },
+      ]),
+    );
+    expect(
+      await screen.findByText(/votes must be a non-negative integer/i),
+    ).toBeInTheDocument();
+  });
+
   it('declining the delete confirmation does not call deleteElection, and shows no success banner', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     mocked.fetchElections.mockResolvedValue([
@@ -362,7 +452,9 @@ describe('ElectionsManager', () => {
     render(<ElectionsManager />);
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit board election 2026/i }),
+    );
     const titleInput = screen.getByLabelText(/^title$/i);
     await userEvent.clear(titleInput);
     await userEvent.type(titleInput, 'Updated Board Election');
