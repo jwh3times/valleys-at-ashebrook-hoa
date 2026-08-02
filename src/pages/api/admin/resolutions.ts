@@ -125,6 +125,21 @@ async function supersede(db: Db, body: unknown): Promise<Response> {
       status: 409,
     });
 
+  // Mirrors adopt: real supersession happens by motion at a meeting, and
+  // PATCH cannot write adoptedByMotionId, so without recording it here a
+  // resolution adopted by supersession could never have its adopting motion
+  // on record — a permanent hole, not a simplification.
+  const motionId = stringField(body, 'motionId') || null;
+  if (motionId) {
+    const motion = await db
+      .select({ id: motions.id })
+      .from(motions)
+      .where(eq(motions.id, motionId))
+      .limit(1);
+    if (motion.length === 0)
+      return new Response('Motion not found', { status: 404 });
+  }
+
   // Both writes must land together: a new resolution taking effect with no
   // predecessor marked superseded (or vice versa) would leave the chain
   // inconsistent, so this is the one action that needs db.batch().
@@ -135,6 +150,7 @@ async function supersede(db: Db, body: unknown): Promise<Response> {
         status: 'in_force',
         supersedesId,
         effectiveDate,
+        adoptedByMotionId: motionId,
         updatedAt: new Date(),
       })
       .where(eq(resolutions.id, id)),
@@ -234,7 +250,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response('No fields to update', { status: 400 });
   const db = getDb(env);
   const existing = await db
-    .select({ id: resolutions.id })
+    .select({ id: resolutions.id, status: resolutions.status })
     .from(resolutions)
     .where(eq(resolutions.id, id))
     .limit(1);
@@ -242,6 +258,16 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response('Resolution not found', { status: 404 });
   if (input.number !== undefined && (await numberInUse(db, input.number, id)))
     return new Response(DUPLICATE_NUMBER, { status: 409 });
+  // nullableIsoDate maps both an explicit null and a blank string to null, so
+  // this also catches `effectiveDate: ''`. Clearing the date on a resolution
+  // that has already taken effect would reproduce exactly the state adopt's
+  // required-effectiveDate rule exists to prevent; clearing it on a draft
+  // (which never had one that mattered) stays legal.
+  if (input.effectiveDate === null && existing[0].status !== 'draft')
+    return new Response(
+      'effectiveDate cannot be cleared on a resolution that has taken effect',
+      { status: 409 },
+    );
   // A resolution is not moved between chains via PATCH — only these fields.
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (input.number !== undefined) set.number = input.number;
