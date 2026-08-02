@@ -7,7 +7,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.3.45] - 2026-08-01
+## [0.3.45] - 2026-08-02
 
 ### Added
 
@@ -25,8 +25,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   atomic write so the two can never land out of step; **repeal** retires an in-force resolution
   without replacing it, leaving its place in the chain intact for anyone tracing the history later.
 - A new **Resolutions** tab in the admin panel creates and edits resolutions and drives all three
-  transitions. A resolution can be deleted only while still a draft; anything that has ever taken
-  effect is permanent history.
+  transitions, grouping the book by status so what is currently in force reads first. Adopting or
+  superseding offers a picker of recorded motions, so the rule can be tied back to the vote that
+  authorized it without anyone handling an internal identifier. A resolution can be deleted only
+  while still a draft; anything that has ever taken effect is permanent history.
 - A new public page, `/resolutions`, lists in-force resolutions by default, with a toggle to include
   superseded and repealed ones, each with its full text and a rendered chain of what it supersedes.
   A visibility tier applied per resolution controls who sees it, and the chain itself respects that
@@ -34,6 +36,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   never its number or title.
 - Migration `0012` adds the `resolutions` table, with unique indexes preventing two resolutions from
   sharing a citation number or both claiming to supersede the same predecessor.
+
+### Changed
+
+- Deleting a motion, or a meeting containing one, is now refused when a resolution cites that motion
+  as the one that adopted it. Previously the deletion succeeded and silently detached the
+  resolution's provenance, which nothing could restore — the link is recorded when the resolution is
+  adopted and cannot be edited afterward. Ending a motion's tie to a resolution is now an explicit
+  act rather than a side effect of tidying up a meeting.
+- An effective date supplied when adopting or superseding a resolution must be a real calendar date.
+  Dates that merely look well-formed, such as `2026-02-31`, are rejected rather than stored and
+  displayed verbatim on the public page.
 
 ## [0.3.44] - 2026-08-01
 
