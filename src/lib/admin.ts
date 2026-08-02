@@ -15,6 +15,8 @@ import type {
   MotionInput,
   VoteChoice,
   MemberVoteChoice,
+  ResolutionDetail,
+  ResolutionInput,
 } from './types';
 import type { ReportListItem, ReportDetail } from './reports';
 
@@ -521,4 +523,89 @@ export async function setMemberVotes(
   });
   if (!res.ok)
     throw new Error((await res.text()) || `Save votes failed: ${res.status}`);
+}
+
+// ---------- Resolutions ----------
+// GET already returns every resolution's full detail (drafts included, no
+// tier filter — see fetchAdminResolutions), so unlike meetings/motions there
+// is no separate single-record fetch: the list read IS the detail read.
+export async function fetchResolutions(): Promise<ResolutionDetail[]> {
+  const res = await fetch('/api/admin/resolutions');
+  if (!res.ok) throw new Error(`Load resolutions failed: ${res.status}`);
+  return res.json();
+}
+
+export async function saveResolution(
+  data: ResolutionInput,
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/resolutions', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Save resolution failed: ${res.status}`,
+    );
+}
+
+export async function deleteResolution(id: string): Promise<void> {
+  const res = await fetch('/api/admin/resolutions', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+}
+
+export async function adoptResolution(
+  id: string,
+  effectiveDate: string,
+  motionId?: string | null,
+): Promise<void> {
+  const res = await fetch('/api/admin/resolutions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      action: 'adopt',
+      id,
+      effectiveDate,
+      motionId: motionId || undefined,
+    }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Adopt failed: ${res.status}`);
+}
+
+export async function supersedeResolution(
+  id: string,
+  supersedesId: string,
+  effectiveDate: string,
+  motionId?: string | null,
+): Promise<void> {
+  const res = await fetch('/api/admin/resolutions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      action: 'supersede',
+      id,
+      supersedesId,
+      effectiveDate,
+      motionId: motionId || undefined,
+    }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Supersede failed: ${res.status}`);
+}
+
+export async function repealResolution(id: string): Promise<void> {
+  const res = await fetch('/api/admin/resolutions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'repeal', id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Repeal failed: ${res.status}`);
 }
