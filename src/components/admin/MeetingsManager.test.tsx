@@ -156,7 +156,6 @@ describe('MeetingsManager', () => {
     await waitFor(() =>
       expect(mocked.saveMeeting).toHaveBeenCalledWith(
         {
-          body: 'board',
           kind: 'special',
           date: '2026-09-14',
           title: 'September meeting',
@@ -171,6 +170,49 @@ describe('MeetingsManager', () => {
       ),
     );
     expect(await screen.findByText(/meeting updated/i)).toBeInTheDocument();
+  });
+
+  it('omits body when editing an existing meeting', async () => {
+    mocked.fetchMeetings.mockResolvedValue([meeting]);
+    mocked.saveMeeting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('September meeting');
+    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await screen.findByLabelText(/^minutes/i);
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /save meeting/i }),
+    );
+
+    await waitFor(() => expect(mocked.saveMeeting).toHaveBeenCalled());
+    const [payload, id] = mocked.saveMeeting.mock.calls[0];
+    expect(id).toBe('m1');
+    // Key absence, not `body: undefined` — the server guard fires on
+    // presence, so `toBeUndefined()` would pass against a payload that
+    // still carries the key.
+    expect('body' in payload).toBe(false);
+  });
+
+  it('still sends body when creating a meeting', async () => {
+    mocked.fetchMeetings.mockResolvedValue([]);
+    mocked.saveMeeting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText(/no meetings.*yet/i);
+
+    await userEvent.type(
+      screen.getByLabelText(/^title$/i),
+      'September meeting',
+    );
+    const dateInput = screen.getByLabelText(/^date$/i);
+    await userEvent.clear(dateInput);
+    await userEvent.type(dateInput, '2026-09-14');
+    await userEvent.click(screen.getByRole('button', { name: /add meeting/i }));
+
+    await waitFor(() => expect(mocked.saveMeeting).toHaveBeenCalled());
+    const [payload, id] = mocked.saveMeeting.mock.calls[0];
+    expect(id).toBeUndefined();
+    expect('body' in payload).toBe(true);
+    expect(payload.body).toBe('board');
   });
 
   it('emptying summaryMd on an existing meeting persists as cleared, not silently ignored', async () => {

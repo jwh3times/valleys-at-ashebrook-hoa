@@ -28,6 +28,7 @@ import type {
   MeetingDetail,
   MeetingBody,
   MeetingKind,
+  MeetingInput,
   MotionOutcome,
   VoteChoice,
   MemberVoteChoice,
@@ -378,28 +379,31 @@ export default function MeetingsManager() {
     e.preventDefault();
     await run(
       async () => {
-        // Both create and edit send the full field set. On edit, the form was
-        // seeded from the real MeetingDetail (see startEditMeeting), so a
-        // blank field here means the board actually cleared it — that must
-        // reach the server as an explicit null, not be dropped, or clearing
-        // summaryMd (the minutes /meetings/[id] renders) would silently no-op.
-        await saveMeeting(
-          {
-            body: meetingForm.body,
-            kind: meetingForm.kind,
-            date: meetingForm.date,
-            title: meetingForm.title,
-            startTime: meetingForm.startTime || null,
-            location: meetingForm.location || null,
-            summaryMd: meetingForm.summaryMd || null,
-            documentId: meetingForm.documentId || null,
-            quorumRequired: meetingForm.quorumRequired
-              ? Number(meetingForm.quorumRequired)
-              : null,
-            visibility: meetingForm.visibility,
-          },
-          editingMeetingId ?? undefined,
-        );
+        // Both create and edit send the full field set — except `body`,
+        // which the server now refuses on PATCH (changing it on a meeting
+        // that already has attendance or votes recorded would produce an
+        // incoherent record). On edit, the form was seeded from the real
+        // MeetingDetail (see startEditMeeting), so a blank field here means
+        // the board actually cleared it — that must reach the server as an
+        // explicit null, not be dropped, or clearing summaryMd (the minutes
+        // /meetings/[id] renders) would silently no-op. Built without the
+        // `body` key on edit, rather than `body: undefined`, since the
+        // server's guard fires on key presence, not truthiness.
+        const payload: MeetingInput = {
+          kind: meetingForm.kind,
+          date: meetingForm.date,
+          title: meetingForm.title,
+          startTime: meetingForm.startTime || null,
+          location: meetingForm.location || null,
+          summaryMd: meetingForm.summaryMd || null,
+          documentId: meetingForm.documentId || null,
+          quorumRequired: meetingForm.quorumRequired
+            ? Number(meetingForm.quorumRequired)
+            : null,
+          visibility: meetingForm.visibility,
+        };
+        if (!editingMeetingId) payload.body = meetingForm.body;
+        await saveMeeting(payload, editingMeetingId ?? undefined);
         resetMeeting();
         await reload();
       },
