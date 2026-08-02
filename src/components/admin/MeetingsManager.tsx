@@ -7,16 +7,20 @@ import {
   approveMeeting,
   unapproveMeeting,
   setAttendance,
+  setMemberAttendance,
   saveMotion,
   deleteMotion,
   setVotes,
+  setMemberVotes,
   fetchBoardPeople,
+  fetchProperties,
 } from '../../lib/admin';
 import {
   MEETING_BODIES,
   MEETING_KINDS,
   MOTION_OUTCOMES,
   VOTE_CHOICES,
+  MEMBER_VOTE_CHOICES,
   tallyVotes,
 } from '../../lib/types';
 import type {
@@ -26,8 +30,10 @@ import type {
   MeetingKind,
   MotionOutcome,
   VoteChoice,
+  MemberVoteChoice,
   Visibility,
   BoardPersonWithTerms,
+  PropertyWithOwners,
   MotionDetail,
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
@@ -80,6 +86,20 @@ const emptyMotion = {
   outcome: 'passed' as MotionOutcome,
 };
 
+/** Per-property attendance draft for a member meeting. */
+interface MemberAttendanceFormRow {
+  present: boolean;
+  representedByOwnerId: string;
+  viaProxy: boolean;
+}
+
+/** Per-property vote draft for a member meeting's motion. */
+interface MemberVoteFormRow {
+  choice: MemberVoteChoice;
+  castByOwnerId: string;
+  viaProxy: boolean;
+}
+
 /**
  * Reverse lookup used only to pre-select a motion's mover/second when
  * opening it for edit: MotionDetail (the same shape the public read
@@ -91,6 +111,21 @@ function personIdByName(
   people: BoardPersonWithTerms[],
 ): string | null {
   return people.find((p) => p.fullName === name)?.id ?? null;
+}
+
+/**
+ * Same reverse lookup as personIdByName, but for a property's owners:
+ * MemberAttendanceRow/MemberVoteRow (the same shapes the public read
+ * returns) carry the representing/casting owner's name, not id.
+ */
+function ownerIdByPropertyAndName(
+  propertyId: string,
+  name: string | null,
+  properties: PropertyWithOwners[],
+): string | null {
+  if (!name) return null;
+  const property = properties.find((p) => p.id === propertyId);
+  return property?.owners.find((o) => o.fullName === name)?.id ?? null;
 }
 
 export default function MeetingsManager() {
@@ -121,6 +156,30 @@ export default function MeetingsManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The property roster backs member-meeting attendance and vote editors —
+  // their per-property twins of `people` above — loaded once alongside it.
+  const [properties, setProperties] = useState<PropertyWithOwners[]>([]);
+  useEffect(() => {
+    fetchProperties()
+      .then(setProperties)
+      .catch((err: unknown) => {
+        const message =
+          (err as { message?: string } | null)?.message ??
+          'could not load the property roster.';
+        setMsg('Error: ' + message);
+      });
+    // Load once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The member attendance and vote editors offer only active properties —
+  // ADR 0015 makes `status = 'inactive'` the sanctioned way to pull a lot
+  // out of voting, and totalActiveWeight (the public quorum denominator) is
+  // summed over active properties only. Letting the board mark an inactive
+  // lot present or cast its vote here would inflate the numerator against a
+  // denominator that already excludes it.
+  const activeProperties = properties.filter((p) => p.status === 'active');
+
   const [meetingForm, setMeetingForm] = useState(emptyMeeting);
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
   // Set while startEditMeeting's detail fetch is in flight, so the "Edit"
@@ -141,9 +200,19 @@ export default function MeetingsManager() {
   const [attendanceForm, setAttendanceForm] = useState<Record<string, boolean>>(
     {},
   );
+  // Member-meeting twin of attendanceForm, keyed by propertyId instead of
+  // personId, carrying the extra representedByOwnerId/viaProxy fields the
+  // property-based editor needs.
+  const [memberAttendanceForm, setMemberAttendanceForm] = useState<
+    Record<string, MemberAttendanceFormRow>
+  >({});
   const [motionForm, setMotionForm] = useState(emptyMotion);
   const [editingMotionId, setEditingMotionId] = useState<string | null>(null);
   const [voteForm, setVoteForm] = useState<Record<string, VoteChoice>>({});
+  // Member-meeting twin of voteForm, keyed by propertyId.
+  const [memberVoteForm, setMemberVoteForm] = useState<
+    Record<string, MemberVoteFormRow>
+  >({});
 
   useEffect(() => {
     if (!expandedId) {
@@ -159,6 +228,23 @@ export default function MeetingsManager() {
         setAttendanceForm(
           Object.fromEntries(d.attendance.map((a) => [a.personId, a.present])),
         );
+        setMemberAttendanceForm(
+          Object.fromEntries(
+            d.memberAttendance.map((a) => [
+              a.propertyId,
+              {
+                present: a.present,
+                representedByOwnerId:
+                  ownerIdByPropertyAndName(
+                    a.propertyId,
+                    a.representedByName,
+                    properties,
+                  ) ?? '',
+                viaProxy: a.viaProxy,
+              },
+            ]),
+          ),
+        );
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -173,9 +259,15 @@ export default function MeetingsManager() {
     return () => {
       cancelled = true;
     };
-    // Re-run only when the expanded meeting changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedId]);
+    // Re-run when the expanded meeting changes, and also when `properties`
+    // resolves: ownerIdByPropertyAndName reads `properties` via closure, so
+    // without this dependency, expanding a meeting before fetchProperties()
+    // resolves would close over the initial empty array, resolve every
+    // representedByOwnerId to '', and a subsequent save would write null
+    // over every recorded representative. Re-running once properties
+    // arrives re-derives memberAttendanceForm correctly; refetching the
+    // same meeting detail again is a harmless extra request.
+  }, [expandedId, properties]);
 
   async function reloadDetail(meetingId: string) {
     const d = await fetchMeeting(meetingId);
@@ -229,11 +321,13 @@ export default function MeetingsManager() {
     setEditingMotionId(null);
     setMotionForm(emptyMotion);
     setVoteForm({});
+    setMemberVoteForm({});
   }
 
   function toggleExpand(meetingId: string) {
     setExpandedId((prev) => (prev === meetingId ? null : meetingId));
     setAttendanceForm({});
+    setMemberAttendanceForm({});
     resetMotion();
     setMsg('');
   }
@@ -257,6 +351,25 @@ export default function MeetingsManager() {
     });
     setVoteForm(
       Object.fromEntries(motion.votes.map((v) => [v.personId, v.choice])),
+    );
+    // Only one of votes/memberVotes is populated, depending on the parent
+    // meeting's body — the other maps to an empty object, harmlessly.
+    setMemberVoteForm(
+      Object.fromEntries(
+        motion.memberVotes.map((v) => [
+          v.propertyId,
+          {
+            choice: v.choice,
+            castByOwnerId:
+              ownerIdByPropertyAndName(
+                v.propertyId,
+                v.castByName,
+                properties,
+              ) ?? '',
+            viaProxy: v.viaProxy,
+          },
+        ]),
+      ),
     );
     setMsg('');
   }
@@ -317,50 +430,108 @@ export default function MeetingsManager() {
     }, 'Meeting unapproved.');
   }
 
-  async function submitAttendance(e: React.FormEvent, meetingId: string) {
+  async function submitAttendance(e: React.FormEvent, m: MeetingSummary) {
     e.preventDefault();
     await run(async () => {
-      const entries = people.map((p) => ({
-        personId: p.id,
-        present: !!attendanceForm[p.id],
-      }));
-      await setAttendance(meetingId, entries);
-      await reloadDetail(meetingId);
+      if (m.body === 'member') {
+        // Full-replace: every property goes in, present or not — an
+        // omitted property would silently drop its row.
+        const entries = properties.map((p) => {
+          const row = memberAttendanceForm[p.id];
+          return {
+            propertyId: p.id,
+            present: !!row?.present,
+            representedByOwnerId: row?.representedByOwnerId || null,
+            viaProxy: !!row?.viaProxy,
+          };
+        });
+        await setMemberAttendance(m.id, entries);
+      } else {
+        const entries = people.map((p) => ({
+          personId: p.id,
+          present: !!attendanceForm[p.id],
+        }));
+        await setAttendance(m.id, entries);
+      }
+      await reloadDetail(m.id);
     }, 'Attendance saved.');
   }
 
   const liveTally = tallyVotes(
     Object.values(voteForm).map((choice) => ({ choice })),
   );
+  // Weighted, not a row count: each property contributes its own
+  // voteWeight, so this will not equal the number of properties touched
+  // whenever any property's weight differs from 1 — see the property roster.
+  const liveMemberTally = tallyVotes(
+    Object.entries(memberVoteForm).map(([propertyId, row]) => ({
+      choice: row.choice,
+      weight: properties.find((p) => p.id === propertyId)?.voteWeight ?? 1,
+    })),
+  );
 
-  async function submitMotion(e: React.FormEvent, meetingId: string) {
+  async function submitMotion(e: React.FormEvent, m: MeetingSummary) {
     e.preventDefault();
+    const meetingId = m.id;
+    // The mover/second pickers are hidden for member meetings (see the
+    // form above) since they're drawn from the board roster, which is the
+    // wrong roster to attribute a member motion's mover to. Re-null both
+    // here too, not just hide the controls, so a value left over from
+    // editing a board motion — or any other stale motionForm state — can
+    // never actually be sent for a member meeting's motion.
+    const moverPersonId =
+      m.body === 'board' ? motionForm.moverPersonId || null : null;
+    const secondPersonId =
+      m.body === 'board' ? motionForm.secondPersonId || null : null;
     await run(
       async () => {
-        const entries = Object.entries(voteForm).map(([personId, choice]) => ({
-          personId,
-          choice,
-        }));
+        let motionId: string | undefined;
         if (editingMotionId) {
           await saveMotion(
             {
               text: motionForm.text,
-              moverPersonId: motionForm.moverPersonId || null,
-              secondPersonId: motionForm.secondPersonId || null,
+              moverPersonId,
+              secondPersonId,
               outcome: motionForm.outcome,
             },
             editingMotionId,
           );
-          await setVotes(editingMotionId, entries);
+          motionId = editingMotionId;
         } else {
-          const id = await saveMotion({
+          motionId = await saveMotion({
             meetingId,
             text: motionForm.text,
-            moverPersonId: motionForm.moverPersonId || null,
-            secondPersonId: motionForm.secondPersonId || null,
+            moverPersonId,
+            secondPersonId,
             outcome: motionForm.outcome,
           });
-          if (id) await setVotes(id, entries);
+        }
+        if (motionId) {
+          if (m.body === 'member') {
+            // Only properties with an entered choice go in — mirrors the
+            // board roll call below (Object.entries(voteForm)). A property
+            // that was never touched has no row in memberVoteForm and is
+            // omitted here, not defaulted to abstain: an untouched lot is
+            // absent, not a recorded abstention, and MemberVoteChoice has
+            // no "not entered" state to say otherwise. The route's
+            // full-replace still deletes any previously saved row for an
+            // omitted property, so leaving one out here is how a vote gets
+            // un-recorded, same as unchecking it.
+            const entries = Object.entries(memberVoteForm).map(
+              ([propertyId, row]) => ({
+                propertyId,
+                choice: row.choice,
+                castByOwnerId: row.castByOwnerId || null,
+                viaProxy: !!row.viaProxy,
+              }),
+            );
+            await setMemberVotes(motionId, entries);
+          } else {
+            const entries = Object.entries(voteForm).map(
+              ([personId, choice]) => ({ personId, choice }),
+            );
+            await setVotes(motionId, entries);
+          }
         }
         resetMotion();
         await reload();
@@ -387,10 +558,11 @@ export default function MeetingsManager() {
         <h1>Meetings</h1>
       </div>
       <p className="admin-panel__intro">
-        Board meetings, who attended, and what was moved and how each board
-        member voted. A meeting starts as a draft and is published to the public
-        site once approved. Only board meetings record attendance and votes here
-        — member meetings arrive in a future release.
+        Board and member meetings, who attended, and what was moved and how each
+        vote went. A meeting starts as a draft and is published to the public
+        site once approved. Board meetings record board attendance and a
+        roll-call vote; member meetings record per-property attendance and votes
+        weighted by each property&rsquo;s vote share.
       </p>
 
       {msg && (
@@ -577,6 +749,13 @@ export default function MeetingsManager() {
               </option>
             ))}
           </select>
+          {meetingForm.body === 'member' && (
+            <p className="muted" style={{ marginTop: '6px' }}>
+              A member meeting&rsquo;s motion records list each property&rsquo;s
+              address alongside how it voted — setting Visibility to Public
+              makes that visible to anyone, not just homeowners.
+            </p>
+          )}
         </div>
         <div className="btn-row">
           <button className="btn btn--small" type="submit" disabled={busy}>
@@ -632,16 +811,14 @@ export default function MeetingsManager() {
                   >
                     {editDetailLoadingId === m.id ? 'Loading…' : 'Edit'}
                   </button>
-                  {m.body === 'board' && (
-                    <button
-                      className="row-link"
-                      onClick={() => toggleExpand(m.id)}
-                    >
-                      {expandedId === m.id
-                        ? 'Hide attendance & motions'
-                        : 'Attendance & motions'}
-                    </button>
-                  )}
+                  <button
+                    className="row-link"
+                    onClick={() => toggleExpand(m.id)}
+                  >
+                    {expandedId === m.id
+                      ? 'Hide attendance & motions'
+                      : 'Attendance & motions'}
+                  </button>
                   {m.status === 'approved' ? (
                     <button
                       className="row-link"
@@ -667,67 +844,180 @@ export default function MeetingsManager() {
                 </div>
               </div>
 
-              {m.body === 'member' && (
-                <p
-                  className="muted"
-                  style={{ paddingLeft: '18px', paddingTop: '6px' }}
-                >
-                  Member meeting — attendance and voting arrive in a future
-                  release.
-                </p>
-              )}
-
-              {expandedId === m.id && m.body === 'board' && (
+              {expandedId === m.id && (
                 <div style={{ paddingLeft: '18px', paddingTop: '10px' }}>
-                  <form
-                    className="panel-card"
-                    onSubmit={(e) => submitAttendance(e, m.id)}
-                    style={{ marginBottom: '14px' }}
-                  >
-                    <div className="panel-editor__title">Attendance</div>
-                    {people.length === 0 ? (
-                      <p className="muted">
-                        No board roster yet — add people on The Board tab.
-                      </p>
-                    ) : (
-                      people.map((p) => (
-                        <label
-                          key={p.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            marginBottom: '6px',
-                          }}
+                  {m.body === 'board' ? (
+                    <form
+                      className="panel-card"
+                      onSubmit={(e) => submitAttendance(e, m)}
+                      style={{ marginBottom: '14px' }}
+                    >
+                      <div className="panel-editor__title">Attendance</div>
+                      {people.length === 0 ? (
+                        <p className="muted">
+                          No board roster yet — add people on The Board tab.
+                        </p>
+                      ) : (
+                        people.map((p) => (
+                          <label
+                            key={p.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '6px',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!attendanceForm[p.id]}
+                              onChange={(e) =>
+                                setAttendanceForm((prev) => ({
+                                  ...prev,
+                                  [p.id]: e.target.checked,
+                                }))
+                              }
+                            />
+                            {p.fullName}
+                          </label>
+                        ))
+                      )}
+                      <div className="btn-row">
+                        <button
+                          className="btn btn--small"
+                          type="submit"
+                          disabled={busy || people.length === 0}
                         >
-                          <input
-                            type="checkbox"
-                            checked={!!attendanceForm[p.id]}
-                            onChange={(e) =>
-                              setAttendanceForm((prev) => ({
-                                ...prev,
-                                [p.id]: e.target.checked,
-                              }))
-                            }
-                          />
-                          {p.fullName}
-                        </label>
-                      ))
-                    )}
-                    <div className="btn-row">
-                      <button
-                        className="btn btn--small"
-                        type="submit"
-                        disabled={busy || people.length === 0}
-                      >
-                        {busy ? 'Saving…' : 'Save attendance'}
-                      </button>
-                    </div>
-                  </form>
+                          {busy ? 'Saving…' : 'Save attendance'}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form
+                      className="panel-card"
+                      onSubmit={(e) => submitAttendance(e, m)}
+                      style={{ marginBottom: '14px' }}
+                    >
+                      <div className="panel-editor__title">Attendance</div>
+                      {activeProperties.length === 0 ? (
+                        <p className="muted">
+                          No properties yet — add homes on The Roster tab.
+                        </p>
+                      ) : (
+                        activeProperties.map((p) => {
+                          const row = memberAttendanceForm[p.id];
+                          return (
+                            <div key={p.id} style={{ marginBottom: '10px' }}>
+                              <label
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!!row?.present}
+                                  onChange={(e) =>
+                                    setMemberAttendanceForm((prev) => ({
+                                      ...prev,
+                                      [p.id]: {
+                                        present: e.target.checked,
+                                        representedByOwnerId:
+                                          prev[p.id]?.representedByOwnerId ??
+                                          '',
+                                        viaProxy: prev[p.id]?.viaProxy ?? false,
+                                      },
+                                    }))
+                                  }
+                                />
+                                {p.address}
+                                {p.unit ? ` ${p.unit}` : ''}
+                              </label>
+                              {p.owners.length > 0 && (
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    paddingLeft: '26px',
+                                    marginTop: '4px',
+                                  }}
+                                >
+                                  <label
+                                    htmlFor={`member-attendance-rep-${m.id}-${p.id}`}
+                                  >
+                                    Represented by — {p.address}
+                                  </label>
+                                  <select
+                                    id={`member-attendance-rep-${m.id}-${p.id}`}
+                                    value={row?.representedByOwnerId ?? ''}
+                                    onChange={(e) =>
+                                      setMemberAttendanceForm((prev) => ({
+                                        ...prev,
+                                        [p.id]: {
+                                          present: prev[p.id]?.present ?? false,
+                                          representedByOwnerId: e.target.value,
+                                          viaProxy:
+                                            prev[p.id]?.viaProxy ?? false,
+                                        },
+                                      }))
+                                    }
+                                  >
+                                    <option value="">— none —</option>
+                                    {p.owners.map((o) => (
+                                      <option key={o.id} value={o.id}>
+                                        {o.fullName}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <label
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={!!row?.viaProxy}
+                                      onChange={(e) =>
+                                        setMemberAttendanceForm((prev) => ({
+                                          ...prev,
+                                          [p.id]: {
+                                            present:
+                                              prev[p.id]?.present ?? false,
+                                            representedByOwnerId:
+                                              prev[p.id]
+                                                ?.representedByOwnerId ?? '',
+                                            viaProxy: e.target.checked,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    Via proxy
+                                  </label>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                      <div className="btn-row">
+                        <button
+                          className="btn btn--small"
+                          type="submit"
+                          disabled={busy || activeProperties.length === 0}
+                        >
+                          {busy ? 'Saving…' : 'Save attendance'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
 
                   <form
                     className="panel-card"
-                    onSubmit={(e) => submitMotion(e, m.id)}
+                    onSubmit={(e) => submitMotion(e, m)}
                     style={{ marginBottom: '14px' }}
                   >
                     <div className="panel-editor__title">
@@ -747,55 +1037,69 @@ export default function MeetingsManager() {
                         required
                       />
                     </div>
-                    <div
-                      className="field-grid"
-                      style={{ marginBottom: '16px' }}
-                    >
-                      <div className="field" style={{ margin: 0 }}>
-                        <label htmlFor={`motion-mover-${m.id}`}>
-                          Moved by (optional)
-                        </label>
-                        <select
-                          id={`motion-mover-${m.id}`}
-                          value={motionForm.moverPersonId}
-                          onChange={(e) =>
-                            setMotionForm({
-                              ...motionForm,
-                              moverPersonId: e.target.value,
-                            })
-                          }
+                    {
+                      // Mover/second are picked from the board roster
+                      // (`people`) below, which is the only roster this
+                      // panel has for that purpose. `motions.mover_owner_id`
+                      // / `second_owner_id` exist in the schema for an
+                      // owner-attributed mover, but nothing writes or reads
+                      // them yet — that arrives with PR 4. Until then, a
+                      // member meeting's motion has no correct roster to
+                      // attribute a mover/second to, so hide the pickers
+                      // rather than let this record a board person as the
+                      // mover of a motion the members made.
+                      m.body === 'board' && (
+                        <div
+                          className="field-grid"
+                          style={{ marginBottom: '16px' }}
                         >
-                          <option value="">— none —</option>
-                          {people.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.fullName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field" style={{ margin: 0 }}>
-                        <label htmlFor={`motion-second-${m.id}`}>
-                          Seconded by (optional)
-                        </label>
-                        <select
-                          id={`motion-second-${m.id}`}
-                          value={motionForm.secondPersonId}
-                          onChange={(e) =>
-                            setMotionForm({
-                              ...motionForm,
-                              secondPersonId: e.target.value,
-                            })
-                          }
-                        >
-                          <option value="">— none —</option>
-                          {people.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.fullName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label htmlFor={`motion-mover-${m.id}`}>
+                              Moved by (optional)
+                            </label>
+                            <select
+                              id={`motion-mover-${m.id}`}
+                              value={motionForm.moverPersonId}
+                              onChange={(e) =>
+                                setMotionForm({
+                                  ...motionForm,
+                                  moverPersonId: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">— none —</option>
+                              {people.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.fullName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="field" style={{ margin: 0 }}>
+                            <label htmlFor={`motion-second-${m.id}`}>
+                              Seconded by (optional)
+                            </label>
+                            <select
+                              id={`motion-second-${m.id}`}
+                              value={motionForm.secondPersonId}
+                              onChange={(e) =>
+                                setMotionForm({
+                                  ...motionForm,
+                                  secondPersonId: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">— none —</option>
+                              {people.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.fullName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )
+                    }
 
                     <div className="field" style={{ marginBottom: '16px' }}>
                       <label htmlFor={`motion-outcome-${m.id}`}>Outcome</label>
@@ -820,54 +1124,186 @@ export default function MeetingsManager() {
                           and the tally sits right beside it so a mismatch
                           between the two is visible to whoever is typing;
                           the server does not enforce that they agree. */}
-                      <p
-                        className="muted motion-tally"
-                        data-testid="motion-tally"
-                        style={{ marginTop: '6px' }}
-                      >
-                        Tally: {liveTally.yes} yes · {liveTally.no} no ·{' '}
-                        {liveTally.abstain} abstain · {liveTally.recused}{' '}
-                        recused · {liveTally.absent} absent
-                        {!liveTally.recorded && ' (no roll call entered yet)'}
-                      </p>
+                      {m.body === 'board' ? (
+                        <p
+                          className="muted motion-tally"
+                          data-testid="motion-tally"
+                          style={{ marginTop: '6px' }}
+                        >
+                          Tally: {liveTally.yes} yes · {liveTally.no} no ·{' '}
+                          {liveTally.abstain} abstain · {liveTally.recused}{' '}
+                          recused · {liveTally.absent} absent
+                          {!liveTally.recorded && ' (no roll call entered yet)'}
+                        </p>
+                      ) : (
+                        <p
+                          className="muted motion-tally"
+                          data-testid="motion-tally"
+                          style={{ marginTop: '6px' }}
+                        >
+                          {/* Weighted by each property's vote share — with
+                              weights other than 1 this will not equal the
+                              number of properties voted, by design. */}
+                          Weighted tally: {liveMemberTally.yes} yes ·{' '}
+                          {liveMemberTally.no} no · {liveMemberTally.abstain}{' '}
+                          abstain
+                          {!liveMemberTally.recorded &&
+                            ' (no votes entered yet)'}
+                        </p>
+                      )}
                     </div>
 
-                    {people.length > 0 && (
-                      <div style={{ marginBottom: '16px' }}>
-                        <div className="panel-editor__title">Roll call</div>
-                        {people.map((p) => (
-                          <div
-                            key={p.id}
-                            className="field"
-                            style={{ margin: '0 0 10px' }}
-                          >
-                            <label htmlFor={`vote-${m.id}-${p.id}`}>
-                              Vote — {p.fullName}
-                            </label>
-                            <select
-                              id={`vote-${m.id}-${p.id}`}
-                              value={voteForm[p.id] ?? ''}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setVoteForm((prev) => {
-                                  const next = { ...prev };
-                                  if (value === '') delete next[p.id];
-                                  else next[p.id] = value as VoteChoice;
-                                  return next;
-                                });
-                              }}
-                            >
-                              <option value="">— not entered —</option>
-                              {VOTE_CHOICES.map((c) => (
-                                <option key={c} value={c}>
-                                  {VOTE_LABELS[c]}
-                                </option>
-                              ))}
-                            </select>
+                    {m.body === 'board'
+                      ? people.length > 0 && (
+                          <div style={{ marginBottom: '16px' }}>
+                            <div className="panel-editor__title">Roll call</div>
+                            {people.map((p) => (
+                              <div
+                                key={p.id}
+                                className="field"
+                                style={{ margin: '0 0 10px' }}
+                              >
+                                <label htmlFor={`vote-${m.id}-${p.id}`}>
+                                  Vote — {p.fullName}
+                                </label>
+                                <select
+                                  id={`vote-${m.id}-${p.id}`}
+                                  value={voteForm[p.id] ?? ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    setVoteForm((prev) => {
+                                      const next = { ...prev };
+                                      if (value === '') delete next[p.id];
+                                      else next[p.id] = value as VoteChoice;
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  <option value="">— not entered —</option>
+                                  {VOTE_CHOICES.map((c) => (
+                                    <option key={c} value={c}>
+                                      {VOTE_LABELS[c]}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        )
+                      : activeProperties.length > 0 && (
+                          <div style={{ marginBottom: '16px' }}>
+                            <div className="panel-editor__title">Votes</div>
+                            {activeProperties.map((p) => {
+                              const row = memberVoteForm[p.id];
+                              return (
+                                <div
+                                  key={p.id}
+                                  className="field"
+                                  style={{ margin: '0 0 10px' }}
+                                >
+                                  <label
+                                    htmlFor={`member-vote-${m.id}-${p.id}`}
+                                  >
+                                    Vote — {p.address}
+                                  </label>
+                                  <select
+                                    id={`member-vote-${m.id}-${p.id}`}
+                                    value={row?.choice ?? ''}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      setMemberVoteForm((prev) => {
+                                        const next = { ...prev };
+                                        if (value === '') delete next[p.id];
+                                        else
+                                          next[p.id] = {
+                                            choice: value as MemberVoteChoice,
+                                            castByOwnerId:
+                                              prev[p.id]?.castByOwnerId ?? '',
+                                            viaProxy:
+                                              prev[p.id]?.viaProxy ?? false,
+                                          };
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    <option value="">— not entered —</option>
+                                    {MEMBER_VOTE_CHOICES.map((c) => (
+                                      <option key={c} value={c}>
+                                        {VOTE_LABELS[c]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {p.owners.length > 0 && (
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        marginTop: '4px',
+                                      }}
+                                    >
+                                      <label
+                                        htmlFor={`member-vote-cast-by-${m.id}-${p.id}`}
+                                      >
+                                        Cast by — {p.address}
+                                      </label>
+                                      <select
+                                        id={`member-vote-cast-by-${m.id}-${p.id}`}
+                                        value={row?.castByOwnerId ?? ''}
+                                        onChange={(e) =>
+                                          setMemberVoteForm((prev) => ({
+                                            ...prev,
+                                            [p.id]: {
+                                              choice:
+                                                prev[p.id]?.choice ?? 'abstain',
+                                              castByOwnerId: e.target.value,
+                                              viaProxy:
+                                                prev[p.id]?.viaProxy ?? false,
+                                            },
+                                          }))
+                                        }
+                                      >
+                                        <option value="">— none —</option>
+                                        {p.owners.map((o) => (
+                                          <option key={o.id} value={o.id}>
+                                            {o.fullName}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <label
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={!!row?.viaProxy}
+                                          onChange={(e) =>
+                                            setMemberVoteForm((prev) => ({
+                                              ...prev,
+                                              [p.id]: {
+                                                choice:
+                                                  prev[p.id]?.choice ??
+                                                  'abstain',
+                                                castByOwnerId:
+                                                  prev[p.id]?.castByOwnerId ??
+                                                  '',
+                                                viaProxy: e.target.checked,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        Via proxy
+                                      </label>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                     <div className="btn-row">
                       <button
@@ -905,11 +1341,24 @@ export default function MeetingsManager() {
                           <div className="admin-row-main">
                             <div className="admin-row-title">{mo.text}</div>
                             <div className="admin-row-sub">
-                              {OUTCOME_LABELS[mo.outcome]} · {mo.tally.yes} yes
-                              · {mo.tally.no} no · {mo.tally.abstain} abstain ·{' '}
-                              {mo.tally.recused} recused · {mo.tally.absent}{' '}
-                              absent
-                              {!mo.tally.recorded && ' (no roll call recorded)'}
+                              {m.body === 'board' ? (
+                                <>
+                                  {OUTCOME_LABELS[mo.outcome]} · {mo.tally.yes}{' '}
+                                  yes · {mo.tally.no} no · {mo.tally.abstain}{' '}
+                                  abstain · {mo.tally.recused} recused ·{' '}
+                                  {mo.tally.absent} absent
+                                  {!mo.tally.recorded &&
+                                    ' (no roll call recorded)'}
+                                </>
+                              ) : (
+                                <>
+                                  {OUTCOME_LABELS[mo.outcome]} · weighted{' '}
+                                  {mo.memberTally.yes} yes · {mo.memberTally.no}{' '}
+                                  no · {mo.memberTally.abstain} abstain
+                                  {!mo.memberTally.recorded &&
+                                    ' (no votes recorded)'}
+                                </>
+                              )}
                             </div>
                           </div>
                           <div className="row-actions">

@@ -257,6 +257,24 @@ describe('meetings admin route — board', () => {
     expect(res.status).toBe(404);
   });
 
+  it('setAttendance on a member-body meeting returns 409', async () => {
+    const id = await createMeeting({ body: 'member', kind: 'annual' });
+    const p1 = await createPerson('A. Reyes');
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setAttendance',
+        meetingId: id,
+        entries: [{ personId: p1, present: true }],
+      }),
+    );
+    expect(res.status).toBe(409);
+    const rows = await getDb(env)
+      .select()
+      .from(boardAttendance)
+      .where(eq(boardAttendance.meetingId, id));
+    expect(rows.length).toBe(0);
+  });
+
   it('PATCH cannot write status (400)', async () => {
     const id = await createMeeting();
     const res = await PATCH(req(url, 'PATCH', { id, status: 'approved' }));

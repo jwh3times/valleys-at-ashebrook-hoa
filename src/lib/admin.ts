@@ -14,6 +14,7 @@ import type {
   MeetingInput,
   MotionInput,
   VoteChoice,
+  MemberVoteChoice,
 } from './types';
 import type { ReportListItem, ReportDetail } from './reports';
 
@@ -191,6 +192,7 @@ export async function saveProperty(
     unit?: string | null;
     notes?: string | null;
     status?: 'active' | 'inactive';
+    voteWeight?: number;
   },
   id?: string,
 ): Promise<void> {
@@ -426,6 +428,30 @@ export async function setAttendance(
     );
 }
 
+export async function setMemberAttendance(
+  meetingId: string,
+  entries: {
+    propertyId: string;
+    present: boolean;
+    representedByOwnerId?: string | null;
+    viaProxy?: boolean;
+  }[],
+): Promise<void> {
+  const res = await fetch('/api/admin/meetings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      action: 'setMemberAttendance',
+      meetingId,
+      entries,
+    }),
+  });
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Save attendance failed: ${res.status}`,
+    );
+}
+
 // ---------- Motions ----------
 export async function saveMotion(
   data: MotionInput,
@@ -474,6 +500,24 @@ export async function setVotes(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'setVotes', motionId, entries }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save votes failed: ${res.status}`);
+}
+
+export async function setMemberVotes(
+  motionId: string,
+  entries: {
+    propertyId: string;
+    choice: MemberVoteChoice;
+    castByOwnerId?: string | null;
+    viaProxy?: boolean;
+  }[],
+): Promise<void> {
+  const res = await fetch('/api/admin/motions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'setMemberVotes', motionId, entries }),
   });
   if (!res.ok)
     throw new Error((await res.text()) || `Save votes failed: ${res.status}`);

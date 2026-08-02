@@ -30,6 +30,23 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   not granted to board sessions. The first board account is bootstrapped through a permanent,
   fail-closed `POST /api/bootstrap/board` endpoint that is inert once any board account exists and
   requires a constant-time secret match plus `BOARD_*` config (see `SETUP.md` §6).
+- **A public member meeting publishes each represented property's address alongside its vote,
+  gated only by the meeting's own visibility tier.** The meeting record's public pages
+  (`/meetings`, `/meetings/[id]`, rendered server-side via `fetchMeetingsFor`/`fetchMeetingFor` —
+  there is no `/api/content/meetings` JSON endpoint) render, for a `public`-visibility member
+  meeting, a per-motion roll call listing each property's street address next to its
+  `yes`/`no`/`abstain` choice, weight, and `via_proxy` flag; the attendance summary above the
+  motions (the "N of M votes represented" line) is aggregate-only and names no property.
+  **No resident name is ever published**: `castByName` and `representedByName` are present on the
+  `fetchMeetingFor` payload for the admin panel's use, but the public template never interpolates
+  them, and a test (`test/server/meeting-pages.test.ts`) pins that a name on the payload does not
+  reach the rendered HTML. This is a deliberate data-contract decision, not an oversight: which lot
+  voted which way is the kind of detail a member meeting's minutes traditionally record, and the
+  existing `visibility` tier (`public`/`homeowner`/`board`) is the only gate — a board member who
+  sets a member meeting's visibility to `public` is warned about the address exposure directly on
+  the admin panel's visibility control. Board meetings are unaffected: `board_attendance`/
+  `board_votes` reference `board_people`, not addresses, and a board meeting's roll call has always
+  named board members, never homeowners.
 - **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
   owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
   by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in

@@ -20,6 +20,14 @@ export const properties = sqliteTable(
     status: text('status', { enum: ['active', 'inactive'] })
       .notNull()
       .default('active'),
+    // Votes at member meetings are per property, and associations sometimes
+    // weight them by lot size or ownership share. Always present, defaulting
+    // to 1, so weighted and unweighted share one code path: every tally and
+    // quorum check does SUM(weight), which equals COUNT(*) when all weights
+    // are 1. Integer "shares" rather than a float — floating-point tallies
+    // accumulate error; fractional shares are expressed by scaling the whole
+    // scheme up.
+    voteWeight: integer('vote_weight').notNull().default(1),
     notes: text('notes'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
@@ -237,6 +245,29 @@ export const motions = sqliteTable(
     secondPersonId: text('second_person_id').references(() => boardPeople.id, {
       onDelete: 'restrict',
     }),
+    // A member meeting's mover is an owner, not a board person. The parent
+    // meeting's `body` disambiguates which pair is populated, so these stay
+    // nullable rather than forming a checked constraint.
+    //
+    // NOTE: drizzle-kit's SQLite `ALTER TABLE ADD COLUMN` generator drops the
+    // `onDelete` action — only its `CREATE TABLE` path emits FK actions. The
+    // migration this produced (0011) adds these two columns with a bare
+    // `REFERENCES owners(id)`, so the live database enforces SQLite's default
+    // `NO ACTION` here, not `RESTRICT`, even though this declaration says
+    // `restrict`. Do not trust this annotation as ground truth for these two
+    // columns. In practice it is behaviorally inert: every FK in this
+    // codebase is non-deferred (no `PRAGMA defer_foreign_keys` anywhere), and
+    // `NO ACTION` vs `RESTRICT` reject an in-use-row delete identically under
+    // non-deferred constraints. That equivalence would break if deferred
+    // constraints were ever introduced — see the "refuses to delete an owner
+    // who moved a motion" test in member-schema.test.ts, which pins today's
+    // actual (NO ACTION) behavior rather than the declared one.
+    moverOwnerId: text('mover_owner_id').references(() => owners.id, {
+      onDelete: 'restrict',
+    }),
+    secondOwnerId: text('second_owner_id').references(() => owners.id, {
+      onDelete: 'restrict',
+    }),
     outcome: text('outcome', {
       enum: ['passed', 'failed', 'withdrawn', 'tabled'],
     }).notNull(),
@@ -270,6 +301,71 @@ export const boardVotes = sqliteTable(
   // accumulate. Also the leftmost prefix for the per-motion tally read.
   (t) => [
     uniqueIndex('board_votes_motion_person_unq').on(t.motionId, t.personId),
+  ],
+);
+
+// Member-meeting attendance is per PROPERTY, not per person, because that is
+// what quorum counts. `represented_by_owner_id` records which owner actually
+// showed up when known — a sign-in sheet does not always say.
+export const memberAttendance = sqliteTable(
+  'member_attendance',
+  {
+    id: text('id').primaryKey(),
+    meetingId: text('meeting_id')
+      .notNull()
+      .references(() => meetings.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    present: integer('present', { mode: 'boolean' }).notNull(),
+    representedByOwnerId: text('represented_by_owner_id').references(
+      () => owners.id,
+      { onDelete: 'set null' },
+    ),
+    viaProxy: integer('via_proxy', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+  },
+  // One row per property per meeting — re-recording attendance replaces
+  // rather than accumulates.
+  (t) => [
+    uniqueIndex('member_attendance_meeting_property_unq').on(
+      t.meetingId,
+      t.propertyId,
+    ),
+  ],
+);
+
+export const memberVotes = sqliteTable(
+  'member_votes',
+  {
+    id: text('id').primaryKey(),
+    motionId: text('motion_id')
+      .notNull()
+      .references(() => motions.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
+      onDelete: 'set null',
+    }),
+    viaProxy: integer('via_proxy', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    // Snapshot of properties.vote_weight when this vote was recorded.
+    // Correcting a property's weight later must not silently rewrite past
+    // tallies — same reasoning as reports.sources_json.
+    weight: integer('weight').notNull(),
+    // Member motions are yes/no/abstain. `recused` and `absent` are board
+    // roll-call concepts and are deliberately absent here.
+    choice: text('choice', { enum: ['yes', 'no', 'abstain'] }).notNull(),
+  },
+  // One vote per lot — this index is what enforces it.
+  (t) => [
+    uniqueIndex('member_votes_motion_property_unq').on(
+      t.motionId,
+      t.propertyId,
+    ),
   ],
 );
 

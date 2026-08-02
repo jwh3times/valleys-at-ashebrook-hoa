@@ -1,4 +1,4 @@
-import { inArray, desc, and, eq, asc, count } from 'drizzle-orm';
+import { inArray, desc, and, eq, asc, count, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import type { Db } from '../db/client';
 import {
@@ -9,6 +9,10 @@ import {
   motions,
   boardVotes,
   boardPeople,
+  properties,
+  owners,
+  memberAttendance,
+  memberVotes,
 } from '../db/schema';
 import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
@@ -198,6 +202,82 @@ async function assembleMeetingDetail(
     votesByMotion.set(v.motionId, list);
   }
 
+  // Property addresses and owner names, resolved the same way board_people
+  // names are resolved above: one unscoped lookup, then a map. Both member
+  // attendance and every motion's member votes need both maps, so they are
+  // built once and shared.
+  const propertyRows = await db
+    .select({
+      id: properties.id,
+      address: properties.address,
+      voteWeight: properties.voteWeight,
+    })
+    .from(properties);
+  const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
+  const weightOf = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
+
+  const ownerRows = await db
+    .select({ id: owners.id, fullName: owners.fullName })
+    .from(owners);
+  const ownerNameOf = new Map(ownerRows.map((o) => [o.id, o.fullName]));
+
+  const memberAttendanceRows = await db
+    .select({
+      propertyId: memberAttendance.propertyId,
+      present: memberAttendance.present,
+      representedByOwnerId: memberAttendance.representedByOwnerId,
+      viaProxy: memberAttendance.viaProxy,
+    })
+    .from(memberAttendance)
+    .where(eq(memberAttendance.meetingId, id));
+
+  // Scoped to this meeting's own motions, same reasoning and the same
+  // empty-list guard as the board votes query above — inArray(col, []) is a
+  // runtime error in Drizzle, and a meeting with no motions is ordinary.
+  const memberVoteRows =
+    motionRows.length === 0
+      ? []
+      : await db
+          .select({
+            motionId: memberVotes.motionId,
+            propertyId: memberVotes.propertyId,
+            castByOwnerId: memberVotes.castByOwnerId,
+            viaProxy: memberVotes.viaProxy,
+            weight: memberVotes.weight,
+            choice: memberVotes.choice,
+          })
+          .from(memberVotes)
+          .where(
+            inArray(
+              memberVotes.motionId,
+              motionRows.map((mo) => mo.id),
+            ),
+          );
+  // This grouping, not the `where` above, is what actually prevents another
+  // meeting's votes from leaking into this meeting's motions: motion ids are
+  // unique across the whole table, so grouping by motionId and then reading
+  // only `motionRows`' own ids back out of the map is isolation on its own.
+  // The `where inArray(...)` is an overfetch guard (skip the round trip when
+  // there are no motions to match) layered on top of that, not the thing
+  // doing the scoping — do not remove this grouping believing the `where`
+  // alone covers it.
+  const memberVotesByMotion = new Map<string, typeof memberVoteRows>();
+  for (const v of memberVoteRows) {
+    const list = memberVotesByMotion.get(v.motionId) ?? [];
+    list.push(v);
+    memberVotesByMotion.set(v.motionId, list);
+  }
+
+  // SUM(vote_weight) over ACTIVE properties only — the member quorum
+  // denominator. A single SQL aggregate, not a row scan totalled in JS.
+  // SQLite's SUM returns NULL over zero rows, hence the coalesce.
+  const [{ totalActiveWeight }] = await db
+    .select({
+      totalActiveWeight: sql<number>`coalesce(sum(${properties.voteWeight}), 0)`,
+    })
+    .from(properties)
+    .where(eq(properties.status, 'active'));
+
   return {
     id: m.id,
     body: m.body,
@@ -217,8 +297,20 @@ async function assembleMeetingDetail(
       fullName: nameOf.get(a.personId) ?? 'Unknown',
       present: a.present,
     })),
+    memberAttendance: memberAttendanceRows.map((a) => ({
+      propertyId: a.propertyId,
+      address: addressOf.get(a.propertyId) ?? 'Unknown',
+      present: a.present,
+      weight: weightOf.get(a.propertyId) ?? 0,
+      representedByName: a.representedByOwnerId
+        ? (ownerNameOf.get(a.representedByOwnerId) ?? null)
+        : null,
+      viaProxy: a.viaProxy,
+    })),
+    totalActiveWeight,
     motions: motionRows.map((mo) => {
       const votes = votesByMotion.get(mo.id) ?? [];
+      const mVotes = memberVotesByMotion.get(mo.id) ?? [];
       return {
         id: mo.id,
         sequence: mo.sequence,
@@ -236,6 +328,20 @@ async function assembleMeetingDetail(
           fullName: nameOf.get(v.personId) ?? 'Unknown',
           choice: v.choice,
         })),
+        memberVotes: mVotes.map((v) => ({
+          propertyId: v.propertyId,
+          address: addressOf.get(v.propertyId) ?? 'Unknown',
+          choice: v.choice,
+          weight: v.weight,
+          castByName: v.castByOwnerId
+            ? (ownerNameOf.get(v.castByOwnerId) ?? null)
+            : null,
+          viaProxy: v.viaProxy,
+        })),
+        // Weight comes from each vote's own stored `weight` snapshot, never
+        // recomputed from the property's current voteWeight — that would
+        // defeat the snapshot when a weight is corrected after the fact.
+        memberTally: tallyVotes(mVotes),
       };
     }),
   };

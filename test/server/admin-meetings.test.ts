@@ -56,6 +56,20 @@ describe('meetings admin route — gate', () => {
     ).toBe(401);
   });
 
+  it('rejects an unauthenticated setMemberAttendance with 401', async () => {
+    expect(
+      (
+        await POST(
+          req(url, 'POST', {
+            action: 'setMemberAttendance',
+            meetingId: 'm1',
+            entries: [],
+          }),
+        )
+      ).status,
+    ).toBe(401);
+  });
+
   it('rejects an unauthenticated approve with 401', async () => {
     expect(
       (await POST(req(url, 'POST', { action: 'approve', meetingId: 'm1' })))

@@ -47,6 +47,20 @@ describe('motions admin route — gate', () => {
     ).toBe(401);
   });
 
+  it('rejects an unauthenticated setMemberVotes with 401', async () => {
+    expect(
+      (
+        await POST(
+          req(url, 'POST', {
+            action: 'setMemberVotes',
+            motionId: 'mo1',
+            entries: [],
+          }),
+        )
+      ).status,
+    ).toBe(401);
+  });
+
   it('rejects an unauthenticated patch with 401', async () => {
     expect(
       (await PATCH(req(url, 'PATCH', { id: 'mo1', text: 'X' }))).status,

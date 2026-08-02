@@ -123,20 +123,27 @@ Markdown twins described below and never the human-readable originals.
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
   duplicate group resurfaces for review.
-- Board-only meeting record (board meetings only — member meetings, attendance, votes,
-  resolutions, elections, ballots, and proxies are a later phase): `/api/admin/meetings` supports
-  `GET`/`POST`/`PATCH`/`DELETE`. `GET` lists every meeting including drafts, or returns one full
-  meeting detail with `?id=`; `POST` creates a meeting, or with `{ action: 'setAttendance' }` fully
-  replaces its attendance roll, or with `{ action: 'approve' }`/`{ action: 'unapprove' }` flips
-  `status` (`approve` returns `409` if already approved; `unapprove` clears
+- Board-only meeting record (board and member meetings — resolutions, elections, ballots, and
+  proxies are a later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`. `GET`
+  lists every meeting including drafts, or returns one full meeting detail with `?id=`; `POST`
+  creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
+  per-person attendance roll, or with `{ action: 'setMemberAttendance' }` fully replaces a member
+  meeting's per-property attendance roll, or with `{ action: 'approve' }`/`{ action: 'unapprove' }`
+  flips `status` (`approve` returns `409` if already approved; `unapprove` clears
   `approved_at`/`approved_by`/`approved_by_motion_id`); `PATCH` updates a meeting's fields but
   cannot write `status`; `DELETE` returns `409` on an approved meeting (unapprove first), otherwise
   cascading its attendance, motions, and votes. `/api/admin/motions` supports
   `POST`/`PATCH`/`DELETE`. `POST` creates a motion with a server-assigned `sequence` (unique per
-  meeting), or with `{ action: 'setVotes' }` fully replaces a motion's roll-call vote set; `PATCH`
-  updates a motion's fields but cannot write `sequence` or move it between meetings; `DELETE`
-  cascades its votes. `setAttendance` and `setVotes` each replace their full child set in one
-  `db.batch()`. All verbs on both routes are `requireBoard`-gated.
+  meeting), or with `{ action: 'setVotes' }` fully replaces a board motion's roll-call vote set, or
+  with `{ action: 'setMemberVotes' }` fully replaces a member motion's per-property vote set;
+  `PATCH` updates a motion's fields but cannot write `sequence` or move it between meetings;
+  `DELETE` cascades its votes. `setAttendance`/`setMemberAttendance` and `setVotes`/`setMemberVotes`
+  each replace their full child set in one `db.batch()`. All four attendance/vote actions return
+  `409` if the target meeting's or motion's `body` doesn't match the action — board attendance/votes
+  against a member meeting/motion, or vice versa, are refused; `setMemberVotes` also returns `400`
+  for an unknown `propertyId`, since it stamps `memberVotes.weight` from `properties.vote_weight` at
+  recording time and must resolve that weight to build a legal row. All verbs on both routes are
+  `requireBoard`-gated.
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
@@ -192,7 +199,8 @@ Markdown twins described below and never the human-readable originals.
   `fetchReport`, `deleteReport`), board roster helpers (`fetchBoardPeople`, `saveBoardPerson`,
   `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`), and meeting-record helpers
   (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
-  `unapproveMeeting`, `setAttendance`, `saveMotion`, `deleteMotion`, `setVotes`).
+  `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
+  `setVotes`, `setMemberVotes`).
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
@@ -218,8 +226,13 @@ Markdown twins described below and never the human-readable originals.
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
   reachable only through the board-only `fetchAdminMeetings`/`fetchAdminMeeting`; a shared
   `assembleMeetingDetail` builds the attendance/motions/roll-call body for both pairs and carries no
-  status or tier logic itself — see [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md)), and
-  `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring).
+  status or tier logic itself — see [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md).
+  `assembleMeetingDetail` also assembles the member side — `MeetingDetail.memberAttendance`,
+  per-motion `MotionDetail.memberVotes`/`memberTally`, and `totalActiveWeight`, a `SUM(vote_weight)`
+  aggregate over ACTIVE properties that is the member quorum denominator, computed unconditionally
+  for every meeting (including board ones) so consumers must gate its use on `meetings.body`, never
+  on the value itself being non-zero; see [ADR 0015](./docs/adr/0015-weighted-member-voting.md)),
+  and `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring).
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
 - `roster/` and `verification/`: homeowner verification support.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
@@ -254,23 +267,34 @@ with a nullable `user_id` link to a Better Auth `user` row kept for display only
 authorization; `board_terms` records a term of service — `person_id`, nullable `title`,
 `term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
 across terms; deleting a person with a term on record is refused with `409`), `meetings`,
-`board_attendance`, `motions`, and `board_votes` (the board meeting record — board meetings only;
-member meetings, member votes, resolutions, elections, ballots, and proxies are a later phase — per
-[ADR 0014](./docs/adr/0014-meeting-record-status-gate.md): `meetings` has `body` (`board`/`member`,
-the column that decides which voter model applies — only `board` is implemented here), `kind`
-(`regular`/`special`/`annual`), `date`, `start_time`, `location`, `title`, `summary_md`,
-`document_id` referencing `documents` on delete-set-null, `quorum_required`, `status`
-(`draft`/`approved`, default `draft`), `visibility` (default `board`), approval provenance
-`approved_at`/`approved_by`/`approved_by_motion_id`, and `created_by`; `board_attendance` is one
-present/absent row per meeting per `board_people` row, unique per pair; `motions` records one
-motion per meeting with a server-assigned `sequence` unique per meeting, mover/second referencing
-`board_people` on delete-restrict, and a board-entered `outcome`
-(`passed`/`failed`/`withdrawn`/`tabled`); `board_votes` is one roll-call vote per motion per
-`board_people` row (`choice`: `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair. A
-motion's displayed tally is always derived from `board_votes` by `tallyVotes` in
-`src/lib/types.ts`; `motions.outcome` itself is board-entered and never computed, because passage
-thresholds vary and quorum is not modelled), roster/verification
-tables (`properties`, `owners`, `user_property_links`,
+`board_attendance`, `motions`, `board_votes`, `member_attendance`, and `member_votes` (the meeting
+record — board and member meetings; resolutions, elections, ballots, and proxies are a later phase
+— per [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md) and
+[ADR 0015](./docs/adr/0015-weighted-member-voting.md): `meetings` has `body` (`board`/`member`, the
+column that decides which voter model applies), `kind` (`regular`/`special`/`annual`), `date`,
+`start_time`, `location`, `title`, `summary_md`, `document_id` referencing `documents` on
+delete-set-null, `quorum_required`, `status` (`draft`/`approved`, default `draft`), `visibility`
+(default `board`), approval provenance `approved_at`/`approved_by`/`approved_by_motion_id`, and
+`created_by`; `board_attendance` is one present/absent row per meeting per `board_people` row,
+unique per pair; `motions` records one motion per meeting with a server-assigned `sequence` unique
+per meeting, board mover/second referencing `board_people` on delete-restrict, plus nullable
+`mover_owner_id`/`second_owner_id` referencing `owners` — pre-placed for a later phase; nothing
+writes them yet, and the mover/second pickers are hidden on member meetings — and a board-entered
+`outcome` (`passed`/`failed`/`withdrawn`/`tabled`); `board_votes` is one roll-call vote per motion
+per `board_people` row (`choice`: `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
+`member_attendance` is one present/absent row per meeting per `properties` row, unique per pair,
+with nullable `represented_by_owner_id` and a `via_proxy` flag; `member_votes` is one vote per
+motion per `properties` row — that uniqueness is what enforces one vote per lot — with nullable
+`cast_by_owner_id`, a `via_proxy` flag, a `weight` column snapshotting `properties.vote_weight` as
+stamped by the route at recording time (so correcting a property's weight later cannot rewrite a
+past tally), and `choice` restricted to `yes`/`no`/`abstain` (`recused`/`absent` are board
+roll-call concepts and are excluded). A motion's displayed tally is always derived from
+`board_votes` or `member_votes` by the single `tallyVotes` in `src/lib/types.ts`, which sums each
+vote's `weight` (defaulting to 1, so board votes — which carry none — tally exactly as before, with
+no separate weighted/unweighted mode); `motions.outcome` itself is board-entered and never
+computed, because passage thresholds vary and quorum is not modelled), roster/verification tables
+(`properties` — including `vote_weight`, an integer `NOT NULL DEFAULT 1` that weights a lot's
+member-meeting vote and is rejected at zero, see ADR 0015 — `owners`, `user_property_links`,
 `property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
 `account`, `verification`).
 
@@ -294,7 +318,10 @@ the `reports` table and its `reports_created_at_idx` index. Migration `0009` add
 `board_terms.term_end`. Migration `0010` adds the `meetings`, `board_attendance`, `motions`, and
 `board_votes` tables, with `meetings_status_date_idx`, `meetings_body_idx`, and
 `motions_meeting_id_idx`, plus unique indexes enforcing one attendance row per meeting per person,
-one vote per motion per person, and one motion per meeting per `sequence`. Migrations are applied
+one vote per motion per person, and one motion per meeting per `sequence`. Migration `0011` adds
+`properties.vote_weight`, the `member_attendance` and `member_votes` tables with unique indexes
+enforcing one attendance row per meeting per property and one vote per motion per property, and
+nullable `motions.mover_owner_id`/`motions.second_owner_id`. Migrations are applied
 with `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
