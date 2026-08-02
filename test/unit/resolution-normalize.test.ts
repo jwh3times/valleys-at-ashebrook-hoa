@@ -44,12 +44,19 @@ describe('normalizeResolutionInput', () => {
   it('rejects a falsy-but-present status, so a truthiness check would fail', () => {
     // The guard must fire on key PRESENCE. A regression to `if (raw.status)`
     // would let null and undefined through.
-    expect(
-      normalizeResolutionInput({ ...valid, status: null }, 'create').ok,
-    ).toBe(false);
-    expect(
-      normalizeResolutionInput({ id: 'r1', status: undefined }, 'patch').ok,
-    ).toBe(false);
+    const onCreate = normalizeResolutionInput(
+      { ...valid, status: null },
+      'create',
+    );
+    expect(onCreate.ok).toBe(false);
+    if (!onCreate.ok) expect(onCreate.error).toMatch(/status is not editable/i);
+
+    const onPatch = normalizeResolutionInput(
+      { title: 'Renamed', status: undefined },
+      'patch',
+    );
+    expect(onPatch.ok).toBe(false);
+    if (!onPatch.ok) expect(onPatch.error).toMatch(/status is not editable/i);
   });
 
   it('rejects a supersedesId key — supersession is an action, not a field', () => {
@@ -68,6 +75,39 @@ describe('normalizeResolutionInput', () => {
       'create',
     );
     expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/adoptedByMotionId is not editable/i);
+  });
+
+  it('rejects a falsy-but-present supersedesId or adoptedByMotionId', () => {
+    // Same presence-not-truthiness rule as status: a regression to
+    // `if (raw.supersedesId)` would let null and undefined through, and the
+    // chain invariants are only safe while these stay unwritable by PATCH.
+    // Each case asserts the field-specific message, so it cannot pass for
+    // some unrelated reason.
+    for (const field of ['supersedesId', 'adoptedByMotionId'] as const) {
+      const onCreate = normalizeResolutionInput(
+        { ...valid, [field]: null },
+        'create',
+      );
+      expect(onCreate.ok).toBe(false);
+      if (!onCreate.ok) {
+        expect(onCreate.error).toMatch(
+          new RegExp(`${field} is not editable`, 'i'),
+        );
+      }
+
+      const onPatch = normalizeResolutionInput(
+        { title: 'Renamed', [field]: undefined },
+        'patch',
+      );
+      expect(onPatch.ok).toBe(false);
+      if (!onPatch.ok) {
+        expect(onPatch.error).toMatch(
+          new RegExp(`${field} is not editable`, 'i'),
+        );
+      }
+    }
   });
 
   it('treats a blank effective date as null', () => {
