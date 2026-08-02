@@ -13,6 +13,8 @@ import {
   candidates,
   ballots,
   properties,
+  owners,
+  meetings,
 } from '../../../server/db/schema';
 import { normalizeElectionInput } from '../../../lib/types';
 import { fetchAdminElections } from '../../../server/content/reads';
@@ -29,6 +31,22 @@ const CERTIFIED_OR_VOID = (thing: string): string =>
 // silently overwrite real cast votes.
 const NOT_RECORDED = (thing: string): string =>
   `${thing} can only be typed for a recorded election`;
+
+/** 404 Response if `meetingId` is non-null and does not exist, else null. */
+async function checkMeetingExists(
+  db: Db,
+  meetingId: string | null | undefined,
+): Promise<Response | null> {
+  if (!meetingId) return null;
+  const rows = await db
+    .select({ id: meetings.id })
+    .from(meetings)
+    .where(eq(meetings.id, meetingId))
+    .limit(1);
+  if (rows.length === 0)
+    return new Response('Meeting not found', { status: 404 });
+  return null;
+}
 
 interface TallyEntry {
   candidateId: string;
@@ -210,6 +228,25 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       : [];
   const weightById = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
 
+  // Pre-checked the same way propertyId is: castByOwnerId is a nullable FK
+  // to owners (ON DELETE SET NULL), so an unknown id would otherwise throw a
+  // raw D1 FOREIGN KEY constraint error out of the insert below.
+  const ownerIds = [
+    ...new Set(
+      parsedEntries.value
+        .map((e) => e.castByOwnerId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const ownerRows =
+    ownerIds.length > 0
+      ? await db
+          .select({ id: owners.id })
+          .from(owners)
+          .where(inArray(owners.id, ownerIds))
+      : [];
+  const validOwnerIds = new Set(ownerRows.map((o) => o.id));
+
   const rows: {
     id: string;
     electionId: string;
@@ -224,6 +261,10 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     const dbWeight = weightById.get(e.propertyId);
     if (dbWeight === undefined)
       return new Response('Unknown property in entries', { status: 400 });
+    if (e.castByOwnerId !== null && !validOwnerIds.has(e.castByOwnerId))
+      return new Response('Unknown castByOwnerId in entries', {
+        status: 400,
+      });
     // setMemberVotes stamps weight from the database and never trusts the
     // client, because it builds a COMPUTED tally — a client-supplied weight
     // there would let a caller silently rewrite the electorate. This action
@@ -330,6 +371,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const result = normalizeElectionInput(parsed.value, 'create');
   if (!result.ok) return new Response(result.error, { status: 400 });
+  const meetingCheck = await checkMeetingExists(db, result.value.meetingId);
+  if (meetingCheck) return meetingCheck;
   const ctx = await resolveAuthContext(locals, request, env);
   const now = new Date();
   const id = crypto.randomUUID();
@@ -363,6 +406,8 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const result = normalizeElectionInput(parsed.value, 'patch');
   if (!result.ok) return new Response(result.error, { status: 400 });
   const input = result.value;
+  if (Object.keys(input).length === 0)
+    return new Response('No fields to update', { status: 400 });
   const db = getDb(env);
   const existing = await db
     .select({ id: elections.id, status: elections.status })
@@ -373,6 +418,8 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response('Election not found', { status: 404 });
   if (existing[0].status === 'certified' || existing[0].status === 'void')
     return new Response(CERTIFIED_OR_VOID('it'), { status: 409 });
+  const meetingCheck = await checkMeetingExists(db, input.meetingId);
+  if (meetingCheck) return meetingCheck;
   // An election is not moved between meetings' bookkeeping via any other
   // mechanism — only these fields, matching owners.ts's PATCH allow-list.
   const set: Record<string, unknown> = { updatedAt: new Date() };
@@ -405,7 +452,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
     return new Response('Election not found', { status: 404 });
   if (existing[0].status !== 'draft')
     return new Response(
-      'Only a draft election can be deleted — one that has closed is part of the record.',
+      `Only a draft election can be deleted — one that is already ${existing[0].status} is part of the record.`,
       { status: 409 },
     );
   await db.delete(elections).where(eq(elections.id, id));
