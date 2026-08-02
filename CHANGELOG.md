@@ -31,7 +31,10 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   cannot win the same election twice.
 - A new **Elections** tab in the admin panel creates elections, manages their candidates, records
   each candidate's tally and the per-lot ballots that produced the turnout figure, and drives all
-  four transitions from the closed/certified/void state machine.
+  four transitions from the closed/certified/void state machine. A tally left blank stays
+  unrecorded rather than counting as zero — the two are different facts, and a candidate whose
+  tally was never entered is shown as not recorded on the public page instead of appearing to have
+  been shut out.
 - A new public page, `/elections`, lists closed and certified elections with each candidate's
   tally, winners marked, and turnout stated only in aggregate — lots and vote weight, both against
   their eligible totals — never the per-lot list of who returned a ballot. A visibility tier applied
@@ -39,6 +42,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - Migration `0013` adds the `elections`, `candidates`, and `ballots` tables, with a unique index
   preventing two ballots from the same lot on one election and another preventing two candidates
   from sharing a sequence position within one election.
+
+### Changed
+
+- Deleting a meeting is now refused when an election records it as where it was held. The link
+  would otherwise be dropped silently, leaving a certified election with no record of the meeting
+  it took place at — unlink the election first if the meeting really needs to go.
+- A term of service created by certifying an election can no longer be deleted directly from the
+  board roster. Removing it that way would leave the election still claiming a winner whose term
+  had vanished; uncertifying the election is the way to undo it, which removes the terms it
+  created and reopens the result for correction.
 
 ### Fixed
 
