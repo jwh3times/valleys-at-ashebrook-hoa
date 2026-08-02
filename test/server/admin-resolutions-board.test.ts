@@ -114,6 +114,7 @@ describe('resolutions admin route — board', () => {
     const row = await getResolution(id);
     expect(row.status).toBe('draft');
     expect(row.number).toBe('R-2026-01');
+    expect(row.createdBy).toBe('b');
   });
 
   it('rejects a create carrying status, with 400', async () => {
@@ -126,6 +127,11 @@ describe('resolutions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(400);
+    const rows = await getDb(env)
+      .select()
+      .from(resolutions)
+      .where(eq(resolutions.number, 'R-2026-01'));
+    expect(rows.length).toBe(0);
   });
 
   it('duplicate number returns 409 on create', async () => {
@@ -138,6 +144,12 @@ describe('resolutions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/already exists/i);
+    const rows = await getDb(env)
+      .select()
+      .from(resolutions)
+      .where(eq(resolutions.number, 'R-2026-05'));
+    expect(rows.length).toBe(1);
   });
 
   it('duplicate number returns 409 on patch', async () => {
@@ -145,6 +157,7 @@ describe('resolutions admin route — board', () => {
     const id = await createResolution({ number: 'R-2026-06' });
     const res = await PATCH(req(url, 'PATCH', { id, number: 'R-2026-05' }));
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/already exists/i);
     const row = await getResolution(id);
     expect(row.number).toBe('R-2026-06');
   });
@@ -193,6 +206,7 @@ describe('resolutions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/not a draft/i);
     const row = await getResolution(id);
     expect(row.effectiveDate).toBe('2026-01-01');
   });
@@ -236,6 +250,71 @@ describe('resolutions admin route — board', () => {
     expect(oldRow.status).toBe('superseded');
   });
 
+  it('supersede without effectiveDate returns 400', async () => {
+    const oldId = await createResolution({
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const newId = await createResolution();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'supersede',
+        id: newId,
+        supersedesId: oldId,
+      }),
+    );
+    expect(res.status).toBe(400);
+    const newRow = await getResolution(newId);
+    const oldRow = await getResolution(oldId);
+    expect(newRow.status).toBe('draft');
+    expect(newRow.supersedesId).toBeNull();
+    expect(oldRow.status).toBe('in_force');
+  });
+
+  it('supersede records the adopting motion when given', async () => {
+    const oldId = await createResolution({
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const newId = await createResolution();
+    const motionId = await createMotion();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'supersede',
+        id: newId,
+        supersedesId: oldId,
+        effectiveDate: '2026-03-01',
+        motionId,
+      }),
+    );
+    expect(res.status).toBe(204);
+    const newRow = await getResolution(newId);
+    expect(newRow.adoptedByMotionId).toBe(motionId);
+  });
+
+  it('supersede with an unknown motionId returns 404', async () => {
+    const oldId = await createResolution({
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const newId = await createResolution();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'supersede',
+        id: newId,
+        supersedesId: oldId,
+        effectiveDate: '2026-03-01',
+        motionId: 'nope',
+      }),
+    );
+    expect(res.status).toBe(404);
+    const newRow = await getResolution(newId);
+    const oldRow = await getResolution(oldId);
+    expect(newRow.status).toBe('draft');
+    expect(newRow.supersedesId).toBeNull();
+    expect(oldRow.status).toBe('in_force');
+  });
+
   it('supersede refuses self-supersession with 409', async () => {
     const id = await createResolution({
       status: 'in_force',
@@ -272,10 +351,38 @@ describe('resolutions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/not in force/i);
     const oldRow = await getResolution(oldId);
     const newRow = await getResolution(newId);
     expect(oldRow.status).toBe('draft');
     expect(newRow.status).toBe('draft');
+  });
+
+  it('supersede with a non-draft superseding resolution returns 409', async () => {
+    const oldId = await createResolution({
+      number: 'R-2026-01',
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const newId = await createResolution({
+      number: 'R-2026-02',
+      status: 'in_force',
+      effectiveDate: '2026-01-15',
+    });
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'supersede',
+        id: newId,
+        supersedesId: oldId,
+        effectiveDate: '2026-03-01',
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/must be a draft/i);
+    const oldRow = await getResolution(oldId);
+    const newRow = await getResolution(newId);
+    expect(oldRow.status).toBe('in_force');
+    expect(newRow.supersedesId).toBeNull();
   });
 
   it('supersede refuses a predecessor already superseded, with 409', async () => {
@@ -284,15 +391,16 @@ describe('resolutions admin route — board', () => {
       status: 'in_force',
       effectiveDate: '2026-01-01',
     });
-    const midId = await createResolution({ number: 'R-2026-02' });
-    await POST(
-      req(url, 'POST', {
-        action: 'supersede',
-        id: midId,
-        supersedesId: oldId,
-        effectiveDate: '2026-02-01',
-      }),
-    );
+    // Reach this precondition the only way it is actually reachable: insert
+    // a second row directly that already claims to supersede oldId, without
+    // going through the supersede action itself. Going through the action
+    // (as an earlier version of this test did) also flips oldId's status
+    // away from in_force, so the request would land on the earlier
+    // not-in-force check instead and never exercise this one.
+    await createResolution({
+      number: 'R-2026-02',
+      supersedesId: oldId,
+    });
     const newId = await createResolution({ number: 'R-2026-03' });
     const res = await POST(
       req(url, 'POST', {
@@ -303,7 +411,10 @@ describe('resolutions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/already superseded/i);
+    const oldRow = await getResolution(oldId);
     const newRow = await getResolution(newId);
+    expect(oldRow.status).toBe('in_force');
     expect(newRow.status).toBe('draft');
     expect(newRow.supersedesId).toBeNull();
   });
@@ -319,6 +430,9 @@ describe('resolutions admin route — board', () => {
       }),
     );
     expect(res.status).toBe(404);
+    const newRow = await getResolution(newId);
+    expect(newRow.status).toBe('draft');
+    expect(newRow.supersedesId).toBeNull();
   });
 
   it('repeal moves in_force to repealed and leaves supersedesId links untouched', async () => {
@@ -349,6 +463,7 @@ describe('resolutions admin route — board', () => {
     const id = await createResolution();
     const res = await POST(req(url, 'POST', { action: 'repeal', id }));
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/not in force/i);
     const row = await getResolution(id);
     expect(row.status).toBe('draft');
   });
@@ -370,6 +485,43 @@ describe('resolutions admin route — board', () => {
     expect(row.adoptedByMotionId).toBeNull();
   });
 
+  it('PATCH updates title, bodyMd, and visibility', async () => {
+    const id = await createResolution();
+    const res = await PATCH(
+      req(url, 'PATCH', {
+        id,
+        title: 'Updated pool hours',
+        bodyMd: 'The pool is open 8am to 10pm.',
+        visibility: 'public',
+      }),
+    );
+    expect(res.status).toBe(204);
+    const row = await getResolution(id);
+    expect(row.title).toBe('Updated pool hours');
+    expect(row.bodyMd).toBe('The pool is open 8am to 10pm.');
+    expect(row.visibility).toBe('public');
+  });
+
+  it('PATCH refuses to clear effectiveDate on a non-draft resolution, with 409', async () => {
+    const id = await createResolution({
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const res = await PATCH(req(url, 'PATCH', { id, effectiveDate: null }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/cannot be cleared/i);
+    const row = await getResolution(id);
+    expect(row.effectiveDate).toBe('2026-01-01');
+  });
+
+  it('PATCH may clear effectiveDate on a draft resolution', async () => {
+    const id = await createResolution({ effectiveDate: '2026-01-01' });
+    const res = await PATCH(req(url, 'PATCH', { id, effectiveDate: null }));
+    expect(res.status).toBe(204);
+    const row = await getResolution(id);
+    expect(row.effectiveDate).toBeNull();
+  });
+
   it('PATCH on a nonexistent resolution returns 404', async () => {
     const res = await PATCH(req(url, 'PATCH', { id: 'nope', title: 'X' }));
     expect(res.status).toBe(404);
@@ -382,6 +534,7 @@ describe('resolutions admin route — board', () => {
     });
     const res = await DELETE(req(url, 'DELETE', { id }));
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/taken effect/i);
     const row = await getResolution(id);
     expect(row).toBeDefined();
   });
@@ -394,6 +547,7 @@ describe('resolutions admin route — board', () => {
     });
     const res = await DELETE(req(url, 'DELETE', { id: oldId }));
     expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/superseded by another/i);
     const row = await getResolution(oldId);
     expect(row).toBeDefined();
   });
