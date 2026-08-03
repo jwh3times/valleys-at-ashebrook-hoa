@@ -86,9 +86,10 @@ over abbreviations. Use `*.test.ts` and `*.test.tsx` for tests. Keep server-only
 ## Architecture
 
 **Rendering model.** Pages are `.astro` files in `src/pages/`. The site is full SSR. Public content
-(announcements, documents, dues, the meeting record, the resolutions book) is read server-side in
-each page's frontmatter via `fetchAnnouncementsFor`, `fetchDocumentsFor`, `getDuesSettings`,
-`fetchMeetingsFor`/`fetchMeetingFor`, or `fetchResolutionsFor`, using the role from
+(announcements, documents, dues, the meeting record, the resolutions book, the elections record) is
+read server-side in each page's frontmatter via `fetchAnnouncementsFor`, `fetchDocumentsFor`,
+`getDuesSettings`, `fetchMeetingsFor`/`fetchMeetingFor`, `fetchResolutionsFor`, or
+`fetchElectionsFor`, using the role from
 `Astro.locals.authContext`, then passed as props to display
 components. Those components render server-side without client directives so HTML ships with real
 content for SEO, first paint, and no-JS behavior. When `fetchMeetingFor` returns `null` for a draft
@@ -116,16 +117,19 @@ Markdown twins described below and never the human-readable originals.
   `GET /api/admin/board-people` returns board people with their terms nested, mirroring the
   properties/owners read. Deleting a board person who has a term of service on record returns
   `409` from `DELETE /api/admin/board-people` — ending the term is the intended action instead —
-  and a term's `person_id` cannot be reassigned via `PATCH /api/admin/board-terms`. The same
-  `DELETE` also returns `409` if the person appears anywhere in the meeting record (attendance, as
-  a motion's mover/second, or a roll-call vote), pre-checking all five RESTRICT foreign keys so the
-  response is deterministic rather than a raw D1 FK error.
+  and a term's `person_id` cannot be reassigned via `PATCH /api/admin/board-terms`; `DELETE
+/api/admin/board-terms` itself returns `409` for a term created by certifying an election
+  (`board_terms.election_id` set) — uncertify that election instead of deleting the term directly.
+  The same board-people `DELETE` also returns `409` if the person appears anywhere in the meeting
+  record (attendance, as a motion's mover/second, or a roll-call vote) or holds a candidacy
+  (`candidates.board_person_id`), pre-checking all six RESTRICT foreign keys so the response is
+  deterministic rather than a raw D1 FK error.
   `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
   duplicate group resurfaces for review.
-- Board-only meeting record (board and member meetings — elections, ballots, and proxies are a
-  later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`. `GET` lists every
+- Board-only meeting record (board and member meetings — proxies and live-conducted elections are
+  a later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`. `GET` lists every
   meeting including drafts, or returns one full meeting detail with `?id=`; `POST`
   creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
   per-person attendance roll, or with `{ action: 'setMemberAttendance' }` fully replaces a member
@@ -134,7 +138,8 @@ Markdown twins described below and never the human-readable originals.
   `approved_at`/`approved_by`/`approved_by_motion_id`); `PATCH` updates a meeting's fields but
   cannot write `status`; `DELETE` returns `409` on an approved meeting (unapprove first), `409` if
   any motion belonging to it is cited as a resolution's adopting motion (see the resolutions
-  bullet below), otherwise cascading its attendance, motions, and votes. `/api/admin/motions`
+  bullet below), `409` if an election records it as where it was held (see the elections bullet
+  below), otherwise cascading its attendance, motions, and votes. `/api/admin/motions`
   supports `POST`/`PATCH`/`DELETE`. `POST` creates a motion with a server-assigned `sequence`
   (unique per meeting), or with `{ action: 'setVotes' }` fully replaces a board motion's roll-call
   vote set, or with `{ action: 'setMemberVotes' }` fully replaces a member motion's per-property
@@ -163,6 +168,33 @@ Markdown twins described below and never the human-readable originals.
   can never be bypassed through a plain field write; `PATCH` also returns `409` if it would clear
   `effective_date` on a non-draft resolution. `DELETE` removes only a `draft` that nothing
   supersedes.
+- Board-only elections record (the board recording an election that already happened on paper —
+  candidates, paper ballots, and tallies typed in from the paper count; live-conducted ballot
+  casting is a later phase; see
+  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md)): `/api/admin/elections`
+  supports `GET`/`POST`/`PATCH`/`DELETE`, plus actions `close`, `void`, `setTallies`,
+  `setBallots`, `certify`, and `uncertify`, all `requireBoard`-gated. `GET` returns every election
+  including drafts, each with its candidates and turnout nested and, board-only, its per-lot
+  ballot list — the same full-detail-on-list shape as `/api/admin/resolutions`. `POST` creates a
+  `draft` election, always `source: 'recorded'` in this phase; `PATCH` edits
+  `title`/`seats`/`electionDate`/`meetingId`/`visibility` only — `status`, `source`, and
+  certification provenance are transition-only and rejected on key presence by
+  `normalizeElectionInput`. `close` moves `draft` -> `closed`; `setTallies` and `setBallots` each
+  fully replace their election's candidate-tally set or per-lot ballot set in one `db.batch()` (a
+  candidate omitted from `setTallies` has its tally restored to `NULL`), and both return `409` for
+  a `certified`/`void` election and `409` for a non-`recorded` election (unreachable today —
+  written ahead of the later live-ballot phase); `setBallots` stamps `weight` from
+  `properties.vote_weight` unless explicitly supplied. `certify` takes per-winner
+  `{candidateId, termStart, termEnd?, title?}` and, in one `db.batch()`, creates `board_people`
+  rows for winners who lack one, backfills `candidates.board_person_id`, opens one `board_terms`
+  row per winner carrying `election_id`, sets `candidates.won`, and moves the election to
+  `certified`; it returns `409` for a winner who already holds an open term and `400` for two
+  winners resolving to the same person. `uncertify` reverses it, deleting the terms it created but
+  never the `board_people` rows. `DELETE` removes only a `draft` election; a `certified` election
+  cannot be voided directly (`void` returns `409` — uncertify first). `/api/admin/candidates`
+  supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned and
+  rejected on key presence, and a candidate can be deleted only while its election is still a
+  `draft` (mark it withdrawn otherwise).
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
@@ -219,21 +251,28 @@ Markdown twins described below and never the human-readable originals.
   `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`), meeting-record helpers
   (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
   `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
-  `setVotes`, `setMemberVotes`), and resolutions-book helpers (`fetchResolutions`,
+  `setVotes`, `setMemberVotes`), resolutions-book helpers (`fetchResolutions`,
   `saveResolution`, `deleteResolution`, `adoptResolution`, `supersedeResolution`,
-  `repealResolution`) — the board-only `GET` already returns every resolution's full detail, so
-  unlike meetings/motions there is no separate single-record fetch.
+  `repealResolution`), and elections-record helpers (`fetchElections`, `saveElection`,
+  `deleteElection`, `closeElection`, `voidElection`, `certifyElection`, `uncertifyElection`,
+  `setTallies`, `setBallots`, `saveCandidate`, `deleteCandidate`) — the board-only `GET` for both
+  resolutions and elections already returns every record's full detail, so unlike meetings/motions
+  neither has a separate single-record fetch.
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
   the admin UI and the `/api/admin/reports` endpoint.
 - `src/lib/types.ts` contains shared shapes, `DEFAULT_*` fallbacks, `DOCUMENT_CATEGORIES`, the
   `Visibility` type, admin-write input normalizers
-  (`normalize{Announcement,Property,Owner,Resolution}Input`, `INPUT_LIMITS`) that trim, cap,
-  validate, and reject on write, the resolution shapes (`ResolutionStatus`,
+  (`normalize{Announcement,Property,Owner,Resolution,Election,Candidate}Input`, `INPUT_LIMITS`)
+  that trim, cap, validate, and reject on write, the resolution shapes (`ResolutionStatus`,
   `RESOLUTION_STATUSES`, `ResolutionSummary`, `ResolutionDetail`, `ResolutionChainLink`,
-  `ResolutionInput`), and a shared `isoDateOrError` calendar-date validator used by both the
-  declarative normalizers and the resolutions route's `adopt`/`supersede` transition arguments.
+  `ResolutionInput`), the elections shapes (`ElectionStatus`, `ElectionSource`,
+  `ELECTION_STATUSES`, `ELECTION_SOURCES`, `ElectionSummary`, `ElectionDetail`,
+  `CandidateSummary`, `ElectionTurnout`, `BallotRow`, `ElectionInput`, `CandidateInput`), and a
+  shared `isoDateOrError` calendar-date validator used by both the declarative normalizers and the
+  resolutions route's `adopt`/`supersede` and the elections route's `certify` transition
+  arguments.
 - `src/lib/site.ts` contains branding constants and official-mode presentation logic (`navLinks`,
   `brandTag`, `accountNav`). The footer disclaimer and `/about` copy are board-editable via site
   settings, with `DISCLAIMER_SHORT` and `DISCLAIMER_LONG` as fallbacks. `disclaimer(site)` and
@@ -267,6 +306,15 @@ Markdown twins described below and never the human-readable originals.
   tier filter at every step, masking an out-of-tier predecessor/successor to
   `{ id: null, number: null, title: null, visible: false }` rather than omitting it, so the chain's
   true length is never hidden. See [ADR 0016](./docs/adr/0016-resolutions-supersession-chain.md).
+  `reads.ts` also has the elections record — `fetchElectionsFor(env, role)` filters
+  `status IN ('closed', 'certified')` UNCONDITIONALLY, including for a board caller, the same rule
+  ADR 0014 sets for meetings, so a draft or void election is reachable only through the board-only
+  `fetchAdminElections`; both share `assembleElectionDetail`, which always computes aggregate
+  turnout (`ballotsCast`, `weightCast`, `eligibleCount`, `eligibleWeight`) but attaches the per-lot
+  `ballots` list only for the admin caller — `ElectionDetail.ballots` is `null` on every public
+  read, since publishing per-lot turnout beside per-candidate tallies is what would make an
+  individual's choice deducible in a small race. See
+  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md).
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
 - `roster/` and `verification/`: homeowner verification support.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
@@ -302,7 +350,7 @@ authorization; `board_terms` records a term of service — `person_id`, nullable
 `term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
 across terms; deleting a person with a term on record is refused with `409`), `meetings`,
 `board_attendance`, `motions`, `board_votes`, `member_attendance`, and `member_votes` (the meeting
-record — board and member meetings; elections, ballots, and proxies are a later phase — per
+record — board and member meetings; proxies and live-conducted elections are a later phase — per
 [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md) and
 [ADR 0015](./docs/adr/0015-weighted-member-voting.md): `meetings` has `body` (`board`/`member`, the
 column that decides which voter model applies), `kind` (`regular`/`special`/`annual`), `date`,
@@ -347,6 +395,29 @@ Because deleting a motion or its meeting could otherwise silently null a resolut
 provenance via the `set null` cascade, `DELETE /api/admin/motions` and `DELETE /api/admin/meetings`
 both return `409` if a resolution cites one of the motions being removed as its adopting motion.
 
+`elections`, `candidates`, and `ballots` (the elections record — the board recording an election
+that already happened on paper; live-conducted ballot casting is a later phase — per
+[ADR 0017](./docs/adr/0017-elections-secret-by-construction.md)): `elections` has a nullable
+`meeting_id` referencing `meetings` on delete-set-null (an election may stand alone), `title`,
+`seats`, `election_date`, `source` (`recorded`/`conducted`, default `recorded`, create-immutable —
+this phase only ever writes `recorded`; `conducted` is reserved for the later live-ballot phase),
+`status` (`draft`/`closed`/`certified`/`void`, default `draft`), `visibility` (default `board`),
+certification provenance `certified_at`/`certified_by`, and `created_by`. `candidates` references
+`elections` on delete-cascade, with a nullable `board_person_id` referencing `board_people` on
+delete-restrict (backfilled by `certify` for a winner who had none, so a returning board member
+keeps one identity across terms per ADR 0012), a server-assigned `sequence` unique per election, a
+nullable `votes` (`NULL` = not yet recorded, `0` = recorded as zero — the same distinction
+`tallyVotes` protects for motions), `won`, and `withdrawn`; it deliberately carries no
+`updated_at`, unlike every other table in this schema — see ADR 0017. `ballots` references
+`elections` on delete-cascade and `properties` on delete-restrict, unique per
+`(election_id, property_id)`, and records only that a lot returned a ballot: a `weight` snapshot
+of `properties.vote_weight`, a `via_proxy` flag, and a nullable `cast_by_owner_id` referencing
+`owners` on delete-set-null — there is deliberately no link from a ballot to a candidate, so which
+candidate a lot chose is never recorded anywhere. `board_terms` also carries a nullable
+`election_id` referencing `elections` on delete-set-null, recording which election produced that
+term; `certify` opens it, `uncertify` deletes it, and `DELETE /api/admin/board-terms` refuses to
+delete a term with one set.
+
 Every document has two R2 representations keyed by its D1 uuid, per
 [ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md): the human-readable original
 at `documents/<uuid>/<filename>`, served by `GET /api/files/<id>` with tier checks, and a derived
@@ -372,8 +443,12 @@ one vote per motion per person, and one motion per meeting per `sequence`. Migra
 enforcing one attendance row per meeting per property and one vote per motion per property, and
 nullable `motions.mover_owner_id`/`motions.second_owner_id`. Migration `0012` adds the
 `resolutions` table with `resolutions_number_unq`, `resolutions_supersedes_unq`, and
-`resolutions_status_idx` (applied locally; not yet applied to production). Migrations are applied
-with `npm run db:migrate:{local,remote}` via
+`resolutions_status_idx` (applied locally; not yet applied to production). Migration `0013` adds
+the `elections`, `candidates`, and `ballots` tables — `elections_status_idx`,
+`elections_meeting_id_idx`, `candidates_election_id_idx`, `candidates_election_sequence_unq`,
+`ballots_election_property_unq`, and `ballots_election_id_idx` — plus a nullable
+`board_terms.election_id` column (applied locally; not yet applied to production). Migrations are
+applied with `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
 so `npm run db:generate` should diff cleanly for future changes.

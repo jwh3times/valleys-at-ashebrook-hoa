@@ -16,6 +16,7 @@ import {
   PATCH as termPatch,
   DELETE as termDelete,
 } from '../../src/pages/api/admin/board-terms';
+import { POST as electionsPost } from '../../src/pages/api/admin/elections';
 import { getDb } from '../../src/server/db/client';
 import {
   boardPeople,
@@ -24,8 +25,11 @@ import {
   boardAttendance,
   motions,
   boardVotes,
+  elections,
+  candidates,
 } from '../../src/server/db/schema';
 import type { BoardPersonWithTerms } from '../../src/lib/types';
+import { eq } from 'drizzle-orm';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -38,6 +42,8 @@ beforeEach(async () => {
   await db.delete(boardAttendance);
   await db.delete(meetings);
   await db.delete(boardTerms);
+  await db.delete(candidates);
+  await db.delete(elections);
   await db.delete(boardPeople);
 });
 
@@ -100,6 +106,46 @@ async function createPerson(fullName: string): Promise<string> {
   const res = await POST(req(url, 'POST', { fullName }));
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
+}
+
+async function createElection(
+  overrides: Record<string, unknown> = {},
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env)
+    .insert(elections)
+    .values({
+      id,
+      title: '2026 Board Election',
+      seats: 1,
+      electionDate: '2026-03-01',
+      source: 'recorded',
+      status: 'closed',
+      visibility: 'board',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
+  return id;
+}
+
+async function createCandidate(electionId: string): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env).insert(candidates).values({
+    id,
+    electionId,
+    fullName: 'A. Reyes',
+    sequence: 1,
+    votes: null,
+    won: false,
+    withdrawn: false,
+    boardPersonId: null,
+    createdAt: now,
+  });
+  return id;
 }
 
 describe('board roster — board', () => {
@@ -219,6 +265,105 @@ describe('board roster — board', () => {
     expect(await res.text()).toMatch(/meeting record/i);
     const rows = await getDb(env).select().from(boardPeople);
     expect(rows.length).toBe(1);
+  });
+
+  it('refuses to delete a board person linked to a candidate, with 409 — reachable via certify then uncertify, which clears the term guard', async () => {
+    // The reachable failure sequence: certify backfills candidates.board_
+    // person_id for a winner who had none, then uncertify deletes the term
+    // it created — leaving the candidacy as the ONLY remaining reference,
+    // one the term-of-service pre-check above does not see at all.
+    const electionId = await createElection({ seats: 1 });
+    const candidateId = await createCandidate(electionId);
+    const certifyRes = await electionsPost(
+      req('http://localhost/api/admin/elections', 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId, termStart: '2026-01-01' }],
+      }),
+    );
+    expect(certifyRes.status).toBe(204);
+    const candidateRows = await getDb(env)
+      .select()
+      .from(candidates)
+      .where(eq(candidates.id, candidateId));
+    const personId = candidateRows[0].boardPersonId!;
+    expect(personId).toBeTruthy();
+
+    const uncertifyRes = await electionsPost(
+      req('http://localhost/api/admin/elections', 'POST', {
+        action: 'uncertify',
+        id: electionId,
+      }),
+    );
+    expect(uncertifyRes.status).toBe(204);
+    const termRows = await getDb(env)
+      .select()
+      .from(boardTerms)
+      .where(eq(boardTerms.personId, personId));
+    expect(termRows.length).toBe(0);
+
+    const res = await DELETE(req(url, 'DELETE', { id: personId }));
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/candidacy/i);
+    const rows = await getDb(env)
+      .select()
+      .from(boardPeople)
+      .where(eq(boardPeople.id, personId));
+    expect(rows.length).toBe(1);
+  });
+
+  it('refuses to delete a certify-created term, with 409, leaving the certification intact', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const candidateId = await createCandidate(electionId);
+    const certifyRes = await electionsPost(
+      req('http://localhost/api/admin/elections', 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId, termStart: '2026-01-01' }],
+      }),
+    );
+    expect(certifyRes.status).toBe(204);
+    const candidateRows = await getDb(env)
+      .select()
+      .from(candidates)
+      .where(eq(candidates.id, candidateId));
+    const personId = candidateRows[0].boardPersonId!;
+    const termRows = await getDb(env)
+      .select()
+      .from(boardTerms)
+      .where(eq(boardTerms.personId, personId));
+    expect(termRows.length).toBe(1);
+
+    const res = await termDelete(
+      req(termUrl, 'DELETE', { id: termRows[0].id }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/uncertify/i);
+    const survivingTerms = await getDb(env)
+      .select()
+      .from(boardTerms)
+      .where(eq(boardTerms.personId, personId));
+    expect(survivingTerms.length).toBe(1);
+    const electionRows = await getDb(env)
+      .select()
+      .from(elections)
+      .where(eq(elections.id, electionId));
+    expect(electionRows[0].status).toBe('certified');
+  });
+
+  it('deletes a hand-entered term with no election_id, with 204', async () => {
+    const id = await createPerson('A. Reyes');
+    const created = await termPost(
+      req(termUrl, 'POST', { personId: id, termStart: '2026-01-01' }),
+    );
+    const termId = ((await created.json()) as { id: string }).id;
+    const res = await termDelete(req(termUrl, 'DELETE', { id: termId }));
+    expect(res.status).toBe(204);
+    const rows = await getDb(env)
+      .select()
+      .from(boardTerms)
+      .where(eq(boardTerms.id, termId));
+    expect(rows.length).toBe(0);
   });
 
   it('deletes a person who has no terms', async () => {

@@ -294,6 +294,8 @@ export const INPUT_LIMITS = {
   summaryMd: 20_000,
   resolutionNumber: 40,
   resolutionBody: 20_000,
+  candidateStatement: 4_000,
+  electionTitle: 200,
 } as const;
 
 export type InputResult<T> =
@@ -840,6 +842,14 @@ export function normalizeMeetingInput(
   if ('status' in r)
     return fail('status is not editable — use the approve or unapprove action');
 
+  // Body decides which voter model applies — board roll-call vs per-property
+  // weighted. Changing it on a meeting that already has attendance or votes
+  // recorded produces an incoherent record, so it is fixed at creation.
+  if (mode === 'patch' && 'body' in r)
+    return fail(
+      'body is not editable — create the meeting again with the right body',
+    );
+
   const body = enumField(r, 'body', MEETING_BODIES, mode);
   if (!body.ok) return body;
   if (body.value !== undefined) out.body = body.value;
@@ -1000,6 +1010,211 @@ export function normalizeResolutionInput(
   const visibility = visibilityField(r, 'visibility');
   if (!visibility.ok) return visibility;
   if (visibility.value !== undefined) out.visibility = visibility.value;
+
+  return { ok: true, value: out };
+}
+
+export type ElectionStatus = 'draft' | 'closed' | 'certified' | 'void';
+export type ElectionSource = 'recorded' | 'conducted';
+export const ELECTION_STATUSES = [
+  'draft',
+  'closed',
+  'certified',
+  'void',
+] as const;
+// 'conducted' is reserved for PR 6 (live casting); normalizeElectionInput
+// rejects `source` outright today, so no `enumField` call reads this yet.
+export const ELECTION_SOURCES = ['recorded', 'conducted'] as const;
+
+export interface CandidateSummary {
+  id: string;
+  fullName: string;
+  boardPersonId: string | null;
+  statementMd: string | null;
+  sequence: number;
+  votes: number | null;
+  won: boolean;
+  withdrawn: boolean;
+}
+
+export interface ElectionSummary {
+  id: string;
+  meetingId: string | null;
+  title: string;
+  seats: number;
+  electionDate: string;
+  source: ElectionSource;
+  status: ElectionStatus;
+  visibility: Visibility;
+}
+
+export interface ElectionTurnout {
+  ballotsCast: number;
+  weightCast: number;
+  /** COUNT of ACTIVE properties — the lot denominator. */
+  eligibleCount: number;
+  /** SUM(vote_weight) over ACTIVE properties — the weight denominator. */
+  eligibleWeight: number;
+}
+
+export interface ElectionDetail extends ElectionSummary {
+  candidates: CandidateSummary[];
+  turnout: ElectionTurnout;
+  /** Board-only. Null on every public read — see Task 3. */
+  ballots: BallotRow[] | null;
+}
+
+export interface BallotRow {
+  propertyId: string;
+  address: string;
+  weight: number;
+  viaProxy: boolean;
+  castByOwnerId: string | null;
+}
+
+export interface ElectionInput {
+  title?: string;
+  seats?: number;
+  electionDate?: string;
+  meetingId?: string | null;
+  visibility?: Visibility;
+}
+
+export interface CandidateInput {
+  fullName?: string;
+  boardPersonId?: string | null;
+  statementMd?: string | null;
+  withdrawn?: boolean;
+}
+
+/** Required, positive integer seat count. Absent → required on create. */
+function seatsField(
+  raw: Record<string, unknown>,
+  mode: WriteMode,
+): InputResult<number | undefined> {
+  if (!('seats' in raw))
+    return mode === 'create'
+      ? fail('seats is required')
+      : { ok: true, value: undefined };
+  const v = raw.seats;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1)
+    return fail('seats must be at least 1');
+  return { ok: true, value: v };
+}
+
+export function normalizeElectionInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<ElectionInput> {
+  const r = asRecord(raw);
+  const out: ElectionInput = {};
+  // Status is transition-only: close/certify/uncertify/void maintain it
+  // together with their preconditions and batched writes.
+  if ('status' in r)
+    return fail(
+      'status is not editable — use close, certify, uncertify, or void',
+    );
+  // Create-immutable. Every guard in this feature tests `source`; if `source`
+  // itself were patchable, flipping it would BE the bypass — one PATCH turns
+  // "the board can never type a tally" into "the board can type any tally".
+  if ('source' in r)
+    return fail(
+      'source is not editable — it is fixed when the election is created',
+    );
+  if ('certifiedAt' in r || 'certifiedBy' in r)
+    return fail(
+      'certification provenance is not editable — use certify or uncertify',
+    );
+
+  const title = coreString(
+    r,
+    'title',
+    INPUT_LIMITS.electionTitle,
+    'title',
+    mode,
+  );
+  if (!title.ok) return title;
+  if (title.value !== undefined) out.title = title.value;
+
+  const seats = seatsField(r, mode);
+  if (!seats.ok) return seats;
+  if (seats.value !== undefined) out.seats = seats.value;
+
+  const electionDate = isoDate(r, 'electionDate', 'electionDate', mode);
+  if (!electionDate.ok) return electionDate;
+  if (electionDate.value !== undefined) out.electionDate = electionDate.value;
+
+  const meetingId = nullableString(
+    r,
+    'meetingId',
+    INPUT_LIMITS.propertyId,
+    'meetingId',
+  );
+  if (!meetingId.ok) return meetingId;
+  if (meetingId.value !== undefined) out.meetingId = meetingId.value;
+
+  const visibility = visibilityField(r, 'visibility');
+  if (!visibility.ok) return visibility;
+  if (visibility.value !== undefined) out.visibility = visibility.value;
+
+  return { ok: true, value: out };
+}
+
+export function normalizeCandidateInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<CandidateInput> {
+  const r = asRecord(raw);
+  const out: CandidateInput = {};
+  if ('votes' in r)
+    return fail('votes is not editable here — use the setTallies action');
+  if ('won' in r)
+    return fail('won is not editable — it is written by the certify action');
+  // Server-assigned as MAX(sequence)+1 within the election, and
+  // candidates_election_sequence_unq is a UNIQUE index — a client-supplied
+  // value could collide with an existing candidate and surface as a raw D1
+  // error instead of a readable one. Reordering would need a whole-set
+  // rewrite in one batch, which this PR doesn't need. Motions resolved the
+  // identical tension the same way (see normalizeMotionInput).
+  if ('sequence' in r)
+    return fail(
+      'sequence is not editable — it is assigned when the candidate is added',
+    );
+
+  const fullName = coreString(
+    r,
+    'fullName',
+    INPUT_LIMITS.fullName,
+    'fullName',
+    mode,
+  );
+  if (!fullName.ok) return fullName;
+  if (fullName.value !== undefined) out.fullName = fullName.value;
+
+  const boardPersonId = nullableString(
+    r,
+    'boardPersonId',
+    INPUT_LIMITS.personId,
+    'boardPersonId',
+  );
+  if (!boardPersonId.ok) return boardPersonId;
+  if (boardPersonId.value !== undefined)
+    out.boardPersonId = boardPersonId.value;
+
+  const statementMd = nullableString(
+    r,
+    'statementMd',
+    INPUT_LIMITS.candidateStatement,
+    'statementMd',
+  );
+  if (!statementMd.ok) return statementMd;
+  if (statementMd.value !== undefined) out.statementMd = statementMd.value;
+
+  if ('withdrawn' in r) {
+    if (typeof r.withdrawn !== 'boolean')
+      return fail('withdrawn must be a boolean');
+    out.withdrawn = r.withdrawn;
+  }
 
   return { ok: true, value: out };
 }
