@@ -15,6 +15,8 @@ import {
   motions,
   resolutions,
   elections,
+  proxies,
+  ballots,
 } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
 import { proxyUseError } from '../../../server/content/proxy-guards';
@@ -422,6 +424,36 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       'An election records this meeting as where it was held — unlink it from the Elections tab first.',
       { status: 409 },
     );
+  // proxies.meeting_id is ON DELETE CASCADE — deleting this meeting deletes
+  // its proxies. A ballot can cite one of those proxies even after its
+  // election's meetingId has been detached from this meeting (the
+  // linkedElections check above only catches an election that STILL points
+  // here), because "an election held at this meeting" is a one-time lookup
+  // rule at write time, not a standing link. ballots.proxy_id carries no ON
+  // DELETE action (deliberate, see schema.ts), so without this pre-check the
+  // cascade would leave a dangling reference and D1 would throw a raw FK
+  // constraint error instead of a readable 409.
+  const meetingProxies = await db
+    .select({ id: proxies.id })
+    .from(proxies)
+    .where(eq(proxies.meetingId, id));
+  if (meetingProxies.length > 0) {
+    const citingBallots = await db
+      .select({ id: ballots.id })
+      .from(ballots)
+      .where(
+        inArray(
+          ballots.proxyId,
+          meetingProxies.map((p) => p.id),
+        ),
+      )
+      .limit(1);
+    if (citingBallots.length > 0)
+      return new Response(
+        'An election ballot cites a proxy for this meeting — remove those ballots first',
+        { status: 409 },
+      );
+  }
   // Deleting a draft cascades its attendance, motions, and votes via FK.
   await db.delete(meetings).where(eq(meetings.id, id));
   return new Response(null, { status: 204 });

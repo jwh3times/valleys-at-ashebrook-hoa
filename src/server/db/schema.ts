@@ -651,8 +651,14 @@ export const ballots = sqliteTable(
 // failure readable. property/grantor are RESTRICT: a lot or an owner named on
 // a recorded proxy is part of the record. meeting/election are CASCADE like
 // member_attendance/ballots — the occasion's record owns its proxies. (A
-// ballot referencing a meeting-scoped proxy survives meeting deletion only via
-// the existing "election held at this meeting" 409 on DELETE /api/admin/meetings.)
+// ballot can cite a meeting-scoped proxy via the "election held at this
+// meeting" lookup rule even after the election's meetingId is later PATCHed
+// away from this meeting — that link is a one-time write-time rule, not a
+// standing one, so the "election held here" 409 on DELETE
+// /api/admin/meetings alone cannot catch it. The route's own pre-check —
+// any proxy scoped to this meeting cited by a ballot — closes that
+// detachment path and returns a 409 instead of letting the cascade hit
+// ballots.proxy_id's actionless FK.)
 export const proxies = sqliteTable(
   'proxies',
   {
