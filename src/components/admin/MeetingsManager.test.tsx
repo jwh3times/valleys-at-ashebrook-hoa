@@ -612,13 +612,13 @@ describe('MeetingsManager', () => {
           propertyId: 'prop1',
           present: true,
           representedByOwnerId: null,
-          viaProxy: false,
+          proxyId: null,
         },
         {
           propertyId: 'prop2',
           present: false,
           representedByOwnerId: null,
-          viaProxy: false,
+          proxyId: null,
         },
       ]),
     );
@@ -678,7 +678,7 @@ describe('MeetingsManager', () => {
           propertyId: 'prop1',
           choice: 'yes',
           castByOwnerId: null,
-          viaProxy: false,
+          proxyId: null,
         },
       ]),
     );
@@ -820,7 +820,7 @@ describe('MeetingsManager', () => {
     expect(tally()).toMatch(/3 no/);
   });
 
-  it('submitting member votes sends the chosen castByOwnerId and viaProxy per property', async () => {
+  it('submitting member votes sends the chosen castByOwnerId per property', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
     mocked.fetchProperties.mockResolvedValue([
       {
@@ -866,9 +866,7 @@ describe('MeetingsManager', () => {
       'Approve the budget',
     );
 
-    // Scope to 12 Oak Lane's own field container — "Via proxy" also labels
-    // a checkbox in the attendance editor above, so an unscoped query would
-    // be ambiguous.
+    // Scope to 12 Oak Lane's own field container.
     const voteField = screen
       .getByLabelText('Vote — 12 Oak Lane')
       .closest('.field') as HTMLElement;
@@ -876,13 +874,13 @@ describe('MeetingsManager', () => {
       within(voteField).getByLabelText('Cast by — 12 Oak Lane'),
       'o1',
     );
-    await userEvent.click(within(voteField).getByLabelText('Via proxy'));
-    // Leave 14 Oak Lane (no owners, so no Cast by/Via proxy controls at
-    // all) completely untouched — it must NOT be sent at all: touching
-    // only Cast by/Via proxy for 12 Oak Lane (never its Vote choice) still
-    // records a row for it, defaulting to abstain, because those controls
-    // themselves create the memberVoteForm entry; a property nothing was
-    // ever entered for gets no row and no default.
+    // Leave 14 Oak Lane (no owners, so no Cast by control at all)
+    // completely untouched — it must NOT be sent at all: touching only Cast
+    // by for 12 Oak Lane (never its Vote choice) still records a row for it,
+    // defaulting to abstain, because that control itself creates the
+    // memberVoteForm entry; a property nothing was ever entered for gets no
+    // row and no default. proxyId is not yet settable through this form —
+    // see Task 6's picker — so it always sends null here.
 
     await userEvent.click(screen.getByRole('button', { name: /add motion/i }));
 
@@ -892,7 +890,7 @@ describe('MeetingsManager', () => {
           propertyId: 'prop1',
           choice: 'abstain',
           castByOwnerId: 'o1',
-          viaProxy: true,
+          proxyId: null,
         },
       ]),
     );

@@ -342,9 +342,6 @@ export const memberAttendance = sqliteTable(
       () => owners.id,
       { onDelete: 'set null' },
     ),
-    viaProxy: integer('via_proxy', { mode: 'boolean' })
-      .notNull()
-      .default(false),
     // NOTE: added by ALTER TABLE — drizzle-kit silently drops any ON DELETE
     // action on ALTER-added FK columns (same trap as properties.vote_weight
     // and board_terms.election_id), so this is deliberately declared WITHOUT
@@ -375,9 +372,6 @@ export const memberVotes = sqliteTable(
     castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
       onDelete: 'set null',
     }),
-    viaProxy: integer('via_proxy', { mode: 'boolean' })
-      .notNull()
-      .default(false),
     // Snapshot of properties.vote_weight when this vote was recorded.
     // Correcting a property's weight later must not silently rewrite past
     // tallies — same reasoning as reports.sources_json.
@@ -630,9 +624,6 @@ export const ballots = sqliteTable(
     // Snapshot of properties.vote_weight, per ADR 0015, so correcting a lot's
     // weight later cannot rewrite a past turnout figure.
     weight: integer('weight').notNull(),
-    viaProxy: integer('via_proxy', { mode: 'boolean' })
-      .notNull()
-      .default(false),
     castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
       onDelete: 'set null',
     }),

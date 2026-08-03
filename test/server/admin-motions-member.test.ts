@@ -138,7 +138,6 @@ describe('motions admin route — member votes', () => {
             propertyId: p1,
             choice: 'yes',
             castByOwnerId: owner1,
-            viaProxy: false,
           },
           { propertyId: p2, choice: 'no' },
         ],
@@ -154,12 +153,12 @@ describe('motions admin route — member votes', () => {
     expect(row1?.choice).toBe('yes');
     expect(row1?.weight).toBe(2);
     expect(row1?.castByOwnerId).toBe(owner1);
-    expect(row1?.viaProxy).toBe(false);
+    expect(row1?.proxyId).toBeNull();
     const row2 = rows.find((r) => r.propertyId === p2);
     expect(row2?.choice).toBe('no');
     expect(row2?.weight).toBe(1);
     expect(row2?.castByOwnerId).toBeNull();
-    expect(row2?.viaProxy).toBe(false);
+    expect(row2?.proxyId).toBeNull();
   });
 
   it('full-replace removes an omitted property', async () => {

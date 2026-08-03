@@ -530,7 +530,7 @@ describe('ElectionsManager', () => {
     );
   });
 
-  it('recording ballots calls setBallots with weight, viaProxy, and castByOwnerId per checked property', async () => {
+  it('recording ballots calls setBallots with weight and castByOwnerId per checked property', async () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
@@ -563,8 +563,9 @@ describe('ElectionsManager', () => {
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 100 main st/i),
     );
-    // p2: returned a ballot, weight explicitly overridden, cast by its owner,
-    // via proxy.
+    // p2: returned a ballot, weight explicitly overridden, cast by its owner.
+    // proxyId is not yet settable through this form — see Task 6's picker —
+    // so it always sends null here.
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 200 oak st/i),
     );
@@ -576,7 +577,6 @@ describe('ElectionsManager', () => {
       screen.getByLabelText(/cast by — 200 oak st/i),
       'o2',
     );
-    await userEvent.click(screen.getByLabelText(/via proxy/i));
     await userEvent.click(
       screen.getByRole('button', { name: /^save ballots$/i }),
     );
@@ -586,13 +586,13 @@ describe('ElectionsManager', () => {
         {
           propertyId: 'p1',
           weight: undefined,
-          viaProxy: false,
+          proxyId: null,
           castByOwnerId: null,
         },
         {
           propertyId: 'p2',
           weight: 3,
-          viaProxy: true,
+          proxyId: null,
           castByOwnerId: 'o2',
         },
       ]),

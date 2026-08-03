@@ -439,7 +439,7 @@ export async function setMemberAttendance(
     propertyId: string;
     present: boolean;
     representedByOwnerId?: string | null;
-    viaProxy?: boolean;
+    proxyId?: string | null;
   }[],
 ): Promise<void> {
   const res = await fetch('/api/admin/meetings', {
@@ -516,7 +516,7 @@ export async function setMemberVotes(
     propertyId: string;
     choice: MemberVoteChoice;
     castByOwnerId?: string | null;
-    viaProxy?: boolean;
+    proxyId?: string | null;
   }[],
 ): Promise<void> {
   const res = await fetch('/api/admin/motions', {
@@ -718,7 +718,7 @@ export async function setBallots(
   entries: {
     propertyId: string;
     weight?: number;
-    viaProxy?: boolean;
+    proxyId?: string | null;
     castByOwnerId?: string | null;
   }[],
 ): Promise<void> {

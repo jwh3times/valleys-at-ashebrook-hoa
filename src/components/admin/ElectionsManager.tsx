@@ -56,7 +56,8 @@ const emptyCandidate = { fullName: '', statementMd: '', boardPersonId: '' };
 interface BallotFormRow {
   selected: boolean;
   weight: string;
-  viaProxy: boolean;
+  /** Empty string = no proxy. Not yet settable through this form — see Task 6. */
+  proxyId: string;
   castByOwnerId: string;
 }
 
@@ -163,7 +164,7 @@ export default function ElectionsManager() {
           {
             selected: true,
             weight: String(b.weight),
-            viaProxy: b.viaProxy,
+            proxyId: b.proxyId ?? '',
             castByOwnerId: b.castByOwnerId ?? '',
           },
         ]),
@@ -360,7 +361,7 @@ export default function ElectionsManager() {
           return {
             propertyId: p.id,
             weight: trimmedWeight === '' ? undefined : Number(trimmedWeight),
-            viaProxy: row.viaProxy,
+            proxyId: row.proxyId || null,
             castByOwnerId: row.castByOwnerId || null,
           };
         });
@@ -875,8 +876,8 @@ export default function ElectionsManager() {
                                                 selected: evt.target.checked,
                                                 weight:
                                                   prev[p.id]?.weight ?? '',
-                                                viaProxy:
-                                                  prev[p.id]?.viaProxy ?? false,
+                                                proxyId:
+                                                  prev[p.id]?.proxyId ?? '',
                                                 castByOwnerId:
                                                   prev[p.id]?.castByOwnerId ??
                                                   '',
@@ -916,9 +917,8 @@ export default function ElectionsManager() {
                                                     prev[p.id]?.selected ??
                                                     true,
                                                   weight: evt.target.value,
-                                                  viaProxy:
-                                                    prev[p.id]?.viaProxy ??
-                                                    false,
+                                                  proxyId:
+                                                    prev[p.id]?.proxyId ?? '',
                                                   castByOwnerId:
                                                     prev[p.id]?.castByOwnerId ??
                                                     '',
@@ -947,9 +947,9 @@ export default function ElectionsManager() {
                                                       weight:
                                                         prev[p.id]?.weight ??
                                                         '',
-                                                      viaProxy:
-                                                        prev[p.id]?.viaProxy ??
-                                                        false,
+                                                      proxyId:
+                                                        prev[p.id]?.proxyId ??
+                                                        '',
                                                       castByOwnerId:
                                                         evt.target.value,
                                                     },
@@ -968,38 +968,6 @@ export default function ElectionsManager() {
                                                   </option>
                                                 ))}
                                               </select>
-                                              <label
-                                                style={{
-                                                  display: 'flex',
-                                                  alignItems: 'center',
-                                                  gap: '4px',
-                                                }}
-                                              >
-                                                <input
-                                                  type="checkbox"
-                                                  checked={!!row?.viaProxy}
-                                                  onChange={(evt) =>
-                                                    setBallotForm((prev) => ({
-                                                      ...prev,
-                                                      [p.id]: {
-                                                        selected:
-                                                          prev[p.id]
-                                                            ?.selected ?? true,
-                                                        weight:
-                                                          prev[p.id]?.weight ??
-                                                          '',
-                                                        viaProxy:
-                                                          evt.target.checked,
-                                                        castByOwnerId:
-                                                          prev[p.id]
-                                                            ?.castByOwnerId ??
-                                                          '',
-                                                      },
-                                                    }))
-                                                  }
-                                                />
-                                                Via proxy
-                                              </label>
                                             </>
                                           )}
                                         </div>

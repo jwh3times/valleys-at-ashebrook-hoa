@@ -682,6 +682,8 @@ export interface MemberAttendanceRow {
   weight: number;
   representedByName: string | null;
   viaProxy: boolean;
+  /** Board-only. Null on every public read — same contract as ElectionDetail.ballots. */
+  proxyId: string | null;
 }
 
 export interface MemberVoteRow {
@@ -691,6 +693,8 @@ export interface MemberVoteRow {
   weight: number;
   castByName: string | null;
   viaProxy: boolean;
+  /** Board-only. Null on every public read — same contract as ElectionDetail.ballots. */
+  proxyId: string | null;
 }
 
 export interface MotionDetail {
@@ -1070,6 +1074,7 @@ export interface BallotRow {
   weight: number;
   viaProxy: boolean;
   castByOwnerId: string | null;
+  proxyId: string | null;
 }
 
 export interface ElectionInput {

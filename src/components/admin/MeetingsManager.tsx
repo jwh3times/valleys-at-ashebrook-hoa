@@ -91,14 +91,16 @@ const emptyMotion = {
 interface MemberAttendanceFormRow {
   present: boolean;
   representedByOwnerId: string;
-  viaProxy: boolean;
+  /** Empty string = no proxy. Not yet settable through this form — see Task 6. */
+  proxyId: string;
 }
 
 /** Per-property vote draft for a member meeting's motion. */
 interface MemberVoteFormRow {
   choice: MemberVoteChoice;
   castByOwnerId: string;
-  viaProxy: boolean;
+  /** Empty string = no proxy. Not yet settable through this form — see Task 6. */
+  proxyId: string;
 }
 
 /**
@@ -202,7 +204,7 @@ export default function MeetingsManager() {
     {},
   );
   // Member-meeting twin of attendanceForm, keyed by propertyId instead of
-  // personId, carrying the extra representedByOwnerId/viaProxy fields the
+  // personId, carrying the extra representedByOwnerId/proxyId fields the
   // property-based editor needs.
   const [memberAttendanceForm, setMemberAttendanceForm] = useState<
     Record<string, MemberAttendanceFormRow>
@@ -241,7 +243,7 @@ export default function MeetingsManager() {
                     a.representedByName,
                     properties,
                   ) ?? '',
-                viaProxy: a.viaProxy,
+                proxyId: a.proxyId ?? '',
               },
             ]),
           ),
@@ -367,7 +369,7 @@ export default function MeetingsManager() {
                 v.castByName,
                 properties,
               ) ?? '',
-            viaProxy: v.viaProxy,
+            proxyId: v.proxyId ?? '',
           },
         ]),
       ),
@@ -446,7 +448,7 @@ export default function MeetingsManager() {
             propertyId: p.id,
             present: !!row?.present,
             representedByOwnerId: row?.representedByOwnerId || null,
-            viaProxy: !!row?.viaProxy,
+            proxyId: row?.proxyId || null,
           };
         });
         await setMemberAttendance(m.id, entries);
@@ -526,7 +528,7 @@ export default function MeetingsManager() {
                 propertyId,
                 choice: row.choice,
                 castByOwnerId: row.castByOwnerId || null,
-                viaProxy: !!row.viaProxy,
+                proxyId: row.proxyId || null,
               }),
             );
             await setMemberVotes(motionId, entries);
@@ -930,7 +932,7 @@ export default function MeetingsManager() {
                                         representedByOwnerId:
                                           prev[p.id]?.representedByOwnerId ??
                                           '',
-                                        viaProxy: prev[p.id]?.viaProxy ?? false,
+                                        proxyId: prev[p.id]?.proxyId ?? '',
                                       },
                                     }))
                                   }
@@ -962,8 +964,7 @@ export default function MeetingsManager() {
                                         [p.id]: {
                                           present: prev[p.id]?.present ?? false,
                                           representedByOwnerId: e.target.value,
-                                          viaProxy:
-                                            prev[p.id]?.viaProxy ?? false,
+                                          proxyId: prev[p.id]?.proxyId ?? '',
                                         },
                                       }))
                                     }
@@ -975,32 +976,6 @@ export default function MeetingsManager() {
                                       </option>
                                     ))}
                                   </select>
-                                  <label
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                    }}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={!!row?.viaProxy}
-                                      onChange={(e) =>
-                                        setMemberAttendanceForm((prev) => ({
-                                          ...prev,
-                                          [p.id]: {
-                                            present:
-                                              prev[p.id]?.present ?? false,
-                                            representedByOwnerId:
-                                              prev[p.id]
-                                                ?.representedByOwnerId ?? '',
-                                            viaProxy: e.target.checked,
-                                          },
-                                        }))
-                                      }
-                                    />
-                                    Via proxy
-                                  </label>
                                 </div>
                               )}
                             </div>
@@ -1223,8 +1198,7 @@ export default function MeetingsManager() {
                                             choice: value as MemberVoteChoice,
                                             castByOwnerId:
                                               prev[p.id]?.castByOwnerId ?? '',
-                                            viaProxy:
-                                              prev[p.id]?.viaProxy ?? false,
+                                            proxyId: prev[p.id]?.proxyId ?? '',
                                           };
                                         return next;
                                       });
@@ -1261,8 +1235,8 @@ export default function MeetingsManager() {
                                               choice:
                                                 prev[p.id]?.choice ?? 'abstain',
                                               castByOwnerId: e.target.value,
-                                              viaProxy:
-                                                prev[p.id]?.viaProxy ?? false,
+                                              proxyId:
+                                                prev[p.id]?.proxyId ?? '',
                                             },
                                           }))
                                         }
@@ -1274,33 +1248,6 @@ export default function MeetingsManager() {
                                           </option>
                                         ))}
                                       </select>
-                                      <label
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '4px',
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={!!row?.viaProxy}
-                                          onChange={(e) =>
-                                            setMemberVoteForm((prev) => ({
-                                              ...prev,
-                                              [p.id]: {
-                                                choice:
-                                                  prev[p.id]?.choice ??
-                                                  'abstain',
-                                                castByOwnerId:
-                                                  prev[p.id]?.castByOwnerId ??
-                                                  '',
-                                                viaProxy: e.target.checked,
-                                              },
-                                            }))
-                                          }
-                                        />
-                                        Via proxy
-                                      </label>
                                     </div>
                                   )}
                                 </div>
