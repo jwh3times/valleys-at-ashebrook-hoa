@@ -6,7 +6,10 @@ vi.mock('../../src/server/authz/context', () => ({
   getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
 }));
 
-import { POST as meetingsPost } from '../../src/pages/api/admin/meetings';
+import {
+  POST as meetingsPost,
+  DELETE as meetingsDelete,
+} from '../../src/pages/api/admin/meetings';
 import { POST as motionsPost } from '../../src/pages/api/admin/motions';
 import { POST as electionsPost } from '../../src/pages/api/admin/elections';
 import {
@@ -455,6 +458,7 @@ describe('proxyId public/admin exposure', () => {
     await seedProperty('p1');
     await seedOwner('o1', 'p1');
     await seedMeeting('m1');
+    await seedMotion('mo1', 'm1');
     await getDb(env)
       .insert(proxies)
       .values(proxyRow('px1', { meetingId: 'm1' }));
@@ -466,6 +470,14 @@ describe('proxyId public/admin exposure', () => {
       }),
     );
     expect(res.status).toBe(204);
+    const votesRes = await motionsPost(
+      req(motionsUrl, 'POST', {
+        action: 'setMemberVotes',
+        motionId: 'mo1',
+        entries: [{ propertyId: 'p1', choice: 'yes', proxyId: 'px1' }],
+      }),
+    );
+    expect(votesRes.status).toBe(204);
     await getDb(env)
       .update(meetings)
       .set({ status: 'approved', visibility: 'public' })
@@ -473,8 +485,96 @@ describe('proxyId public/admin exposure', () => {
     const admin = await fetchAdminMeeting(env, 'm1');
     expect(admin!.memberAttendance[0].proxyId).toBe('px1');
     expect(admin!.memberAttendance[0].viaProxy).toBe(true);
+    expect(admin!.motions[0].memberVotes[0].proxyId).toBe('px1');
+    expect(admin!.motions[0].memberVotes[0].viaProxy).toBe(true);
     const pub = await fetchMeetingFor(env, 'visitor', 'm1');
     expect(pub!.memberAttendance[0].proxyId).toBeNull();
     expect(pub!.memberAttendance[0].viaProxy).toBe(true);
+    expect(pub!.motions[0].memberVotes[0].proxyId).toBeNull();
+    expect(pub!.motions[0].memberVotes[0].viaProxy).toBe(true);
+  });
+});
+
+describe('DELETE /api/admin/meetings with proxies', () => {
+  beforeEach(async () => {
+    await seedProperty('p1');
+    await seedOwner('o1', 'p1');
+  });
+
+  it('cascades attendance, votes, and proxies for a draft meeting in one statement', async () => {
+    await seedMeeting('m1');
+    await seedMotion('mo1', 'm1');
+    await getDb(env)
+      .insert(proxies)
+      .values(proxyRow('px1', { meetingId: 'm1' }));
+    const attendanceRes = await meetingsPost(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: 'm1',
+        entries: [{ propertyId: 'p1', present: true, proxyId: 'px1' }],
+      }),
+    );
+    expect(attendanceRes.status).toBe(204);
+    const votesRes = await motionsPost(
+      req(motionsUrl, 'POST', {
+        action: 'setMemberVotes',
+        motionId: 'mo1',
+        entries: [{ propertyId: 'p1', choice: 'yes', proxyId: 'px1' }],
+      }),
+    );
+    expect(votesRes.status).toBe(204);
+
+    const res = await meetingsDelete(req(url, 'DELETE', { id: 'm1' }));
+    expect(res.status).toBe(204);
+
+    const db = getDb(env);
+    expect(
+      await db.select().from(meetings).where(eq(meetings.id, 'm1')),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(memberAttendance)
+        .where(eq(memberAttendance.meetingId, 'm1')),
+    ).toHaveLength(0);
+    expect(await db.select().from(memberVotes)).toHaveLength(0);
+    expect(
+      await db.select().from(proxies).where(eq(proxies.id, 'px1')),
+    ).toHaveLength(0);
+  });
+
+  it('refuses to delete a meeting whose proxy is cited by an election ballot after the election detaches', async () => {
+    await seedMeeting('m1');
+    await seedElection('e1', 'm1');
+    await getDb(env)
+      .insert(proxies)
+      .values(proxyRow('px1', { meetingId: 'm1' }));
+    const ballotsRes = await electionsPost(
+      req(electionsUrl, 'POST', {
+        action: 'setBallots',
+        electionId: 'e1',
+        entries: [{ propertyId: 'p1', proxyId: 'px1' }],
+      }),
+    );
+    expect(ballotsRes.status).toBe(204);
+
+    // Detach the election from the meeting directly via Drizzle — simulating
+    // a PATCH that clears meetingId after the ballot was already recorded.
+    // The ballot still cites px1, which is still scoped to m1.
+    await getDb(env)
+      .update(elections)
+      .set({ meetingId: null })
+      .where(eq(elections.id, 'e1'));
+
+    const blocked = await meetingsDelete(req(url, 'DELETE', { id: 'm1' }));
+    expect(blocked.status).toBe(409);
+    expect(await blocked.text()).toBe(
+      'An election ballot cites a proxy for this meeting — remove those ballots first',
+    );
+
+    // Clearing the ballots lets the delete through.
+    await getDb(env).delete(ballots);
+    const res = await meetingsDelete(req(url, 'DELETE', { id: 'm1' }));
+    expect(res.status).toBe(204);
   });
 });
