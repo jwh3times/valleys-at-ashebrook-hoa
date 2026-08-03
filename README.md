@@ -16,7 +16,8 @@ It provides:
   duplicate detection and cleanup tools
 - 🗳️ **Meeting record** — board-authored, board-approved minutes at `/meetings`: date,
   attendance, motions, and roll-call votes for board meetings, plus weighted per-property
-  attendance and votes for member meetings (proxies and live-conducted elections are a later phase)
+  attendance and votes for member meetings, including paper proxies the board records against a
+  lot's attendance, vote, or ballot (live-conducted elections remain a later phase)
 - 📜 **Resolutions book** — standing rules the board adopts, published at `/resolutions`;
   amending a resolution creates a new one that supersedes the old, forming a walkable chain
 - 🏛️ **Elections** — the record of a board election that already happened on paper, published at
