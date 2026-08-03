@@ -1236,3 +1236,127 @@ export function normalizeVoteWeight(
     return fail('voteWeight must be a whole number of 1 or more');
   return { ok: true, value: v };
 }
+
+// --- Proxies (paper proxy assignments recorded against a meeting or an
+// election) ---------------------------------------------------------------
+
+export interface ProxyDetail {
+  id: string;
+  propertyId: string;
+  address: string;
+  grantorOwnerId: string;
+  grantorName: string;
+  holderName: string;
+  holderOwnerId: string | null;
+  holderOwnerName: string | null;
+  meetingId: string | null;
+  electionId: string | null;
+}
+
+export interface ProxyInput {
+  propertyId?: string;
+  grantorOwnerId?: string;
+  holderName?: string;
+  holderOwnerId?: string | null;
+  meetingId?: string | null;
+  electionId?: string | null;
+}
+
+export function normalizeProxyInput(
+  raw: unknown,
+  mode: WriteMode,
+): InputResult<ProxyInput> {
+  const r = asRecord(raw);
+  const out: ProxyInput = {};
+
+  if (mode === 'patch') {
+    // Moving a proxy to another occasion or another lot is not an edit — it
+    // is a different proxy. Rejected on key presence, the same rule
+    // normalizeResolutionInput applies to transition-only fields.
+    if ('meetingId' in r || 'electionId' in r)
+      return fail(
+        'scope is not editable — delete this proxy and record a new one',
+      );
+    if ('propertyId' in r)
+      return fail(
+        'propertyId is not editable — delete this proxy and record a new one',
+      );
+  }
+
+  if (mode === 'create') {
+    const propertyId = coreString(
+      r,
+      'propertyId',
+      INPUT_LIMITS.propertyId,
+      'propertyId',
+      'create',
+    );
+    if (!propertyId.ok) return propertyId;
+    out.propertyId = propertyId.value;
+
+    const meetingId = nullableString(
+      r,
+      'meetingId',
+      INPUT_LIMITS.propertyId,
+      'meetingId',
+    );
+    if (!meetingId.ok) return meetingId;
+    if (meetingId.value !== undefined) out.meetingId = meetingId.value;
+
+    const electionId = nullableString(
+      r,
+      'electionId',
+      INPUT_LIMITS.propertyId,
+      'electionId',
+    );
+    if (!electionId.ok) return electionId;
+    if (electionId.value !== undefined) out.electionId = electionId.value;
+
+    // Exactly one occasion — checked here so the route can return a readable
+    // 400 before the schema CHECK ever fires.
+    if ((out.meetingId != null) === (out.electionId != null))
+      return fail('Exactly one of meetingId or electionId is required');
+  }
+
+  const grantorOwnerId = coreString(
+    r,
+    'grantorOwnerId',
+    INPUT_LIMITS.propertyId,
+    'grantorOwnerId',
+    mode,
+  );
+  if (!grantorOwnerId.ok) return grantorOwnerId;
+  if (grantorOwnerId.value !== undefined)
+    out.grantorOwnerId = grantorOwnerId.value;
+
+  const holderName = coreString(
+    r,
+    'holderName',
+    INPUT_LIMITS.fullName,
+    'holderName',
+    mode,
+  );
+  if (!holderName.ok) return holderName;
+  if (holderName.value !== undefined) out.holderName = holderName.value;
+
+  const holderOwnerId = nullableString(
+    r,
+    'holderOwnerId',
+    INPUT_LIMITS.propertyId,
+    'holderOwnerId',
+  );
+  if (!holderOwnerId.ok) return holderOwnerId;
+  if (holderOwnerId.value !== undefined)
+    out.holderOwnerId = holderOwnerId.value;
+
+  // A proxy to yourself is a data-entry error. When a patch changes only one
+  // side, the route re-checks against the stored row (Task 5).
+  if (
+    out.grantorOwnerId != null &&
+    out.holderOwnerId != null &&
+    out.grantorOwnerId === out.holderOwnerId
+  )
+    return fail('grantorOwnerId and holderOwnerId cannot be the same owner');
+
+  return { ok: true, value: out };
+}
