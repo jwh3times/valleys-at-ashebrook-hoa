@@ -17,6 +17,7 @@ import {
   elections,
 } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
+import { proxyUseError } from '../../../server/content/proxy-guards';
 import {
   fetchAdminMeetings,
   fetchAdminMeeting,
@@ -95,7 +96,7 @@ interface MemberAttendanceEntry {
   propertyId: string;
   present: boolean;
   representedByOwnerId: string | null;
-  viaProxy: boolean;
+  proxyId: string | null;
 }
 
 /** Validate the raw `entries` payload for `setMemberAttendance`. */
@@ -112,7 +113,6 @@ function parseMemberAttendanceEntries(
     const propertyId = record?.propertyId;
     const present = record?.present;
     const representedByOwnerId = record?.representedByOwnerId;
-    const viaProxy = record?.viaProxy;
     if (
       typeof propertyId !== 'string' ||
       propertyId.trim() === '' ||
@@ -133,15 +133,31 @@ function parseMemberAttendanceEntries(
         error: 'representedByOwnerId must be a string when present',
       };
     }
-    if (viaProxy !== undefined && typeof viaProxy !== 'boolean') {
-      return { ok: false, error: 'viaProxy must be a boolean when present' };
+    const proxyId = record?.proxyId;
+    if (
+      proxyId !== undefined &&
+      proxyId !== null &&
+      typeof proxyId !== 'string'
+    ) {
+      return { ok: false, error: 'proxyId must be a string when present' };
+    }
+    const parsedProxyId = typeof proxyId === 'string' ? proxyId : null;
+    // Mutual exclusion: who acted for the lot lives on the (board-only)
+    // proxy row, never beside it — a row carrying both could name two
+    // different people, and the public read would leak the holder.
+    if (parsedProxyId !== null && typeof representedByOwnerId === 'string') {
+      return {
+        ok: false,
+        error:
+          'An entry cannot carry both proxyId and representedByOwnerId — who acted lives on the proxy record',
+      };
     }
     entries.push({
       propertyId,
       present,
       representedByOwnerId:
         typeof representedByOwnerId === 'string' ? representedByOwnerId : null,
-      viaProxy: viaProxy === true,
+      proxyId: parsedProxyId,
     });
   }
   return { ok: true, value: entries };
@@ -164,13 +180,24 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
   // produce a meeting with both kinds of attendance and an incoherent quorum.
   if (existing[0].body !== 'member')
     return new Response('Meeting is not a member meeting', { status: 409 });
+  const proxyFailure = await proxyUseError(
+    db,
+    parsedEntries.value
+      .filter((e) => e.proxyId !== null)
+      .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
+    { meetingId },
+  );
+  if (proxyFailure)
+    return new Response(proxyFailure.message, {
+      status: proxyFailure.status,
+    });
   const rows = parsedEntries.value.map((e) => ({
     id: crypto.randomUUID(),
     meetingId,
     propertyId: e.propertyId,
     present: e.present,
     representedByOwnerId: e.representedByOwnerId,
-    viaProxy: e.viaProxy,
+    proxyId: e.proxyId,
   }));
   // Full replace, atomically: a property omitted from `entries` is removed,
   // not left at its previous value. Weight is intentionally not stamped here

@@ -161,7 +161,6 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      viaProxy: false,
       castByOwnerId: null,
       recordedAt: now,
     });
@@ -179,7 +178,6 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      viaProxy: false,
       castByOwnerId: null,
       recordedAt: now,
     });
@@ -241,7 +239,6 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      viaProxy: false,
       castByOwnerId: null,
       recordedAt: now,
     });
@@ -251,7 +248,6 @@ describe('elections schema', () => {
         electionId: 'e1',
         propertyId: 'p1',
         weight: 1,
-        viaProxy: false,
         castByOwnerId: null,
         recordedAt: now,
       }),
@@ -268,7 +264,6 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      viaProxy: false,
       castByOwnerId: null,
       recordedAt: now,
     });
@@ -277,7 +272,6 @@ describe('elections schema', () => {
       electionId: 'e2',
       propertyId: 'p1',
       weight: 1,
-      viaProxy: false,
       castByOwnerId: null,
       recordedAt: now,
     });

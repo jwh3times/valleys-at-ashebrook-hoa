@@ -91,12 +91,11 @@ describe('member meeting schema', () => {
       propertyId: 'p1',
       present: true,
       representedByOwnerId: 'o1',
-      viaProxy: false,
     });
     const rows = await db.select().from(memberAttendance);
     expect(rows.length).toBe(1);
     expect(rows[0].representedByOwnerId).toBe('o1');
-    expect(rows[0].viaProxy).toBe(false);
+    expect(rows[0].proxyId).toBeNull();
   });
 
   it('allows attendance with no named representative', async () => {
@@ -108,7 +107,6 @@ describe('member meeting schema', () => {
       propertyId: 'p1',
       present: true,
       representedByOwnerId: null,
-      viaProxy: false,
     });
     const rows = await getDb(env).select().from(memberAttendance);
     expect(rows[0].representedByOwnerId).toBeNull();
@@ -124,7 +122,6 @@ describe('member meeting schema', () => {
       propertyId: 'p1',
       present: true,
       representedByOwnerId: null,
-      viaProxy: false,
     });
     await expect(
       db.insert(memberAttendance).values({
@@ -133,7 +130,6 @@ describe('member meeting schema', () => {
         propertyId: 'p1',
         present: false,
         representedByOwnerId: null,
-        viaProxy: false,
       }),
     ).rejects.toThrow();
   });
@@ -161,7 +157,6 @@ describe('member meeting schema', () => {
       motionId: 'mo1',
       propertyId: 'p1',
       castByOwnerId: null,
-      viaProxy: false,
       weight: 1,
       choice: 'yes',
     });
@@ -171,7 +166,6 @@ describe('member meeting schema', () => {
         motionId: 'mo1',
         propertyId: 'p1',
         castByOwnerId: null,
-        viaProxy: false,
         weight: 1,
         choice: 'no',
       }),
@@ -201,7 +195,6 @@ describe('member meeting schema', () => {
       motionId: 'mo1',
       propertyId: 'p1',
       castByOwnerId: null,
-      viaProxy: false,
       weight: 1,
       choice: 'yes',
     });
@@ -221,7 +214,6 @@ describe('member meeting schema', () => {
       propertyId: 'p1',
       present: true,
       representedByOwnerId: null,
-      viaProxy: false,
     });
     await db.insert(motions).values({
       id: 'mo1',
@@ -242,7 +234,6 @@ describe('member meeting schema', () => {
       motionId: 'mo1',
       propertyId: 'p1',
       castByOwnerId: null,
-      viaProxy: false,
       weight: 1,
       choice: 'yes',
     });

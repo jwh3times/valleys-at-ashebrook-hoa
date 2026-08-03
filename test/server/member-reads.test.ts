@@ -8,6 +8,7 @@ import {
   motions,
   memberAttendance,
   memberVotes,
+  proxies,
 } from '../../src/server/db/schema';
 import {
   fetchAdminMeeting,
@@ -24,6 +25,9 @@ beforeEach(async () => {
   const db = getDb(env);
   await db.delete(memberVotes);
   await db.delete(memberAttendance);
+  // proxies carries a proxy_id FK (NO ACTION) from memberAttendance/memberVotes
+  // — those must be cleared first, same ordering proxy-flip.test.ts uses.
+  await db.delete(proxies);
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(owners);
@@ -74,6 +78,26 @@ async function seedMeeting(id: string, body: 'board' | 'member' = 'member') {
     });
 }
 
+async function seedProxy(
+  id: string,
+  propertyId: string,
+  meetingId: string,
+  grantorOwnerId: string,
+) {
+  await getDb(env).insert(proxies).values({
+    id,
+    propertyId,
+    grantorOwnerId,
+    holderName: 'Jane Q. Holder',
+    holderOwnerId: null,
+    meetingId,
+    electionId: null,
+    createdBy: 'u1',
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 async function seedMotion(id: string, meetingId: string, sequence = 1) {
   await getDb(env)
     .insert(motions)
@@ -104,7 +128,6 @@ describe('member meeting assembly', () => {
       propertyId: 'p1',
       present: true,
       representedByOwnerId: null,
-      viaProxy: false,
     });
 
     const detail = await fetchAdminMeeting(env, 'm1');
@@ -118,6 +141,7 @@ describe('member meeting assembly', () => {
         weight: 2,
         representedByName: null,
         viaProxy: false,
+        proxyId: null,
       },
     ]);
   });
@@ -128,6 +152,7 @@ describe('member meeting assembly', () => {
     await seedProperty('p2');
     await seedOwner('o1', 'p1', 'A. Reyes');
     await seedMeeting('m1');
+    await seedProxy('px1', 'p1', 'm1', 'o1');
     await db.insert(memberAttendance).values([
       {
         id: 'a1',
@@ -135,7 +160,7 @@ describe('member meeting assembly', () => {
         propertyId: 'p1',
         present: true,
         representedByOwnerId: 'o1',
-        viaProxy: true,
+        proxyId: 'px1',
       },
       {
         id: 'a2',
@@ -143,7 +168,6 @@ describe('member meeting assembly', () => {
         propertyId: 'p2',
         present: true,
         representedByOwnerId: null,
-        viaProxy: false,
       },
     ]);
 
@@ -155,6 +179,7 @@ describe('member meeting assembly', () => {
     );
     expect(byProperty.get('p1')?.representedByName).toBe('A. Reyes');
     expect(byProperty.get('p1')?.viaProxy).toBe(true);
+    expect(byProperty.get('p1')?.proxyId).toBe('px1');
     expect(byProperty.get('p2')?.representedByName).toBeNull();
   });
 
@@ -199,7 +224,6 @@ describe('member meeting assembly', () => {
         motionId: 'mo1',
         propertyId: 'p1',
         castByOwnerId: null,
-        viaProxy: false,
         weight: 3,
         choice: 'yes',
       },
@@ -208,7 +232,6 @@ describe('member meeting assembly', () => {
         motionId: 'mo1',
         propertyId: 'p2',
         castByOwnerId: null,
-        viaProxy: false,
         weight: 5,
         choice: 'yes',
       },
@@ -251,7 +274,6 @@ describe('member meeting assembly', () => {
         motionId: 'mo1',
         propertyId: 'p1',
         castByOwnerId: null,
-        viaProxy: false,
         weight: 1,
         choice: 'yes',
       },
@@ -260,7 +282,6 @@ describe('member meeting assembly', () => {
         motionId: 'mo2',
         propertyId: 'p2',
         castByOwnerId: null,
-        viaProxy: false,
         weight: 1,
         choice: 'no',
       },
@@ -291,7 +312,6 @@ describe('member meeting assembly', () => {
         propertyId: 'p1',
         present: true,
         representedByOwnerId: null,
-        viaProxy: false,
       },
       {
         id: 'a2',
@@ -299,7 +319,6 @@ describe('member meeting assembly', () => {
         propertyId: 'p2',
         present: false,
         representedByOwnerId: null,
-        viaProxy: false,
       },
     ]);
 
@@ -354,7 +373,6 @@ describe('member meeting assembly', () => {
       propertyId: 'p1',
       present: true,
       representedByOwnerId: null,
-      viaProxy: false,
     });
     // seedMeeting always creates a 'draft' meeting — the member-assembly
     // additions in this file must not have loosened fetchMeetingFor's
