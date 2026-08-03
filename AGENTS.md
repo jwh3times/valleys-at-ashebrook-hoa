@@ -145,8 +145,10 @@ Markdown twins described below and never the human-readable originals.
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
   duplicate group resurfaces for review.
-- Board-only meeting record (board and member meetings — proxies and live-conducted elections are
-  a later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`. `GET` lists every
+- Board-only meeting record (board and member meetings — recorded paper proxies now attach to
+  member attendance/votes and election ballots; live-conducted elections and homeowner-submitted
+  proxy grants remain a later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`.
+  `GET` lists every
   meeting including drafts, or returns one full meeting detail with `?id=`; `POST`
   creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
   per-person attendance roll, or with `{ action: 'setMemberAttendance' }` fully replaces a member
@@ -156,7 +158,10 @@ Markdown twins described below and never the human-readable originals.
   cannot write `status`; `DELETE` returns `409` on an approved meeting (unapprove first), `409` if
   any motion belonging to it is cited as a resolution's adopting motion (see the resolutions
   bullet below), `409` if an election records it as where it was held (see the elections bullet
-  below), otherwise cascading its attendance, motions, and votes. `/api/admin/motions`
+  below), `409` if an election ballot cites a proxy scoped to this meeting (closes a raw-D1-error
+  path that opens once an election's `meetingId` is detached from a meeting after ballots were
+  recorded against a meeting-scoped proxy — the meeting-still-linked check above can't catch that
+  case), otherwise cascading its attendance, motions, votes, and proxies. `/api/admin/motions`
   supports `POST`/`PATCH`/`DELETE`. `POST` creates a motion with a server-assigned `sequence`
   (unique per meeting), or with `{ action: 'setVotes' }` fully replaces a board motion's roll-call
   vote set, or with `{ action: 'setMemberVotes' }` fully replaces a member motion's per-property
@@ -167,7 +172,14 @@ Markdown twins described below and never the human-readable originals.
   `409` if the target meeting's or motion's `body` doesn't match the action — board attendance/votes
   against a member meeting/motion, or vice versa, are refused; `setMemberVotes` also returns `400`
   for an unknown `propertyId`, since it stamps `memberVotes.weight` from `properties.vote_weight` at
-  recording time and must resolve that weight to build a legal row. All verbs on both routes are
+  recording time and must resolve that weight to build a legal row. `setMemberAttendance`,
+  `setMemberVotes`, and (on `/api/admin/elections`) `setBallots` each take a per-entry `proxyId`
+  instead of the old `viaProxy` boolean; every referenced proxy is checked by the shared
+  `proxyUseError` guard (`src/server/content/proxy-guards.ts`) — unknown `proxyId` is `400`, a proxy
+  for a different lot or scoped to a different occasion is `409` (a meeting-scoped proxy also
+  covers an election held at that meeting; a standalone election accepts only its own) — and an
+  entry carrying both `proxyId` and `representedByOwnerId`/`castByOwnerId` is `400`, since who acted
+  lives on the (board-only) proxy row, never beside it. All verbs on both routes are
   `requireBoard`-gated.
 - Board-only resolutions book (standing rules the board adopts; a durable record — amending one
   creates a **new** resolution that supersedes the old, forming a walkable chain; see
@@ -201,7 +213,10 @@ Markdown twins described below and never the human-readable originals.
   candidate omitted from `setTallies` has its tally restored to `NULL`), and both return `409` for
   a `certified`/`void` election and `409` for a non-`recorded` election (unreachable today —
   written ahead of the later live-ballot phase); `setBallots` stamps `weight` from
-  `properties.vote_weight` unless explicitly supplied. `certify` takes per-winner
+  `properties.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
+  same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
+meetingId: election.meetingId }` so a proxy signed for the election's own meeting also covers it.
+  `certify` takes per-winner
   `{candidateId, termStart, termEnd?, title?}` and, in one `db.batch()`, creates `board_people`
   rows for winners who lack one, backfills `candidates.board_person_id`, opens one `board_terms`
   row per winner carrying `election_id`, sets `candidates.won`, and moves the election to
@@ -212,6 +227,23 @@ Markdown twins described below and never the human-readable originals.
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned and
   rejected on key presence, and a candidate can be deleted only while its election is still a
   `draft` (mark it withdrawn otherwise).
+- Board-only proxies record (a board member typing in a paper proxy that already exists — one
+  owner authorising one named holder to act for one lot at exactly one meeting or election; see
+  [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md)): `/api/admin/proxies`
+  supports `GET`/`POST`/`PATCH`/`DELETE`, all `requireBoard`-gated. `GET` returns every proxy with
+  its property address and grantor/holder names resolved — the same full-detail-on-list shape as
+  `/api/admin/resolutions` and `/api/admin/elections` — and there is deliberately no public or
+  tier-gated sibling. `POST` returns `201 { id }` with a readable `404` for each of the five FKs it
+  can write (`propertyId`, `grantorOwnerId`, `holderOwnerId`, `meetingId`, `electionId`), `400` if
+  the grantor doesn't belong to the given property, `400` if grantor and holder resolve to the same
+  owner, and `409` on a duplicate occasion (`proxies_property_meeting_unq`/
+  `proxies_property_election_unq`, "This lot already has a proxy for this occasion"). `PATCH`
+  allow-lists `holderName`/`holderOwnerId`/`grantorOwnerId` — `propertyId`, `meetingId`, and
+  `electionId` are rejected on key presence by `normalizeProxyInput`, since moving a proxy to
+  another lot or occasion is a different proxy, not an edit — and re-checks grantor-≠-holder against
+  the effective stored-plus-payload values. `DELETE` returns `409` naming which of `attendance`,
+  `votes`, or `ballots` still cites the proxy ("Proxy is in use (…) — remove those records first"),
+  else deletes; deletion is the entire revocation model, there is no `revoked_at`.
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
@@ -272,24 +304,30 @@ Markdown twins described below and never the human-readable originals.
   `saveResolution`, `deleteResolution`, `adoptResolution`, `supersedeResolution`,
   `repealResolution`), and elections-record helpers (`fetchElections`, `saveElection`,
   `deleteElection`, `closeElection`, `voidElection`, `certifyElection`, `uncertifyElection`,
-  `setTallies`, `setBallots`, `saveCandidate`, `deleteCandidate`) — the board-only `GET` for both
-  resolutions and elections already returns every record's full detail, so unlike meetings/motions
-  neither has a separate single-record fetch.
+  `setTallies`, `setBallots`, `saveCandidate`, `deleteCandidate`) — the board-only `GET` for
+  resolutions, elections, and proxies already returns every record's full detail, so unlike
+  meetings/motions none of them has a separate single-record fetch — and proxies-record helpers
+  (`fetchProxies`, `saveProxy`, `deleteProxy`). `setMemberAttendance`, `setMemberVotes`, and
+  `setBallots` each take a `proxyId?: string | null` per entry, replacing the old `viaProxy?:
+boolean`.
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
   the admin UI and the `/api/admin/reports` endpoint.
 - `src/lib/types.ts` contains shared shapes, `DEFAULT_*` fallbacks, `DOCUMENT_CATEGORIES`, the
   `Visibility` type, admin-write input normalizers
-  (`normalize{Announcement,Property,Owner,Resolution,Election,Candidate}Input`, `INPUT_LIMITS`)
-  that trim, cap, validate, and reject on write, the resolution shapes (`ResolutionStatus`,
-  `RESOLUTION_STATUSES`, `ResolutionSummary`, `ResolutionDetail`, `ResolutionChainLink`,
-  `ResolutionInput`), the elections shapes (`ElectionStatus`, `ElectionSource`,
-  `ELECTION_STATUSES`, `ELECTION_SOURCES`, `ElectionSummary`, `ElectionDetail`,
-  `CandidateSummary`, `ElectionTurnout`, `BallotRow`, `ElectionInput`, `CandidateInput`), and a
-  shared `isoDateOrError` calendar-date validator used by both the declarative normalizers and the
+  (`normalize{Announcement,Property,Owner,Resolution,Election,Candidate,Proxy}Input`,
+  `INPUT_LIMITS`) that trim, cap, validate, and reject on write, the resolution shapes
+  (`ResolutionStatus`, `RESOLUTION_STATUSES`, `ResolutionSummary`, `ResolutionDetail`,
+  `ResolutionChainLink`, `ResolutionInput`), the elections shapes (`ElectionStatus`,
+  `ElectionSource`, `ELECTION_STATUSES`, `ELECTION_SOURCES`, `ElectionSummary`, `ElectionDetail`,
+  `CandidateSummary`, `ElectionTurnout`, `BallotRow`, `ElectionInput`, `CandidateInput`), the
+  proxies shapes (`ProxyDetail`, `ProxyInput`), a shared
+  `isoDateOrError` calendar-date validator used by both the declarative normalizers and the
   resolutions route's `adopt`/`supersede` and the elections route's `certify` transition
-  arguments.
+  arguments, and `MemberAttendanceRow`/`MemberVoteRow`/`BallotRow`'s `proxyId` field (board-only,
+  `null` on every public read — `viaProxy` on all three is now derived as `proxyId !== null` rather
+  than a stored column).
 - `src/lib/site.ts` contains branding constants and official-mode presentation logic (`navLinks`,
   `brandTag`, `accountNav`). The footer disclaimer and `/about` copy are board-editable via site
   settings, with `DISCLAIMER_SHORT` and `DISCLAIMER_LONG` as fallbacks. `disclaimer(site)` and
@@ -313,8 +351,16 @@ Markdown twins described below and never the human-readable originals.
   per-motion `MotionDetail.memberVotes`/`memberTally`, and `totalActiveWeight`, a `SUM(vote_weight)`
   aggregate over ACTIVE properties that is the member quorum denominator, computed unconditionally
   for every meeting (including board ones) so consumers must gate its use on `meetings.body`, never
-  on the value itself being non-zero; see [ADR 0015](./docs/adr/0015-weighted-member-voting.md)),
-  and `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring). `reads.ts` also
+  on the value itself being non-zero; see [ADR 0015](./docs/adr/0015-weighted-member-voting.md)).
+  `assembleMeetingDetail` also takes an `includeProxyIds` admin-caller flag — the second instance of
+  the ADR-0017 admin-only-field pattern, recorded together in
+  [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md): `MemberAttendanceRow.proxyId`
+  and `MemberVoteRow.proxyId` carry the real proxy id only when `fetchAdminMeeting`/
+  `fetchAdminMeetings` call it `true`; `fetchMeetingFor`/`fetchMeetingsFor` call it `false`, and
+  `viaProxy` — always present — is derived as `proxyId !== null` rather than a stored flag. `content/`
+  also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring) and
+  `proxy-guards.ts` (`proxyUseError`, the shared cross-row guard `setMemberAttendance`,
+  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`). `reads.ts` also
   has the resolutions book — `fetchResolutionsFor(env, role, { includeHistoric? })` filters
   `status != 'draft'` UNCONDITIONALLY, including for a board caller, the same rule ADR 0014 sets for
   meetings, so a draft resolution is reachable only through the board-only `fetchAdminResolutions`;
@@ -331,7 +377,10 @@ Markdown twins described below and never the human-readable originals.
   `ballots` list only for the admin caller — `ElectionDetail.ballots` is `null` on every public
   read, since publishing per-lot turnout beside per-candidate tallies is what would make an
   individual's choice deducible in a small race. See
-  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md).
+  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md). `reads.ts` also has
+  `fetchAdminProxies(env)`, board-only with no public or tier-gated sibling by design: it returns
+  every `ProxyDetail` with its property address and grantor/holder owner names resolved, the same
+  full-detail-on-list shape as `fetchAdminResolutions`/`fetchAdminElections`.
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
 - `roster/` and `verification/`: homeowner verification support.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
@@ -367,7 +416,8 @@ authorization; `board_terms` records a term of service — `person_id`, nullable
 `term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
 across terms; deleting a person with a term on record is refused with `409`), `meetings`,
 `board_attendance`, `motions`, `board_votes`, `member_attendance`, and `member_votes` (the meeting
-record — board and member meetings; proxies and live-conducted elections are a later phase — per
+record — board and member meetings; live-conducted elections and homeowner-submitted proxy grants
+remain a later phase — per
 [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md) and
 [ADR 0015](./docs/adr/0015-weighted-member-voting.md): `meetings` has `body` (`board`/`member`, the
 column that decides which voter model applies), `kind` (`regular`/`special`/`annual`), `date`,
@@ -382,12 +432,19 @@ writes them yet, and the mover/second pickers are hidden on member meetings — 
 `outcome` (`passed`/`failed`/`withdrawn`/`tabled`); `board_votes` is one roll-call vote per motion
 per `board_people` row (`choice`: `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
 `member_attendance` is one present/absent row per meeting per `properties` row, unique per pair,
-with nullable `represented_by_owner_id` and a `via_proxy` flag; `member_votes` is one vote per
+with nullable `represented_by_owner_id` and a nullable `proxy_id` referencing `proxies` (see below;
+carries no `ON DELETE` action, deliberately); `member_votes` is one vote per
 motion per `properties` row — that uniqueness is what enforces one vote per lot — with nullable
-`cast_by_owner_id`, a `via_proxy` flag, a `weight` column snapshotting `properties.vote_weight` as
+`cast_by_owner_id` and the same nullable, actionless `proxy_id`, a `weight` column snapshotting
+`properties.vote_weight` as
 stamped by the route at recording time (so correcting a property's weight later cannot rewrite a
 past tally), and `choice` restricted to `yes`/`no`/`abstain` (`recused`/`absent` are board
-roll-call concepts and are excluded). A motion's displayed tally is always derived from
+roll-call concepts and are excluded). `member_attendance.proxy_id` and `member_votes.proxy_id`
+replaced a `via_proxy` boolean each carried until migration `0015`; `viaProxy` on both is now
+derived at read time (`proxy_id IS NOT NULL`), never a stored fact a caller could set
+independently — see the `proxies` paragraph below and
+[ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md). A motion's displayed tally
+is always derived from
 `board_votes` or `member_votes` by the single `tallyVotes` in `src/lib/types.ts`, which sums each
 vote's `weight` (defaulting to 1, so board votes — which carry none — tally exactly as before, with
 no separate weighted/unweighted mode); `motions.outcome` itself is board-entered and never
@@ -428,12 +485,38 @@ nullable `votes` (`NULL` = not yet recorded, `0` = recorded as zero — the same
 `updated_at`, unlike every other table in this schema — see ADR 0017. `ballots` references
 `elections` on delete-cascade and `properties` on delete-restrict, unique per
 `(election_id, property_id)`, and records only that a lot returned a ballot: a `weight` snapshot
-of `properties.vote_weight`, a `via_proxy` flag, and a nullable `cast_by_owner_id` referencing
+of `properties.vote_weight`, a nullable `proxy_id` (actionless, see below), and a nullable
+`cast_by_owner_id` referencing
 `owners` on delete-set-null — there is deliberately no link from a ballot to a candidate, so which
 candidate a lot chose is never recorded anywhere. `board_terms` also carries a nullable
 `election_id` referencing `elections` on delete-set-null, recording which election produced that
 term; `certify` opens it, `uncertify` deletes it, and `DELETE /api/admin/board-terms` refuses to
 delete a term with one set.
+
+`proxies` (the proxies record — a board member typing in a paper proxy that already exists, per
+[ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md)): one owner
+(`grantor_owner_id`, referencing `owners` on delete-restrict) authorising one named holder
+(`holder_name`, required — a holder need not be an owner) to act for one lot (`property_id`,
+referencing `properties` on delete-restrict) at exactly one occasion, a nullable `meeting_id` or
+`election_id` (each referencing its table on delete-cascade), never both, never neither — enforced
+by a schema `CHECK` (`proxies_one_occasion`) rather than left to application code alone, so it holds
+even against a direct write that bypasses the route. A unique index per occasion kind
+(`proxies_property_meeting_unq`, `proxies_property_election_unq`) enforces one proxy per lot per
+occasion, the same NULLs-are-distinct trick `resolutions_supersedes_unq` already relies on. An
+optional `holder_owner_id` (referencing `owners` on delete-set-null) is recorded when the holder
+happens to be an owner, plus `created_by`/`created_at`/`updated_at`. `member_attendance.proxy_id`,
+`member_votes.proxy_id`, and `ballots.proxy_id` each reference `proxies.id` but carry no `ON DELETE`
+action at all — they were added by `ALTER TABLE` against tables that predate this feature, and
+drizzle-kit silently drops any `ON DELETE` action on an ALTER-added FK column, the same trap already
+on record for `properties.vote_weight` and `board_terms.election_id`; `proxy-schema.test.ts` pins
+that the generated SQL carries none. Because that FK can't enforce a refusal itself, `DELETE
+/api/admin/proxies` pre-checks all three citing tables and returns `409` naming which of
+`attendance`/`votes`/`ballots` still reference the proxy; an uncited proxy is simply deleted —
+deletion is the entire revocation model, there is no `revoked_at`. `viaProxy` on
+`MemberAttendanceRow`/`MemberVoteRow`/`BallotRow` is derived (`proxy_id IS NOT NULL`) rather than a
+second, independently-settable fact; the real `proxyId` is attached to `MemberAttendanceRow`/
+`MemberVoteRow` only for the admin caller (`BallotRow.proxyId`, already board-only, carries it
+always) — see the `assembleMeetingDetail`/`includeProxyIds` note under **Server code** above.
 
 Every document has two R2 representations keyed by its D1 uuid, per
 [ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md): the human-readable original
@@ -464,7 +547,12 @@ nullable `motions.mover_owner_id`/`motions.second_owner_id`. Migration `0012` ad
 the `elections`, `candidates`, and `ballots` tables — `elections_status_idx`,
 `elections_meeting_id_idx`, `candidates_election_id_idx`, `candidates_election_sequence_unq`,
 `ballots_election_property_unq`, and `ballots_election_id_idx` — plus a nullable
-`board_terms.election_id` column (applied locally; not yet applied to production). Migrations are
+`board_terms.election_id` column (applied locally; not yet applied to production). Migration
+`0014` adds the `proxies` table — `proxies_property_meeting_unq`, `proxies_property_election_unq`,
+`proxies_meeting_id_idx`, and `proxies_election_id_idx`, plus the `proxies_one_occasion` CHECK
+constraint. Migration `0015` drops `via_proxy` from `member_attendance`, `member_votes`, and
+`ballots` and adds each table's `proxy_id` column (both applied locally; not yet applied to
+production). Migrations are
 applied with `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
