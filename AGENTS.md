@@ -40,6 +40,7 @@ npm run format            # Prettier write
 npm run format:check      # Prettier check, enforced by CI
 npm run agents:sync       # regenerate .agents/skills (Codex) from .claude/
 npm run agents:check      # fail if that mirror drifted, enforced by CI
+npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run db:generate       # generate Drizzle migration files
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to the live D1 database
@@ -60,7 +61,7 @@ npx vitest run -t "shows an empty message"
 npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 ```
 
-CI (`.github/workflows/build.yml`) runs `format:check`, `agents:check`, `check`, `test`,
+CI (`.github/workflows/build.yml`) runs `format:check`, `agents:check`, `lint:coercions`, `check`, `test`,
 `test:server`, then `build` on every PR and push to `main`; run the relevant checks locally
 before pushing. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
@@ -82,6 +83,22 @@ Use TypeScript and Astro conventions already present in the repo. Follow the exi
 settings, keep indentation consistent with the file's current style, and prefer descriptive names
 over abbreviations. Use `*.test.ts` and `*.test.tsx` for tests. Keep server-only code in
 `src/server/` and avoid importing it into client-side modules.
+
+**Never default a coerced numeric form value with `||`.** `Number('')` and `Number('0')` are both
+`0`, so `Number(x) || 1` cannot tell a blank field from a typed zero and silently substitutes the
+default — and because the substitution happens before the request is sent, the server never sees
+the `0` to reject it. Check for blank first:
+
+```ts
+const raw = form.field.trim();
+const value = raw === '' ? undefined : Number(raw);
+```
+
+This has bitten twice — a lot's `vote_weight` set to 1 when the board typed 0, and a candidate's
+tally recorded as a real 0 when the field was left blank, destroying the `NULL` ("not recorded")
+vs `0` ("recorded as zero") distinction. `npm run lint:coercions` fails CI on the pattern; a
+deliberate case needs a trailing `coercion-ok` comment with a reason. It catches the shape, not
+every way blank can be conflated with zero.
 
 ## Architecture
 

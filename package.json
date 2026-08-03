@@ -25,6 +25,7 @@
     "test:server": "vitest run --config vitest.workers.config.ts",
     "agents:sync": "node --experimental-strip-types scripts/sync-agent-skills.ts",
     "agents:check": "node --experimental-strip-types scripts/sync-agent-skills.ts --check",
+    "lint:coercions": "node --experimental-strip-types scripts/check-coercions.ts",
     "roster:import": "node --experimental-strip-types scripts/import-roster.ts",
     "docs:import": "node --experimental-strip-types scripts/import-documents.ts",
     "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts",
