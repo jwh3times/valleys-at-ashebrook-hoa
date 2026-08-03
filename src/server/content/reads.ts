@@ -17,6 +17,7 @@ import {
   elections,
   candidates,
   ballots,
+  proxies,
 } from '../db/schema';
 import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
@@ -32,6 +33,7 @@ import type {
   ElectionStatus,
   CandidateSummary,
   BallotRow,
+  ProxyDetail,
 } from '../../lib/types';
 
 export async function fetchDocumentsFor(env: Env, role: Role) {
@@ -855,4 +857,40 @@ export async function fetchAdminElections(env: Env): Promise<ElectionDetail[]> {
   return Promise.all(
     rows.map((r) => assembleElectionDetail(db, r, true, eligible)),
   );
+}
+
+/**
+ * Board-only: every proxy, newest first, with property address and owner
+ * names resolved so the panel needs no second lookup — the same
+ * full-detail-on-list shape as fetchAdminElections. There is deliberately no
+ * public or tier-gated sibling: who delegated to whom is more sensitive than
+ * the fact of it, which the derived viaProxy already surfaces at the
+ * meeting's own tier. Every call site MUST be requireBoard-gated.
+ */
+export async function fetchAdminProxies(env: Env): Promise<ProxyDetail[]> {
+  const db = getDb(env);
+  const rows = await db.select().from(proxies).orderBy(desc(proxies.createdAt));
+  if (rows.length === 0) return [];
+  const propertyRows = await db
+    .select({ id: properties.id, address: properties.address })
+    .from(properties);
+  const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
+  const ownerRows = await db
+    .select({ id: owners.id, fullName: owners.fullName })
+    .from(owners);
+  const ownerNameOf = new Map(ownerRows.map((o) => [o.id, o.fullName]));
+  return rows.map((r) => ({
+    id: r.id,
+    propertyId: r.propertyId,
+    address: addressOf.get(r.propertyId) ?? 'Unknown',
+    grantorOwnerId: r.grantorOwnerId,
+    grantorName: ownerNameOf.get(r.grantorOwnerId) ?? 'Unknown',
+    holderName: r.holderName,
+    holderOwnerId: r.holderOwnerId,
+    holderOwnerName: r.holderOwnerId
+      ? (ownerNameOf.get(r.holderOwnerId) ?? null)
+      : null,
+    meetingId: r.meetingId,
+    electionId: r.electionId,
+  }));
 }
