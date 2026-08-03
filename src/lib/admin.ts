@@ -20,6 +20,8 @@ import type {
   ElectionDetail,
   ElectionInput,
   CandidateInput,
+  ProxyDetail,
+  ProxyInput,
 } from './types';
 import type { ReportListItem, ReportDetail } from './reports';
 
@@ -753,6 +755,35 @@ export async function saveCandidate(
 
 export async function deleteCandidate(id: string): Promise<void> {
   const res = await fetch('/api/admin/candidates', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+}
+
+// ---------- Proxies ----------
+// GET returns every proxy with names resolved (see fetchAdminProxies) — like
+// resolutions and elections, the list read IS the detail read.
+export async function fetchProxies(): Promise<ProxyDetail[]> {
+  const res = await fetch('/api/admin/proxies');
+  if (!res.ok) throw new Error(`Load proxies failed: ${res.status}`);
+  return res.json();
+}
+
+export async function saveProxy(data: ProxyInput, id?: string): Promise<void> {
+  const res = await fetch('/api/admin/proxies', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save proxy failed: ${res.status}`);
+}
+
+export async function deleteProxy(id: string): Promise<void> {
+  const res = await fetch('/api/admin/proxies', {
     method: 'DELETE',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ id }),
