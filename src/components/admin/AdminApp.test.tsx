@@ -107,6 +107,18 @@ describe('AdminApp', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers an Elections tab', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    expect(
+      screen.getByRole('button', { name: 'Elections' }),
+    ).toBeInTheDocument();
+  });
+
   it('offers The Board and Board access as separate tabs', () => {
     vi.mocked(useAuth).mockReturnValue({
       loading: false,

@@ -14,6 +14,7 @@ import {
   memberAttendance,
   motions,
   resolutions,
+  elections,
 } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
 import {
@@ -380,6 +381,20 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
         { status: 409 },
       );
   }
+  // elections.meeting_id is ON DELETE SET NULL, the identical pattern to
+  // resolutions.adopted_by_motion_id above — deleting this meeting would
+  // otherwise silently blank an election's record of where it was held, with
+  // nothing left to recover which meeting that was.
+  const linkedElections = await db
+    .select({ id: elections.id })
+    .from(elections)
+    .where(eq(elections.meetingId, id))
+    .limit(1);
+  if (linkedElections.length > 0)
+    return new Response(
+      'An election records this meeting as where it was held — unlink it from the Elections tab first.',
+      { status: 409 },
+    );
   // Deleting a draft cascades its attendance, motions, and votes via FK.
   await db.delete(meetings).where(eq(meetings.id, id));
   return new Response(null, { status: 204 });

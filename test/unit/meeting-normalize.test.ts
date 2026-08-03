@@ -136,6 +136,20 @@ describe('normalizeMeetingInput', () => {
     if (!r.ok) return;
     expect(Object.keys(r.value).length).toBe(0);
   });
+
+  it('rejects a body key on patch — body is fixed at creation', () => {
+    const r = normalizeMeetingInput({ id: 'm1', body: 'member' }, 'patch');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/body is not editable/i);
+  });
+
+  it('rejects a falsy-but-present body key', () => {
+    const r = normalizeMeetingInput({ id: 'm1', body: '' }, 'patch');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/body is not editable/i);
+  });
 });
 
 describe('normalizeMotionInput', () => {

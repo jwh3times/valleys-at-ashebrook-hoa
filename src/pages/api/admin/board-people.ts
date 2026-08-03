@@ -10,6 +10,7 @@ import {
   boardAttendance,
   motions,
   boardVotes,
+  candidates,
 } from '../../../server/db/schema';
 import { normalizeBoardPersonInput } from '../../../lib/types';
 
@@ -100,10 +101,19 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   // Service history and the meeting record are the record. Refuse explicitly
   // rather than relying on the ON DELETE RESTRICT foreign keys (board_terms,
   // board_attendance, motions.mover_person_id, motions.second_person_id,
-  // board_votes — all RESTRICT against board_people.id), so the 409 is
-  // deterministic instead of an uncaught D1 error. The two checks are kept
-  // separate because the remedies differ: a term is edited on The Board tab,
-  // while attendance/motions/votes live on the meeting itself.
+  // board_votes, and candidates.board_person_id — all RESTRICT against
+  // board_people.id), so the 409 is deterministic instead of an uncaught D1
+  // error. The two checks are kept separate because the remedies differ: a
+  // term is edited on The Board tab, while attendance/motions/votes/
+  // candidacy live on the meeting or election record itself.
+  //
+  // candidates.board_person_id is reachable WITHOUT a term ever existing:
+  // certify backfills it for a winner who had none, and uncertify then
+  // deletes the term certify created while leaving the backfilled
+  // candidacy link in place — so the term-of-service check above does not
+  // see it at all. A prior PR in this series regressed this endpoint from
+  // 409 to 500 by adding a RESTRICT foreign key without extending this
+  // check; this one is caught by test/server/admin-board-people-board.test.ts.
   const served = await db
     .select({ id: boardTerms.id })
     .from(boardTerms)
@@ -114,7 +124,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       'This person has a term of service on record — remove their terms first.',
       { status: 409 },
     );
-  const [attended, moved, seconded, voted] = await Promise.all([
+  const [attended, moved, seconded, voted, candidacies] = await Promise.all([
     db
       .select({ id: boardAttendance.id })
       .from(boardAttendance)
@@ -135,15 +145,21 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       .from(boardVotes)
       .where(eq(boardVotes.personId, id))
       .limit(1),
+    db
+      .select({ id: candidates.id })
+      .from(candidates)
+      .where(eq(candidates.boardPersonId, id))
+      .limit(1),
   ]);
   if (
     attended.length > 0 ||
     moved.length > 0 ||
     seconded.length > 0 ||
-    voted.length > 0
+    voted.length > 0 ||
+    candidacies.length > 0
   )
     return new Response(
-      'This person appears in the meeting record (attendance, a motion, or a roll-call vote) — remove them from the meeting record first.',
+      'This person appears in the meeting record (attendance, a motion, a roll-call vote, or a candidacy) — remove them from the meeting record first.',
       { status: 409 },
     );
   await db.delete(boardPeople).where(eq(boardPeople.id, id));

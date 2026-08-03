@@ -14,6 +14,9 @@ import {
   memberAttendance,
   memberVotes,
   resolutions,
+  elections,
+  candidates,
+  ballots,
 } from '../db/schema';
 import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
@@ -25,6 +28,10 @@ import type {
   ResolutionChainLink,
   ResolutionStatus,
   Visibility,
+  ElectionDetail,
+  ElectionStatus,
+  CandidateSummary,
+  BallotRow,
 } from '../../lib/types';
 
 export async function fetchDocumentsFor(env: Env, role: Role) {
@@ -628,5 +635,214 @@ export async function fetchAdminResolutions(
 
   return all.map((r) =>
     toResolutionDetail(r, ALL_VISIBILITIES, byId, supersededBy),
+  );
+}
+
+type ElectionRow = typeof elections.$inferSelect;
+
+/** The two eligible-voter denominators, shared across every election in one call. */
+interface EligibleTotals {
+  eligibleCount: number;
+  eligibleWeight: number;
+}
+
+/**
+ * COUNT(*) and SUM(vote_weight) over ACTIVE properties, from the same query —
+ * the two distinct denominators ElectionTurnout needs. Reuses the aggregate
+ * shape assembleMeetingDetail uses for totalActiveWeight. Computed once per
+ * fetchElectionsFor/fetchAdminElections call and shared across every election
+ * returned, since the active roster does not change mid-call.
+ */
+async function fetchEligibleTotals(db: Db): Promise<EligibleTotals> {
+  const [row] = await db
+    .select({
+      eligibleCount: count(),
+      eligibleWeight: sql<number>`coalesce(sum(${properties.voteWeight}), 0)`,
+    })
+    .from(properties)
+    .where(eq(properties.status, 'active'));
+  return row;
+}
+
+/** One election's candidates, ordered by sequence. */
+async function fetchCandidatesFor(
+  db: Db,
+  electionId: string,
+): Promise<CandidateSummary[]> {
+  const rows = await db
+    .select()
+    .from(candidates)
+    .where(eq(candidates.electionId, electionId))
+    .orderBy(asc(candidates.sequence));
+  return rows.map((c) => ({
+    id: c.id,
+    fullName: c.fullName,
+    boardPersonId: c.boardPersonId,
+    statementMd: c.statementMd,
+    sequence: c.sequence,
+    votes: c.votes,
+    won: c.won,
+    withdrawn: c.withdrawn,
+  }));
+}
+
+/** ballotsCast and weightCast for one election, from a single aggregate query. */
+async function fetchTurnoutCounts(
+  db: Db,
+  electionId: string,
+): Promise<{ ballotsCast: number; weightCast: number }> {
+  const [row] = await db
+    .select({
+      ballotsCast: count(),
+      weightCast: sql<number>`coalesce(sum(${ballots.weight}), 0)`,
+    })
+    .from(ballots)
+    .where(eq(ballots.electionId, electionId));
+  return row;
+}
+
+/**
+ * The per-lot ballot list for one election, with each property's address
+ * resolved the same way board_people/property names are resolved elsewhere
+ * in this file: an unscoped lookup, then a map. Board-only — never called
+ * from the public read path. See fetchElectionsFor's ballots: null contract.
+ */
+async function fetchBallotRowsFor(
+  db: Db,
+  electionId: string,
+): Promise<BallotRow[]> {
+  const rows = await db
+    .select({
+      propertyId: ballots.propertyId,
+      weight: ballots.weight,
+      viaProxy: ballots.viaProxy,
+      castByOwnerId: ballots.castByOwnerId,
+    })
+    .from(ballots)
+    .where(eq(ballots.electionId, electionId))
+    .orderBy(asc(ballots.propertyId));
+  if (rows.length === 0) return [];
+  const propertyRows = await db
+    .select({ id: properties.id, address: properties.address })
+    .from(properties)
+    .where(
+      inArray(
+        properties.id,
+        rows.map((r) => r.propertyId),
+      ),
+    );
+  const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
+  return rows.map((r) => ({
+    propertyId: r.propertyId,
+    address: addressOf.get(r.propertyId) ?? 'Unknown',
+    weight: r.weight,
+    viaProxy: r.viaProxy,
+    castByOwnerId: r.castByOwnerId,
+  }));
+}
+
+/**
+ * Assembles one ElectionDetail from an already-selected election row.
+ * `includeBallots` is the ONLY thing that distinguishes the public and admin
+ * assembly — turnout (a count and a sum) is always computed, but the per-lot
+ * ballots list is fetched and attached only for the admin caller. This is a
+ * privacy decision, not an optimization: publishing which lots returned a
+ * ballot beside per-candidate tallies is exactly what lets someone deduce an
+ * individual vote in a small race. Carries NO status or tier gate of its own
+ * — those live in the two callers below, before this function ever runs.
+ */
+async function assembleElectionDetail(
+  db: Db,
+  row: ElectionRow,
+  includeBallots: boolean,
+  eligible: EligibleTotals,
+): Promise<ElectionDetail> {
+  const [candidateRows, turnout] = await Promise.all([
+    fetchCandidatesFor(db, row.id),
+    fetchTurnoutCounts(db, row.id),
+  ]);
+  const ballotRows = includeBallots
+    ? await fetchBallotRowsFor(db, row.id)
+    : null;
+
+  return {
+    id: row.id,
+    meetingId: row.meetingId,
+    title: row.title,
+    seats: row.seats,
+    electionDate: row.electionDate,
+    source: row.source,
+    status: row.status,
+    visibility: row.visibility,
+    candidates: candidateRows,
+    turnout: {
+      ballotsCast: turnout.ballotsCast,
+      weightCast: turnout.weightCast,
+      eligibleCount: eligible.eligibleCount,
+      eligibleWeight: eligible.eligibleWeight,
+    },
+    ballots: ballotRows,
+  };
+}
+
+// Elections that are a settled record, one way or another — a closed (tallied
+// but not yet certified) or certified election. Never relaxed for a board
+// caller: see fetchElectionsFor's own doc comment for why.
+const RECORDED_ELECTION_STATUSES: ElectionStatus[] = ['closed', 'certified'];
+
+/**
+ * Closed or certified elections visible to `role`, each with full candidate
+ * and turnout detail. The status filter is UNCONDITIONAL and is deliberately
+ * NOT relaxed for a board caller — mirrors ADR 0014 for meetings and
+ * fetchResolutionsFor's `status != 'draft'` gate: a draft election is not yet
+ * a record of anything, and a void election is an abandoned one, so neither
+ * belongs on a public surface regardless of who asks. Drafts and void
+ * elections are reachable only through fetchAdminElections.
+ *
+ * `ballots` is always null here — see ElectionDetail's own doc comment and
+ * assembleElectionDetail above for why the per-lot list is board-only.
+ *
+ * There is deliberately no single-election fetch — elections are roughly
+ * annual, so a list page renders every one inline, same reasoning as
+ * fetchResolutionsFor.
+ */
+export async function fetchElectionsFor(
+  env: Env,
+  role: Role,
+): Promise<ElectionDetail[]> {
+  const db = getDb(env);
+  const rows = await db
+    .select()
+    .from(elections)
+    .where(
+      and(
+        inArray(elections.status, RECORDED_ELECTION_STATUSES),
+        inArray(elections.visibility, visibleTiers(role)),
+      ),
+    )
+    .orderBy(desc(elections.electionDate));
+  if (rows.length === 0) return [];
+  const eligible = await fetchEligibleTotals(db);
+  return Promise.all(
+    rows.map((r) => assembleElectionDetail(db, r, false, eligible)),
+  );
+}
+
+/**
+ * Board-only: every election including drafts and void ones, newest first,
+ * with the per-lot ballots list attached — same contract shape as
+ * fetchAdminMeetings/fetchAdminResolutions, so every call site MUST be
+ * requireBoard-gated. Carries no status or tier gate of its own.
+ */
+export async function fetchAdminElections(env: Env): Promise<ElectionDetail[]> {
+  const db = getDb(env);
+  const rows = await db
+    .select()
+    .from(elections)
+    .orderBy(desc(elections.electionDate));
+  if (rows.length === 0) return [];
+  const eligible = await fetchEligibleTotals(db);
+  return Promise.all(
+    rows.map((r) => assembleElectionDetail(db, r, true, eligible)),
   );
 }

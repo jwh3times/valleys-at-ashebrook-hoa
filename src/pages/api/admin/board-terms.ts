@@ -86,6 +86,24 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
   const id = stringField(parsed.value, 'id');
   if (!id) return new Response('id is required', { status: 400 });
-  await getDb(env).delete(boardTerms).where(eq(boardTerms.id, id));
+  const db = getDb(env);
+  const existing = await db
+    .select({ electionId: boardTerms.electionId })
+    .from(boardTerms)
+    .where(eq(boardTerms.id, id))
+    .limit(1);
+  if (existing.length === 0)
+    return new Response('Term not found', { status: 404 });
+  // A term with electionId set was created by certifying an election —
+  // deleting it here would strand that certification with no way to reach
+  // the term it created, the same reasoning voidElection already applies to
+  // a certified election itself. Uncertify first, which deletes this row as
+  // part of cleanly reversing the certification.
+  if (existing[0].electionId !== null)
+    return new Response(
+      'This term was created by certifying an election — uncertify that election instead.',
+      { status: 409 },
+    );
+  await db.delete(boardTerms).where(eq(boardTerms.id, id));
   return new Response(null, { status: 204 });
 };

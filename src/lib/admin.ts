@@ -17,6 +17,9 @@ import type {
   MemberVoteChoice,
   ResolutionDetail,
   ResolutionInput,
+  ElectionDetail,
+  ElectionInput,
+  CandidateInput,
 } from './types';
 import type { ReportListItem, ReportDetail } from './reports';
 
@@ -608,4 +611,152 @@ export async function repealResolution(id: string): Promise<void> {
   });
   if (!res.ok)
     throw new Error((await res.text()) || `Repeal failed: ${res.status}`);
+}
+
+// ---------- Elections ----------
+// GET already returns every election's full detail (drafts included, no tier
+// filter, candidates and ballots nested — see fetchAdminElections), so like
+// resolutions there is no separate single-election fetch: the list read IS
+// the detail read.
+export async function fetchElections(): Promise<ElectionDetail[]> {
+  const res = await fetch('/api/admin/elections');
+  if (!res.ok) throw new Error(`Load elections failed: ${res.status}`);
+  return res.json();
+}
+
+export async function saveElection(
+  data: ElectionInput,
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : data),
+  });
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Save election failed: ${res.status}`,
+    );
+}
+
+export async function deleteElection(id: string): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+}
+
+export async function closeElection(id: string): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'close', id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Close failed: ${res.status}`);
+}
+
+export async function voidElection(id: string): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'void', id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Void failed: ${res.status}`);
+}
+
+// Per-winner term fields — a single shared termStart would be wrong for a
+// staggered board, where the top vote-getter and the runner-up can seat for
+// different lengths.
+export async function certifyElection(
+  id: string,
+  winners: {
+    candidateId: string;
+    termStart: string;
+    termEnd?: string | null;
+    title?: string | null;
+  }[],
+): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'certify', id, winners }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Certify failed: ${res.status}`);
+}
+
+export async function uncertifyElection(id: string): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'uncertify', id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Uncertify failed: ${res.status}`);
+}
+
+export async function setTallies(
+  electionId: string,
+  entries: { candidateId: string; votes: number }[],
+): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'setTallies', electionId, entries }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save tallies failed: ${res.status}`);
+}
+
+export async function setBallots(
+  electionId: string,
+  entries: {
+    propertyId: string;
+    weight?: number;
+    viaProxy?: boolean;
+    castByOwnerId?: string | null;
+  }[],
+): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'setBallots', electionId, entries }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Save ballots failed: ${res.status}`);
+}
+
+// ---------- Candidates ----------
+// CandidateInput (unlike MotionInput) carries no electionId — the server
+// route reads it as a separate top-level field on create, and ignores it on
+// PATCH — so it is a separate parameter here rather than folded into data.
+export async function saveCandidate(
+  electionId: string,
+  data: CandidateInput,
+  id?: string,
+): Promise<void> {
+  const res = await fetch('/api/admin/candidates', {
+    method: id ? 'PATCH' : 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(id ? { id, ...data } : { electionId, ...data }),
+  });
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Save candidate failed: ${res.status}`,
+    );
+}
+
+export async function deleteCandidate(id: string): Promise<void> {
+  const res = await fetch('/api/admin/candidates', {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
 }
