@@ -24,6 +24,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchProperties.mockResolvedValue([]);
   mocked.fetchBoardPeople.mockResolvedValue([]);
+  mocked.fetchProxies.mockResolvedValue([]);
 });
 
 function candidate(
@@ -630,5 +631,79 @@ describe('ElectionsManager', () => {
     expect(
       await screen.findByText(/seats must be at least 1/i),
     ).toBeInTheDocument();
+  });
+
+  it('selecting a proxy for a ballot sends its id and clears castByOwnerId', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      property({
+        id: 'p1',
+        address: '100 Main St',
+        owners: [
+          {
+            id: 'o1',
+            propertyId: 'p1',
+            fullName: 'Jane Doe',
+            phone: null,
+            email: null,
+            status: 'active',
+            notes: null,
+          },
+        ],
+      }),
+    ]);
+    mocked.fetchProxies.mockResolvedValue([
+      {
+        id: 'px1',
+        propertyId: 'p1',
+        address: '100 Main St',
+        grantorOwnerId: 'o1',
+        grantorName: 'Jane Doe',
+        holderName: 'Proxy Holder',
+        holderOwnerId: null,
+        holderOwnerName: null,
+        meetingId: null,
+        electionId: 'e1',
+      },
+    ]);
+    mocked.setBallots.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    await userEvent.click(
+      screen.getByLabelText(/ballot returned — 100 main st/i),
+    );
+    const castBySelect = screen.getByLabelText(/cast by — 100 main st/i);
+    await userEvent.selectOptions(castBySelect, 'o1');
+    expect(castBySelect).toHaveValue('o1');
+
+    await userEvent.selectOptions(
+      screen.getByLabelText(/proxy — 100 main st/i),
+      'px1',
+    );
+
+    // Choosing the proxy clears AND disables the cast-by select.
+    expect(castBySelect).toHaveValue('');
+    expect(castBySelect).toBeDisabled();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /^save ballots$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setBallots).toHaveBeenCalledWith('e1', [
+        {
+          propertyId: 'p1',
+          weight: undefined,
+          proxyId: 'px1',
+          castByOwnerId: null,
+        },
+      ]),
+    );
   });
 });

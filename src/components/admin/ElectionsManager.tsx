@@ -13,6 +13,7 @@ import {
   deleteCandidate,
   fetchProperties,
   fetchBoardPeople,
+  fetchProxies,
 } from '../../lib/admin';
 import type {
   ElectionDetail,
@@ -23,6 +24,7 @@ import type {
   Visibility,
   PropertyWithOwners,
   BoardPersonWithTerms,
+  ProxyDetail,
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
 
@@ -56,7 +58,7 @@ const emptyCandidate = { fullName: '', statementMd: '', boardPersonId: '' };
 interface BallotFormRow {
   selected: boolean;
   weight: string;
-  /** Empty string = no proxy. Not yet settable through this form — see Task 6. */
+  /** Empty string = no proxy. Picking a proxy clears castByOwnerId. */
   proxyId: string;
   castByOwnerId: string;
 }
@@ -119,6 +121,17 @@ export default function ElectionsManager() {
           'could not load the board roster.';
         setMsg('Error: ' + message);
       });
+    // Load once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Recorded proxies back the ballot picker below — loaded once alongside
+  // properties/board people, independent of useAdminResource.
+  const [proxyList, setProxyList] = useState<ProxyDetail[]>([]);
+  useEffect(() => {
+    fetchProxies()
+      .then(setProxyList)
+      .catch(() => {});
     // Load once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -937,6 +950,9 @@ export default function ElectionsManager() {
                                               <select
                                                 id={`ballot-cast-by-${e.id}-${p.id}`}
                                                 value={row?.castByOwnerId ?? ''}
+                                                disabled={
+                                                  busy || !!row?.proxyId
+                                                }
                                                 onChange={(evt) =>
                                                   setBallotForm((prev) => ({
                                                     ...prev,
@@ -970,6 +986,74 @@ export default function ElectionsManager() {
                                               </select>
                                             </>
                                           )}
+                                          {(() => {
+                                            // Scope filter is the election OR
+                                            // its meeting — a meeting-scoped
+                                            // proxy covers an election held
+                                            // at that meeting.
+                                            const lotProxies = proxyList.filter(
+                                              (px) =>
+                                                px.propertyId === p.id &&
+                                                (px.electionId === e.id ||
+                                                  (e.meetingId !== null &&
+                                                    px.meetingId ===
+                                                      e.meetingId)),
+                                            );
+                                            if (lotProxies.length === 0)
+                                              return null;
+                                            return (
+                                              <>
+                                                <label
+                                                  htmlFor={`ballot-proxy-${e.id}-${p.id}`}
+                                                >
+                                                  Proxy — {p.address}
+                                                </label>
+                                                <select
+                                                  id={`ballot-proxy-${e.id}-${p.id}`}
+                                                  aria-label={`Proxy — ${p.address}`}
+                                                  value={row?.proxyId ?? ''}
+                                                  onChange={(evt) =>
+                                                    setBallotForm((prev) => ({
+                                                      ...prev,
+                                                      [p.id]: {
+                                                        selected:
+                                                          prev[p.id]
+                                                            ?.selected ?? true,
+                                                        weight:
+                                                          prev[p.id]?.weight ??
+                                                          '',
+                                                        proxyId:
+                                                          evt.target.value,
+                                                        // Mutual exclusion,
+                                                        // mirrored from the
+                                                        // server: picking a
+                                                        // proxy clears the
+                                                        // cast-by owner.
+                                                        castByOwnerId: evt
+                                                          .target.value
+                                                          ? ''
+                                                          : (prev[p.id]
+                                                              ?.castByOwnerId ??
+                                                            ''),
+                                                      },
+                                                    }))
+                                                  }
+                                                >
+                                                  <option value="">
+                                                    — no proxy —
+                                                  </option>
+                                                  {lotProxies.map((px) => (
+                                                    <option
+                                                      key={px.id}
+                                                      value={px.id}
+                                                    >
+                                                      via proxy: {px.holderName}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              </>
+                                            );
+                                          })()}
                                         </div>
                                       )}
                                     </div>
