@@ -437,7 +437,6 @@ describe('/meetings/[id]', () => {
         propertyId: 'p1',
         present: true,
         representedByOwnerId: null,
-        viaProxy: false,
       },
       {
         id: 'ma2',
@@ -445,7 +444,6 @@ describe('/meetings/[id]', () => {
         propertyId: 'p2',
         present: false,
         representedByOwnerId: null,
-        viaProxy: false,
       },
     ]);
     const container = await makeContainer();
@@ -476,7 +474,6 @@ describe('/meetings/[id]', () => {
         propertyId: 'p1',
         present: true,
         representedByOwnerId: null,
-        viaProxy: false,
       },
       {
         id: 'ma4',
@@ -484,7 +481,6 @@ describe('/meetings/[id]', () => {
         propertyId: 'p2',
         present: false,
         representedByOwnerId: null,
-        viaProxy: false,
       },
     ]);
     const notMetHtml = await container.renderToString(MeetingDetailPage, {
@@ -547,7 +543,6 @@ describe('/meetings/[id]', () => {
         motionId: 'mmo1',
         propertyId: 'p1',
         castByOwnerId: 'o1',
-        viaProxy: false,
         weight: 2,
         choice: 'yes',
       },
@@ -556,7 +551,6 @@ describe('/meetings/[id]', () => {
         motionId: 'mmo1',
         propertyId: 'p2',
         castByOwnerId: null,
-        viaProxy: false,
         weight: 1,
         choice: 'no',
       },
@@ -574,7 +568,6 @@ describe('/meetings/[id]', () => {
         propertyId: 'p2',
         present: true,
         representedByOwnerId: 'o2',
-        viaProxy: false,
       },
     ]);
     const container = await makeContainer();

@@ -35,8 +35,17 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   (`/meetings`, `/meetings/[id]`, rendered server-side via `fetchMeetingsFor`/`fetchMeetingFor` —
   there is no `/api/content/meetings` JSON endpoint) render, for a `public`-visibility member
   meeting, a per-motion roll call listing each property's street address next to its
-  `yes`/`no`/`abstain` choice, weight, and `via_proxy` flag; the attendance summary above the
-  motions (the "N of M votes represented" line) is aggregate-only and names no property.
+  `yes`/`no`/`abstain` choice, weight, and a derived `viaProxy` flag; the attendance summary above
+  the motions (the "N of M votes represented" line) is aggregate-only and names no property.
+  **Who held a lot's proxy is board-only.** `viaProxy` (`proxy_id IS NOT NULL`) is the only proxy
+  fact any public or homeowner caller ever sees; the real `proxyId` — which would let a caller work
+  backward to the named holder recorded on `proxies` — is attached to
+  `MemberAttendanceRow`/`MemberVoteRow` only for the admin caller (the same admin-only-field
+  pattern `ElectionDetail.ballots` already uses, see [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md)),
+  and `ElectionDetail.ballots[].proxyId`, already board-only, carries it unconditionally. There is
+  no public or tier-gated read of the `proxies` table itself; `GET /api/admin/proxies` is
+  `requireBoard`-gated like every other admin endpoint. See
+  [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md).
   **No resident name is ever published**: `castByName` and `representedByName` are present on the
   `fetchMeetingFor` payload for the admin panel's use, but the public template never interpolates
   them, and a test (`test/server/meeting-pages.test.ts`) pins that a name on the payload does not
@@ -49,7 +58,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   named board members, never homeowners.
 - **Elections are secret by construction: no table links a ballot to a candidate.** `ballots`
   records only that a lot returned a ballot for an election — `election_id`, `property_id`, a
-  `vote_weight` snapshot, and cast-by/proxy provenance — and there is deliberately no
+  `vote_weight` snapshot, and cast-by/proxy provenance (`cast_by_owner_id`, `proxy_id`) — and there
+  is deliberately no
   `ballot_id -> candidate_id` table, so "did lot 42 vote" is answerable and "who did lot 42 vote
   for" is not recorded anywhere, by anyone, at any tier. `candidates.votes` holds only the
   board-entered aggregate tally per candidate, typed in from a paper count rather than derived from

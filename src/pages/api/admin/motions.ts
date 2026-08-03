@@ -22,6 +22,7 @@ import {
   MEMBER_VOTE_CHOICES,
 } from '../../../lib/types';
 import type { VoteChoice, MemberVoteChoice } from '../../../lib/types';
+import { proxyUseError } from '../../../server/content/proxy-guards';
 
 export const prerender = false;
 
@@ -60,14 +61,18 @@ function parseVoteEntries(
 }
 
 /**
- * Look up the `body` of the meeting a motion belongs to. Reaching the
- * meeting from a motion takes a second lookup — `motions.meetingId` then
- * `meetings.body` — since `motions` does not carry `body` directly.
+ * Look up the `body` of the meeting a motion belongs to, and that meeting's
+ * own id — needed by setMemberVotes to scope the proxy guard to the right
+ * occasion. Reaching the meeting from a motion takes a second lookup —
+ * `motions.meetingId` then `meetings.body` — since `motions` does not carry
+ * `body` directly.
  */
 async function meetingBodyForMotion(
   db: Db,
   motionId: string,
-): Promise<{ found: false } | { found: true; body: string }> {
+): Promise<
+  { found: false } | { found: true; body: string; meetingId: string }
+> {
   const existing = await db
     .select({ meetingId: motions.meetingId })
     .from(motions)
@@ -79,7 +84,11 @@ async function meetingBodyForMotion(
     .from(meetings)
     .where(eq(meetings.id, existing[0].meetingId))
     .limit(1);
-  return { found: true, body: meeting[0]?.body ?? '' };
+  return {
+    found: true,
+    body: meeting[0]?.body ?? '',
+    meetingId: existing[0].meetingId,
+  };
 }
 
 async function setVotes(db: Db, body: unknown): Promise<Response> {
@@ -115,7 +124,7 @@ interface MemberVoteEntry {
   propertyId: string;
   choice: MemberVoteChoice;
   castByOwnerId: string | null;
-  viaProxy: boolean;
+  proxyId: string | null;
 }
 
 /** Validate the raw `entries` payload for `setMemberVotes`. */
@@ -132,7 +141,6 @@ function parseMemberVoteEntries(
     const propertyId = record?.propertyId;
     const choice = record?.choice;
     const castByOwnerId = record?.castByOwnerId;
-    const viaProxy = record?.viaProxy;
     if (
       typeof propertyId !== 'string' ||
       propertyId.trim() === '' ||
@@ -156,14 +164,30 @@ function parseMemberVoteEntries(
         error: 'castByOwnerId must be a string when present',
       };
     }
-    if (viaProxy !== undefined && typeof viaProxy !== 'boolean') {
-      return { ok: false, error: 'viaProxy must be a boolean when present' };
+    const proxyId = record?.proxyId;
+    if (
+      proxyId !== undefined &&
+      proxyId !== null &&
+      typeof proxyId !== 'string'
+    ) {
+      return { ok: false, error: 'proxyId must be a string when present' };
+    }
+    const parsedProxyId = typeof proxyId === 'string' ? proxyId : null;
+    // Mutual exclusion: who acted for the lot lives on the (board-only)
+    // proxy row, never beside it — a row carrying both could name two
+    // different people, and the public read would leak the holder.
+    if (parsedProxyId !== null && typeof castByOwnerId === 'string') {
+      return {
+        ok: false,
+        error:
+          'An entry cannot carry both proxyId and castByOwnerId — who acted lives on the proxy record',
+      };
     }
     entries.push({
       propertyId,
       choice: choice as MemberVoteChoice,
       castByOwnerId: typeof castByOwnerId === 'string' ? castByOwnerId : null,
-      viaProxy: viaProxy === true,
+      proxyId: parsedProxyId,
     });
   }
   return { ok: true, value: entries };
@@ -181,6 +205,18 @@ async function setMemberVotes(db: Db, body: unknown): Promise<Response> {
   // silently produce a motion with an incoherent electorate.
   if (lookup.body !== 'member')
     return new Response('Motion is not on a member meeting', { status: 409 });
+
+  const proxyFailure = await proxyUseError(
+    db,
+    parsedEntries.value
+      .filter((e) => e.proxyId !== null)
+      .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
+    { meetingId: lookup.meetingId },
+  );
+  if (proxyFailure)
+    return new Response(proxyFailure.message, {
+      status: proxyFailure.status,
+    });
 
   // Weight is stamped from the database, never trusted from the client — a
   // client-supplied weight would let a caller silently rewrite the
@@ -200,7 +236,7 @@ async function setMemberVotes(db: Db, body: unknown): Promise<Response> {
     motionId: string;
     propertyId: string;
     castByOwnerId: string | null;
-    viaProxy: boolean;
+    proxyId: string | null;
     weight: number;
     choice: MemberVoteChoice;
   }[] = [];
@@ -213,7 +249,7 @@ async function setMemberVotes(db: Db, body: unknown): Promise<Response> {
       motionId,
       propertyId: e.propertyId,
       castByOwnerId: e.castByOwnerId,
-      viaProxy: e.viaProxy,
+      proxyId: e.proxyId,
       weight,
       choice: e.choice,
     });

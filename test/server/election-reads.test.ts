@@ -103,7 +103,6 @@ async function seedBallot(
       electionId,
       propertyId,
       weight: 1,
-      viaProxy: false,
       castByOwnerId: null,
       recordedAt: now,
       ...overrides,
@@ -231,6 +230,7 @@ describe('election read helpers', () => {
         weight: 1,
         viaProxy: false,
         castByOwnerId: null,
+        proxyId: null,
       },
       {
         propertyId: 'p2',
@@ -238,6 +238,7 @@ describe('election read helpers', () => {
         weight: 1,
         viaProxy: false,
         castByOwnerId: null,
+        proxyId: null,
       },
     ]);
   });

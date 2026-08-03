@@ -15,8 +15,11 @@ import {
   motions,
   resolutions,
   elections,
+  proxies,
+  ballots,
 } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
+import { proxyUseError } from '../../../server/content/proxy-guards';
 import {
   fetchAdminMeetings,
   fetchAdminMeeting,
@@ -95,7 +98,7 @@ interface MemberAttendanceEntry {
   propertyId: string;
   present: boolean;
   representedByOwnerId: string | null;
-  viaProxy: boolean;
+  proxyId: string | null;
 }
 
 /** Validate the raw `entries` payload for `setMemberAttendance`. */
@@ -112,7 +115,6 @@ function parseMemberAttendanceEntries(
     const propertyId = record?.propertyId;
     const present = record?.present;
     const representedByOwnerId = record?.representedByOwnerId;
-    const viaProxy = record?.viaProxy;
     if (
       typeof propertyId !== 'string' ||
       propertyId.trim() === '' ||
@@ -133,15 +135,31 @@ function parseMemberAttendanceEntries(
         error: 'representedByOwnerId must be a string when present',
       };
     }
-    if (viaProxy !== undefined && typeof viaProxy !== 'boolean') {
-      return { ok: false, error: 'viaProxy must be a boolean when present' };
+    const proxyId = record?.proxyId;
+    if (
+      proxyId !== undefined &&
+      proxyId !== null &&
+      typeof proxyId !== 'string'
+    ) {
+      return { ok: false, error: 'proxyId must be a string when present' };
+    }
+    const parsedProxyId = typeof proxyId === 'string' ? proxyId : null;
+    // Mutual exclusion: who acted for the lot lives on the (board-only)
+    // proxy row, never beside it — a row carrying both could name two
+    // different people, and the public read would leak the holder.
+    if (parsedProxyId !== null && typeof representedByOwnerId === 'string') {
+      return {
+        ok: false,
+        error:
+          'An entry cannot carry both proxyId and representedByOwnerId — who acted lives on the proxy record',
+      };
     }
     entries.push({
       propertyId,
       present,
       representedByOwnerId:
         typeof representedByOwnerId === 'string' ? representedByOwnerId : null,
-      viaProxy: viaProxy === true,
+      proxyId: parsedProxyId,
     });
   }
   return { ok: true, value: entries };
@@ -164,13 +182,24 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
   // produce a meeting with both kinds of attendance and an incoherent quorum.
   if (existing[0].body !== 'member')
     return new Response('Meeting is not a member meeting', { status: 409 });
+  const proxyFailure = await proxyUseError(
+    db,
+    parsedEntries.value
+      .filter((e) => e.proxyId !== null)
+      .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
+    { meetingId },
+  );
+  if (proxyFailure)
+    return new Response(proxyFailure.message, {
+      status: proxyFailure.status,
+    });
   const rows = parsedEntries.value.map((e) => ({
     id: crypto.randomUUID(),
     meetingId,
     propertyId: e.propertyId,
     present: e.present,
     representedByOwnerId: e.representedByOwnerId,
-    viaProxy: e.viaProxy,
+    proxyId: e.proxyId,
   }));
   // Full replace, atomically: a property omitted from `entries` is removed,
   // not left at its previous value. Weight is intentionally not stamped here
@@ -395,6 +424,36 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       'An election records this meeting as where it was held — unlink it from the Elections tab first.',
       { status: 409 },
     );
+  // proxies.meeting_id is ON DELETE CASCADE — deleting this meeting deletes
+  // its proxies. A ballot can cite one of those proxies even after its
+  // election's meetingId has been detached from this meeting (the
+  // linkedElections check above only catches an election that STILL points
+  // here), because "an election held at this meeting" is a one-time lookup
+  // rule at write time, not a standing link. ballots.proxy_id carries no ON
+  // DELETE action (deliberate, see schema.ts), so without this pre-check the
+  // cascade would leave a dangling reference and D1 would throw a raw FK
+  // constraint error instead of a readable 409.
+  const meetingProxies = await db
+    .select({ id: proxies.id })
+    .from(proxies)
+    .where(eq(proxies.meetingId, id));
+  if (meetingProxies.length > 0) {
+    const citingBallots = await db
+      .select({ id: ballots.id })
+      .from(ballots)
+      .where(
+        inArray(
+          ballots.proxyId,
+          meetingProxies.map((p) => p.id),
+        ),
+      )
+      .limit(1);
+    if (citingBallots.length > 0)
+      return new Response(
+        'An election ballot cites a proxy for this meeting — remove those ballots first',
+        { status: 409 },
+      );
+  }
   // Deleting a draft cascades its attendance, motions, and votes via FK.
   await db.delete(meetings).where(eq(meetings.id, id));
   return new Response(null, { status: 204 });

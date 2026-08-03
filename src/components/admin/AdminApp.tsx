@@ -14,6 +14,7 @@ import BoardPanel from './BoardPanel';
 import MeetingsManager from './MeetingsManager';
 import ResolutionsManager from './ResolutionsManager';
 import ElectionsManager from './ElectionsManager';
+import ProxiesManager from './ProxiesManager';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
 
@@ -48,6 +49,11 @@ const SECTIONS = [
     key: 'elections',
     label: 'Elections',
     render: () => <ElectionsManager />,
+  },
+  {
+    key: 'proxies',
+    label: 'Proxies',
+    render: () => <ProxiesManager />,
   },
   {
     // Site sign-in access, not who serves on the board — see the
