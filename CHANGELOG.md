@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.47] - 2026-08-03
+
+### Added
+
+- **A build check rejects numeric form values defaulted with `||`.** `Number('')` and `Number('0')`
+  are both `0`, so a pattern like `Number(field) || 1` cannot tell an empty box from a typed zero
+  and quietly substitutes the default — and because that happens in the browser, the server never
+  receives the zero to reject it, so nobody sees an error. This shipped twice as a real bug: a
+  lot's vote weight became 1 when a board member entered 0, and a candidate's tally was stored as
+  a genuine zero when the field was simply left blank. Both were caught in review before release;
+  the check now fails the build instead of relying on someone noticing.
+
 ## [0.3.46] - 2026-08-02
 
 ### Added
