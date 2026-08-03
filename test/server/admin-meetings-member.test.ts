@@ -92,7 +92,6 @@ describe('meetings admin route — member attendance', () => {
             propertyId: p1,
             present: true,
             representedByOwnerId: owner1,
-            viaProxy: false,
           },
           { propertyId: p2, present: false },
         ],
@@ -107,11 +106,11 @@ describe('meetings admin route — member attendance', () => {
     const row1 = rows.find((r) => r.propertyId === p1);
     expect(row1?.present).toBe(true);
     expect(row1?.representedByOwnerId).toBe(owner1);
-    expect(row1?.viaProxy).toBe(false);
+    expect(row1?.proxyId).toBeNull();
     const row2 = rows.find((r) => r.propertyId === p2);
     expect(row2?.present).toBe(false);
     expect(row2?.representedByOwnerId).toBeNull();
-    expect(row2?.viaProxy).toBe(false);
+    expect(row2?.proxyId).toBeNull();
   });
 
   it('full-replace removes an omitted property', async () => {

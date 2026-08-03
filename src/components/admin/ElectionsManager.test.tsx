@@ -24,6 +24,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchProperties.mockResolvedValue([]);
   mocked.fetchBoardPeople.mockResolvedValue([]);
+  mocked.fetchProxies.mockResolvedValue([]);
 });
 
 function candidate(
@@ -530,7 +531,7 @@ describe('ElectionsManager', () => {
     );
   });
 
-  it('recording ballots calls setBallots with weight, viaProxy, and castByOwnerId per checked property', async () => {
+  it('recording ballots calls setBallots with weight and castByOwnerId per checked property', async () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
@@ -563,8 +564,9 @@ describe('ElectionsManager', () => {
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 100 main st/i),
     );
-    // p2: returned a ballot, weight explicitly overridden, cast by its owner,
-    // via proxy.
+    // p2: returned a ballot, weight explicitly overridden, cast by its owner.
+    // proxyId is not yet settable through this form — see Task 6's picker —
+    // so it always sends null here.
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 200 oak st/i),
     );
@@ -576,7 +578,6 @@ describe('ElectionsManager', () => {
       screen.getByLabelText(/cast by — 200 oak st/i),
       'o2',
     );
-    await userEvent.click(screen.getByLabelText(/via proxy/i));
     await userEvent.click(
       screen.getByRole('button', { name: /^save ballots$/i }),
     );
@@ -586,13 +587,13 @@ describe('ElectionsManager', () => {
         {
           propertyId: 'p1',
           weight: undefined,
-          viaProxy: false,
+          proxyId: null,
           castByOwnerId: null,
         },
         {
           propertyId: 'p2',
           weight: 3,
-          viaProxy: true,
+          proxyId: null,
           castByOwnerId: 'o2',
         },
       ]),
@@ -630,5 +631,195 @@ describe('ElectionsManager', () => {
     expect(
       await screen.findByText(/seats must be at least 1/i),
     ).toBeInTheDocument();
+  });
+
+  it('selecting a proxy for a ballot sends its id and clears castByOwnerId', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      property({
+        id: 'p1',
+        address: '100 Main St',
+        owners: [
+          {
+            id: 'o1',
+            propertyId: 'p1',
+            fullName: 'Jane Doe',
+            phone: null,
+            email: null,
+            status: 'active',
+            notes: null,
+          },
+        ],
+      }),
+    ]);
+    mocked.fetchProxies.mockResolvedValue([
+      {
+        id: 'px1',
+        propertyId: 'p1',
+        address: '100 Main St',
+        grantorOwnerId: 'o1',
+        grantorName: 'Jane Doe',
+        holderName: 'Proxy Holder',
+        holderOwnerId: null,
+        holderOwnerName: null,
+        meetingId: null,
+        electionId: 'e1',
+      },
+    ]);
+    mocked.setBallots.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    await userEvent.click(
+      screen.getByLabelText(/ballot returned — 100 main st/i),
+    );
+    const castBySelect = screen.getByLabelText(/cast by — 100 main st/i);
+    await userEvent.selectOptions(castBySelect, 'o1');
+    expect(castBySelect).toHaveValue('o1');
+
+    await userEvent.selectOptions(
+      screen.getByLabelText(/proxy — 100 main st/i),
+      'px1',
+    );
+
+    // Choosing the proxy clears AND disables the cast-by select.
+    expect(castBySelect).toHaveValue('');
+    expect(castBySelect).toBeDisabled();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /^save ballots$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setBallots).toHaveBeenCalledWith('e1', [
+        {
+          propertyId: 'p1',
+          weight: undefined,
+          proxyId: 'px1',
+          castByOwnerId: null,
+        },
+      ]),
+    );
+  });
+
+  it("the ballot picker offers a proxy scoped only to the election's meeting, not the election itself", async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        id: 'e1',
+        title: 'Board Election 2026',
+        status: 'closed',
+        meetingId: 'm1',
+      }),
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      property({ id: 'p1', address: '100 Main St', owners: [] }),
+    ]);
+    mocked.fetchProxies.mockResolvedValue([
+      {
+        id: 'px1',
+        propertyId: 'p1',
+        address: '100 Main St',
+        grantorOwnerId: 'o1',
+        grantorName: 'Jane Doe',
+        holderName: 'Proxy Holder',
+        holderOwnerId: null,
+        holderOwnerName: null,
+        // Scoped ONLY to the meeting the election was held at — not to the
+        // election id itself — which is the fallback branch this test pins.
+        meetingId: 'm1',
+        electionId: null,
+      },
+    ]);
+    mocked.setBallots.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    await userEvent.click(
+      screen.getByLabelText(/ballot returned — 100 main st/i),
+    );
+
+    const proxySelect = screen.getByLabelText(/proxy — 100 main st/i);
+    expect(
+      within(proxySelect).getByText(/via proxy: proxy holder/i),
+    ).toBeInTheDocument();
+    await userEvent.selectOptions(proxySelect, 'px1');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /^save ballots$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setBallots).toHaveBeenCalledWith('e1', [
+        expect.objectContaining({ propertyId: 'p1', proxyId: 'px1' }),
+      ]),
+    );
+  });
+
+  it('clearing the ballot proxy picker back to "no proxy" re-enables the cast-by select', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      property({
+        id: 'p1',
+        address: '100 Main St',
+        owners: [
+          {
+            id: 'o1',
+            propertyId: 'p1',
+            fullName: 'Jane Doe',
+            phone: null,
+            email: null,
+            status: 'active',
+            notes: null,
+          },
+        ],
+      }),
+    ]);
+    mocked.fetchProxies.mockResolvedValue([
+      {
+        id: 'px1',
+        propertyId: 'p1',
+        address: '100 Main St',
+        grantorOwnerId: 'o1',
+        grantorName: 'Jane Doe',
+        holderName: 'Proxy Holder',
+        holderOwnerId: null,
+        holderOwnerName: null,
+        meetingId: null,
+        electionId: 'e1',
+      },
+    ]);
+    render(<ElectionsManager />);
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /candidates & ballots/i }),
+    );
+    await userEvent.click(
+      screen.getByLabelText(/ballot returned — 100 main st/i),
+    );
+    const castBySelect = screen.getByLabelText(/cast by — 100 main st/i);
+    const proxySelect = screen.getByLabelText(/proxy — 100 main st/i);
+
+    await userEvent.selectOptions(proxySelect, 'px1');
+    expect(castBySelect).toBeDisabled();
+
+    await userEvent.selectOptions(proxySelect, '');
+    expect(castBySelect).not.toBeDisabled();
+    // Clearing the proxy leaves cast-by blank rather than restoring a
+    // previous value — there was none to restore, since choosing the proxy
+    // is what cleared it in the first place.
+    expect(castBySelect).toHaveValue('');
+    await userEvent.selectOptions(castBySelect, 'o1');
+    expect(castBySelect).toHaveValue('o1');
   });
 });

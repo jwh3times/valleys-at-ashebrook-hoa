@@ -14,6 +14,7 @@ beforeEach(() => {
   mocked.fetchBoardPeople.mockResolvedValue([]);
   mocked.fetchProperties.mockResolvedValue([]);
   mocked.fetchMeeting.mockResolvedValue(meetingDetail());
+  mocked.fetchProxies.mockResolvedValue([]);
 });
 
 const meeting = {
@@ -612,13 +613,13 @@ describe('MeetingsManager', () => {
           propertyId: 'prop1',
           present: true,
           representedByOwnerId: null,
-          viaProxy: false,
+          proxyId: null,
         },
         {
           propertyId: 'prop2',
           present: false,
           representedByOwnerId: null,
-          viaProxy: false,
+          proxyId: null,
         },
       ]),
     );
@@ -678,7 +679,7 @@ describe('MeetingsManager', () => {
           propertyId: 'prop1',
           choice: 'yes',
           castByOwnerId: null,
-          viaProxy: false,
+          proxyId: null,
         },
       ]),
     );
@@ -820,7 +821,7 @@ describe('MeetingsManager', () => {
     expect(tally()).toMatch(/3 no/);
   });
 
-  it('submitting member votes sends the chosen castByOwnerId and viaProxy per property', async () => {
+  it('submitting member votes sends the chosen castByOwnerId per property', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
     mocked.fetchProperties.mockResolvedValue([
       {
@@ -866,9 +867,7 @@ describe('MeetingsManager', () => {
       'Approve the budget',
     );
 
-    // Scope to 12 Oak Lane's own field container — "Via proxy" also labels
-    // a checkbox in the attendance editor above, so an unscoped query would
-    // be ambiguous.
+    // Scope to 12 Oak Lane's own field container.
     const voteField = screen
       .getByLabelText('Vote — 12 Oak Lane')
       .closest('.field') as HTMLElement;
@@ -876,13 +875,13 @@ describe('MeetingsManager', () => {
       within(voteField).getByLabelText('Cast by — 12 Oak Lane'),
       'o1',
     );
-    await userEvent.click(within(voteField).getByLabelText('Via proxy'));
-    // Leave 14 Oak Lane (no owners, so no Cast by/Via proxy controls at
-    // all) completely untouched — it must NOT be sent at all: touching
-    // only Cast by/Via proxy for 12 Oak Lane (never its Vote choice) still
-    // records a row for it, defaulting to abstain, because those controls
-    // themselves create the memberVoteForm entry; a property nothing was
-    // ever entered for gets no row and no default.
+    // Leave 14 Oak Lane (no owners, so no Cast by control at all)
+    // completely untouched — it must NOT be sent at all: touching only Cast
+    // by for 12 Oak Lane (never its Vote choice) still records a row for it,
+    // defaulting to abstain, because that control itself creates the
+    // memberVoteForm entry; a property nothing was ever entered for gets no
+    // row and no default. proxyId is not yet settable through this form —
+    // see Task 6's picker — so it always sends null here.
 
     await userEvent.click(screen.getByRole('button', { name: /add motion/i }));
 
@@ -892,10 +891,191 @@ describe('MeetingsManager', () => {
           propertyId: 'prop1',
           choice: 'abstain',
           castByOwnerId: 'o1',
-          viaProxy: true,
+          proxyId: null,
         },
       ]),
     );
     expect(await screen.findByText(/motion recorded/i)).toBeInTheDocument();
+  });
+
+  it('selecting a proxy sends its id and clears representedByOwnerId', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [
+          {
+            id: 'o1',
+            propertyId: 'prop1',
+            fullName: 'Jane Doe',
+            phone: null,
+            email: null,
+            status: 'active',
+            notes: null,
+          },
+        ],
+      },
+    ]);
+    mocked.fetchProxies.mockResolvedValue([
+      {
+        id: 'px1',
+        propertyId: 'prop1',
+        address: '12 Oak Lane',
+        grantorOwnerId: 'o1',
+        grantorName: 'Jane Doe',
+        holderName: 'Proxy Holder',
+        holderOwnerId: null,
+        holderOwnerName: null,
+        meetingId: 'm2',
+        electionId: null,
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        ...memberMeeting,
+        memberAttendance: [
+          {
+            propertyId: 'prop1',
+            address: '12 Oak Lane',
+            present: true,
+            weight: 1,
+            representedByName: 'Jane Doe',
+            viaProxy: false,
+            proxyId: null,
+          },
+        ],
+      }),
+    );
+    mocked.setMemberAttendance.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    // Pre-selected represented-by owner from the loaded detail row.
+    const repSelect = await screen.findByLabelText(
+      /represented by — 12 oak lane/i,
+    );
+    expect(repSelect).toHaveValue('o1');
+
+    // Scope to the attendance form specifically — the votes editor below it
+    // renders its own, identically-labelled proxy picker for the same lot.
+    const attendanceForm = screen
+      .getByRole('button', { name: /save attendance/i })
+      .closest('form') as HTMLElement;
+    await userEvent.selectOptions(
+      within(attendanceForm).getByLabelText(/proxy — 12 oak lane/i),
+      'px1',
+    );
+
+    // Choosing the proxy clears AND disables the represented-by select.
+    expect(repSelect).toHaveValue('');
+    expect(repSelect).toBeDisabled();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /save attendance/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.setMemberAttendance).toHaveBeenCalledWith('m2', [
+        {
+          propertyId: 'prop1',
+          present: true,
+          representedByOwnerId: null,
+          proxyId: 'px1',
+        },
+      ]),
+    );
+  });
+
+  it('selecting a proxy for a member vote sends its id and clears castByOwnerId', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 1,
+        owners: [
+          {
+            id: 'o1',
+            propertyId: 'prop1',
+            fullName: 'Jane Doe',
+            phone: null,
+            email: null,
+            status: 'active',
+            notes: null,
+          },
+        ],
+      },
+    ]);
+    mocked.fetchProxies.mockResolvedValue([
+      {
+        id: 'px1',
+        propertyId: 'prop1',
+        address: '12 Oak Lane',
+        grantorOwnerId: 'o1',
+        grantorName: 'Jane Doe',
+        holderName: 'Proxy Holder',
+        holderOwnerId: null,
+        holderOwnerName: null,
+        meetingId: 'm2',
+        electionId: null,
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
+    mocked.saveMotion.mockResolvedValue('mo1');
+    mocked.setMemberVotes.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the budget',
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText('Vote — 12 Oak Lane'),
+      'yes',
+    );
+    const castBySelect = screen.getByLabelText(/cast by — 12 oak lane/i);
+    await userEvent.selectOptions(castBySelect, 'o1');
+    expect(castBySelect).toHaveValue('o1');
+
+    // Scope to the motion form specifically — the attendance editor above
+    // it renders its own, identically-labelled proxy picker for the same lot.
+    const motionForm = screen
+      .getByRole('button', { name: /add motion/i })
+      .closest('form') as HTMLElement;
+    await userEvent.selectOptions(
+      within(motionForm).getByLabelText(/proxy — 12 oak lane/i),
+      'px1',
+    );
+
+    expect(castBySelect).toHaveValue('');
+    expect(castBySelect).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /add motion/i }));
+
+    await waitFor(() =>
+      expect(mocked.setMemberVotes).toHaveBeenCalledWith('mo1', [
+        {
+          propertyId: 'prop1',
+          choice: 'yes',
+          castByOwnerId: null,
+          proxyId: 'px1',
+        },
+      ]),
+    );
   });
 });

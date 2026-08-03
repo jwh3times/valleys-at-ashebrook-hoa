@@ -25,6 +25,7 @@ import {
   INPUT_LIMITS,
 } from '../../../lib/types';
 import { fetchAdminElections } from '../../../server/content/reads';
+import { proxyUseError } from '../../../server/content/proxy-guards';
 
 export const prerender = false;
 
@@ -146,7 +147,7 @@ async function setTallies(db: Db, body: unknown): Promise<Response> {
 interface BallotEntry {
   propertyId: string;
   weight?: number;
-  viaProxy: boolean;
+  proxyId: string | null;
   castByOwnerId: string | null;
 }
 
@@ -163,7 +164,6 @@ function parseBallotEntries(
     const record = item as Record<string, unknown> | null;
     const propertyId = record?.propertyId;
     const weight = record?.weight;
-    const viaProxy = record?.viaProxy;
     const castByOwnerId = record?.castByOwnerId;
     if (typeof propertyId !== 'string' || propertyId.trim() === '') {
       return { ok: false, error: 'Each ballot entry needs a propertyId' };
@@ -184,13 +184,29 @@ function parseBallotEntries(
         error: 'castByOwnerId must be a string when present',
       };
     }
-    if (viaProxy !== undefined && typeof viaProxy !== 'boolean') {
-      return { ok: false, error: 'viaProxy must be a boolean when present' };
+    const proxyId = record?.proxyId;
+    if (
+      proxyId !== undefined &&
+      proxyId !== null &&
+      typeof proxyId !== 'string'
+    ) {
+      return { ok: false, error: 'proxyId must be a string when present' };
+    }
+    const parsedProxyId = typeof proxyId === 'string' ? proxyId : null;
+    // Mutual exclusion: who acted for the lot lives on the (board-only)
+    // proxy row, never beside it — a row carrying both could name two
+    // different people, and the public read would leak the holder.
+    if (parsedProxyId !== null && typeof castByOwnerId === 'string') {
+      return {
+        ok: false,
+        error:
+          'An entry cannot carry both proxyId and castByOwnerId — who acted lives on the proxy record',
+      };
     }
     entries.push({
       propertyId,
       weight: parsedWeight,
-      viaProxy: viaProxy === true,
+      proxyId: parsedProxyId,
       castByOwnerId: typeof castByOwnerId === 'string' ? castByOwnerId : null,
     });
   }
@@ -206,7 +222,11 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     return new Response(parsedEntries.error, { status: 400 });
 
   const existing = await db
-    .select({ status: elections.status, source: elections.source })
+    .select({
+      status: elections.status,
+      source: elections.source,
+      meetingId: elections.meetingId,
+    })
     .from(elections)
     .where(eq(elections.id, electionId))
     .limit(1);
@@ -217,6 +237,18 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     return new Response(CERTIFIED_OR_VOID('ballots'), { status: 409 });
   if (election.source !== 'recorded')
     return new Response(NOT_RECORDED('Ballots'), { status: 409 });
+
+  const proxyFailure = await proxyUseError(
+    db,
+    parsedEntries.value
+      .filter((e) => e.proxyId !== null)
+      .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
+    { electionId, meetingId: election.meetingId },
+  );
+  if (proxyFailure)
+    return new Response(proxyFailure.message, {
+      status: proxyFailure.status,
+    });
 
   // Pre-checked so a repeated propertyId is a readable 409 instead of hitting
   // ballots_election_property_unq mid-batch as a raw D1 error.
@@ -259,7 +291,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     electionId: string;
     propertyId: string;
     weight: number;
-    viaProxy: boolean;
+    proxyId: string | null;
     castByOwnerId: string | null;
     recordedAt: Date;
   }[] = [];
@@ -287,7 +319,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       electionId,
       propertyId: e.propertyId,
       weight,
-      viaProxy: e.viaProxy,
+      proxyId: e.proxyId,
       castByOwnerId: e.castByOwnerId,
       recordedAt: now,
     });

@@ -7,6 +7,46 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.48] - 2026-08-03
+
+### Added
+
+- **A proxies record: the board can now record that an owner authorised someone to act for their
+  lot** at one meeting or one election, entered from the signed paper forms the association already
+  collects. A proxy names the lot, the granting owner, and the holder — who need not be an owner
+  (a spouse, a neighbour, an attorney); when the holder is an owner, the link is recorded too, so
+  "whose proxies did Jane hold?" stays answerable. Each proxy is scoped to exactly one occasion,
+  enforced by a database CHECK constraint rather than only a route guard, and one lot can hold at
+  most one proxy per occasion. Revocation is deletion: an unused proxy is simply removed, while a
+  proxy already cited by attendance, a vote, or a ballot is refused deletion with a message naming
+  where it is used. See [ADR 0018](docs/adr/0018-proxies-record-via-proxy-consolidation.md).
+- A new **Proxies** tab in the admin panel records and deletes proxies, grouped by the meeting or
+  election they cover, so the board sees "who is covered for the March meeting" at a glance. The
+  attendance, vote, and ballot editors replace their old "via proxy" checkbox with a proxy picker
+  that offers only the proxies actually valid for that lot at that occasion; choosing one clears
+  the owner picker beside it, since who acted now lives on the proxy record itself.
+- Recording attendance, votes, or ballots against a proxy is validated server-side, not just in
+  the picker: the proxy must exist, must belong to the lot it is used for, and must be scoped to
+  the occasion being written — a proxy signed for the March meeting cannot justify a vote at the
+  June meeting. A proxy scoped to a meeting also covers an election held at that meeting, matching
+  what a form signed "for the annual meeting" actually authorises, while a standalone election
+  accepts only its own proxies.
+- Migrations `0014` and `0015` add the `proxies` table and replace the free-floating `via_proxy`
+  booleans on member attendance, member votes, and ballots with a real `proxy_id` reference —
+  "acted by proxy" is now derived from an actual proxy on file rather than asserted by a checkbox
+  nothing backed. All three tables carry no production rows, so the change rewrites no history.
+
+### Changed
+
+- Who held a lot's proxy is board-only. Public meeting and election pages still show that a lot
+  acted by proxy — that fact carries the tier of the meeting or election it belongs to — but the
+  proxy's identity, and even its opaque id, never appear on a public read, so two lots can never
+  be publicly correlated to the same holder.
+- Deleting a meeting is now also refused when an election's recorded ballots cite a proxy scoped
+  to that meeting — previously reachable only through an unusual sequence (recording ballots under
+  a meeting-scoped proxy, then detaching the election from the meeting), which would have surfaced
+  as a raw database error instead of a readable message.
+
 ## [0.3.47] - 2026-08-03
 
 ### Added

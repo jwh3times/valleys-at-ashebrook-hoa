@@ -5,7 +5,9 @@ import {
   index,
   uniqueIndex,
   foreignKey,
+  check,
 } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 import { users } from './auth-schema';
 
 // Re-export the Better-Auth-generated tables so one schema covers everything.
@@ -340,9 +342,12 @@ export const memberAttendance = sqliteTable(
       () => owners.id,
       { onDelete: 'set null' },
     ),
-    viaProxy: integer('via_proxy', { mode: 'boolean' })
-      .notNull()
-      .default(false),
+    // NOTE: added by ALTER TABLE — drizzle-kit silently drops any ON DELETE
+    // action on ALTER-added FK columns (same trap as properties.vote_weight
+    // and board_terms.election_id), so this is deliberately declared WITHOUT
+    // one and pinned by proxy-schema.test.ts. Deleting a used proxy is
+    // refused by the DELETE pre-check in /api/admin/proxies instead.
+    proxyId: text('proxy_id').references(() => proxies.id),
   },
   // One row per property per meeting — re-recording attendance replaces
   // rather than accumulates.
@@ -367,9 +372,6 @@ export const memberVotes = sqliteTable(
     castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
       onDelete: 'set null',
     }),
-    viaProxy: integer('via_proxy', { mode: 'boolean' })
-      .notNull()
-      .default(false),
     // Snapshot of properties.vote_weight when this vote was recorded.
     // Correcting a property's weight later must not silently rewrite past
     // tallies — same reasoning as reports.sources_json.
@@ -377,6 +379,12 @@ export const memberVotes = sqliteTable(
     // Member motions are yes/no/abstain. `recused` and `absent` are board
     // roll-call concepts and are deliberately absent here.
     choice: text('choice', { enum: ['yes', 'no', 'abstain'] }).notNull(),
+    // NOTE: added by ALTER TABLE — drizzle-kit silently drops any ON DELETE
+    // action on ALTER-added FK columns (same trap as properties.vote_weight
+    // and board_terms.election_id), so this is deliberately declared WITHOUT
+    // one and pinned by proxy-schema.test.ts. Deleting a used proxy is
+    // refused by the DELETE pre-check in /api/admin/proxies instead.
+    proxyId: text('proxy_id').references(() => proxies.id),
   },
   // One vote per lot — this index is what enforces it.
   (t) => [
@@ -616,13 +624,16 @@ export const ballots = sqliteTable(
     // Snapshot of properties.vote_weight, per ADR 0015, so correcting a lot's
     // weight later cannot rewrite a past turnout figure.
     weight: integer('weight').notNull(),
-    viaProxy: integer('via_proxy', { mode: 'boolean' })
-      .notNull()
-      .default(false),
     castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
       onDelete: 'set null',
     }),
     recordedAt: integer('recorded_at', { mode: 'timestamp' }).notNull(),
+    // NOTE: added by ALTER TABLE — drizzle-kit silently drops any ON DELETE
+    // action on ALTER-added FK columns (same trap as properties.vote_weight
+    // and board_terms.election_id), so this is deliberately declared WITHOUT
+    // one and pinned by proxy-schema.test.ts. Deleting a used proxy is
+    // refused by the DELETE pre-check in /api/admin/proxies instead.
+    proxyId: text('proxy_id').references(() => proxies.id),
   },
   // One ballot per lot per election. This row records ONLY that a lot returned
   // a ballot — it is turnout, and nothing else. There is no link from here to
@@ -630,5 +641,62 @@ export const ballots = sqliteTable(
   (t) => [
     uniqueIndex('ballots_election_property_unq').on(t.electionId, t.propertyId),
     index('ballots_election_id_idx').on(t.electionId),
+  ],
+);
+
+// A proxy: one owner authorising a named holder to act for one lot at ONE
+// occasion — a meeting or an election, never both, never neither, never
+// open-ended. The CHECK lives in the schema so the database enforces it even
+// against a direct write; the route's own validation exists only to make the
+// failure readable. property/grantor are RESTRICT: a lot or an owner named on
+// a recorded proxy is part of the record. meeting/election are CASCADE like
+// member_attendance/ballots — the occasion's record owns its proxies. (A
+// ballot can cite a meeting-scoped proxy via the "election held at this
+// meeting" lookup rule even after the election's meetingId is later PATCHed
+// away from this meeting — that link is a one-time write-time rule, not a
+// standing one, so the "election held here" 409 on DELETE
+// /api/admin/meetings alone cannot catch it. The route's own pre-check —
+// any proxy scoped to this meeting cited by a ballot — closes that
+// detachment path and returns a 409 instead of letting the cascade hit
+// ballots.proxy_id's actionless FK.)
+export const proxies = sqliteTable(
+  'proxies',
+  {
+    id: text('id').primaryKey(),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    grantorOwnerId: text('grantor_owner_id')
+      .notNull()
+      .references(() => owners.id, { onDelete: 'restrict' }),
+    // A holder need not be an owner (spouse, neighbour, attorney) — the name
+    // is the record. The owner link is recorded when it exists so "whose
+    // proxies did Jane hold?" stays answerable.
+    holderName: text('holder_name').notNull(),
+    holderOwnerId: text('holder_owner_id').references(() => owners.id, {
+      onDelete: 'set null',
+    }),
+    meetingId: text('meeting_id').references(() => meetings.id, {
+      onDelete: 'cascade',
+    }),
+    electionId: text('election_id').references(() => elections.id, {
+      onDelete: 'cascade',
+    }),
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (t) => [
+    check(
+      'proxies_one_occasion',
+      sql`(${t.meetingId} IS NOT NULL) <> (${t.electionId} IS NOT NULL)`,
+    ),
+    // One lot, one proxy per occasion. SQLite treats NULLs as distinct, so
+    // the two indexes do not interfere — same property
+    // resolutions_supersedes_unq relies on.
+    uniqueIndex('proxies_property_meeting_unq').on(t.propertyId, t.meetingId),
+    uniqueIndex('proxies_property_election_unq').on(t.propertyId, t.electionId),
+    index('proxies_meeting_id_idx').on(t.meetingId),
+    index('proxies_election_id_idx').on(t.electionId),
   ],
 );

@@ -17,6 +17,7 @@ import {
   elections,
   candidates,
   ballots,
+  proxies,
 } from '../db/schema';
 import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
@@ -32,6 +33,7 @@ import type {
   ElectionStatus,
   CandidateSummary,
   BallotRow,
+  ProxyDetail,
 } from '../../lib/types';
 
 export async function fetchDocumentsFor(env: Env, role: Role) {
@@ -165,10 +167,17 @@ async function withMotionCounts(
  * the two cannot drift apart. Deliberately carries NO access control of its
  * own — the status filter and visibleTiers(role) check happen in the two
  * callers, before this function ever runs, and must stay there.
+ *
+ * `includeProxyIds` is the same admin-caller flag assembleElectionDetail
+ * already takes for `ballots` (second instance of the ADR 0017 pattern,
+ * recorded in ADR 0018): `viaProxy` is always derived and returned, but the
+ * real `proxyId` — which would let a caller work backward to who holds a
+ * given proxy — is attached only for the admin caller.
  */
 async function assembleMeetingDetail(
   db: Db,
   m: typeof meetings.$inferSelect,
+  includeProxyIds: boolean,
 ): Promise<MeetingDetail> {
   const id = m.id;
 
@@ -241,7 +250,7 @@ async function assembleMeetingDetail(
       propertyId: memberAttendance.propertyId,
       present: memberAttendance.present,
       representedByOwnerId: memberAttendance.representedByOwnerId,
-      viaProxy: memberAttendance.viaProxy,
+      proxyId: memberAttendance.proxyId,
     })
     .from(memberAttendance)
     .where(eq(memberAttendance.meetingId, id));
@@ -257,7 +266,7 @@ async function assembleMeetingDetail(
             motionId: memberVotes.motionId,
             propertyId: memberVotes.propertyId,
             castByOwnerId: memberVotes.castByOwnerId,
-            viaProxy: memberVotes.viaProxy,
+            proxyId: memberVotes.proxyId,
             weight: memberVotes.weight,
             choice: memberVotes.choice,
           })
@@ -320,7 +329,8 @@ async function assembleMeetingDetail(
       representedByName: a.representedByOwnerId
         ? (ownerNameOf.get(a.representedByOwnerId) ?? null)
         : null,
-      viaProxy: a.viaProxy,
+      viaProxy: a.proxyId !== null,
+      proxyId: includeProxyIds ? a.proxyId : null,
     })),
     totalActiveWeight,
     motions: motionRows.map((mo) => {
@@ -351,7 +361,8 @@ async function assembleMeetingDetail(
           castByName: v.castByOwnerId
             ? (ownerNameOf.get(v.castByOwnerId) ?? null)
             : null,
-          viaProxy: v.viaProxy,
+          viaProxy: v.proxyId !== null,
+          proxyId: includeProxyIds ? v.proxyId : null,
         })),
         // Weight comes from each vote's own stored `weight` snapshot, never
         // recomputed from the property's current voteWeight — that would
@@ -387,7 +398,7 @@ export async function fetchMeetingFor(
     )
     .limit(1);
   if (found.length === 0) return null;
-  return assembleMeetingDetail(db, found[0]);
+  return assembleMeetingDetail(db, found[0], false);
 }
 
 /**
@@ -406,7 +417,7 @@ export async function fetchAdminMeeting(
     .where(eq(meetings.id, id))
     .limit(1);
   if (found.length === 0) return null;
-  return assembleMeetingDetail(db, found[0]);
+  return assembleMeetingDetail(db, found[0], true);
 }
 
 // Every visibility tier — used by fetchAdminResolutions to share the masking
@@ -715,7 +726,7 @@ async function fetchBallotRowsFor(
     .select({
       propertyId: ballots.propertyId,
       weight: ballots.weight,
-      viaProxy: ballots.viaProxy,
+      proxyId: ballots.proxyId,
       castByOwnerId: ballots.castByOwnerId,
     })
     .from(ballots)
@@ -736,7 +747,8 @@ async function fetchBallotRowsFor(
     propertyId: r.propertyId,
     address: addressOf.get(r.propertyId) ?? 'Unknown',
     weight: r.weight,
-    viaProxy: r.viaProxy,
+    viaProxy: r.proxyId !== null,
+    proxyId: r.proxyId,
     castByOwnerId: r.castByOwnerId,
   }));
 }
@@ -845,4 +857,40 @@ export async function fetchAdminElections(env: Env): Promise<ElectionDetail[]> {
   return Promise.all(
     rows.map((r) => assembleElectionDetail(db, r, true, eligible)),
   );
+}
+
+/**
+ * Board-only: every proxy, newest first, with property address and owner
+ * names resolved so the panel needs no second lookup — the same
+ * full-detail-on-list shape as fetchAdminElections. There is deliberately no
+ * public or tier-gated sibling: who delegated to whom is more sensitive than
+ * the fact of it, which the derived viaProxy already surfaces at the
+ * meeting's own tier. Every call site MUST be requireBoard-gated.
+ */
+export async function fetchAdminProxies(env: Env): Promise<ProxyDetail[]> {
+  const db = getDb(env);
+  const rows = await db.select().from(proxies).orderBy(desc(proxies.createdAt));
+  if (rows.length === 0) return [];
+  const propertyRows = await db
+    .select({ id: properties.id, address: properties.address })
+    .from(properties);
+  const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
+  const ownerRows = await db
+    .select({ id: owners.id, fullName: owners.fullName })
+    .from(owners);
+  const ownerNameOf = new Map(ownerRows.map((o) => [o.id, o.fullName]));
+  return rows.map((r) => ({
+    id: r.id,
+    propertyId: r.propertyId,
+    address: addressOf.get(r.propertyId) ?? 'Unknown',
+    grantorOwnerId: r.grantorOwnerId,
+    grantorName: ownerNameOf.get(r.grantorOwnerId) ?? 'Unknown',
+    holderName: r.holderName,
+    holderOwnerId: r.holderOwnerId,
+    holderOwnerName: r.holderOwnerId
+      ? (ownerNameOf.get(r.holderOwnerId) ?? null)
+      : null,
+    meetingId: r.meetingId,
+    electionId: r.electionId,
+  }));
 }
