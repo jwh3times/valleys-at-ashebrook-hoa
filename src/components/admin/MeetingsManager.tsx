@@ -40,6 +40,7 @@ import type {
   ProxyDetail,
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
+import ProxyPicker, { proxiesForOccasion } from './ProxyPicker';
 
 const BODY_LABELS: Record<MeetingBody, string> = {
   board: 'Board',
@@ -992,63 +993,36 @@ export default function MeetingsManager() {
                                   </select>
                                 </div>
                               )}
-                              {(() => {
-                                // Scoped to this lot at this meeting — the
-                                // one-proxy-per-lot-per-occasion unique index
-                                // means there is at most one real option.
-                                const lotProxies = proxyList.filter(
-                                  (px) =>
-                                    px.propertyId === p.id &&
-                                    px.meetingId === m.id,
-                                );
-                                if (lotProxies.length === 0) return null;
-                                return (
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px',
-                                      paddingLeft: '26px',
-                                      marginTop: '4px',
-                                    }}
-                                  >
-                                    <label
-                                      htmlFor={`member-attendance-proxy-${m.id}-${p.id}`}
-                                    >
-                                      Proxy — {p.address}
-                                    </label>
-                                    <select
-                                      id={`member-attendance-proxy-${m.id}-${p.id}`}
-                                      aria-label={`Proxy — ${p.address}`}
-                                      value={row?.proxyId ?? ''}
-                                      onChange={(e) =>
-                                        setMemberAttendanceForm((prev) => ({
-                                          ...prev,
-                                          [p.id]: {
-                                            present:
-                                              prev[p.id]?.present ?? false,
-                                            // Mutual exclusion, mirrored from
-                                            // the server: picking a proxy
-                                            // clears the represented-by owner.
-                                            representedByOwnerId: e.target.value
-                                              ? ''
-                                              : (prev[p.id]
-                                                  ?.representedByOwnerId ?? ''),
-                                            proxyId: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                    >
-                                      <option value="">— no proxy —</option>
-                                      {lotProxies.map((px) => (
-                                        <option key={px.id} value={px.id}>
-                                          via proxy: {px.holderName}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                );
-                              })()}
+                              <ProxyPicker
+                                id={`member-attendance-proxy-${m.id}-${p.id}`}
+                                address={p.address}
+                                lotProxies={proxiesForOccasion(
+                                  proxyList,
+                                  p.id,
+                                  {
+                                    kind: 'meeting',
+                                    meetingId: m.id,
+                                  },
+                                )}
+                                value={row?.proxyId ?? ''}
+                                style={{ paddingLeft: '26px' }}
+                                onChange={(proxyId) =>
+                                  setMemberAttendanceForm((prev) => ({
+                                    ...prev,
+                                    [p.id]: {
+                                      present: prev[p.id]?.present ?? false,
+                                      // Mutual exclusion, mirrored from the
+                                      // server: picking a proxy clears the
+                                      // represented-by owner.
+                                      representedByOwnerId: proxyId
+                                        ? ''
+                                        : (prev[p.id]?.representedByOwnerId ??
+                                          ''),
+                                      proxyId,
+                                    },
+                                  }))
+                                }
+                              />
                             </div>
                           );
                         })
@@ -1322,64 +1296,35 @@ export default function MeetingsManager() {
                                       </select>
                                     </div>
                                   )}
-                                  {(() => {
-                                    // Scoped to this lot at this meeting —
-                                    // at most one real option, same as the
-                                    // attendance editor's picker above.
-                                    const lotProxies = proxyList.filter(
-                                      (px) =>
-                                        px.propertyId === p.id &&
-                                        px.meetingId === m.id,
-                                    );
-                                    if (lotProxies.length === 0) return null;
-                                    return (
-                                      <div
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '8px',
-                                          marginTop: '4px',
-                                        }}
-                                      >
-                                        <label
-                                          htmlFor={`member-vote-proxy-${m.id}-${p.id}`}
-                                        >
-                                          Proxy — {p.address}
-                                        </label>
-                                        <select
-                                          id={`member-vote-proxy-${m.id}-${p.id}`}
-                                          aria-label={`Proxy — ${p.address}`}
-                                          value={row?.proxyId ?? ''}
-                                          onChange={(e) =>
-                                            setMemberVoteForm((prev) => ({
-                                              ...prev,
-                                              [p.id]: {
-                                                choice:
-                                                  prev[p.id]?.choice ??
-                                                  'abstain',
-                                                // Mutual exclusion, mirrored
-                                                // from the server: picking a
-                                                // proxy clears the cast-by
-                                                // owner.
-                                                castByOwnerId: e.target.value
-                                                  ? ''
-                                                  : (prev[p.id]
-                                                      ?.castByOwnerId ?? ''),
-                                                proxyId: e.target.value,
-                                              },
-                                            }))
-                                          }
-                                        >
-                                          <option value="">— no proxy —</option>
-                                          {lotProxies.map((px) => (
-                                            <option key={px.id} value={px.id}>
-                                              via proxy: {px.holderName}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    );
-                                  })()}
+                                  <ProxyPicker
+                                    id={`member-vote-proxy-${m.id}-${p.id}`}
+                                    address={p.address}
+                                    lotProxies={proxiesForOccasion(
+                                      proxyList,
+                                      p.id,
+                                      {
+                                        kind: 'meeting',
+                                        meetingId: m.id,
+                                      },
+                                    )}
+                                    value={row?.proxyId ?? ''}
+                                    onChange={(proxyId) =>
+                                      setMemberVoteForm((prev) => ({
+                                        ...prev,
+                                        [p.id]: {
+                                          choice:
+                                            prev[p.id]?.choice ?? 'abstain',
+                                          // Mutual exclusion, mirrored from
+                                          // the server: picking a proxy
+                                          // clears the cast-by owner.
+                                          castByOwnerId: proxyId
+                                            ? ''
+                                            : (prev[p.id]?.castByOwnerId ?? ''),
+                                          proxyId,
+                                        },
+                                      }))
+                                    }
+                                  />
                                 </div>
                               );
                             })}
