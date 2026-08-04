@@ -532,6 +532,37 @@ describe('proxies admin route — board', () => {
     expect(row).toBeUndefined();
   });
 
+  it('POST rejects a proxy against a board meeting with 409, control member meeting still 201', async () => {
+    const propertyId = await createProperty();
+    const grantorOwnerId = await createOwner(propertyId);
+    const boardMeetingId = await createMeeting({ body: 'board' });
+    const res = await POST(
+      req(url, 'POST', {
+        propertyId,
+        grantorOwnerId,
+        holderName: 'Alice Holder',
+        meetingId: boardMeetingId,
+        electionId: null,
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/member meetings/);
+
+    // Positive control: the identical payload against a member meeting works,
+    // so the 409 above can only be the body guard.
+    const memberMeetingId = await createMeeting({ body: 'member' });
+    const ok = await POST(
+      req(url, 'POST', {
+        propertyId,
+        grantorOwnerId,
+        holderName: 'Alice Holder',
+        meetingId: memberMeetingId,
+        electionId: null,
+      }),
+    );
+    expect(ok.status).toBe(201);
+  });
+
   it('GET returns proxies via fetchAdminProxies', async () => {
     const propertyId = await createProperty();
     const grantorOwnerId = await createOwner(propertyId);
