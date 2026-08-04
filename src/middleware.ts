@@ -40,6 +40,13 @@ function isAdminApi(path: string): boolean {
   return path === '/api/admin' || path.startsWith('/api/admin/');
 }
 
+/**
+ * The homeowner-write API surface. Same exact-prefix caution as isAdminApi.
+ */
+function isMemberApi(path: string): boolean {
+  return path === '/api/member' || path.startsWith('/api/member/');
+}
+
 function applySecurityHeaders(headers: Headers): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -58,9 +65,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   // Surface site settings (incl. officialMode) to page renders. Skip the DB read for
   // API/file routes, which do not render chrome — they get inert defaults.
-  context.locals.site = path.startsWith('/api')
-    ? { ...DEFAULT_SITE_SETTINGS }
-    : await getSiteSettings(env);
+  context.locals.site =
+    path.startsWith('/api') && !isMemberApi(path)
+      ? { ...DEFAULT_SITE_SETTINGS }
+      : await getSiteSettings(env);
 
   let response: Response;
   if (isAdminApi(path)) {
@@ -73,6 +81,23 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     if (!ctx) {
       response = new Response('Unauthorized', { status: 401 });
     } else if (ctx.role !== 'board') {
+      response = new Response('Forbidden', { status: 403 });
+    } else {
+      response = await next();
+    }
+  } else if (isMemberApi(path)) {
+    // Production backstop for the homeowner-write surface, mirroring the
+    // admin-API backstop above and requireMemberApi's codes exactly: mode
+    // off is 404 (never advertise the surface), anonymous is 401, a
+    // visitor-role caller is 403. Every handler under src/pages/api/member/
+    // also calls requireMemberApi itself — that per-route call is the
+    // enforced and tested layer (see member-routes-all-gated.test.ts); this
+    // exists so a route shipped without its guard is not exposed meanwhile.
+    if (!context.locals.site.officialMode) {
+      response = new Response('Not found', { status: 404 });
+    } else if (!ctx) {
+      response = new Response('Unauthorized', { status: 401 });
+    } else if (ctx.role === 'visitor') {
       response = new Response('Forbidden', { status: 403 });
     } else {
       response = await next();
