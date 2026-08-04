@@ -244,4 +244,94 @@ describe('ProxiesManager', () => {
     expect(screen.getByText(/Board session/)).toBeInTheDocument();
     expect(screen.getByText(/Alice Holder/)).toBeInTheDocument();
   });
+
+  describe('edit affordance', () => {
+    // Owner requires the full seven-field shape (src/lib/types.ts:205).
+    function owner(id: string, fullName: string) {
+      return {
+        id,
+        propertyId: 'p1',
+        fullName,
+        phone: null,
+        email: null,
+        status: 'active' as const,
+        notes: null,
+      };
+    }
+
+    function setupEditFixtures() {
+      mocked.fetchProperties.mockResolvedValue([
+        property({
+          id: 'p1',
+          address: '100 Main St',
+          owners: [owner('o1', 'Jane Doe'), owner('o2', 'John Roe')],
+        }),
+      ]);
+      mocked.fetchMeetings.mockResolvedValue([meeting({ id: 'm1' })]);
+      mocked.fetchProxies.mockResolvedValue([
+        proxy({ id: 'px1', meetingId: 'm1' }),
+      ]);
+    }
+
+    it('Edit loads the proxy, disables scope fields, and PATCHes only editable keys', async () => {
+      const user = userEvent.setup();
+      setupEditFixtures();
+      mocked.saveProxy.mockResolvedValue();
+      render(<ProxiesManager />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: 'Edit proxy for 100 Main St',
+        }),
+      );
+
+      // Form is in edit mode with the proxy loaded…
+      expect(screen.getByText('Edit Proxy')).toBeInTheDocument();
+      expect(screen.getByLabelText('Proxy holder name')).toHaveValue(
+        'Alice Holder',
+      );
+      // …and the non-editable fields are disabled (PATCH rejects them on key
+      // presence — the UI must not even offer the change).
+      expect(screen.getByLabelText('Occasion type')).toBeDisabled();
+      expect(screen.getByLabelText('Meeting')).toBeDisabled();
+      expect(screen.getByLabelText('Property')).toBeDisabled();
+      expect(screen.getByLabelText('Grantor (owner)')).not.toBeDisabled();
+
+      await user.clear(screen.getByLabelText('Proxy holder name'));
+      await user.type(
+        screen.getByLabelText('Proxy holder name'),
+        'Bob Carrier',
+      );
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      await waitFor(() =>
+        expect(mocked.saveProxy).toHaveBeenCalledWith(
+          {
+            grantorOwnerId: 'o1',
+            holderName: 'Bob Carrier',
+            holderOwnerId: null,
+          },
+          'px1',
+        ),
+      );
+    });
+
+    it('Cancel returns the form to add mode', async () => {
+      const user = userEvent.setup();
+      setupEditFixtures();
+      render(<ProxiesManager />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: 'Edit proxy for 100 Main St',
+        }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      // Title and submit button both read "Add Proxy" in add mode, so target
+      // the button by role rather than getByText (which would multi-match).
+      expect(
+        screen.getByRole('button', { name: 'Add Proxy' }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText('Proxy holder name')).toHaveValue('');
+      expect(screen.getByLabelText('Property')).not.toBeDisabled();
+    });
+  });
 });

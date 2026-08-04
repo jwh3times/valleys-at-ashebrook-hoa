@@ -34,6 +34,7 @@ export default function ProxiesManager() {
     run,
   } = useAdminResource<ProxyDetail[]>(fetchProxies, []);
   const [form, setForm] = useState(emptyProxy);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [properties, setProperties] = useState<PropertyWithOwners[]>([]);
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const [elections, setElections] = useState<ElectionDetail[]>([]);
@@ -85,22 +86,47 @@ export default function ProxiesManager() {
 
   function resetForm() {
     setForm(emptyProxy);
+    setEditingId(null);
+  }
+
+  function startEdit(px: ProxyDetail) {
+    setEditingId(px.id);
+    setForm({
+      propertyId: px.propertyId,
+      grantorOwnerId: px.grantorOwnerId,
+      holderName: px.holderName,
+      holderOwnerId: px.holderOwnerId ?? '',
+      occasionKind: px.meetingId ? 'meeting' : 'election',
+      occasionId: px.meetingId ?? px.electionId ?? '',
+    });
   }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    const done = editingId ? 'Proxy updated.' : 'Proxy recorded.';
     void run(async () => {
-      await saveProxy({
-        propertyId: form.propertyId,
-        grantorOwnerId: form.grantorOwnerId,
-        holderName: form.holderName,
-        holderOwnerId: form.holderOwnerId || null,
-        meetingId: form.occasionKind === 'meeting' ? form.occasionId : null,
-        electionId: form.occasionKind === 'election' ? form.occasionId : null,
-      });
+      if (editingId) {
+        await saveProxy(
+          {
+            grantorOwnerId: form.grantorOwnerId,
+            holderName: form.holderName,
+            holderOwnerId: form.holderOwnerId || null,
+          },
+          editingId,
+        );
+      } else {
+        await saveProxy({
+          propertyId: form.propertyId,
+          grantorOwnerId: form.grantorOwnerId,
+          holderName: form.holderName,
+          holderOwnerId: form.holderOwnerId || null,
+          meetingId: form.occasionKind === 'meeting' ? form.occasionId : null,
+          electionId: form.occasionKind === 'election' ? form.occasionId : null,
+        });
+      }
       resetForm();
       await reload();
-    }, 'Proxy recorded.');
+    }, done);
   }
 
   function remove(px: ProxyDetail) {
@@ -141,7 +167,9 @@ export default function ProxiesManager() {
         onSubmit={submit}
         style={{ marginBottom: '26px' }}
       >
-        <div className="panel-editor__title">Add Proxy</div>
+        <div className="panel-editor__title">
+          {editingId ? 'Edit Proxy' : 'Add Proxy'}
+        </div>
         <div className="field-grid" style={{ marginBottom: '16px' }}>
           <div className="field" style={{ margin: 0 }}>
             <label htmlFor="proxy-occasion-kind">Occasion type</label>
@@ -155,6 +183,7 @@ export default function ProxiesManager() {
                   occasionId: '',
                 })
               }
+              disabled={busy || editingId !== null}
             >
               <option value="meeting">Meeting</option>
               <option value="election">Election</option>
@@ -169,6 +198,7 @@ export default function ProxiesManager() {
               value={form.occasionId}
               onChange={(e) => setForm({ ...form, occasionId: e.target.value })}
               required
+              disabled={busy || editingId !== null}
             >
               <option value="">— choose —</option>
               {form.occasionKind === 'meeting'
@@ -205,6 +235,7 @@ export default function ProxiesManager() {
                 })
               }
               required
+              disabled={busy || editingId !== null}
             >
               <option value="">— choose a lot —</option>
               {properties.map((p) => (
@@ -268,8 +299,18 @@ export default function ProxiesManager() {
         </div>
         <div className="btn-row">
           <button className="btn btn--small" type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Add Proxy'}
+            {busy ? 'Saving…' : editingId ? 'Save changes' : 'Add Proxy'}
           </button>
+          {editingId && (
+            <button
+              className="btn btn--small btn--ghost"
+              type="button"
+              onClick={resetForm}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </form>
 
@@ -288,7 +329,12 @@ export default function ProxiesManager() {
                     {m.date} — {m.title}
                   </h2>
                   {byMeeting.get(m.id)!.map((px) => (
-                    <ProxyRow key={px.id} px={px} onDelete={() => remove(px)} />
+                    <ProxyRow
+                      key={px.id}
+                      px={px}
+                      onEdit={() => startEdit(px)}
+                      onDelete={() => remove(px)}
+                    />
                   ))}
                 </div>
               ))}
@@ -300,7 +346,12 @@ export default function ProxiesManager() {
                     {e.electionDate} — {e.title}
                   </h2>
                   {byElection.get(e.id)!.map((px) => (
-                    <ProxyRow key={px.id} px={px} onDelete={() => remove(px)} />
+                    <ProxyRow
+                      key={px.id}
+                      px={px}
+                      onEdit={() => startEdit(px)}
+                      onDelete={() => remove(px)}
+                    />
                   ))}
                 </div>
               ))}
@@ -308,7 +359,12 @@ export default function ProxiesManager() {
               <div style={{ marginBottom: '22px' }}>
                 <h2 style={{ marginBottom: '10px' }}>Unknown occasion</h2>
                 {orphaned.map((px) => (
-                  <ProxyRow key={px.id} px={px} onDelete={() => remove(px)} />
+                  <ProxyRow
+                    key={px.id}
+                    px={px}
+                    onEdit={() => startEdit(px)}
+                    onDelete={() => remove(px)}
+                  />
                 ))}
               </div>
             )}
@@ -319,7 +375,15 @@ export default function ProxiesManager() {
   );
 }
 
-function ProxyRow({ px, onDelete }: { px: ProxyDetail; onDelete: () => void }) {
+function ProxyRow({
+  px,
+  onEdit,
+  onDelete,
+}: {
+  px: ProxyDetail;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div className="panel-card" style={{ marginBottom: '14px' }}>
       <div className="list-row">
@@ -329,6 +393,13 @@ function ProxyRow({ px, onDelete }: { px: ProxyDetail; onDelete: () => void }) {
           </div>
         </div>
         <div className="row-actions">
+          <button
+            className="row-link"
+            aria-label={`Edit proxy for ${px.address}`}
+            onClick={onEdit}
+          >
+            Edit
+          </button>
           <button
             className="row-link row-link--danger"
             aria-label={`Delete proxy for ${px.address}`}
