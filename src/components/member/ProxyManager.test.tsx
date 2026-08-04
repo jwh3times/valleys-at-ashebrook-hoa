@@ -153,4 +153,83 @@ describe('ProxyManager', () => {
     );
     await waitFor(() => expect(mocked.revokeProxy).toHaveBeenCalledWith('px1'));
   });
+
+  it('grants an election proxy with only electionId set', async () => {
+    const user = userEvent.setup();
+    mocked.lookupOwners.mockResolvedValue({
+      propertyId: 'p2',
+      address: '2 Oak St',
+      owners: [{ id: 'o2', fullName: 'John Roe' }],
+    });
+    mocked.grantProxy.mockResolvedValue();
+    render(<ProxyManager lots={lots} occasions={occasions} />);
+
+    await user.selectOptions(await screen.findByLabelText('Your lot'), 'p1');
+    await user.selectOptions(screen.getByLabelText('You are'), 'o1');
+    await user.selectOptions(screen.getByLabelText('Occasion'), 'election:e1');
+    await user.type(
+      screen.getByLabelText("Holder's street address"),
+      '2 Oak St',
+    );
+    await user.click(screen.getByRole('button', { name: 'Find owner' }));
+    await user.selectOptions(
+      await screen.findByLabelText('Proxy holder'),
+      'o2',
+    );
+    await user.click(screen.getByRole('button', { name: 'Grant proxy' }));
+
+    await waitFor(() =>
+      expect(mocked.grantProxy).toHaveBeenCalledWith({
+        propertyId: 'p1',
+        grantorOwnerId: 'o1',
+        holderOwnerId: 'o2',
+        meetingId: null,
+        electionId: 'e1',
+      }),
+    );
+  });
+
+  it('shows a load error instead of false empty states when initial loading fails', async () => {
+    mocked.fetchMyProxies.mockRejectedValue(new Error('Network unavailable'));
+    render(<ProxyManager lots={lots} occasions={occasions} />);
+
+    expect(
+      await screen.findAllByText(
+        "Couldn't load your proxies — reload the page to try again.",
+      ),
+    ).toHaveLength(2);
+    expect(screen.queryByText('No proxies granted.')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('You are not holding any proxies.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the lot selected and clears the occasion after a successful grant', async () => {
+    const user = userEvent.setup();
+    mocked.lookupOwners.mockResolvedValue({
+      propertyId: 'p2',
+      address: '2 Oak St',
+      owners: [{ id: 'o2', fullName: 'John Roe' }],
+    });
+    mocked.grantProxy.mockResolvedValue();
+    render(<ProxyManager lots={lots} occasions={occasions} />);
+
+    await user.selectOptions(await screen.findByLabelText('Your lot'), 'p1');
+    await user.selectOptions(screen.getByLabelText('You are'), 'o1');
+    await user.selectOptions(screen.getByLabelText('Occasion'), 'meeting:m1');
+    await user.type(
+      screen.getByLabelText("Holder's street address"),
+      '2 Oak St',
+    );
+    await user.click(screen.getByRole('button', { name: 'Find owner' }));
+    await user.selectOptions(
+      await screen.findByLabelText('Proxy holder'),
+      'o2',
+    );
+    await user.click(screen.getByRole('button', { name: 'Grant proxy' }));
+
+    expect(await screen.findByText('Proxy granted.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your lot')).toHaveValue('p1');
+    expect(screen.getByLabelText('Occasion')).toHaveValue('');
+  });
 });
