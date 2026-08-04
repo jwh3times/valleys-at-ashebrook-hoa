@@ -11,9 +11,8 @@ import type { AuthContext } from './guards';
  * Board callers pass (requireRole is rank-based). Per-lot scoping is the
  * caller's job, via ctx.propertyIds / requirePropertyAccess.
  *
- * Reads settings directly rather than trusting locals.site: middleware
- * hands API routes inert defaults, and a guard must not be spoofable by
- * whatever a caller managed to put on locals.
+ * Reads settings directly rather than trusting locals.site: a guard must not
+ * be spoofable by whatever a caller managed to put on locals.
  */
 export async function requireMemberApi(
   locals: App.Locals | undefined,

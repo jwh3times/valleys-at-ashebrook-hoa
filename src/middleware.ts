@@ -63,8 +63,13 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   context.locals.authContext = ctx;
   const path = context.url.pathname;
 
-  // Surface site settings (incl. officialMode) to page renders. Skip the DB read for
-  // API/file routes, which do not render chrome — they get inert defaults.
+  // Surface site settings (incl. officialMode) to page renders. Skip the DB read
+  // for most API/file routes, which do not render chrome — they get inert
+  // defaults. The homeowner-write surface is the exception: the backstop below
+  // gates on the real officialMode, so it needs the real settings here too.
+  // requireMemberApi (src/server/authz/member-guards.ts) still re-reads settings
+  // itself rather than trusting this value — a deliberate double read, since a
+  // guard must not be spoofable by whatever a caller managed to put on locals.
   context.locals.site =
     path.startsWith('/api') && !isMemberApi(path)
       ? { ...DEFAULT_SITE_SETTINGS }
