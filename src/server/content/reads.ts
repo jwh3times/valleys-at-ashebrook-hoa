@@ -1,4 +1,16 @@
-import { inArray, desc, and, eq, ne, asc, count, sql } from 'drizzle-orm';
+import {
+  inArray,
+  desc,
+  and,
+  eq,
+  ne,
+  asc,
+  count,
+  sql,
+  gte,
+  notInArray,
+  or,
+} from 'drizzle-orm';
 import { getDb } from '../db/client';
 import type { Db } from '../db/client';
 import {
@@ -34,6 +46,10 @@ import type {
   CandidateSummary,
   BallotRow,
   ProxyDetail,
+  UpcomingOccasion,
+  MemberLot,
+  MemberProxyDetail,
+  MemberProxyLists,
 } from '../../lib/types';
 
 export async function fetchDocumentsFor(env: Env, role: Role) {
@@ -893,4 +909,188 @@ export async function fetchAdminProxies(env: Env): Promise<ProxyDetail[]> {
     meetingId: r.meetingId,
     electionId: r.electionId,
   }));
+}
+
+/**
+ * Minimal metadata for occasions a homeowner can still grant a proxy for
+ * (and, in PR 7c, vote at): member-body meetings and non-terminal elections
+ * dated today or later, filtered by the caller's visibility tier but NOT by
+ * status — a scheduled meeting whose minutes are still draft is exactly the
+ * thing a proxy is granted for. This is the deliberate ADR 0019 narrowing of
+ * ADR 0014: scheduled existence (title/date) at the occasion's own tier,
+ * never content. `today` is an ISO date so callers and tests agree on the
+ * boundary; dates are ISO strings, so lexical >= is date >=.
+ */
+export async function fetchUpcomingOccasionsFor(
+  env: Env,
+  role: Role,
+  today: string,
+): Promise<UpcomingOccasion[]> {
+  const db = getDb(env);
+  const tiers = visibleTiers(role);
+  const meetingRows = await db
+    .select({ id: meetings.id, title: meetings.title, date: meetings.date })
+    .from(meetings)
+    .where(
+      and(
+        eq(meetings.body, 'member'),
+        gte(meetings.date, today),
+        inArray(meetings.visibility, tiers),
+      ),
+    );
+  const electionRows = await db
+    .select({
+      id: elections.id,
+      title: elections.title,
+      date: elections.electionDate,
+      seats: elections.seats,
+    })
+    .from(elections)
+    .where(
+      and(
+        gte(elections.electionDate, today),
+        notInArray(elections.status, ['closed', 'certified', 'void']),
+        inArray(elections.visibility, tiers),
+      ),
+    );
+  const out: UpcomingOccasion[] = [
+    ...meetingRows.map((m) => ({
+      kind: 'meeting' as const,
+      id: m.id,
+      title: m.title,
+      date: m.date,
+      seats: null,
+    })),
+    ...electionRows.map((e) => ({
+      kind: 'election' as const,
+      id: e.id,
+      title: e.title,
+      date: e.date,
+      seats: e.seats,
+    })),
+  ];
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** The caller's own active lots with their ACTIVE owners, for the grant form's pickers. */
+export async function fetchMemberLots(
+  env: Env,
+  propertyIds: string[],
+): Promise<MemberLot[]> {
+  if (propertyIds.length === 0) return [];
+  const db = getDb(env);
+  const lots = await db
+    .select({
+      id: properties.id,
+      address: properties.address,
+      unit: properties.unit,
+    })
+    .from(properties)
+    .where(
+      and(inArray(properties.id, propertyIds), eq(properties.status, 'active')),
+    );
+  const ownerRows = await db
+    .select({
+      id: owners.id,
+      propertyId: owners.propertyId,
+      fullName: owners.fullName,
+    })
+    .from(owners)
+    .where(
+      and(inArray(owners.propertyId, propertyIds), eq(owners.status, 'active')),
+    );
+  return lots.map((l) => ({
+    ...l,
+    owners: ownerRows
+      .filter((o) => o.propertyId === l.id)
+      .map((o) => ({ id: o.id, fullName: o.fullName })),
+  }));
+}
+
+/**
+ * The caller's proxy lists: granted = proxies FOR the caller's lots; held =
+ * proxies naming one of the caller's lots' active owners as holder. Scoped
+ * reads only — this is the homeowner sibling of the board-only
+ * fetchAdminProxies and must never widen to other lots' proxies. Every call
+ * site is requireMemberApi-gated.
+ */
+export async function fetchMemberProxies(
+  env: Env,
+  propertyIds: string[],
+): Promise<MemberProxyLists> {
+  if (propertyIds.length === 0) return { granted: [], held: [] };
+  const db = getDb(env);
+  const myOwnerRows = await db
+    .select({ id: owners.id })
+    .from(owners)
+    .where(
+      and(inArray(owners.propertyId, propertyIds), eq(owners.status, 'active')),
+    );
+  const myOwnerIds = myOwnerRows.map((o) => o.id);
+  const rows = await db
+    .select()
+    .from(proxies)
+    .where(
+      myOwnerIds.length > 0
+        ? or(
+            inArray(proxies.propertyId, propertyIds),
+            inArray(proxies.holderOwnerId, myOwnerIds),
+          )
+        : inArray(proxies.propertyId, propertyIds),
+    )
+    .orderBy(desc(proxies.createdAt));
+  if (rows.length === 0) return { granted: [], held: [] };
+  const propRows = await db
+    .select({ id: properties.id, address: properties.address })
+    .from(properties);
+  const addressOf = new Map(propRows.map((p) => [p.id, p.address]));
+  const ownerNameRows = await db
+    .select({ id: owners.id, fullName: owners.fullName })
+    .from(owners);
+  const ownerNameOf = new Map(ownerNameRows.map((o) => [o.id, o.fullName]));
+  const meetingRows = await db
+    .select({ id: meetings.id, title: meetings.title, date: meetings.date })
+    .from(meetings);
+  const meetingOf = new Map(meetingRows.map((m) => [m.id, m]));
+  const electionRows = await db
+    .select({
+      id: elections.id,
+      title: elections.title,
+      date: elections.electionDate,
+    })
+    .from(elections);
+  const electionOf = new Map(electionRows.map((e) => [e.id, e]));
+  const toDetail = (r: (typeof rows)[number]): MemberProxyDetail => {
+    const occ = r.meetingId
+      ? meetingOf.get(r.meetingId)
+      : r.electionId
+        ? electionOf.get(r.electionId)
+        : undefined;
+    return {
+      id: r.id,
+      propertyId: r.propertyId,
+      address: addressOf.get(r.propertyId) ?? 'Unknown',
+      grantorOwnerId: r.grantorOwnerId,
+      grantorName: ownerNameOf.get(r.grantorOwnerId) ?? 'Unknown',
+      holderName: r.holderName,
+      holderOwnerId: r.holderOwnerId,
+      holderOwnerName: r.holderOwnerId
+        ? (ownerNameOf.get(r.holderOwnerId) ?? null)
+        : null,
+      meetingId: r.meetingId,
+      electionId: r.electionId,
+      occasionTitle: occ?.title ?? null,
+      occasionDate: occ?.date ?? null,
+    };
+  };
+  const myOwnerIdSet = new Set(myOwnerIds);
+  const propertyIdSet = new Set(propertyIds);
+  return {
+    granted: rows.filter((r) => propertyIdSet.has(r.propertyId)).map(toDetail),
+    held: rows
+      .filter(
+        (r) => r.holderOwnerId !== null && myOwnerIdSet.has(r.holderOwnerId),
+      )
+      .map(toDetail),
+  };
 }
