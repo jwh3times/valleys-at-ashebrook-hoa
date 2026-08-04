@@ -45,13 +45,26 @@ export default function ProxyManager({ lots, occasions }: Props) {
   );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Never throws — a failed load is recorded in loadError rather than
+  // propagated, so callers (mount effect, post-grant/revoke refresh) don't
+  // need their own try/catch around it and a reload failure can't be
+  // mistaken for the grant/revoke action itself failing.
   async function reload() {
-    setLists(await fetchMyProxies());
-    setLoading(false);
+    try {
+      setLists(await fetchMyProxies());
+      setLoadError(null);
+    } catch {
+      setLoadError(
+        "Couldn't load your proxies — reload the page to try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => {
-    reload().catch(() => setLoading(false));
+    reload();
     // Load once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -90,15 +103,18 @@ export default function ProxyManager({ lots, occasions }: Props) {
         meetingId: kind === 'meeting' ? occasionId : null,
         electionId: kind === 'election' ? occasionId : null,
       });
-      setForm({ ...emptyForm, propertyId: form.propertyId });
+      setForm((f) => ({ ...emptyForm, propertyId: f.propertyId }));
       setHolderResult(null);
       setMsg('Proxy granted.');
-      await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Grant failed');
-    } finally {
       setBusy(false);
+      return;
     }
+    // Outside the try: a reload failure (recorded via loadError inside
+    // reload()) must never overwrite the "Proxy granted." success message.
+    await reload();
+    setBusy(false);
   }
 
   async function revoke(px: MemberProxyDetail) {
@@ -108,12 +124,14 @@ export default function ProxyManager({ lots, occasions }: Props) {
     try {
       await revokeProxy(px.id);
       setMsg('Proxy revoked.');
-      await reload();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Revoke failed');
-    } finally {
       setBusy(false);
+      return;
     }
+    // Outside the try: same reasoning as submit() above.
+    await reload();
+    setBusy(false);
   }
 
   return (
@@ -260,6 +278,8 @@ export default function ProxyManager({ lots, occasions }: Props) {
       <h2 className="side-h2">Proxies you have granted</h2>
       {loading ? (
         <p className="loading">Loading…</p>
+      ) : loadError ? (
+        <p className="form-message form-message--error">{loadError}</p>
       ) : lists.granted.length === 0 ? (
         <p className="muted">No proxies granted.</p>
       ) : (
@@ -290,6 +310,8 @@ export default function ProxyManager({ lots, occasions }: Props) {
       <h2 className="side-h2">Proxies you hold</h2>
       {loading ? (
         <p className="loading">Loading…</p>
+      ) : loadError ? (
+        <p className="form-message form-message--error">{loadError}</p>
       ) : lists.held.length === 0 ? (
         <p className="muted">You are not holding any proxies.</p>
       ) : (
