@@ -1365,3 +1365,38 @@ export function normalizeProxyInput(
 
   return { ok: true, value: out };
 }
+
+// --- Homeowner-facing occasion and proxy reads (PR 7b) --------------------
+
+/**
+ * Minimal occasion metadata for the homeowner proxy-grant picker (PR 7b) and
+ * later /vote (PR 7c): id, title, date, and (elections) seats — NEVER
+ * summary_md, motions, attendance, tallies, or status. Exposing a not-yet-
+ * approved meeting's scheduled existence at its own visibility tier is the
+ * deliberate, ADR 0019-recorded narrowing of ADR 0014's drafts-are-admin-only
+ * rule; exposing its content would be a violation of it.
+ */
+export interface UpcomingOccasion {
+  kind: 'meeting' | 'election';
+  id: string;
+  title: string;
+  date: string; // ISO YYYY-MM-DD
+  seats: number | null; // elections only; null for meetings
+}
+
+export interface MemberProxyDetail extends ProxyDetail {
+  occasionTitle: string | null;
+  occasionDate: string | null;
+}
+
+export interface MemberProxyLists {
+  granted: MemberProxyDetail[];
+  held: MemberProxyDetail[];
+}
+
+export interface MemberLot {
+  id: string;
+  address: string;
+  unit: string | null;
+  owners: { id: string; fullName: string }[]; // ACTIVE owners only
+}
