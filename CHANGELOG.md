@@ -7,6 +7,28 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.49] - 2026-08-03
+
+### Added
+
+- **Recorded proxies can now be edited from the admin Proxies tab.** An Edit button on each proxy
+  loads it into the form for correcting the holder's name, the holder-as-owner link, or which of
+  the lot's owners granted it — the fields a mis-read paper form actually gets wrong. The lot and
+  the occasion stay fixed while editing, since moving a proxy to another lot or occasion is a
+  different proxy, not an edit; recording that remains delete-and-re-add, as before.
+
+### Changed
+
+- **A proxy can no longer be recorded against a board meeting.** Only member attendance, member
+  votes, and election ballots can cite a proxy, so a proxy tied to a board meeting could never be
+  used — it was an inert row waiting to confuse someone. The Proxies tab now offers only member
+  meetings as occasions, and the API refuses a board-meeting proxy outright, so the rule holds
+  even for a caller bypassing the picker. Election occasions are unchanged, and any proxy recorded
+  against a board meeting before this rule still displays in the record list.
+- The proxy pickers in the attendance, vote, and ballot editors are now one shared component, so
+  the rule for which proxies are offered — including "a proxy for the annual meeting also covers
+  the election held there" — lives in exactly one place. No visible behavior changed.
+
 ## [0.3.48] - 2026-08-03
 
 ### Added
