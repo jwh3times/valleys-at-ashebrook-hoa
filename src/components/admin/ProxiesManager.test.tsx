@@ -222,4 +222,26 @@ describe('ProxiesManager', () => {
     await waitFor(() => expect(mocked.deleteProxy).toHaveBeenCalledWith('px1'));
     confirmSpy.mockRestore();
   });
+
+  it('occasion picker offers member meetings only, but board-meeting proxies still render in the list', async () => {
+    mocked.fetchMeetings.mockResolvedValue([
+      meeting({ id: 'm1', body: 'member', title: 'Annual meeting' }),
+      meeting({ id: 'mB', body: 'board', title: 'Board session' }),
+    ]);
+    mocked.fetchProxies.mockResolvedValue([proxy({ meetingId: 'mB' })]);
+    render(<ProxiesManager />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('option', { name: /Annual meeting/ }),
+      ).toBeInTheDocument(),
+    );
+    // The board meeting is not offered as a new-proxy occasion…
+    expect(
+      screen.queryByRole('option', { name: /Board session/ }),
+    ).not.toBeInTheDocument();
+    // …but the legacy proxy recorded against it still shows in the record list
+    // (positive control that the filter is scoped to the picker).
+    expect(screen.getByText(/Board session/)).toBeInTheDocument();
+    expect(screen.getByText(/Alice Holder/)).toBeInTheDocument();
+  });
 });

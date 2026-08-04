@@ -172,11 +172,17 @@ export default function ProxiesManager() {
             >
               <option value="">— choose —</option>
               {form.occasionKind === 'meeting'
-                ? meetings.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.date} — {m.title}
-                    </option>
-                  ))
+                ? meetings
+                    // Only member meetings take proxies — the route 409s a
+                    // board-body meeting (PR 7a); the grouped record list
+                    // below is deliberately NOT filtered, so a legacy row
+                    // never vanishes from view.
+                    .filter((m) => m.body === 'member')
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.date} — {m.title}
+                      </option>
+                    ))
                 : elections.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.electionDate} — {e.title}
