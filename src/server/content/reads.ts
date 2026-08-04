@@ -1013,6 +1013,13 @@ export async function fetchMemberLots(
  * reads only — this is the homeowner sibling of the board-only
  * fetchAdminProxies and must never widen to other lots' proxies. Every call
  * site is requireMemberApi-gated.
+ *
+ * Occasion title/date are resolved WITHOUT a visibility filter, deliberately:
+ * a proxy binds the caller's own lot, so its owner may always see which
+ * occasion their lot is committed to — title and date only, never the
+ * occasion's content — even while the occasion itself is still
+ * board-visibility. This is the own-lot exception to the occasion-tier rule,
+ * recorded in ADR 0019.
  */
 export async function fetchMemberProxies(
   env: Env,
