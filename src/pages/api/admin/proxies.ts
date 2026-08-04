@@ -26,7 +26,7 @@ export const prerender = false;
 /** 404 Response if the referenced row is missing, else null. */
 async function checkExists(
   db: Db,
-  table: typeof properties | typeof meetings | typeof elections,
+  table: typeof properties | typeof elections,
   id: string | null | undefined,
   label: string,
 ): Promise<Response | null> {
@@ -106,7 +106,7 @@ async function checkMeetingIsMember(
     .limit(1);
   if (rows.length === 0)
     return new Response('Meeting not found', { status: 404 });
-  if (rows[0].body === 'board')
+  if (rows[0].body !== 'member')
     return new Response(
       'Proxies apply to member meetings — this is a board meeting',
       { status: 409 },
