@@ -93,4 +93,28 @@ describe('POST /api/member/owner-lookup', () => {
     expect((await call(jane, { address: 'x'.repeat(301) })).status).toBe(400);
     expect((await call(jane)).status).toBe(400);
   });
+
+  it('404s an inactive property identically to an unknown one, even with an active owner attached', async () => {
+    const db = getDb(env);
+    await db.insert(properties).values({
+      id: 'p3',
+      address: '3 Oak St.',
+      addressNormalized: '3 oak st',
+      status: 'inactive',
+      voteWeight: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(owners).values({
+      id: 'o3',
+      propertyId: 'p3',
+      fullName: 'Still Active Owner',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const unknown = await call(jane, { address: '9 Nowhere Ln' });
+    const inactive = await call(jane, { address: '3 Oak St' });
+    expect(inactive.status).toBe(404);
+    expect(await inactive.text()).toBe(await unknown.text());
+  });
 });
