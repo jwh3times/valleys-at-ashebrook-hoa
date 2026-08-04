@@ -236,8 +236,11 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   tier-gated sibling. `POST` returns `201 { id }` with a readable `404` for each of the five FKs it
   can write (`propertyId`, `grantorOwnerId`, `holderOwnerId`, `meetingId`, `electionId`), `400` if
   the grantor doesn't belong to the given property, `400` if grantor and holder resolve to the same
-  owner, and `409` on a duplicate occasion (`proxies_property_meeting_unq`/
-  `proxies_property_election_unq`, "This lot already has a proxy for this occasion"). `PATCH`
+  owner, `409` if `meetingId` resolves to a board-body meeting ("Proxies apply to member meetings —
+  this is a board meeting" — proxies are cited only by member attendance/votes/ballots, so a
+  board-meeting proxy could never be used; election occasions are unaffected), and `409` on a
+  duplicate occasion (`proxies_property_meeting_unq`/`proxies_property_election_unq`, "This lot
+  already has a proxy for this occasion"). `PATCH`
   allow-lists `holderName`/`holderOwnerId`/`grantorOwnerId` — `propertyId`, `meetingId`, and
   `electionId` are rejected on key presence by `normalizeProxyInput`, since moving a proxy to
   another lot or occasion is a different proxy, not an edit — and re-checks grantor-≠-holder against

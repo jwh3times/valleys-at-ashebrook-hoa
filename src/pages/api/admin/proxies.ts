@@ -26,7 +26,7 @@ export const prerender = false;
 /** 404 Response if the referenced row is missing, else null. */
 async function checkExists(
   db: Db,
-  table: typeof properties | typeof meetings | typeof elections,
+  table: typeof properties | typeof elections,
   id: string | null | undefined,
   label: string,
 ): Promise<Response | null> {
@@ -87,6 +87,33 @@ async function checkGrantorBelongs(
   return null;
 }
 
+/**
+ * 404 if the meeting is missing, 409 if it is a board-body meeting. Member
+ * votes, member attendance, and ballots are the only rows that can cite a
+ * proxy, and all three belong to member occasions — a proxy recorded against
+ * a board meeting could never be cited by anything, so it is refused rather
+ * than stored as an inert row (PR 6 review follow-up).
+ */
+async function checkMeetingIsMember(
+  db: Db,
+  meetingId: string | null | undefined,
+): Promise<Response | null> {
+  if (!meetingId) return null;
+  const rows = await db
+    .select({ body: meetings.body })
+    .from(meetings)
+    .where(eq(meetings.id, meetingId))
+    .limit(1);
+  if (rows.length === 0)
+    return new Response('Meeting not found', { status: 404 });
+  if (rows[0].body !== 'member')
+    return new Response(
+      'Proxies apply to member meetings — this is a board meeting',
+      { status: 409 },
+    );
+  return null;
+}
+
 export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
@@ -122,13 +149,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (grantorProblem) return grantorProblem;
   const holderMissing = await checkHolderOwnerExists(db, input.holderOwnerId);
   if (holderMissing) return holderMissing;
-  const meetingMissing = await checkExists(
-    db,
-    meetings,
-    input.meetingId,
-    'Meeting',
-  );
-  if (meetingMissing) return meetingMissing;
+  const meetingProblem = await checkMeetingIsMember(db, input.meetingId);
+  if (meetingProblem) return meetingProblem;
   const electionMissing = await checkExists(
     db,
     elections,
