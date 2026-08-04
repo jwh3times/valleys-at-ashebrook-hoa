@@ -389,4 +389,57 @@ describe('DELETE /api/member/proxies', () => {
     expect(res.status).toBe(409);
     expect(await res.text()).toMatch(/attendance/);
   });
+
+  it('409s a proxy scoped to a past meeting; the row survives', async () => {
+    await seedRoster();
+    // POST would refuse a past meeting, so insert the proxy row directly —
+    // this stands in for a board-entered paper record against an occasion
+    // that has already happened.
+    const pastMeeting = await seedMeeting({
+      id: 'mPastDel',
+      date: '2020-01-01',
+    });
+    const db = getDb(env);
+    await db.insert(proxies).values({
+      id: 'pxPastMeeting',
+      propertyId: 'p1',
+      grantorOwnerId: 'o1',
+      holderName: 'John Roe',
+      holderOwnerId: 'o2',
+      meetingId: pastMeeting,
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const res = await call(DELETE, 'DELETE', jane, { id: 'pxPastMeeting' });
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/already passed/);
+    expect(
+      (await db.select().from(proxies).where(eq(proxies.id, 'pxPastMeeting')))
+        .length,
+    ).toBe(1);
+  });
+
+  it('409s a proxy scoped to a past election', async () => {
+    await seedRoster();
+    const pastElection = await seedElection({
+      id: 'ePastDel',
+      electionDate: '2020-01-01',
+    });
+    const db = getDb(env);
+    await db.insert(proxies).values({
+      id: 'pxPastElection',
+      propertyId: 'p1',
+      grantorOwnerId: 'o1',
+      holderName: 'John Roe',
+      holderOwnerId: 'o2',
+      electionId: pastElection,
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+    });
+    const res = await call(DELETE, 'DELETE', jane, { id: 'pxPastElection' });
+    expect(res.status).toBe(409);
+    expect(await res.text()).toMatch(/already passed/);
+  });
 });
