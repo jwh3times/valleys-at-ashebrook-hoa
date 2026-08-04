@@ -167,7 +167,11 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   if (!id) return new Response('id is required', { status: 400 });
   const db = getDb(env);
   const rows = await db
-    .select({ propertyId: proxies.propertyId })
+    .select({
+      propertyId: proxies.propertyId,
+      meetingId: proxies.meetingId,
+      electionId: proxies.electionId,
+    })
     .from(proxies)
     .where(eq(proxies.id, id))
     .limit(1);
@@ -175,6 +179,37 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   // not be able to probe which proxy ids exist.
   if (rows.length === 0 || !gate.ctx.propertyIds.includes(rows[0].propertyId))
     return new Response('Proxy not found', { status: 404 });
+
+  // Revocation only has meaning before the occasion: a proxy for a meeting or
+  // election that has already happened stays part of the record, homeowner
+  // side, and can no longer be self-revoked here — only the board's admin
+  // DELETE (unchanged) can remove a past proxy. Mirrors POST's past-occasion
+  // rule. CASCADE makes a missing occasion row impossible; skip rather than
+  // 500 if it somehow happens.
+  const proxy = rows[0];
+  const today = new Date().toISOString().slice(0, 10);
+  if (proxy.meetingId !== null) {
+    const [m] = await db
+      .select({ date: meetings.date })
+      .from(meetings)
+      .where(eq(meetings.id, proxy.meetingId))
+      .limit(1);
+    if (m && m.date < today)
+      return new Response('This occasion has already passed', {
+        status: 409,
+      });
+  } else if (proxy.electionId !== null) {
+    const [e] = await db
+      .select({ date: elections.electionDate })
+      .from(elections)
+      .where(eq(elections.id, proxy.electionId))
+      .limit(1);
+    if (e && e.date < today)
+      return new Response('This occasion has already passed', {
+        status: 409,
+      });
+  }
+
   const labels = await proxyUseLabels(db, id);
   if (labels.length > 0)
     return new Response(
