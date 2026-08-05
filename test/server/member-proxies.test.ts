@@ -61,6 +61,12 @@ const jane: AuthContext = {
   propertyIds: ['p1'],
 };
 
+const board: AuthContext = {
+  userId: 'b1',
+  role: 'board',
+  propertyIds: ['p1'],
+};
+
 async function seedRoster() {
   const db = getDb(env);
   await db.insert(properties).values([
@@ -156,6 +162,25 @@ function grantBody(overrides: Record<string, unknown> = {}) {
     electionId: null,
     ...overrides,
   };
+}
+
+async function seedReadProxy(
+  id: string,
+  overrides: Record<string, unknown> = {},
+) {
+  await getDb(env)
+    .insert(proxies)
+    .values({
+      id,
+      propertyId: 'p2',
+      grantorOwnerId: 'o2',
+      holderName: 'Jane Doe',
+      holderOwnerId: 'o1',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
 }
 
 describe('POST /api/member/proxies', () => {
@@ -339,6 +364,122 @@ describe('GET /api/member/proxies', () => {
     expect(lists.granted).toHaveLength(1);
     expect(lists.granted[0].propertyId).toBe('p1');
     expect(lists.held.map((p) => p.id)).toEqual(['pxH']);
+  });
+
+  it('keeps board-visible meeting and election metadata for proxies granted by the caller lot', async () => {
+    await seedRoster();
+    await seedMeeting({
+      id: 'mBoardGranted',
+      title: 'Private meeting',
+      visibility: 'board',
+    });
+    await seedElection({
+      id: 'eBoardGranted',
+      title: 'Private election',
+      visibility: 'board',
+    });
+    await seedReadProxy('pxMeetingGranted', {
+      propertyId: 'p1',
+      grantorOwnerId: 'o1',
+      holderName: 'John Roe',
+      holderOwnerId: 'o2',
+      meetingId: 'mBoardGranted',
+    });
+    await seedReadProxy('pxElectionGranted', {
+      propertyId: 'p1',
+      grantorOwnerId: 'o1',
+      holderName: 'John Roe',
+      holderOwnerId: 'o2',
+      electionId: 'eBoardGranted',
+    });
+
+    const res = await call(GET, 'GET', jane);
+    const lists = (await res.json()) as {
+      granted: {
+        id: string;
+        occasionTitle: string | null;
+        occasionDate: string | null;
+      }[];
+    };
+    const granted = new Map(lists.granted.map((proxy) => [proxy.id, proxy]));
+    expect(granted.get('pxMeetingGranted')).toMatchObject({
+      occasionTitle: 'Private meeting',
+      occasionDate: '2099-01-01',
+    });
+    expect(granted.get('pxElectionGranted')).toMatchObject({
+      occasionTitle: 'Private election',
+      occasionDate: '2099-01-01',
+    });
+  });
+
+  it('redacts out-of-tier held metadata while retaining tier-visible meeting and election metadata', async () => {
+    await seedRoster();
+    await seedMeeting({
+      id: 'mBoardHeld',
+      title: 'Private meeting',
+      visibility: 'board',
+    });
+    await seedElection({
+      id: 'eBoardHeld',
+      title: 'Private election',
+      visibility: 'board',
+    });
+    await seedMeeting({ id: 'mHomeHeld', title: 'Member meeting' });
+    await seedElection({ id: 'eHomeHeld', title: 'Member election' });
+    await seedReadProxy('pxBoardMeeting', { meetingId: 'mBoardHeld' });
+    await seedReadProxy('pxBoardElection', { electionId: 'eBoardHeld' });
+    await seedReadProxy('pxHomeMeeting', { meetingId: 'mHomeHeld' });
+    await seedReadProxy('pxHomeElection', { electionId: 'eHomeHeld' });
+
+    const res = await call(GET, 'GET', jane);
+    const lists = (await res.json()) as {
+      held: {
+        id: string;
+        occasionTitle: string | null;
+        occasionDate: string | null;
+      }[];
+    };
+    const held = new Map(lists.held.map((proxy) => [proxy.id, proxy]));
+    expect(held.get('pxBoardMeeting')).toMatchObject({
+      occasionTitle: null,
+      occasionDate: null,
+    });
+    expect(held.get('pxBoardElection')).toMatchObject({
+      occasionTitle: null,
+      occasionDate: null,
+    });
+    expect(held.get('pxHomeMeeting')).toMatchObject({
+      occasionTitle: 'Member meeting',
+      occasionDate: '2099-01-01',
+    });
+    expect(held.get('pxHomeElection')).toMatchObject({
+      occasionTitle: 'Member election',
+      occasionDate: '2099-01-01',
+    });
+  });
+
+  it('includes board-visible held metadata for a board caller', async () => {
+    await seedRoster();
+    await seedMeeting({
+      id: 'mBoardHeld',
+      title: 'Private meeting',
+      visibility: 'board',
+    });
+    await seedElection({
+      id: 'eBoardHeld',
+      title: 'Private election',
+      visibility: 'board',
+    });
+    await seedReadProxy('pxBoardMeeting', { meetingId: 'mBoardHeld' });
+    await seedReadProxy('pxBoardElection', { electionId: 'eBoardHeld' });
+
+    const res = await call(GET, 'GET', board);
+    const lists = (await res.json()) as {
+      held: { id: string; occasionTitle: string | null }[];
+    };
+    const held = new Map(lists.held.map((proxy) => [proxy.id, proxy]));
+    expect(held.get('pxBoardMeeting')?.occasionTitle).toBe('Private meeting');
+    expect(held.get('pxBoardElection')?.occasionTitle).toBe('Private election');
   });
 });
 

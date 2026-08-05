@@ -579,7 +579,7 @@ describe('fetchMemberProxies', () => {
       holderOwnerId: 'o1',
       meetingId: m1,
     });
-    const out = await fetchMemberProxies(env, ['p1']);
+    const out = await fetchMemberProxies(env, 'homeowner', ['p1']);
     expect(out.granted.map((p) => p.id)).toEqual(['pxG']);
     expect(out.granted[0].occasionTitle).toBe('Annual');
     expect(out.granted[0].occasionDate).toBe('2026-09-01');
@@ -601,10 +601,10 @@ describe('fetchMemberProxies', () => {
       holderName: 'Somebody Else',
       meetingId: m1,
     });
-    const out = await fetchMemberProxies(env, ['p1']);
+    const out = await fetchMemberProxies(env, 'homeowner', ['p1']);
     expect(out.granted).toEqual([]);
     expect(out.held).toEqual([]);
-    expect(await fetchMemberProxies(env, [])).toEqual({
+    expect(await fetchMemberProxies(env, 'homeowner', [])).toEqual({
       granted: [],
       held: [],
     });

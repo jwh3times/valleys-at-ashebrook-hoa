@@ -24,7 +24,9 @@ export const prerender = false;
 export const GET: APIRoute = async ({ request, locals }) => {
   const gate = await requireMemberApi(locals, request, env);
   if (!gate.ok) return gate.res;
-  return Response.json(await fetchMemberProxies(env, gate.ctx.propertyIds));
+  return Response.json(
+    await fetchMemberProxies(env, gate.ctx.role, gate.ctx.propertyIds),
+  );
 };
 
 export const POST: APIRoute = async ({ request, locals }) => {
