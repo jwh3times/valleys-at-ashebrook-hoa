@@ -4,8 +4,9 @@
 
 This is the public and homeowner website for the Valleys at Ashebrook neighborhood, branded
 **"The Valleys at Ashebrook Residents"**. An admin-toggleable **official mode** switches the site
-to official-HOA presentation: branding, footer disclaimer, and HOA-only surfaces like `/dues` are
-driven by the `officialMode` site setting through `src/lib/site.ts`.
+to official-HOA presentation: branding, footer disclaimer, and HOA-business surfaces like `/dues`
+and homeowner proxy grants at `/proxies` are driven by the `officialMode` site setting through
+`src/lib/site.ts`.
 
 The app is an Astro SSR app (`output: 'server'`) running on **Cloudflare Workers** via the
 `@astrojs/cloudflare` adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2**
@@ -145,9 +146,9 @@ Markdown twins described below and never the human-readable originals.
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
   duplicate group resurfaces for review.
-- Board-only meeting record (board and member meetings — recorded paper proxies now attach to
-  member attendance/votes and election ballots; live-conducted elections and homeowner-submitted
-  proxy grants remain a later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`.
+- Board-only meeting record (board and member meetings — proxies recorded by the board or granted
+  online by a homeowner attach to member attendance/votes and election ballots; live-conducted
+  elections remain a later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`.
   `GET` lists every
   meeting including drafts, or returns one full meeting detail with `?id=`; `POST`
   creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
@@ -179,7 +180,7 @@ Markdown twins described below and never the human-readable originals.
   for a different lot or scoped to a different occasion is `409` (a meeting-scoped proxy also
   covers an election held at that meeting; a standalone election accepts only its own) — and an
   entry carrying both `proxyId` and `representedByOwnerId`/`castByOwnerId` is `400`, since who acted
-  lives on the (board-only) proxy row, never beside it. All verbs on both routes are
+  lives on the canonical proxy row, never beside it. All verbs on both routes are
   `requireBoard`-gated.
 - Board-only resolutions book (standing rules the board adopts; a durable record — amending one
   creates a **new** resolution that supersedes the old, forming a walkable chain; see
@@ -227,13 +228,15 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned and
   rejected on key presence, and a candidate can be deleted only while its election is still a
   `draft` (mark it withdrawn otherwise).
-- Board-only proxies record (a board member typing in a paper proxy that already exists — one
-  owner authorising one named holder to act for one lot at exactly one meeting or election; see
+- Board-only complete proxies record (including paper proxies entered by the board and online
+  grants created by homeowners — one owner authorising one named holder to act for one lot at
+  exactly one meeting or election; see
   [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md)): `/api/admin/proxies`
   supports `GET`/`POST`/`PATCH`/`DELETE`, all `requireBoard`-gated. `GET` returns every proxy with
   its property address and grantor/holder names resolved — the same full-detail-on-list shape as
-  `/api/admin/resolutions` and `/api/admin/elections` — and there is deliberately no public or
-  tier-gated sibling. `POST` returns `201 { id }` with a readable `404` for each of the five FKs it
+  `/api/admin/resolutions` and `/api/admin/elections`; the member sibling described below is
+  lot-scoped rather than a complete register. `POST` returns `201 { id }` with a readable `404` for
+  each of the five FKs it
   can write (`propertyId`, `grantorOwnerId`, `holderOwnerId`, `meetingId`, `electionId`), `400` if
   the grantor doesn't belong to the given property, `400` if grantor and holder resolve to the same
   owner, `409` if `meetingId` resolves to a board-body meeting ("Proxies apply to member meetings —
@@ -247,6 +250,22 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   the effective stored-plus-payload values. `DELETE` returns `409` naming which of `attendance`,
   `votes`, or `ballots` still cites the proxy ("Proxy is in use (…) — remove those records first"),
   else deletes; deletion is the entire revocation model, there is no `revoked_at`.
+- Official-mode homeowner proxies: `/api/member/proxies` supports `GET`/`POST`/`DELETE`, and
+  `/api/member/owner-lookup` supports `POST`. Every handler calls `requireMemberApi`, while
+  middleware independently gates `/api/member/*`: `officialMode` off returns `404`, then anonymous
+  is `401` and callers below `homeowner` are `403`; board callers pass the rank check. `GET` returns
+  only proxies granted for the caller's verified lots plus proxies naming an active owner of those
+  lots as holder. Own-lot rows retain occasion title/date even above the caller's tier; held rows
+  for another lot redact those fields above tier. `POST` requires one caller-controlled lot, an
+  active owner of that lot selected as grantor, a different active owner as holder, and exactly one
+  visible upcoming member meeting or non-terminal election. Both the picker read and write path
+  expose only minimal scheduled-occasion metadata at the occasion's visibility tier even while its
+  record remains draft; dates use the `America/New_York` association day. `DELETE` is limited to
+  the caller's lots and refuses both past occasions and proxies already cited by attendance, votes,
+  or ballots. The address lookup resolves one typed active-property address to active owner names
+  and opaque IDs only (never contact data); verified homeowners can repeat such lookups, an accepted
+  disclosure documented with the lot-control/self-asserted-owner trust model in
+  [ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md).
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
@@ -297,6 +316,9 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
 **Client helpers.**
 
 - `src/lib/content.ts` handles public reads from `/api/content/*` endpoints.
+- `src/lib/member.ts` handles the official-mode homeowner proxy API: `fetchMyProxies`,
+  `grantProxy`, `revokeProxy`, and `lookupOwners`, with the write/lookup request shapes kept beside
+  those helpers.
 - `src/lib/admin.ts` handles board writes to `/api/admin/*` endpoints, typed document duplicate
   errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
   `fetchReport`, `deleteReport`), board roster helpers (`fetchBoardPeople`, `saveBoardPerson`,
@@ -325,7 +347,8 @@ boolean`.
   `ResolutionChainLink`, `ResolutionInput`), the elections shapes (`ElectionStatus`,
   `ElectionSource`, `ELECTION_STATUSES`, `ELECTION_SOURCES`, `ElectionSummary`, `ElectionDetail`,
   `CandidateSummary`, `ElectionTurnout`, `BallotRow`, `ElectionInput`, `CandidateInput`), the
-  proxies shapes (`ProxyDetail`, `ProxyInput`), a shared
+  proxies shapes (`ProxyDetail`, `ProxyInput`, `MemberProxyDetail`, `MemberProxyLists`, `MemberLot`,
+  and `UpcomingOccasion`), a shared
   `isoDateOrError` calendar-date validator used by both the declarative normalizers and the
   resolutions route's `adopt`/`supersede` and the elections route's `certify` transition
   arguments, and `MemberAttendanceRow`/`MemberVoteRow`/`BallotRow`'s `proxyId` field (board-only,
@@ -336,14 +359,16 @@ boolean`.
   settings, with `DISCLAIMER_SHORT` and `DISCLAIMER_LONG` as fallbacks. `disclaimer(site)` and
   `aboutParagraphs(site)` return overrides or built-in copy when blank. This is a pure module usable
   in `.astro` files, islands, and unit tests.
-- `src/lib/format.ts` contains shared formatting helpers, unit-tested in `format.test.ts`.
+- `src/lib/format.ts` contains shared formatting helpers, including `associationDateIso` for the
+  `America/New_York` proxy cutoff, unit-tested in `format.test.ts`.
 - `src/lib/auth-client.ts` contains the Better Auth browser client.
 
 **Server code.** `src/server/` contains:
 
 - `auth/`: Better Auth config, Resend and Twilio senders.
 - `authz/`: `getAuthContext`, `resolveAuthContext` (middleware-first caller resolution with a
-  fail-closed fallback), `requireRole`, `requireBoard`, and Turnstile checks.
+  fail-closed fallback), `requireRole`, `requireBoard`, `requireMemberApi` (official-mode-first
+  homeowner-write gate), per-property access checks, and Turnstile checks.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
@@ -381,9 +406,13 @@ boolean`.
   read, since publishing per-lot turnout beside per-candidate tallies is what would make an
   individual's choice deducible in a small race. See
   [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md). `reads.ts` also has
-  `fetchAdminProxies(env)`, board-only with no public or tier-gated sibling by design: it returns
-  every `ProxyDetail` with its property address and grantor/holder owner names resolved, the same
-  full-detail-on-list shape as `fetchAdminResolutions`/`fetchAdminElections`.
+  `fetchAdminProxies(env)`, the board-only complete-register read: it returns every `ProxyDetail`
+  with its property address and grantor/holder owner names resolved, the same
+  full-detail-on-list shape as `fetchAdminResolutions`/`fetchAdminElections`. Homeowner proxy reads
+  use `fetchUpcomingOccasionsFor` (minimal tier-filtered scheduled-event metadata regardless of
+  draft status), `fetchMemberLots` (the caller's active lots and active owners), and
+  `fetchMemberProxies` (lot-scoped granted/held lists with the ADR 0019 own-lot occasion exception
+  and held-row tier redaction); these are not a public or complete tier-gated proxy register.
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
 - `roster/` and `verification/`: homeowner verification support.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
@@ -419,8 +448,8 @@ authorization; `board_terms` records a term of service — `person_id`, nullable
 `term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
 across terms; deleting a person with a term on record is refused with `409`), `meetings`,
 `board_attendance`, `motions`, `board_votes`, `member_attendance`, and `member_votes` (the meeting
-record — board and member meetings; live-conducted elections and homeowner-submitted proxy grants
-remain a later phase — per
+record — board and member meetings; proxies may be board-recorded or granted online by homeowners,
+while live-conducted elections remain a later phase — per
 [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md) and
 [ADR 0015](./docs/adr/0015-weighted-member-voting.md): `meetings` has `body` (`board`/`member`, the
 column that decides which voter model applies), `kind` (`regular`/`special`/`annual`), `date`,
@@ -496,8 +525,10 @@ candidate a lot chose is never recorded anywhere. `board_terms` also carries a n
 term; `certify` opens it, `uncertify` deletes it, and `DELETE /api/admin/board-terms` refuses to
 delete a term with one set.
 
-`proxies` (the proxies record — a board member typing in a paper proxy that already exists, per
-[ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md)): one owner
+`proxies` (the proxies record — either entered from paper by the board or granted online by a
+homeowner for a lot they control, per
+[ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md) and
+[ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md)): one owner
 (`grantor_owner_id`, referencing `owners` on delete-restrict) authorising one named holder
 (`holder_name`, required — a holder need not be an owner) to act for one lot (`property_id`,
 referencing `properties` on delete-restrict) at exactly one occasion, a nullable `meeting_id` or
@@ -605,6 +636,14 @@ bootstrapped through the permanent fail-closed
 These role changes are direct D1 writes, not Better Auth admin API calls. The Better Auth admin
 plugin's impersonation, ban, and set-role endpoints are not granted to board sessions; see
 `src/server/auth/permissions.ts`.
+
+The official-mode homeowner-write API repeats that two-layer pattern. Middleware gates
+`/api/member/*`, and every handler independently opens with `requireMemberApi`; mode off is checked
+first and returns `404`, then anonymous is `401` and an authenticated visitor is `403`.
+`test/server/member-routes-all-gated.test.ts` enumerates the member route modules. Successful calls
+are scoped again through `AuthContext.propertyIds` (and active roster rows where identity matters),
+so homeowner role alone never grants access to an arbitrary lot. See
+[ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md).
 
 ## Testing Guidelines
 

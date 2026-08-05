@@ -7,6 +7,28 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.50] - 2026-08-04
+
+### Added
+
+- **Verified homeowners can now grant and revoke proxies online when the site is operating in
+  official HOA mode.** The new Proxies page lists the caller's active lots, published upcoming
+  member meetings and elections, proxies they granted, and proxies they hold. A grant identifies
+  the granting owner, resolves the holder from an active-owner street-address lookup, and stays
+  tied to exactly one occasion; an unused grant can be revoked until that occasion has passed,
+  while a proxy already cited by attendance, a vote, or a ballot remains protected from deletion.
+
+### Security
+
+- Homeowner proxy pages and APIs fail closed when official mode is off, require a current verified
+  lot, scope grants and revocations to that lot, and return indistinguishable not-found responses
+  for hidden occasions and foreign proxy ids. Holder lookup returns only active-owner names and
+  opaque ids—never contact data—and held proxies redact occasion titles and dates above the
+  caller's visibility tier. The occasion cutoff follows the association's `America/New_York`
+  calendar day, and the grant form invalidates stale holder selections after address changes,
+  failed lookups, or out-of-order responses. See
+  [ADR 0019](docs/adr/0019-homeowner-writes-official-mode-gate.md).
+
 ## [0.3.49] - 2026-08-03
 
 ### Added

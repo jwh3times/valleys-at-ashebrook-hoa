@@ -1,5 +1,8 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { getDb } from '../../src/server/db/client';
+import { settings } from '../../src/server/db/schema';
 
 // Role is swapped per test so one file can cover anonymous, homeowner, and board
 // without three separate module mocks.
@@ -14,6 +17,18 @@ import { onRequest } from '../../src/middleware';
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
+
+/** Same pattern as member-routes-all-gated.test.ts: seed or clear the singleton settings row. */
+async function setOfficialMode(on: boolean) {
+  const db = getDb(env);
+  await db.delete(settings).where(eq(settings.key, 'site'));
+  if (on)
+    await db.insert(settings).values({
+      key: 'site',
+      value: JSON.stringify({ officialMode: true }),
+      updatedAt: new Date(),
+    });
+}
 
 beforeEach(() => {
   role = null;
@@ -86,6 +101,58 @@ describe('middleware gate on /api/admin', () => {
     // before anyone remembers to write requireBoard into the handler.
     const { res, reached } = await run('/api/admin/not-built-yet', 'POST');
     expect(res.status).toBe(401);
+    expect(reached).toBe(false);
+  });
+});
+
+describe('middleware gate on /api/member', () => {
+  beforeEach(async () => {
+    await setOfficialMode(false);
+  });
+
+  it('is 404 with officialMode off, even for a signed-in homeowner', async () => {
+    role = 'homeowner';
+    const { res, reached } = await run('/api/member/proxies');
+    expect(res.status).toBe(404);
+    expect(reached).toBe(false);
+  });
+
+  it('rejects an anonymous caller with 401 when officialMode is on', async () => {
+    await setOfficialMode(true);
+    const { res, reached } = await run('/api/member/proxies');
+    expect(res.status).toBe(401);
+    expect(reached).toBe(false);
+  });
+
+  it('rejects a visitor-role session with 403 when officialMode is on', async () => {
+    await setOfficialMode(true);
+    role = 'visitor';
+    const { res, reached } = await run('/api/member/proxies');
+    expect(res.status).toBe(403);
+    expect(reached).toBe(false);
+  });
+
+  it('lets a homeowner caller through when officialMode is on', async () => {
+    await setOfficialMode(true);
+    role = 'homeowner';
+    const { res, reached } = await run('/api/member/proxies');
+    expect(res.status).toBe(200);
+    expect(reached).toBe(true);
+  });
+
+  it('does not gate a sibling path sharing the prefix', async () => {
+    // /api/members starts with "/api/member" as a bare string but is a
+    // different route, same reasoning as /api/administrators above.
+    await setOfficialMode(true);
+    const { res, reached } = await run('/api/members');
+    expect(res.status).toBe(200);
+    expect(reached).toBe(true);
+  });
+
+  it('gates the bare /api/member path with no trailing slash', async () => {
+    role = 'homeowner';
+    const { res, reached } = await run('/api/member');
+    expect(res.status).toBe(404);
     expect(reached).toBe(false);
   });
 });

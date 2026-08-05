@@ -11,7 +11,7 @@ const links = navLinks(site.officialMode);
 const tag = brandTag(site.officialMode);
 // Account affordances (sign in / register / verify / admin + sign out) driven
 // by the middleware-resolved caller.
-const account = accountNav(Astro.locals.authContext ?? null);
+const account = accountNav(Astro.locals.authContext ?? null, site.officialMode);
 
 const isCurrent = (href: string) =>
   href === '/' ? pathname === '/' : pathname.startsWith(href);
