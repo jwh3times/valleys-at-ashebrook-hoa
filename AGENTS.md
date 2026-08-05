@@ -577,17 +577,17 @@ one vote per motion per person, and one motion per meeting per `sequence`. Migra
 enforcing one attendance row per meeting per property and one vote per motion per property, and
 nullable `motions.mover_owner_id`/`motions.second_owner_id`. Migration `0012` adds the
 `resolutions` table with `resolutions_number_unq`, `resolutions_supersedes_unq`, and
-`resolutions_status_idx` (applied locally; not yet applied to production). Migration `0013` adds
-the `elections`, `candidates`, and `ballots` tables — `elections_status_idx`,
+`resolutions_status_idx`. Migration `0013` adds the `elections`, `candidates`, and `ballots` tables
+— `elections_status_idx`,
 `elections_meeting_id_idx`, `candidates_election_id_idx`, `candidates_election_sequence_unq`,
 `ballots_election_property_unq`, and `ballots_election_id_idx` — plus a nullable
-`board_terms.election_id` column (applied locally; not yet applied to production). Migration
-`0014` adds the `proxies` table — `proxies_property_meeting_unq`, `proxies_property_election_unq`,
+`board_terms.election_id` column. Migration `0014` adds the `proxies` table —
+`proxies_property_meeting_unq`, `proxies_property_election_unq`,
 `proxies_meeting_id_idx`, and `proxies_election_id_idx`, plus the `proxies_one_occasion` CHECK
 constraint. Migration `0015` drops `via_proxy` from `member_attendance`, `member_votes`, and
-`ballots` and adds each table's `proxy_id` column (both applied locally; not yet applied to
-production). Migrations are
-applied with `npm run db:migrate:{local,remote}` via
+`ballots` and adds each table's `proxy_id` column. All committed migrations through `0015` were
+verified as applied to production on 2026-08-05. Migrations are applied with
+`npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
 so `npm run db:generate` should diff cleanly for future changes.

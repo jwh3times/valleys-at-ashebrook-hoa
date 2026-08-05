@@ -86,6 +86,9 @@ Set `BETTER_AUTH_URL` to the exact production origin visitors use.
 
 ## 4. Apply Migrations
 
+Worker builds and deploys do not apply D1 migrations automatically. Apply the committed migration
+ledger separately for each target database:
+
 ```bash
 npm run db:migrate:local
 npm run db:migrate:remote
@@ -274,7 +277,8 @@ For local work against Cloudflare bindings, use Wrangler after a build so D1/R2/
 ## Day-to-Day Content Updates
 
 Board members use `/admin` to manage announcements, documents, duplicate cleanup, dues, site
-settings, roster records, homeowner access, and board membership. Changes are written to D1/R2 and
+settings, roster records, homeowner access, board membership, the board roster, meetings,
+resolutions, recorded elections, proxies, and saved AI reports. Changes are written to D1/R2 and
 appear on the site without a code deploy.
 
 ## Official Mode
