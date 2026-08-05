@@ -1,0 +1,64 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ProxyManager from '../components/member/ProxyManager.tsx';
+import { env } from 'cloudflare:workers';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import { associationDateIso } from '../lib/format';
+// Deliberately NOT importing fetchMemberProxies here: the island loads the
+// granted/held lists itself via GET /api/member/proxies, so there is exactly
+// one loading path and reload-after-write stays consistent.
+import {
+  fetchMemberLots,
+  fetchUpcomingOccasionsFor,
+} from '../server/content/reads';
+
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this page is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+
+// The first homeowner write surface is officialMode-gated (ADR 0019):
+// conducting association business on a site that is not the official HOA
+// is what the flag exists to gate. Off → the generic 404, never a 403,
+// so the surface is not advertised.
+if (!site.officialMode) {
+  return Astro.rewrite('/404');
+}
+
+const ctx = Astro.locals.authContext ?? null;
+const verified =
+  ctx !== null && ctx.role !== 'visitor' && ctx.propertyIds.length > 0;
+
+const today = associationDateIso();
+const [lots, occasions] = verified
+  ? await Promise.all([
+      fetchMemberLots(env, ctx!.propertyIds),
+      fetchUpcomingOccasionsFor(env, ctx!.role, today),
+    ])
+  : [[], []];
+---
+
+<BaseLayout
+  title="Proxies"
+  description="Grant or revoke a proxy for an upcoming association meeting or election."
+>
+  <div class="page-section">
+    <p class="eyebrow">Members</p>
+    <h1 class="page-title" style="margin-bottom: 36px;">Proxies</h1>
+
+    {
+      !ctx ? (
+        <p class="page-lead">
+          Sign in to grant or review proxies for your lot.{' '}
+          <a href="/login">Sign in</a> or <a href="/register">register</a>.
+        </p>
+      ) : !verified ? (
+        <p class="page-lead">
+          Verify your property to grant a proxy.{' '}
+          <a href="/verify-property">Verify your property</a>.
+        </p>
+      ) : (
+        <ProxyManager client:load lots={lots} occasions={occasions} />
+      )
+    }
+  </div>
+</BaseLayout>

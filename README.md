@@ -5,7 +5,7 @@ the official Valleys at Ashebrook HOA site. It's built and maintained by a resid
 convenience for neighbors. An admin-toggleable **official mode** (off by default) lets a
 board that wants to adopt the site turn on HOA branding and dues/board copy; while it's
 off, the site presents as an unofficial resident hub with a "not affiliated with the
-HOA" disclaimer (see `/about`) and hides dues/board-only surfaces.
+HOA" disclaimer (see `/about`) and hides dues and homeowner-business surfaces.
 
 It provides:
 
@@ -23,6 +23,9 @@ It provides:
 - 🏛️ **Elections** — the record of a board election that already happened on paper, published at
   `/elections`: candidates, board-entered tallies, winners, and turnout; ballots are secret by
   construction — no record ever links which candidate a lot voted for
+- 📝 **Homeowner proxies** — in official mode, a verified homeowner can grant or revoke a proxy
+  for one of their lots at an upcoming member meeting or election and review proxies they granted
+  or hold at `/proxies`; the board can still record and administer paper proxies
 - 🤖 **Board-only AI document assistant** — ask natural-language questions about the
   document library and get a streamed, cited answer (Cloudflare AI Search + Claude),
   with known resident PII pseudonymized before anything reaches the model
@@ -38,9 +41,10 @@ It provides:
   administrators (the `board` role) to manage everything without touching code,
   including the official-mode toggle
 
-Homeowners can create accounts (verified against the owner roster via a one-time code)
-to access homeowner-only content. Content visibility has three tiers: public, homeowner,
-and board.
+Homeowners can create accounts (verified against the owner roster via a one-time code) to access
+homeowner-only content. When the board enables official mode, verified homeowners can also conduct
+supported association business such as granting or revoking a proxy for a lot they control.
+Content visibility has three tiers: public, homeowner, and board.
 
 ## Tech stack
 
@@ -106,13 +110,14 @@ src/
   layouts/            Shared page shell
   components/         Header/Footer + React islands
     admin/            The board admin app
-  lib/                Client helpers (content.ts, admin.ts, site.ts, format.ts, types.ts,
-                      reports.ts, auth-client.ts)
+    member/           Verified-homeowner islands
+  lib/                Client helpers (content.ts, admin.ts, member.ts, site.ts, format.ts,
+                      types.ts, reports.ts, auth-client.ts)
   server/             Server-only code
     ai/               Board-only document assistant + report generator: AI Search
                        retrieval, PII pseudonymization, Anthropic client, orchestration
     auth/             Better Auth config, Resend + Twilio senders
-    authz/            getAuthContext, requireRole, requireBoard, Turnstile check
+    authz/            getAuthContext, role/board/member API guards, Turnstile check
     content/          Visibility logic (tierAllows / visibleTiers) + read helpers
     db/               Drizzle schema, client (getDb), migrations/
     roster/           Owner roster helpers

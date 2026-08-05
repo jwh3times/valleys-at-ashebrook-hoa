@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -14,12 +14,13 @@ import {
   owners,
   meetings,
   elections,
-  memberAttendance,
-  memberVotes,
-  ballots,
 } from '../../../server/db/schema';
 import { normalizeProxyInput } from '../../../lib/types';
 import { fetchAdminProxies } from '../../../server/content/reads';
+import {
+  duplicateProxyExists,
+  proxyUseLabels,
+} from '../../../server/content/proxy-guards';
 
 export const prerender = false;
 
@@ -162,19 +163,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // Pre-checked so the unique index (proxies_property_meeting_unq /
   // proxies_property_election_unq) surfaces as a readable 409 instead of a
   // raw D1 error.
-  const duplicate = await db
-    .select({ id: proxies.id })
-    .from(proxies)
-    .where(
-      and(
-        eq(proxies.propertyId, input.propertyId!),
-        input.meetingId != null
-          ? eq(proxies.meetingId, input.meetingId)
-          : eq(proxies.electionId, input.electionId!),
-      ),
+  if (
+    await duplicateProxyExists(
+      db,
+      input.propertyId!,
+      input.meetingId ?? null,
+      input.electionId ?? null,
     )
-    .limit(1);
-  if (duplicate.length > 0)
+  )
     return new Response('This lot already has a proxy for this occasion', {
       status: 409,
     });
@@ -279,28 +275,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   // raw D1 FK error; with it, the response is deterministic and names where
   // the proxy is used. An unused proxy is simply removed — that is the whole
   // revocation model (no revoked_at state; see ADR 0018).
-  const [attRows, voteRows, ballotRows] = await Promise.all([
-    db
-      .select({ id: memberAttendance.id })
-      .from(memberAttendance)
-      .where(eq(memberAttendance.proxyId, id))
-      .limit(1),
-    db
-      .select({ id: memberVotes.id })
-      .from(memberVotes)
-      .where(eq(memberVotes.proxyId, id))
-      .limit(1),
-    db
-      .select({ id: ballots.id })
-      .from(ballots)
-      .where(eq(ballots.proxyId, id))
-      .limit(1),
-  ]);
-  const labels = [
-    ...(attRows.length > 0 ? ['attendance'] : []),
-    ...(voteRows.length > 0 ? ['votes'] : []),
-    ...(ballotRows.length > 0 ? ['ballots'] : []),
-  ];
+  const labels = await proxyUseLabels(db, id);
   if (labels.length > 0)
     return new Response(
       `Proxy is in use (${labels.join(', ')}) — remove those records first`,

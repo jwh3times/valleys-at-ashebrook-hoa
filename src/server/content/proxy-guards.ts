@@ -1,6 +1,6 @@
-import { inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { proxies } from '../db/schema';
+import { proxies, memberAttendance, memberVotes, ballots } from '../db/schema';
 
 export interface ProxyUse {
   propertyId: string;
@@ -59,4 +59,67 @@ export async function proxyUseError(
       };
   }
   return null;
+}
+
+/**
+ * True if this lot already holds a proxy for the given occasion — the same
+ * condition proxies_property_meeting_unq / proxies_property_election_unq
+ * enforce, pre-checked so the route can answer a readable 409 instead of a
+ * raw D1 unique-constraint error. Exactly one of meetingId/electionId is
+ * non-null (callers validate that before calling).
+ */
+export async function duplicateProxyExists(
+  db: Db,
+  propertyId: string,
+  meetingId: string | null,
+  electionId: string | null,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: proxies.id })
+    .from(proxies)
+    .where(
+      and(
+        eq(proxies.propertyId, propertyId),
+        meetingId != null
+          ? eq(proxies.meetingId, meetingId)
+          : eq(proxies.electionId, electionId!),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * Which record tables still cite this proxy. proxy_id carries no ON DELETE
+ * action (ADR 0018 — ALTER-added FK), so deletes must pre-check all three
+ * citing tables to answer deterministically rather than surface a raw D1
+ * FK error. An empty result means the proxy is unused and deletable —
+ * deletion is the entire revocation model.
+ */
+export async function proxyUseLabels(
+  db: Db,
+  proxyId: string,
+): Promise<string[]> {
+  const [attRows, voteRows, ballotRows] = await Promise.all([
+    db
+      .select({ id: memberAttendance.id })
+      .from(memberAttendance)
+      .where(eq(memberAttendance.proxyId, proxyId))
+      .limit(1),
+    db
+      .select({ id: memberVotes.id })
+      .from(memberVotes)
+      .where(eq(memberVotes.proxyId, proxyId))
+      .limit(1),
+    db
+      .select({ id: ballots.id })
+      .from(ballots)
+      .where(eq(ballots.proxyId, proxyId))
+      .limit(1),
+  ]);
+  return [
+    ...(attRows.length > 0 ? ['attendance'] : []),
+    ...(voteRows.length > 0 ? ['votes'] : []),
+    ...(ballotRows.length > 0 ? ['ballots'] : []),
+  ];
 }

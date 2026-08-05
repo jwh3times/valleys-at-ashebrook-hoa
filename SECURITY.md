@@ -22,6 +22,23 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   content visibility tiers are `public | homeowner | board`. Anonymous users resolve to `visitor`
   and unknown states resolve to the most restrictive tier. Document downloads are tier-checked on
   the server before the R2 object is served.
+- **Homeowner business is available only after the board enables official mode.** The `/proxies`
+  page and every `/api/member/*` handler fail closed to 404 while `officialMode` is off. When it is
+  on, the page offers sign-in/verification guidance while the API returns 401 to anonymous callers
+  and 403 to callers below `homeowner`. Each handler calls
+  `requireMemberApi`, and middleware independently gates the whole prefix as a production
+  backstop. Proxy writes are then scoped to the caller's verified `propertyIds`; verification
+  proves control of a lot, while the grantor selects which active owner of that lot is acting.
+  Identity within a jointly owned lot is therefore self-asserted, matching the explicit trust
+  decision in [ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md), rather than bound
+  to a specific owner row on the user's verification link.
+- **The proxy holder lookup deliberately discloses a narrow roster slice to verified
+  homeowners.** `POST /api/member/owner-lookup` resolves one explicitly typed active-property
+  address to that lot's active owner names and opaque IDs, never phone numbers or email addresses;
+  a non-board caller with no currently verified lot is refused. This makes online grants usable by
+  a holder in the later voting flow without exposing a browsable roster, but a verified homeowner
+  can still repeat address queries to collect those names and IDs. That accepted tradeoff and a
+  possible future rate limiter are recorded in ADR 0019.
 - **`board` is never self-grantable, and board handoff is a supported workflow.** A user's role is
   a column on the user record. A board admin can promote another account to `board` and demote a
   board admin from the admin panel's **Board access** section (the last remaining board admin
@@ -37,15 +54,19 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   meeting, a per-motion roll call listing each property's street address next to its
   `yes`/`no`/`abstain` choice, weight, and a derived `viaProxy` flag; the attendance summary above
   the motions (the "N of M votes represented" line) is aggregate-only and names no property.
-  **Who held a lot's proxy is board-only.** `viaProxy` (`proxy_id IS NOT NULL`) is the only proxy
-  fact any public or homeowner caller ever sees; the real `proxyId` — which would let a caller work
-  backward to the named holder recorded on `proxies` — is attached to
+  **Who held a lot's proxy is absent from public meeting and election reads.** `viaProxy`
+  (`proxy_id IS NOT NULL`) is the only proxy fact those tier-filtered records expose; the real
+  `proxyId` — which would let a caller work backward to the named holder recorded on `proxies` — is attached to
   `MemberAttendanceRow`/`MemberVoteRow` only for the admin caller (the same admin-only-field
   pattern `ElectionDetail.ballots` already uses, see [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md)),
   and `ElectionDetail.ballots[].proxyId`, already board-only, carries it unconditionally. There is
-  no public or tier-gated read of the `proxies` table itself; `GET /api/admin/proxies` is
-  `requireBoard`-gated like every other admin endpoint. See
-  [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md).
+  no public proxy register. In official mode, `GET /api/member/proxies` separately returns only
+  proxies for the caller's verified lots plus proxies naming an active owner of those lots as
+  holder. An own-lot grant always includes its occasion title/date so the homeowner can understand
+  and revoke it; for a proxy held on another lot, those fields are redacted when the occasion is
+  above the caller's visibility tier. The complete `GET /api/admin/proxies` list remains
+  `requireBoard`-gated. See [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md)
+  and [ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md).
   **No resident name is ever published**: `castByName` and `representedByName` are present on the
   `fetchMeetingFor` payload for the admin panel's use, but the public template never interpolates
   them, and a test (`test/server/meeting-pages.test.ts`) pins that a name on the payload does not
@@ -93,11 +114,13 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **Secrets never live in the repo.** Runtime secrets (auth, Resend, Twilio, Turnstile) are set as
   Cloudflare Worker secrets via `wrangler secret put` (see `SETUP.md`); only `PUBLIC_*` build-time
   variables are non-secret. `.env` files are git-ignored.
-- **The roster is personal data, used only for verification.** Owner names, emails, and phone
-  numbers live only in the D1 database — never in committed files — and drive nothing but the
-  one-time verification code sent to the contact already on file. Public docs describe the purpose
-  and high-level handling; deployment-specific removal, erasure, backup, and retention runbooks
-  belong under `private/`.
+- **The roster is personal data, used for verification and lot-scoped association workflows.**
+  Owner names, emails, and phone numbers live only in the D1 database — never in committed files.
+  Contact data delivers the one-time verification code to the contact already on file and also
+  contributes matching values to the AI pseudonymizer described below; it is never returned by the
+  proxy holder lookup. Active owner names and opaque IDs support the official-mode proxy
+  grant/holder workflow described above. Public docs describe the purpose and high-level handling;
+  deployment-specific removal, erasure, backup, and retention runbooks belong under `private/`.
 - **The admin document assistant is board-only and pseudonymizes known PII before it leaves the
   Worker.** `POST /api/admin/assistant` is gated by `requireBoard` (fail-closed, same as every other
   admin endpoint). Answering a question sends retrieved document excerpts, the question, and recent
