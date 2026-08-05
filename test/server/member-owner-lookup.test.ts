@@ -57,6 +57,18 @@ const jane: AuthContext = {
   propertyIds: ['p1'],
 };
 
+const staleJane: AuthContext = {
+  userId: 'u1',
+  role: 'homeowner',
+  propertyIds: [],
+};
+
+const board: AuthContext = {
+  userId: 'b1',
+  role: 'board',
+  propertyIds: [],
+};
+
 function call(ctx: AuthContext | null, body?: unknown) {
   return POST({
     request: new Request('http://localhost/api/member/owner-lookup', {
@@ -69,6 +81,17 @@ function call(ctx: AuthContext | null, body?: unknown) {
 }
 
 describe('POST /api/member/owner-lookup', () => {
+  it('403s a homeowner with no active lots before parsing the request body', async () => {
+    const res = await call(staleJane);
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe('Forbidden');
+  });
+
+  it('retains rank-based board access when the board caller has no lots', async () => {
+    const res = await call(board, { address: '2 Oak St' });
+    expect(res.status).toBe(200);
+  });
+
   it("returns the matched lot's ACTIVE owner names and ids only — no phone, no email", async () => {
     const res = await call(jane, { address: '2 Oak St' });
     expect(res.status).toBe(200);

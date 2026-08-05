@@ -22,6 +22,8 @@ export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const gate = await requireMemberApi(locals, request, env);
   if (!gate.ok) return gate.res;
+  if (gate.ctx.role !== 'board' && gate.ctx.propertyIds.length === 0)
+    return new Response('Forbidden', { status: 403 });
   const parsed = await readJson(request);
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
   const address = stringField(parsed.value, 'address');

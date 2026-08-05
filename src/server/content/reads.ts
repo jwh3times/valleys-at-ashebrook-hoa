@@ -1014,15 +1014,14 @@ export async function fetchMemberLots(
  * fetchAdminProxies and must never widen to other lots' proxies. Every call
  * site is requireMemberApi-gated.
  *
- * Occasion title/date are resolved WITHOUT a visibility filter, deliberately:
- * a proxy binds the caller's own lot, so its owner may always see which
- * occasion their lot is committed to — title and date only, never the
- * occasion's content — even while the occasion itself is still
- * board-visibility. This is the own-lot exception to the occasion-tier rule,
- * recorded in ADR 0019.
+ * Occasion title/date retain ADR 0019's own-lot exception for granted rows:
+ * an owner may always see which occasion their lot is committed to, even
+ * above their tier. A held row for another lot keeps the proxy itself visible
+ * but redacts title/date unless the occasion is within the caller's tier.
  */
 export async function fetchMemberProxies(
   env: Env,
+  role: Role,
   propertyIds: string[],
 ): Promise<MemberProxyLists> {
   if (propertyIds.length === 0) return { granted: [], held: [] };
@@ -1056,7 +1055,12 @@ export async function fetchMemberProxies(
     .from(owners);
   const ownerNameOf = new Map(ownerNameRows.map((o) => [o.id, o.fullName]));
   const meetingRows = await db
-    .select({ id: meetings.id, title: meetings.title, date: meetings.date })
+    .select({
+      id: meetings.id,
+      title: meetings.title,
+      date: meetings.date,
+      visibility: meetings.visibility,
+    })
     .from(meetings);
   const meetingOf = new Map(meetingRows.map((m) => [m.id, m]));
   const electionRows = await db
@@ -1064,15 +1068,21 @@ export async function fetchMemberProxies(
       id: elections.id,
       title: elections.title,
       date: elections.electionDate,
+      visibility: elections.visibility,
     })
     .from(elections);
   const electionOf = new Map(electionRows.map((e) => [e.id, e]));
+  const propertyIdSet = new Set(propertyIds);
+  const tiers = visibleTiers(role);
   const toDetail = (r: (typeof rows)[number]): MemberProxyDetail => {
     const occ = r.meetingId
       ? meetingOf.get(r.meetingId)
       : r.electionId
         ? electionOf.get(r.electionId)
         : undefined;
+    const showOccasion =
+      propertyIdSet.has(r.propertyId) ||
+      (occ !== undefined && tiers.includes(occ.visibility));
     return {
       id: r.id,
       propertyId: r.propertyId,
@@ -1086,12 +1096,11 @@ export async function fetchMemberProxies(
         : null,
       meetingId: r.meetingId,
       electionId: r.electionId,
-      occasionTitle: occ?.title ?? null,
-      occasionDate: occ?.date ?? null,
+      occasionTitle: showOccasion ? (occ?.title ?? null) : null,
+      occasionDate: showOccasion ? (occ?.date ?? null) : null,
     };
   };
   const myOwnerIdSet = new Set(myOwnerIds);
-  const propertyIdSet = new Set(propertyIds);
   return {
     granted: rows.filter((r) => propertyIdSet.has(r.propertyId)).map(toDetail),
     held: rows
