@@ -46,12 +46,12 @@ the picker exposes as valid grant occasions. This is intentional: a homeowner ca
 secret occasion, but may grant ahead of an occasion that the board has explicitly published by
 raising its otherwise-default-`board` visibility.
 
-The grant's holder picker resolves one typed street address to the active owner names for that lot,
-never contact data. It is available only to a verified homeowner behind the official-mode and
+The grant's holder picker resolves one typed street address to the active owner names and opaque
+IDs for that lot, never contact data. It is available only to a verified homeowner behind the official-mode and
 member gates, at the same practical granularity as county deed records, so an online grant can
 always save `holder_owner_id` and the holder can act at `/vote` in PR 7c. The broader roster remains
 board-only. A verified homeowner can nevertheless iterate typed addresses and harvest active owner
-names. That names-only disclosure is attributable to the caller and is accepted for PR 7b; a later
+names and opaque IDs. That limited disclosure is attributable to the caller and is accepted for PR 7b; a later
 mitigation may reuse `src/server/verification/rate-limit.ts` if experience makes one necessary.
 
 An own-lot exception is deliberate. A homeowner may see the title and date of the occasion tied to

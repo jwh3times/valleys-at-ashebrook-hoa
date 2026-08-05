@@ -18,6 +18,7 @@ import {
 import { getActiveOwnersForProperty } from '../../../server/roster/lookup';
 import { fetchMemberProxies } from '../../../server/content/reads';
 import { visibleTiers } from '../../../server/content/visibility';
+import { associationDateIso } from '../../../lib/format';
 
 export const prerender = false;
 
@@ -77,7 +78,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // failing either is the same 404, never confirming a board-only occasion
   // exists. Grantable = member-body + not yet past (meetings), non-terminal
   // + not yet past (elections). ISO dates compare lexically.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = associationDateIso();
   const tiers = visibleTiers(ctx.role);
   if (meetingId !== null) {
     const [m] = await db
@@ -189,7 +190,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   // rule. CASCADE makes a missing occasion row impossible; skip rather than
   // 500 if it somehow happens.
   const proxy = rows[0];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = associationDateIso();
   if (proxy.meetingId !== null) {
     const [m] = await db
       .select({ date: meetings.date })

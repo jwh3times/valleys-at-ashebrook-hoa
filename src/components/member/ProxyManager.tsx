@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   fetchMyProxies,
   grantProxy,
@@ -46,6 +46,7 @@ export default function ProxyManager({ lots, occasions }: Props) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const lookupRequestId = useRef(0);
 
   // Never throws — a failed load is recorded in loadError rather than
   // propagated, so callers (mount effect, post-grant/revoke refresh) don't
@@ -71,19 +72,26 @@ export default function ProxyManager({ lots, occasions }: Props) {
 
   const grantorOptions =
     lots.find((l) => l.id === form.propertyId)?.owners ?? [];
+  const holderSelectionIsCurrent =
+    holderResult?.owners.some((o) => o.id === form.holderOwnerId) ?? false;
 
   async function runLookup() {
+    const requestId = ++lookupRequestId.current;
+    const holderAddress = form.holderAddress;
     setBusy(true);
     setMsg(null);
     try {
-      const result = await lookupOwners(form.holderAddress);
+      const result = await lookupOwners(holderAddress);
+      if (requestId !== lookupRequestId.current) return;
       setHolderResult(result);
       setForm((f) => ({
         ...f,
         holderOwnerId: result.owners.length === 1 ? result.owners[0].id : '',
       }));
     } catch (e) {
+      if (requestId !== lookupRequestId.current) return;
       setHolderResult(null);
+      setForm((f) => ({ ...f, holderOwnerId: '' }));
       setMsg(e instanceof Error ? e.message : 'Lookup failed');
     } finally {
       setBusy(false);
@@ -92,6 +100,10 @@ export default function ProxyManager({ lots, occasions }: Props) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!holderResult?.owners.some((o) => o.id === form.holderOwnerId)) {
+      setMsg('Find and choose a proxy holder before granting.');
+      return;
+    }
     const [kind, occasionId] = form.occasionKey.split(':');
     setBusy(true);
     setMsg(null);
@@ -229,9 +241,15 @@ export default function ProxyManager({ lots, occasions }: Props) {
                 id="pm-holder-address"
                 type="text"
                 value={form.holderAddress}
-                onChange={(e) =>
-                  setForm({ ...form, holderAddress: e.target.value })
-                }
+                onChange={(e) => {
+                  lookupRequestId.current += 1;
+                  setHolderResult(null);
+                  setForm((f) => ({
+                    ...f,
+                    holderAddress: e.target.value,
+                    holderOwnerId: '',
+                  }));
+                }}
               />
               <button
                 className="btn btn--small btn--outline"
@@ -266,7 +284,7 @@ export default function ProxyManager({ lots, occasions }: Props) {
               <button
                 className="btn btn--small"
                 type="submit"
-                disabled={busy || !form.holderOwnerId}
+                disabled={busy || !holderSelectionIsCurrent}
               >
                 {busy ? 'Working…' : 'Grant proxy'}
               </button>

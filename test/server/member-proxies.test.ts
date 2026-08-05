@@ -1,5 +1,5 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { GET, POST, DELETE } from '../../src/pages/api/member/proxies';
 import { getDb } from '../../src/server/db/client';
@@ -184,6 +184,24 @@ async function seedReadProxy(
 }
 
 describe('POST /api/member/proxies', () => {
+  it('treats the Eastern calendar day as current across UTC midnight for grant and revoke', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-05T02:00:00.000Z'));
+    try {
+      await seedRoster();
+      await seedMeeting({ id: 'm1', date: '2026-08-04' });
+
+      const created = await call(POST, 'POST', jane, grantBody());
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+
+      const deleted = await call(DELETE, 'DELETE', jane, { id });
+      expect(deleted.status).toBe(204);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('grants a proxy for the caller lot: 201, holderName copied from the owner row, createdBy = caller', async () => {
     await seedRoster();
     await seedMeeting({ id: 'm1' });
