@@ -3,6 +3,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import ProxyManager from '../components/member/ProxyManager.tsx';
 import { env } from 'cloudflare:workers';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import { associationDateIso } from '../lib/format';
 // Deliberately NOT importing fetchMemberProxies here: the island loads the
 // granted/held lists itself via GET /api/member/proxies, so there is exactly
 // one loading path and reload-after-write stays consistent.
@@ -27,7 +28,7 @@ const ctx = Astro.locals.authContext ?? null;
 const verified =
   ctx !== null && ctx.role !== 'visitor' && ctx.propertyIds.length > 0;
 
-const today = new Date().toISOString().slice(0, 10);
+const today = associationDateIso();
 const [lots, occasions] = verified
   ? await Promise.all([
       fetchMemberLots(env, ctx!.propertyIds),

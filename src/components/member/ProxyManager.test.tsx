@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ProxyManager from './ProxyManager';
 import * as member from '../../lib/member';
@@ -11,6 +17,14 @@ import type {
 
 vi.mock('../../lib/member');
 const mocked = vi.mocked(member);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 const lots: MemberLot[] = [
   {
@@ -123,6 +137,92 @@ describe('ProxyManager', () => {
     expect(
       await screen.findByText(/no matching property/i),
     ).toBeInTheDocument();
+  });
+
+  it('invalidates a selected holder when the address is edited', async () => {
+    const user = userEvent.setup();
+    mocked.lookupOwners.mockResolvedValue({
+      propertyId: 'p2',
+      address: '2 Oak St',
+      owners: [{ id: 'o2', fullName: 'John Roe' }],
+    });
+    mocked.grantProxy.mockResolvedValue();
+    render(<ProxyManager lots={lots} occasions={occasions} />);
+
+    await user.selectOptions(await screen.findByLabelText('Your lot'), 'p1');
+    await user.selectOptions(screen.getByLabelText('You are'), 'o1');
+    await user.selectOptions(screen.getByLabelText('Occasion'), 'meeting:m1');
+    const address = screen.getByLabelText("Holder's street address");
+    await user.type(address, '2 Oak St');
+    await user.click(screen.getByRole('button', { name: 'Find owner' }));
+    expect(await screen.findByLabelText('Proxy holder')).toHaveValue('o2');
+
+    await user.clear(address);
+    await user.type(address, '3 Oak St');
+
+    expect(screen.queryByLabelText('Proxy holder')).not.toBeInTheDocument();
+    const submitButton = screen.getByRole('button', { name: 'Grant proxy' });
+    expect(submitButton).toBeDisabled();
+    fireEvent.submit(submitButton.closest('form')!);
+    await waitFor(() => expect(mocked.grantProxy).not.toHaveBeenCalled());
+  });
+
+  it('invalidates a selected holder when a later lookup fails', async () => {
+    const user = userEvent.setup();
+    mocked.lookupOwners
+      .mockResolvedValueOnce({
+        propertyId: 'p2',
+        address: '2 Oak St',
+        owners: [{ id: 'o2', fullName: 'John Roe' }],
+      })
+      .mockRejectedValueOnce(new Error('No matching property'));
+    mocked.grantProxy.mockResolvedValue();
+    render(<ProxyManager lots={lots} occasions={occasions} />);
+
+    await user.selectOptions(await screen.findByLabelText('Your lot'), 'p1');
+    await user.selectOptions(screen.getByLabelText('You are'), 'o1');
+    await user.selectOptions(screen.getByLabelText('Occasion'), 'meeting:m1');
+    await user.type(
+      screen.getByLabelText("Holder's street address"),
+      '2 Oak St',
+    );
+    await user.click(screen.getByRole('button', { name: 'Find owner' }));
+    expect(await screen.findByLabelText('Proxy holder')).toHaveValue('o2');
+
+    await user.click(screen.getByRole('button', { name: 'Find owner' }));
+    expect(
+      await screen.findByText(/no matching property/i),
+    ).toBeInTheDocument();
+
+    const submitButton = screen.getByRole('button', { name: 'Grant proxy' });
+    expect(submitButton).toBeDisabled();
+    fireEvent.submit(submitButton.closest('form')!);
+    await waitFor(() => expect(mocked.grantProxy).not.toHaveBeenCalled());
+  });
+
+  it('ignores a successful lookup response after its address becomes stale', async () => {
+    const user = userEvent.setup();
+    const pending = deferred<member.OwnerLookupResult>();
+    mocked.lookupOwners.mockReturnValue(pending.promise);
+    render(<ProxyManager lots={lots} occasions={occasions} />);
+
+    const address = await screen.findByLabelText("Holder's street address");
+    await user.type(address, '2 Oak St');
+    await user.click(screen.getByRole('button', { name: 'Find owner' }));
+    await user.clear(address);
+    await user.type(address, '3 Oak St');
+
+    await act(async () => {
+      pending.resolve({
+        propertyId: 'p2',
+        address: '2 Oak St',
+        owners: [{ id: 'o2', fullName: 'John Roe' }],
+      });
+      await pending.promise;
+    });
+
+    expect(screen.queryByLabelText('Proxy holder')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Grant proxy' })).toBeDisabled();
   });
 
   it('renders granted and held lists and revokes a granted proxy', async () => {
