@@ -156,8 +156,10 @@ artifact on its own._
 
 ### 9. Live Homeowner Voting and Conducted Elections
 
-**Status:** Not implemented; recorded-election and proxy foundations are shipped
-**Gate:** Official adoption and a board decision
+**Status:** Approved design; implementation not started; recorded-election and proxy foundations
+are shipped
+**Enablement gate:** Official adoption and a board decision; implementation may proceed behind the
+default-off feature flag
 **Likely size:** Large
 
 The site records elections conducted on paper, aggregate tallies, per-lot turnout, certification,
@@ -170,11 +172,14 @@ never a lot, ballot, owner, proxy, or timestamp link. No live tally is exposed; 
 are derived when the board closes voting. Every write remains official-mode-gated, tier-filtered,
 and scoped to a verified lot or a proxy held by the caller.
 
+The reviewed implementation direction is recorded in
+[Live Homeowner Voting and Conducted Elections](./docs/specs/2026-08-05-live-homeowner-voting-design.md).
+
 Before implementation:
 
-- Promote the existing ignored design notes into a reviewed implementation specification.
-- Pin origin/CSRF expectations, concurrent double-cast behavior, batch atomicity, and final-ballot
-  semantics in Worker tests.
+- Translate the reviewed design into a staged implementation plan.
+- Pin its origin/CSRF expectations, concurrent double-cast behavior, batch atomicity, and
+  final-ballot semantics in Worker tests.
 - Extend the structural member-route gate to cover nested routes and `/api/vote`.
 - Split delivery into reviewable schema/lifecycle, voting API/read, and homeowner UX stages.
 
