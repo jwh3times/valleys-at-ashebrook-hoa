@@ -8,11 +8,15 @@ import {
   motions,
   memberAttendance,
   memberVotes,
+  elections,
   proxies,
 } from '../../src/server/db/schema';
 import {
   fetchAdminMeeting,
   fetchMeetingFor,
+  fetchUpcomingOccasionsFor,
+  fetchMemberLots,
+  fetchMemberProxies,
 } from '../../src/server/content/reads';
 
 beforeAll(async () => {
@@ -20,6 +24,7 @@ beforeAll(async () => {
 });
 
 const now = new Date();
+const TODAY = '2026-08-04';
 
 beforeEach(async () => {
   const db = getDb(env);
@@ -28,6 +33,7 @@ beforeEach(async () => {
   // proxies carries a proxy_id FK (NO ACTION) from memberAttendance/memberVotes
   // — those must be cleared first, same ordering proxy-flip.test.ts uses.
   await db.delete(proxies);
+  await db.delete(elections);
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(owners);
@@ -379,5 +385,228 @@ describe('member meeting assembly', () => {
     // status/tier gate, even though the meeting now has member rows to
     // assemble.
     expect(await fetchMeetingFor(env, 'board', 'm1')).toBeNull();
+  });
+});
+
+// --- fetchUpcomingOccasionsFor / fetchMemberLots / fetchMemberProxies -----
+// Distinct seed helpers below (seedOccasion*) — the "member meeting assembly"
+// helpers above (seedProperty/seedOwner/seedMeeting/seedProxy) take different
+// argument shapes and default to visibility: 'board', which would defeat the
+// tier-filter tests here.
+
+async function seedOccasionProperty(
+  id: string,
+  address: string,
+  status = 'active',
+) {
+  await getDb(env)
+    .insert(properties)
+    .values({
+      id,
+      address,
+      addressNormalized: address.toLowerCase(),
+      status: status as 'active' | 'inactive',
+      voteWeight: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+}
+
+async function seedOccasionOwner(
+  id: string,
+  propertyId: string,
+  fullName: string,
+  status = 'active',
+) {
+  await getDb(env)
+    .insert(owners)
+    .values({
+      id,
+      propertyId,
+      fullName,
+      status: status as 'active' | 'inactive',
+      createdAt: now,
+      updatedAt: now,
+    });
+}
+
+async function seedOccasionMeeting(overrides: Record<string, unknown>) {
+  const id = (overrides.id as string) ?? crypto.randomUUID();
+  await getDb(env)
+    .insert(meetings)
+    .values({
+      id,
+      body: 'member',
+      kind: 'annual',
+      date: '2026-09-01',
+      title: 'Annual meeting',
+      status: 'draft',
+      visibility: 'homeowner',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
+  return id;
+}
+
+async function seedOccasionElection(overrides: Record<string, unknown>) {
+  const id = (overrides.id as string) ?? crypto.randomUUID();
+  await getDb(env)
+    .insert(elections)
+    .values({
+      id,
+      title: 'Board election',
+      seats: 2,
+      electionDate: '2026-10-01',
+      source: 'recorded',
+      status: 'draft',
+      visibility: 'homeowner',
+      createdBy: 'b',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
+  return id;
+}
+
+async function seedOccasionProxy(overrides: Record<string, unknown>) {
+  const id = (overrides.id as string) ?? crypto.randomUUID();
+  await getDb(env)
+    .insert(proxies)
+    .values({
+      id,
+      propertyId: 'p1',
+      grantorOwnerId: 'o1',
+      holderName: 'Holder Name',
+      createdBy: 'u1',
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+    });
+  return id;
+}
+
+describe('fetchUpcomingOccasionsFor', () => {
+  it('returns future member meetings and non-terminal elections at the caller tier, sorted by date', async () => {
+    await seedOccasionMeeting({
+      id: 'm1',
+      date: '2026-09-01',
+      title: 'Annual',
+    });
+    await seedOccasionElection({ id: 'e1', electionDate: '2026-08-20' });
+    const out = await fetchUpcomingOccasionsFor(env, 'homeowner', TODAY);
+    expect(out.map((o) => o.id)).toEqual(['e1', 'm1']);
+    expect(out[0]).toEqual({
+      kind: 'election',
+      id: 'e1',
+      title: 'Board election',
+      date: '2026-08-20',
+      seats: 2,
+    });
+    expect(out[1].seats).toBeNull();
+  });
+
+  it('excludes board-body meetings, past occasions, and terminal elections', async () => {
+    await seedOccasionMeeting({ id: 'mBoard', body: 'board' });
+    await seedOccasionMeeting({ id: 'mPast', date: '2026-07-01' });
+    await seedOccasionElection({ id: 'eClosed', status: 'closed' });
+    await seedOccasionElection({ id: 'eVoid', status: 'void' });
+    await seedOccasionElection({ id: 'ePast', electionDate: '2026-01-01' });
+    const out = await fetchUpcomingOccasionsFor(env, 'homeowner', TODAY);
+    expect(out).toEqual([]);
+  });
+
+  it('applies the visibility tier: board-only occasions hidden from homeowners, visible to board; today itself counts as upcoming', async () => {
+    await seedOccasionMeeting({ id: 'mB', visibility: 'board', date: TODAY });
+    expect(await fetchUpcomingOccasionsFor(env, 'homeowner', TODAY)).toEqual(
+      [],
+    );
+    const forBoard = await fetchUpcomingOccasionsFor(env, 'board', TODAY);
+    expect(forBoard.map((o) => o.id)).toEqual(['mB']);
+  });
+
+  it('includes a draft meeting the board published to the homeowner tier (positive control for the ADR 0019 narrowing)', async () => {
+    await seedOccasionMeeting({
+      id: 'mDraft',
+      status: 'draft',
+      visibility: 'homeowner',
+    });
+    const out = await fetchUpcomingOccasionsFor(env, 'homeowner', TODAY);
+    expect(out.map((o) => o.id)).toEqual(['mDraft']);
+  });
+});
+
+describe('fetchMemberLots', () => {
+  it('returns the given active lots with their active owners only', async () => {
+    await seedOccasionProperty('p1', '1 Oak St');
+    await seedOccasionProperty('p2', '2 Oak St');
+    await seedOccasionOwner('o1', 'p1', 'Jane Doe');
+    await seedOccasionOwner('o2', 'p1', 'Old Owner', 'inactive');
+    const out = await fetchMemberLots(env, ['p1']);
+    expect(out).toHaveLength(1);
+    expect(out[0].address).toBe('1 Oak St');
+    expect(out[0].owners).toEqual([{ id: 'o1', fullName: 'Jane Doe' }]);
+  });
+
+  it('returns [] for an empty id list', async () => {
+    expect(await fetchMemberLots(env, [])).toEqual([]);
+  });
+});
+
+describe('fetchMemberProxies', () => {
+  it('splits granted (my lots) from held (naming me as holder), resolving occasion title and date', async () => {
+    await seedOccasionProperty('p1', '1 Oak St');
+    await seedOccasionProperty('p2', '2 Oak St');
+    await seedOccasionOwner('o1', 'p1', 'Jane Doe');
+    await seedOccasionOwner('o2', 'p2', 'John Roe');
+    const m1 = await seedOccasionMeeting({ id: 'm1', title: 'Annual' });
+    // Granted by my lot p1 to John (another lot's owner):
+    await seedOccasionProxy({
+      id: 'pxG',
+      propertyId: 'p1',
+      grantorOwnerId: 'o1',
+      holderName: 'John Roe',
+      holderOwnerId: 'o2',
+      meetingId: m1,
+    });
+    // Held by me (o1 of p1) for John's lot p2:
+    await seedOccasionProxy({
+      id: 'pxH',
+      propertyId: 'p2',
+      grantorOwnerId: 'o2',
+      holderName: 'Jane Doe',
+      holderOwnerId: 'o1',
+      meetingId: m1,
+    });
+    const out = await fetchMemberProxies(env, 'homeowner', ['p1']);
+    expect(out.granted.map((p) => p.id)).toEqual(['pxG']);
+    expect(out.granted[0].occasionTitle).toBe('Annual');
+    expect(out.granted[0].occasionDate).toBe('2026-09-01');
+    expect(out.held.map((p) => p.id)).toEqual(['pxH']);
+    expect(out.held[0].address).toBe('2 Oak St');
+    expect(out.held[0].grantorName).toBe('John Roe');
+  });
+
+  it("never returns other lots' proxies and returns empty lists for no lots", async () => {
+    await seedOccasionProperty('p1', '1 Oak St');
+    await seedOccasionProperty('p2', '2 Oak St');
+    await seedOccasionOwner('o1', 'p1', 'Jane Doe');
+    await seedOccasionOwner('o2', 'p2', 'John Roe');
+    const m1 = await seedOccasionMeeting({ id: 'm1' });
+    await seedOccasionProxy({
+      id: 'pxOther',
+      propertyId: 'p2',
+      grantorOwnerId: 'o2',
+      holderName: 'Somebody Else',
+      meetingId: m1,
+    });
+    const out = await fetchMemberProxies(env, 'homeowner', ['p1']);
+    expect(out.granted).toEqual([]);
+    expect(out.held).toEqual([]);
+    expect(await fetchMemberProxies(env, 'homeowner', [])).toEqual({
+      granted: [],
+      held: [],
+    });
   });
 });

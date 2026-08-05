@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate, todayIso, maskEmail } from './format';
+import { associationDateIso, formatDate, todayIso, maskEmail } from './format';
 
 describe('formatDate', () => {
   it('formats an ISO date as a friendly long date', () => {
@@ -22,6 +22,14 @@ describe('formatDate', () => {
 describe('todayIso', () => {
   it('returns a YYYY-MM-DD string', () => {
     expect(todayIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('associationDateIso', () => {
+  it('uses the Eastern calendar day before Eastern midnight', () => {
+    expect(associationDateIso(new Date('2026-08-05T02:00:00.000Z'))).toBe(
+      '2026-08-04',
+    );
   });
 });
 
