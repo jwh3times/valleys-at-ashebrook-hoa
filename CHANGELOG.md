@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.54] - 2026-08-05
+
+### Security
+
+- **Cleared the Undici and Sharp dependency advisories in the Cloudflare development toolchain.**
+  Miniflare now resolves Undici 7.29.0 and Sharp 0.35.2, while the refreshed Astro language-server
+  chain resolves YAML 2.8.3; both production-only and full-tree npm audits now report zero
+  vulnerabilities.
+
 ## [0.3.53] - 2026-08-05
 
 ### Changed
