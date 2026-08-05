@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** 2026-07-31
+**Updated:** 2026-08-05
 
 This is the current list of work that is not implemented yet. It replaces the older private review
 notes and now-removed implementation handoff docs.
@@ -8,6 +8,10 @@ notes and now-removed implementation handoff docs.
 Previously identified partial implementation items have been completed or closed by explicit
 operating decisions. Shipped work is tracked in `CHANGELOG.md`; durable decisions are recorded
 under `docs/adr/`.
+
+The immediate product priority is item 9, live homeowner voting and conducted elections. Items
+1–8 and 10 remain unordered policy-, need-, or specification-gated backlog; their numbering is for
+reference, not a delivery commitment.
 
 ## How to Use This Roadmap
 
@@ -107,30 +111,27 @@ The site can display dues information in official mode, but it does not process
 payments. Payment work should wait until the board adopts the site for official
 HOA use and selects a provider.
 
-### 7. Assistant Upload-Time RAG Twin + OCR
+### 7. Assistant Indexing Automation
 
-**Status:** Partially implemented — see `CHANGELOG.md` for the shipped board-only AI
-document assistant (Cloudflare AI Search retrieval + Claude generation, PII
-pseudonymization, hybrid document/general-knowledge answers) and
-[ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md) for the
-retrieval-vs-download index split.
-**Gate:** Dedicated spec
-**Likely size:** Medium
+**Status:** Core pipeline implemented; automation refinements remain
+**Gate:** Cloudflare platform support or a demonstrated operational need
+**Likely size:** Small to Medium
 
-Remaining work the shipped assistant does not yet cover:
+The board-only assistant, its two-representation R2 index, upload-time Markdown twins, searchable
+status, and operator-run OCR recovery are shipped. See `CHANGELOG.md`,
+[ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md), and
+[ADR 0010](./docs/adr/0010-ocr-scanned-documents-operator-job.md).
 
-- Scanned/image-only PDF uploads are addressed via an operator-run offline job
-  (`npm run ocr:scanned`; see [ADR 0010](./docs/adr/0010-ocr-scanned-documents-operator-job.md)),
-  not automatically on upload — there is no supported way to rasterize an existing
-  PDF's pages to images inside a Worker today. Revisit on-upload/automatic OCR if
-  Cloudflare ships a supported in-Worker PDF rasterization primitive.
+Remaining automation work:
+
+- Scanned/image-only PDFs require the operator-run `npm run ocr:scanned` job. Revisit automatic
+  on-upload OCR only if Cloudflare provides a supported in-Worker PDF rasterization primitive.
 - New uploads become searchable only at the next AI Search sync (default ≤6h), not
-  immediately on upload; triggering a sync automatically after upload is a possible
-  future refinement.
+  immediately on upload. Triggering a sync automatically after upload is a possible refinement.
 
 ### 8. AI CC&R Compliance Report
 
-**Status:** Partially implemented — see `CHANGELOG.md` v0.3.39 for the shipped board-only
+**Status:** Core report generator implemented; compliance and lifecycle refinements remain
 governing-documents report (six curated templates plus a freeform topic, planned
 sub-query retrieval, streamed five-section report with `[Source N]` citations, and
 saved report history in the `reports` table).
@@ -140,10 +141,10 @@ saved report history in the `reports` table).
 The "what do our CC&Rs say about X" half is shipped. Remaining work:
 
 - The **compliance** angle — "where are our current practices out of step with the
-  governing documents" — is only covered indirectly by the report's Gaps section.
-  Real gap analysis needs a source of truth for current practice (minutes, dues
-  history, enforcement records) to compare the documents against, so it likely
-  waits on item 9.
+  governing documents" — is only covered indirectly by the report's Gaps section. Structured
+  meetings, motions, resolutions, elections, and proxies now provide some current-practice data,
+  but dues history and enforcement records are still absent. Define the comparison dataset before
+  designing compliance analysis.
 - Refinements deferred from the shipped build: a retention policy for the
   PII-bearing `reports.content_md` (hang it off the existing scheduled cleanup
   trigger), structured outputs for the sub-query planner instead of parsing JSON
@@ -153,34 +154,33 @@ The "what do our CC&Rs say about X" half is shipped. Remaining work:
 _Product angle: a standalone AI governing-documents report is a sellable
 artifact on its own._
 
-### 9. Minutes and Motion/Vote Records
+### 9. Live Homeowner Voting and Conducted Elections
 
-**Status:** Not implemented
-**Gate:** Dedicated spec
-**Likely size:** Medium to Large
-
-Model the board record, not the transcript: meetings, motions, movers, seconds,
-vote tallies, and a resolutions book, as new D1 tables with board CRUD in the
-admin app. Publication is tiered like all other content — approved minutes
-visible at the homeowner tier, drafts and working records board-only, enforced
-server-side.
-
-_Product angle: the durable record is the product; the data model is the moat._
-
-### 10. Election Management
-
-**Status:** Not implemented
+**Status:** Not implemented; recorded-election and proxy foundations are shipped
 **Gate:** Official adoption and a board decision
 **Likely size:** Large
 
-Statutory ballots, quorum tracking, and proxy handling. Like online payments,
-this only carries weight if the board adopts the site for official HOA use, so
-it is gated the same way. Eligibility builds on the existing verified-homeowner
-roster and `user_property_links` for one-ballot-per-property rules.
+The site records elections conducted on paper, aggregate tallies, per-lot turnout, certification,
+board terms, paper proxies, and official-mode homeowner proxy grants. The remaining milestone is
+to conduct member-motion votes and elections through the site at `/vote`.
+
+The approved design direction preserves election secrecy by construction: a turnout row records
+that a lot cast a ballot, while anonymous choice rows carry only election, candidate, and weight —
+never a lot, ballot, owner, proxy, or timestamp link. No live tally is exposed; aggregate results
+are derived when the board closes voting. Every write remains official-mode-gated, tier-filtered,
+and scoped to a verified lot or a proxy held by the caller.
+
+Before implementation:
+
+- Promote the existing ignored design notes into a reviewed implementation specification.
+- Pin origin/CSRF expectations, concurrent double-cast behavior, batch atomicity, and final-ballot
+  semantics in Worker tests.
+- Extend the structural member-route gate to cover nested routes and `/api/vote`.
+- Split delivery into reviewable schema/lifecycle, voting API/read, and homeowner UX stages.
 
 _Product angle: per-election pricing on top of a subscription._
 
-### 11. Reserve Planning Tracker
+### 10. Reserve Planning Tracker
 
 **Status:** Not implemented
 **Gate:** Dedicated spec and board-supplied reserve study data
@@ -195,7 +195,7 @@ _Product angle: a price-ladder module for a future product tier._
 
 ## Operations Backlog
 
-### 12. Enable HSTS at the Cloudflare Zone
+### 11. Enable HSTS at the Cloudflare Zone
 
 **Status:** Not implemented
 **Gate:** Operator action in Cloudflare
@@ -205,7 +205,7 @@ The app already sends the baseline security headers it can control. HSTS should
 be enabled at the Cloudflare zone level after confirming HTTPS is stable for the
 production domain and any subdomains that need to remain reachable.
 
-### 13. Rename GitHub and Cloudflare Resources
+### 12. Rename GitHub and Cloudflare Resources
 
 **Status:** Deferred
 **Gate:** Maintainer action

@@ -7,6 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.53] - 2026-08-05
+
+### Changed
+
+- **Refreshed the project roadmap around the shipped structured association record and made live
+  homeowner voting the next product priority.** Architecture and operator documentation now cover
+  meetings, resolutions, recorded elections, proxies, saved AI reports, the production migration
+  ledger, and the fact that Worker deployments do not apply D1 migrations automatically.
+
+## [0.3.52] - 2026-08-05
+
+### Changed
+
+- Bumped the transitive development dependency `fast-uri` from 3.1.4 to 3.1.5.
+
 ## [0.3.51] - 2026-08-04
 
 ### Changed

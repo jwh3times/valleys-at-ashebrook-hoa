@@ -130,9 +130,10 @@ src/server/db/migrations/   D1 migration files
 
 ## How content is edited
 
-Board members go to `/admin`, sign in with their email + password (Better Auth), and
-manage announcements, documents, duplicate document cleanup, dues, and site text through on-screen forms. Board
-admin sign-in access itself is also managed in the admin app, under **Board access**: a board
+Board members go to `/admin`, sign in with their email + password (Better Auth), and manage
+announcements, documents, duplicate cleanup, dues, site text, the board roster, meetings,
+resolutions, recorded elections, proxies, and saved AI reports through on-screen forms. Board admin
+sign-in access itself is also managed in the admin app, under **Board access**: a board
 admin can promote another account to `board` and demote a board admin (the last
 remaining board admin can't be demoted), which supports handing the site off to a new
 board over time. A board admin can't escalate their own access beyond `board`, and
