@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.51] - 2026-08-04
+
+### Changed
+
+- Bumped `@cloudflare/vitest-pool-workers` from 0.19.0 to 0.20.1,
+  `@cloudflare/workers-types` from 5.20260730.1 to 5.20260801.1, `@types/react` from 19.2.17 to
+  19.2.18, `@types/react-dom` from 19.2.3 to 19.2.4, and `@vitejs/plugin-react` from 6.0.4 to
+  6.0.5; the refreshed lockfile also updates Wrangler from 4.115.0 to 4.118.0.
+
 ## [0.3.50] - 2026-08-04
 
 ### Added
