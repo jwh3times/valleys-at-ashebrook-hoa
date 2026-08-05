@@ -29,7 +29,7 @@ describe('middleware site locals', () => {
     expect(c.locals.site.officialMode).toBe(false);
   });
 
-  it('still populates locals.site for /api requests (defaults, no extra DB read)', async () => {
+  it('still populates locals.site for non-member /api requests (defaults, no extra DB read)', async () => {
     const c = ctx('/api/content/site');
     await onRequest(c, async () => new Response('ok'));
     // @ts-expect-error test shape
@@ -38,7 +38,7 @@ describe('middleware site locals', () => {
     expect(c.locals.site.officialMode).toBe(false);
   });
 
-  it('reflects a seeded officialMode on page requests but not on /api requests', async () => {
+  it('reflects a seeded officialMode on page requests but not on non-member /api requests', async () => {
     const value = JSON.stringify({
       ...DEFAULT_SITE_SETTINGS,
       officialMode: true,
@@ -60,5 +60,28 @@ describe('middleware site locals', () => {
     await onRequest(api, async () => new Response('ok'));
     // @ts-expect-error test shape
     expect(api.locals.site.officialMode).toBe(false);
+  });
+
+  it('gives /api/member requests the real settings, unlike other /api routes', async () => {
+    // The homeowner-write backstop gates on officialMode itself, so it needs
+    // the real value here rather than the inert defaults other /api routes
+    // get. requireMemberApi still re-reads settings independently rather
+    // than trusting this value (see src/server/authz/member-guards.ts).
+    const value = JSON.stringify({
+      ...DEFAULT_SITE_SETTINGS,
+      officialMode: true,
+    });
+    await getDb(env)
+      .insert(settings)
+      .values({ key: 'site', value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: settings.key,
+        set: { value, updatedAt: new Date() },
+      });
+
+    const c = ctx('/api/member/proxies');
+    await onRequest(c, async () => new Response('ok'));
+    // @ts-expect-error test shape
+    expect(c.locals.site.officialMode).toBe(true);
   });
 });

@@ -86,9 +86,14 @@ export interface AccountNav {
  * Account affordances for the public header, driven by the resolved caller:
  * anonymous → sign in / register; a signed-in user without a verified home →
  * verify property; a board member → the admin panel; a verified homeowner →
- * nothing extra (the header still shows a sign-out control when `signedIn`).
+ * the proxy surface when official mode is on (the only homeowner-write
+ * surface today; 404s when the mode is off, so the link must follow the
+ * mode), else nothing extra.
  */
-export function accountNav(auth: AccountNavAuth | null): AccountNav {
+export function accountNav(
+  auth: AccountNavAuth | null,
+  officialMode = false,
+): AccountNav {
   if (!auth)
     return {
       signedIn: false,
@@ -103,6 +108,11 @@ export function accountNav(auth: AccountNavAuth | null): AccountNav {
     return {
       signedIn: true,
       links: [{ href: '/verify-property', label: 'Verify your property' }],
+    };
+  if (officialMode)
+    return {
+      signedIn: true,
+      links: [{ href: '/proxies', label: 'Proxies' }],
     };
   return { signedIn: true, links: [] };
 }
