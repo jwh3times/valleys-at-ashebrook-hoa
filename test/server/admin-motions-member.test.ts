@@ -645,6 +645,36 @@ describe('motions admin route — member votes', () => {
     ).toEqual(correctedRows);
   });
 
+  it('advances the monotonic revision on every lifecycle transition and board replacement', async () => {
+    await enableLiveVoting();
+    const propertyId = await createProperty('1 Oak St', 2);
+    const id = await createMotion(await createMeeting());
+    expect((await getMotion(id)).votingRevision).toBe(0);
+
+    expect((await transitionVoting('openVoting', id)).status).toBe(204);
+    expect((await getMotion(id)).votingRevision).toBe(1);
+    expect((await transitionVoting('closeVoting', id)).status).toBe(204);
+    expect((await getMotion(id)).votingRevision).toBe(2);
+
+    expect(
+      (
+        await POST(
+          req(url, 'POST', {
+            action: 'setMemberVotes',
+            motionId: id,
+            entries: [{ propertyId, choice: 'yes' }],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+    expect((await getMotion(id)).votingRevision).toBe(3);
+
+    expect((await transitionVoting('openVoting', id)).status).toBe(204);
+    expect((await getMotion(id)).votingRevision).toBe(4);
+    expect((await transitionVoting('closeVoting', id)).status).toBe(204);
+    expect((await getMotion(id)).votingRevision).toBe(5);
+  });
+
   it('allows close while the global flag is disabled but refuses reopen without mutating state or votes', async () => {
     await enableLiveVoting();
     const propertyId = await createProperty('1 Oak St', 2);
@@ -811,6 +841,92 @@ describe('motions admin route — member votes', () => {
         (row) => row.propertyId === outsideSnapshot,
       ),
     ).toBe(false);
+  });
+
+  it('does not let a stale closed correction survive a concurrent reopen and close cycle', async () => {
+    await enableLiveVoting();
+    const propertyId = await createProperty('1 Oak St', 2);
+    const id = await createMotion(await createMeeting());
+    expect((await transitionVoting('openVoting', id)).status).toBe(204);
+    expect((await transitionVoting('closeVoting', id)).status).toBe(204);
+
+    const barrier = pauseNextBatch();
+    try {
+      const staleCorrection = POST(
+        req(url, 'POST', {
+          action: 'setMemberVotes',
+          motionId: id,
+          entries: [{ propertyId, choice: 'no' }],
+        }),
+      );
+      await barrier.reached;
+
+      expect((await transitionVoting('openVoting', id)).status).toBe(204);
+      await getDb(env).insert(memberVotes).values({
+        id: crypto.randomUUID(),
+        motionId: id,
+        propertyId,
+        castByOwnerId: null,
+        proxyId: null,
+        weight: 2,
+        choice: 'yes',
+      });
+      expect((await transitionVoting('closeVoting', id)).status).toBe(204);
+
+      barrier.release();
+      expect((await staleCorrection).status).toBe(409);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+
+    const votes = await getDb(env)
+      .select()
+      .from(memberVotes)
+      .where(eq(memberVotes.motionId, id));
+    expect(votes).toHaveLength(1);
+    expect(votes[0].choice).toBe('yes');
+  });
+
+  it('allows exactly one board replacement prepared from the same lifecycle revision', async () => {
+    await enableLiveVoting();
+    const propertyId = await createProperty('1 Oak St', 2);
+    const id = await createMotion(await createMeeting());
+    expect((await transitionVoting('openVoting', id)).status).toBe(204);
+    expect((await transitionVoting('closeVoting', id)).status).toBe(204);
+
+    const barrier = pauseNextBatch();
+    try {
+      const staleReplacement = POST(
+        req(url, 'POST', {
+          action: 'setMemberVotes',
+          motionId: id,
+          entries: [{ propertyId, choice: 'no' }],
+        }),
+      );
+      await barrier.reached;
+      const winningReplacement = await POST(
+        req(url, 'POST', {
+          action: 'setMemberVotes',
+          motionId: id,
+          entries: [{ propertyId, choice: 'yes' }],
+        }),
+      );
+      expect(winningReplacement.status).toBe(204);
+
+      barrier.release();
+      expect((await staleReplacement).status).toBe(409);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+
+    const votes = await getDb(env)
+      .select()
+      .from(memberVotes)
+      .where(eq(memberVotes.motionId, id));
+    expect(votes).toHaveLength(1);
+    expect(votes[0].choice).toBe('yes');
   });
 
   it('does not let a text edit commit after a concurrent first open freezes the motion', async () => {

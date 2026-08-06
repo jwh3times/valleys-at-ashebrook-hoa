@@ -461,8 +461,13 @@ unique per pair; `motions` records one motion per meeting with a server-assigned
 per meeting, board mover/second referencing `board_people` on delete-restrict, plus nullable
 `mover_owner_id`/`second_owner_id` referencing `owners` — pre-placed for a later phase; nothing
 writes them yet, and the mover/second pickers are hidden on member meetings — and a board-entered
-`outcome` (`passed`/`failed`/`withdrawn`/`tabled`); `board_votes` is one roll-call vote per motion
-per `board_people` row (`choice`: `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
+`outcome` (`passed`/`failed`/`withdrawn`/`tabled`). Member motions also carry `voting_state`
+(`none`/`open`/`closed`) and a monotonic `voting_revision`: every open, close, and successful
+board vote-set replacement advances the revision, so a stale correction cannot overwrite an
+intervening live session even when the lifecycle state returns to `closed`; `motion_eligibility`
+freezes each active property's weight at first open and is reused unchanged on reopen.
+`board_votes` is one roll-call vote per motion per `board_people` row (`choice`:
+`yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
 `member_attendance` is one present/absent row per meeting per `properties` row, unique per pair,
 with nullable `represented_by_owner_id` and a nullable `proxy_id` referencing `proxies` (see below;
 carries no `ON DELETE` action, deliberately); `member_votes` is one vote per
@@ -586,7 +591,11 @@ nullable `motions.mover_owner_id`/`motions.second_owner_id`. Migration `0012` ad
 `proxies_meeting_id_idx`, and `proxies_election_id_idx`, plus the `proxies_one_occasion` CHECK
 constraint. Migration `0015` drops `via_proxy` from `member_attendance`, `member_votes`, and
 `ballots` and adds each table's `proxy_id` column. All committed migrations through `0015` were
-verified as applied to production on 2026-08-05. Migrations are applied with
+verified as applied to production on 2026-08-05. Migration `0016` adds `ballot_choices`,
+`election_eligibility`, `motion_eligibility`, and `motions.voting_state`. Migration `0017` adds
+`motions.voting_revision`, an integer `NOT NULL DEFAULT 0` used as the live-motion
+compare-and-swap token. Migrations after `0015` are not yet recorded here as applied to production.
+Migrations are applied with
 `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,

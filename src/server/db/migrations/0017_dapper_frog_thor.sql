@@ -1,0 +1,1 @@
+ALTER TABLE `motions` ADD `voting_revision` integer DEFAULT 0 NOT NULL;

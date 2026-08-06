@@ -293,6 +293,7 @@ export const motions = sqliteTable(
     })
       .notNull()
       .default('none'),
+    votingRevision: integer('voting_revision').notNull().default(0),
     outcome: text('outcome', {
       enum: ['passed', 'failed', 'withdrawn', 'tabled'],
     }).notNull(),
