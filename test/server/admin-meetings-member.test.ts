@@ -5,13 +5,20 @@ vi.mock('../../src/server/authz/context', () => ({
   getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
 }));
 
-import { POST } from '../../src/pages/api/admin/meetings';
+import {
+  DELETE as deleteMeeting,
+  POST as postMeeting,
+} from '../../src/pages/api/admin/meetings';
+import { POST as postMotion } from '../../src/pages/api/admin/motions';
 import { getDb } from '../../src/server/db/client';
 import {
   meetings,
   memberAttendance,
+  motionEligibility,
+  motions,
   properties,
   owners,
+  settings,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -22,9 +29,12 @@ beforeAll(async () => {
 beforeEach(async () => {
   const db = getDb(env);
   await db.delete(memberAttendance);
+  await db.delete(motionEligibility);
+  await db.delete(motions);
   await db.delete(meetings);
   await db.delete(owners);
   await db.delete(properties);
+  await db.delete(settings);
 });
 
 const url = 'http://localhost/api/admin/meetings';
@@ -41,7 +51,7 @@ function req(u: string, method: string, body?: unknown) {
 }
 
 async function createMeeting(overrides: Record<string, unknown> = {}) {
-  const res = await POST(
+  const res = await postMeeting(
     req(url, 'POST', {
       body: 'member',
       kind: 'annual',
@@ -83,7 +93,7 @@ describe('meetings admin route — member attendance', () => {
     const p1 = await createProperty('1 Oak St');
     const p2 = await createProperty('2 Oak St');
     const owner1 = await createOwner(p1, 'A. Reyes');
-    const res = await POST(
+    const res = await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: id,
@@ -117,7 +127,7 @@ describe('meetings admin route — member attendance', () => {
     const id = await createMeeting();
     const p1 = await createProperty('1 Oak St');
     const p2 = await createProperty('2 Oak St');
-    const first = await POST(
+    const first = await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: id,
@@ -134,7 +144,7 @@ describe('meetings admin route — member attendance', () => {
       .where(eq(memberAttendance.meetingId, id));
     expect(rows.length).toBe(2);
 
-    const second = await POST(
+    const second = await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: id,
@@ -153,14 +163,14 @@ describe('meetings admin route — member attendance', () => {
   it('empty entries clears attendance', async () => {
     const id = await createMeeting();
     const p1 = await createProperty('1 Oak St');
-    await POST(
+    await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: id,
         entries: [{ propertyId: p1, present: true }],
       }),
     );
-    const res = await POST(
+    const res = await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: id,
@@ -177,7 +187,7 @@ describe('meetings admin route — member attendance', () => {
 
   it('setMemberAttendance on a nonexistent meeting returns 404', async () => {
     const p1 = await createProperty('1 Oak St');
-    const res = await POST(
+    const res = await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: 'nope',
@@ -188,7 +198,7 @@ describe('meetings admin route — member attendance', () => {
   });
 
   it('setMemberAttendance on a board-body meeting returns 409', async () => {
-    const boardRes = await POST(
+    const boardRes = await postMeeting(
       req(url, 'POST', {
         body: 'board',
         kind: 'regular',
@@ -199,7 +209,7 @@ describe('meetings admin route — member attendance', () => {
     expect(boardRes.status).toBe(201);
     const boardId = ((await boardRes.json()) as { id: string }).id;
     const p1 = await createProperty('1 Oak St');
-    const res = await POST(
+    const res = await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: boardId,
@@ -212,5 +222,60 @@ describe('meetings admin route — member attendance', () => {
       .from(memberAttendance)
       .where(eq(memberAttendance.meetingId, boardId));
     expect(rows.length).toBe(0);
+  });
+
+  it('retains a parent meeting after a member motion first opens, including when only its eligibility snapshot remains', async () => {
+    await getDb(env)
+      .insert(settings)
+      .values({
+        key: 'site',
+        value: JSON.stringify({ officialMode: true, liveVotingEnabled: true }),
+        updatedAt: now,
+      });
+    const propertyId = await createProperty('1 Oak St');
+    const meetingId = await createMeeting();
+    const created = await postMotion(
+      req(url, 'POST', {
+        meetingId,
+        text: 'Move to approve the budget',
+        outcome: 'passed',
+      }),
+    );
+    expect(created.status).toBe(201);
+    const motionId = ((await created.json()) as { id: string }).id;
+    const opened = await postMotion(
+      req(url, 'POST', { action: 'openVoting', id: motionId }),
+    );
+    expect(opened.status).toBe(204);
+
+    expect(
+      (await deleteMeeting(req(url, 'DELETE', { id: meetingId }))).status,
+    ).toBe(409);
+    expect(
+      await getDb(env)
+        .select()
+        .from(meetings)
+        .where(eq(meetings.id, meetingId)),
+    ).toHaveLength(1);
+
+    await getDb(env)
+      .update(motions)
+      .set({ votingState: 'none', updatedAt: new Date() })
+      .where(eq(motions.id, motionId));
+    expect(
+      await getDb(env)
+        .select()
+        .from(motionEligibility)
+        .where(eq(motionEligibility.motionId, motionId)),
+    ).toEqual([{ motionId, propertyId, weight: 1 }]);
+    expect(
+      (await deleteMeeting(req(url, 'DELETE', { id: meetingId }))).status,
+    ).toBe(409);
+    expect(
+      await getDb(env)
+        .select()
+        .from(meetings)
+        .where(eq(meetings.id, meetingId)),
+    ).toHaveLength(1);
   });
 });

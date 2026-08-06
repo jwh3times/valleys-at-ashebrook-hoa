@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -11,6 +11,7 @@ import type { Db } from '../../../server/db/client';
 import {
   meetings,
   motions,
+  motionEligibility,
   boardVotes,
   memberVotes,
   properties,
@@ -23,6 +24,7 @@ import {
 } from '../../../lib/types';
 import type { VoteChoice, MemberVoteChoice } from '../../../lib/types';
 import { proxyUseError } from '../../../server/content/proxy-guards';
+import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
 
 export const prerender = false;
 
@@ -71,10 +73,19 @@ async function meetingBodyForMotion(
   db: Db,
   motionId: string,
 ): Promise<
-  { found: false } | { found: true; body: string; meetingId: string }
+  | { found: false }
+  | {
+      found: true;
+      body: string;
+      meetingId: string;
+      votingState: 'none' | 'open' | 'closed';
+    }
 > {
   const existing = await db
-    .select({ meetingId: motions.meetingId })
+    .select({
+      meetingId: motions.meetingId,
+      votingState: motions.votingState,
+    })
     .from(motions)
     .where(eq(motions.id, motionId))
     .limit(1);
@@ -88,6 +99,7 @@ async function meetingBodyForMotion(
     found: true,
     body: meeting[0]?.body ?? '',
     meetingId: existing[0].meetingId,
+    votingState: existing[0].votingState,
   };
 }
 
@@ -193,7 +205,11 @@ function parseMemberVoteEntries(
   return { ok: true, value: entries };
 }
 
-async function setMemberVotes(db: Db, body: unknown): Promise<Response> {
+async function setMemberVotes(
+  db: Db,
+  database: D1Database,
+  body: unknown,
+): Promise<Response> {
   const motionId = stringField(body, 'motionId');
   if (!motionId) return new Response('motionId is required', { status: 400 });
   const parsedEntries = parseMemberVoteEntries(body);
@@ -205,6 +221,13 @@ async function setMemberVotes(db: Db, body: unknown): Promise<Response> {
   // silently produce a motion with an incoherent electorate.
   if (lookup.body !== 'member')
     return new Response('Motion is not on a member meeting', { status: 409 });
+  if (lookup.votingState === 'open')
+    return new Response(
+      'Member votes cannot be corrected while voting is open',
+      {
+        status: 409,
+      },
+    );
 
   const proxyFailure = await proxyUseError(
     db,
@@ -218,19 +241,32 @@ async function setMemberVotes(db: Db, body: unknown): Promise<Response> {
       status: proxyFailure.status,
     });
 
-  // Weight is stamped from the database, never trusted from the client — a
-  // client-supplied weight would let a caller silently rewrite the
-  // electorate on a governance record. See properties.voteWeight and
-  // memberVotes.weight in schema.ts.
+  // Once first-open eligibility exists, every correction uses that immutable
+  // electorate and its frozen weights. Before first open, preserve the
+  // recorded-meeting behavior of resolving the current property roster.
   const propertyIds = parsedEntries.value.map((e) => e.propertyId);
-  const weightRows =
-    propertyIds.length > 0
-      ? await db
-          .select({ id: properties.id, voteWeight: properties.voteWeight })
-          .from(properties)
-          .where(inArray(properties.id, propertyIds))
-      : [];
-  const weightById = new Map(weightRows.map((r) => [r.id, r.voteWeight]));
+  const eligibilityRows = await db
+    .select({
+      propertyId: motionEligibility.propertyId,
+      weight: motionEligibility.weight,
+    })
+    .from(motionEligibility)
+    .where(eq(motionEligibility.motionId, motionId));
+  const weightById =
+    eligibilityRows.length > 0
+      ? new Map(eligibilityRows.map((row) => [row.propertyId, row.weight]))
+      : new Map(
+          (propertyIds.length > 0
+            ? await db
+                .select({
+                  id: properties.id,
+                  voteWeight: properties.voteWeight,
+                })
+                .from(properties)
+                .where(inArray(properties.id, propertyIds))
+            : []
+          ).map((row) => [row.id, row.voteWeight]),
+        );
   const rows: {
     id: string;
     motionId: string;
@@ -254,14 +290,189 @@ async function setMemberVotes(db: Db, body: unknown): Promise<Response> {
       choice: e.choice,
     });
   }
-  // Full replace, atomically: a property omitted from `entries` is removed,
-  // not left at its previous value. db.batch() requires a non-empty array,
-  // and clearing the vote set entirely (rows.length === 0) is legitimate, so
-  // the insert statement is only included when there is something to insert.
-  await db.batch([
-    db.delete(memberVotes).where(eq(memberVotes.motionId, motionId)),
-    ...(rows.length > 0 ? [db.insert(memberVotes).values(rows)] : []),
-  ] as never);
+  // Full replace, atomically. Repeat the lifecycle/body predicate on every
+  // mutation, pinned to the exact lifecycle state observed above. A first
+  // open followed by a close can otherwise finish between preflight and this
+  // batch, allowing weights resolved before the snapshot to enter a closed
+  // motion. A lifecycle transition makes every write a no-op, and the checked
+  // guard result turns the stale correction into a 409.
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const statements: D1PreparedStatement[] = [
+    database
+      .prepare(
+        `UPDATE motions
+         SET updated_at = ?
+         WHERE id = ?
+           AND voting_state = ?
+           AND EXISTS (
+             SELECT 1 FROM meetings
+             WHERE meetings.id = motions.meeting_id
+               AND meetings.body = 'member'
+           )
+         RETURNING id`,
+      )
+      .bind(updatedAt, motionId, lookup.votingState),
+    database
+      .prepare(
+        `DELETE FROM member_votes
+         WHERE motion_id = ?
+           AND EXISTS (
+             SELECT 1 FROM motions
+             JOIN meetings ON meetings.id = motions.meeting_id
+             WHERE motions.id = ?
+               AND motions.voting_state = ?
+               AND meetings.body = 'member'
+           )`,
+      )
+      .bind(motionId, motionId, lookup.votingState),
+    ...rows.map((row) =>
+      database
+        .prepare(
+          `INSERT INTO member_votes
+             (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id)
+           SELECT ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM motions
+             JOIN meetings ON meetings.id = motions.meeting_id
+             WHERE motions.id = ?
+               AND motions.voting_state = ?
+               AND meetings.body = 'member'
+           )`,
+        )
+        .bind(
+          row.id,
+          row.motionId,
+          row.propertyId,
+          row.castByOwnerId,
+          row.weight,
+          row.choice,
+          row.proxyId,
+          motionId,
+          lookup.votingState,
+        ),
+    ),
+  ];
+  const [guard, , ...inserts] = await database.batch(statements);
+  if (guard.meta.changes !== 1)
+    return new Response(
+      'Member votes cannot be corrected while voting is open',
+      {
+        status: 409,
+      },
+    );
+  if (inserts.some((result) => result.meta.changes !== 1))
+    return new Response('Member vote correction was not fully recorded', {
+      status: 500,
+    });
+  return new Response(null, { status: 204 });
+}
+
+async function openVoting(
+  database: D1Database,
+  body: unknown,
+): Promise<Response> {
+  const id = stringField(body, 'id');
+  if (!id) return new Response('id is required', { status: 400 });
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const [transition, snapshot] = await database.batch([
+    database
+      .prepare(
+        `UPDATE motions
+         SET voting_state = 'open', updated_at = ?
+         WHERE id = ?
+           AND ${LIVE_VOTING_ENABLED_SQL}
+           AND EXISTS (
+             SELECT 1 FROM meetings
+             WHERE meetings.id = motions.meeting_id
+               AND meetings.body = 'member'
+               AND meetings.status = 'draft'
+           )
+           AND (
+             (
+               voting_state = 'none'
+               AND NOT EXISTS (
+                 SELECT 1 FROM member_votes
+                 WHERE member_votes.motion_id = motions.id
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM motion_eligibility
+                 WHERE motion_eligibility.motion_id = motions.id
+               )
+               AND EXISTS (
+                 SELECT 1 FROM properties
+                 WHERE properties.status = 'active'
+               )
+             )
+             OR (
+               voting_state = 'closed'
+               AND EXISTS (
+                 SELECT 1 FROM motion_eligibility
+                 WHERE motion_eligibility.motion_id = motions.id
+               )
+             )
+           )
+         RETURNING id`,
+      )
+      .bind(updatedAt, id),
+    database
+      .prepare(
+        `INSERT INTO motion_eligibility (motion_id, property_id, weight)
+         SELECT ?, properties.id, properties.vote_weight
+         FROM properties
+         WHERE properties.status = 'active'
+           AND changes() = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM motion_eligibility
+             WHERE motion_eligibility.motion_id = ?
+           )`,
+      )
+      .bind(id, id),
+  ]);
+  if (transition.meta.changes !== 1)
+    return new Response('Motion voting cannot be opened', { status: 409 });
+  // A successful first open inserts at least one property because the guarded
+  // transition requires one; a reopen deliberately writes zero snapshot rows.
+  if (snapshot.meta.changes === 0) {
+    const frozen = await database
+      .prepare(
+        `SELECT 1 FROM motion_eligibility
+         WHERE motion_id = ? LIMIT 1`,
+      )
+      .bind(id)
+      .first();
+    if (!frozen)
+      return new Response('Motion eligibility snapshot was not created', {
+        status: 500,
+      });
+  }
+  return new Response(null, { status: 204 });
+}
+
+async function closeVoting(
+  database: D1Database,
+  body: unknown,
+): Promise<Response> {
+  const id = stringField(body, 'id');
+  if (!id) return new Response('id is required', { status: 400 });
+  const [transition] = await database.batch([
+    database
+      .prepare(
+        `UPDATE motions
+         SET voting_state = 'closed', updated_at = ?
+         WHERE id = ?
+           AND voting_state = 'open'
+           AND EXISTS (
+             SELECT 1 FROM meetings
+             WHERE meetings.id = motions.meeting_id
+               AND meetings.body = 'member'
+               AND meetings.status = 'draft'
+           )
+         RETURNING id`,
+      )
+      .bind(Math.floor(Date.now() / 1000), id),
+  ]);
+  if (transition.meta.changes !== 1)
+    return new Response('Motion voting cannot be closed', { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -277,7 +488,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'setVotes':
       return setVotes(db, parsed.value);
     case 'setMemberVotes':
-      return setMemberVotes(db, parsed.value);
+      return setMemberVotes(db, env.DATABASE, parsed.value);
+    case 'openVoting':
+      return openVoting(env.DATABASE, parsed.value);
+    case 'closeVoting':
+      return closeVoting(env.DATABASE, parsed.value);
     case '':
       break;
     default:
@@ -332,12 +547,20 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const input = result.value;
   const db = getDb(env);
   const existing = await db
-    .select({ id: motions.id })
+    .select({ id: motions.id, votingState: motions.votingState })
     .from(motions)
     .where(eq(motions.id, id))
     .limit(1);
   if (existing.length === 0)
     return new Response('Motion not found', { status: 404 });
+  if (existing[0].votingState === 'open')
+    return new Response('A motion cannot be edited while voting is open', {
+      status: 409,
+    });
+  if (existing[0].votingState === 'closed' && input.text !== undefined)
+    return new Response('Motion text is frozen after voting first opens', {
+      status: 409,
+    });
   // A motion is not moved between meetings via PATCH — only these fields.
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (input.text !== undefined) set.text = input.text;
@@ -346,7 +569,22 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   if (input.secondPersonId !== undefined)
     set.secondPersonId = input.secondPersonId;
   if (input.outcome !== undefined) set.outcome = input.outcome;
-  await db.update(motions).set(set).where(eq(motions.id, id));
+  const updated = await db
+    .update(motions)
+    .set(set)
+    .where(
+      and(
+        eq(motions.id, id),
+        input.text !== undefined
+          ? eq(motions.votingState, 'none')
+          : ne(motions.votingState, 'open'),
+      ),
+    )
+    .returning({ id: motions.id });
+  if (updated.length !== 1)
+    return new Response('The motion lifecycle changed before the edit', {
+      status: 409,
+    });
   return new Response(null, { status: 204 });
 };
 
@@ -358,6 +596,27 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   const id = stringField(parsed.value, 'id');
   if (!id) return new Response('id is required', { status: 400 });
   const db = getDb(env);
+  const existing = await db
+    .select({ votingState: motions.votingState })
+    .from(motions)
+    .where(eq(motions.id, id))
+    .limit(1);
+  if (
+    existing[0]?.votingState !== undefined &&
+    existing[0].votingState !== 'none'
+  )
+    return new Response('A motion with live-voting history cannot be deleted', {
+      status: 409,
+    });
+  const frozen = await db
+    .select({ motionId: motionEligibility.motionId })
+    .from(motionEligibility)
+    .where(eq(motionEligibility.motionId, id))
+    .limit(1);
+  if (frozen.length > 0)
+    return new Response('A motion with live-voting history cannot be deleted', {
+      status: 409,
+    });
   // resolutions.adopted_by_motion_id is ON DELETE SET NULL, so without this
   // pre-check deleting a cited motion would silently blank an in-force
   // resolution's adoption provenance instead of refusing — and PATCH
@@ -374,7 +633,25 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       "This motion is cited as a resolution's adopting motion — it cannot be deleted while that citation stands.",
       { status: 409 },
     );
-  // Deleting a motion cascades its votes via FK.
-  await db.delete(motions).where(eq(motions.id, id));
+  // Repeat the retention predicate in the mutation itself so first open and
+  // delete serialize safely: whichever commits second observes the winner.
+  const deleted = await env.DATABASE.prepare(
+    `DELETE FROM motions
+     WHERE id = ?
+       AND voting_state = 'none'
+       AND NOT EXISTS (
+         SELECT 1 FROM motion_eligibility
+         WHERE motion_eligibility.motion_id = motions.id
+       )
+     RETURNING id`,
+  )
+    .bind(id)
+    .run();
+  // `meta.changes` can include cascaded vote rows; RETURNING identifies the
+  // one parent motion this guarded statement was allowed to delete.
+  if (existing.length > 0 && deleted.results.length !== 1)
+    return new Response('A motion with live-voting history cannot be deleted', {
+      status: 409,
+    });
   return new Response(null, { status: 204 });
 };
