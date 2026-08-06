@@ -113,6 +113,13 @@
       "when": 1785775561483,
       "tag": "0015_pale_preak",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1785997284766,
+      "tag": "0016_daffy_chronomancer",
+      "breakpoints": true
     }
   ]
 }

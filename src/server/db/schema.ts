@@ -288,6 +288,11 @@ export const motions = sqliteTable(
     secondOwnerId: text('second_owner_id').references(() => owners.id, {
       onDelete: 'restrict',
     }),
+    votingState: text('voting_state', {
+      enum: ['none', 'open', 'closed'],
+    })
+      .notNull()
+      .default('none'),
     outcome: text('outcome', {
       enum: ['passed', 'failed', 'withdrawn', 'tabled'],
     }).notNull(),
@@ -300,6 +305,26 @@ export const motions = sqliteTable(
   (t) => [
     index('motions_meeting_id_idx').on(t.meetingId),
     uniqueIndex('motions_meeting_sequence_unq').on(t.meetingId, t.sequence),
+  ],
+);
+
+export const motionEligibility = sqliteTable(
+  'motion_eligibility',
+  {
+    motionId: text('motion_id')
+      .notNull()
+      .references(() => motions.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    weight: integer('weight').notNull(),
+  },
+  (t) => [
+    uniqueIndex('motion_eligibility_parent_property_unq').on(
+      t.motionId,
+      t.propertyId,
+    ),
+    check('motion_eligibility_weight_nonnegative', sql`${t.weight} >= 0`),
   ],
 );
 
@@ -565,6 +590,26 @@ export const elections = sqliteTable(
   ],
 );
 
+export const electionEligibility = sqliteTable(
+  'election_eligibility',
+  {
+    electionId: text('election_id')
+      .notNull()
+      .references(() => elections.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    weight: integer('weight').notNull(),
+  },
+  (t) => [
+    uniqueIndex('election_eligibility_parent_property_unq').on(
+      t.electionId,
+      t.propertyId,
+    ),
+    check('election_eligibility_weight_nonnegative', sql`${t.weight} >= 0`),
+  ],
+);
+
 export const candidates = sqliteTable(
   'candidates',
   {
@@ -608,6 +653,24 @@ export const candidates = sqliteTable(
       t.electionId,
       t.sequence,
     ),
+  ],
+);
+
+export const ballotChoices = sqliteTable(
+  'ballot_choices',
+  {
+    id: text('id').primaryKey(),
+    electionId: text('election_id')
+      .notNull()
+      .references(() => elections.id, { onDelete: 'cascade' }),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'restrict' }),
+    weight: integer('weight').notNull(),
+  },
+  (t) => [
+    index('ballot_choices_election_id_idx').on(t.electionId),
+    check('ballot_choices_weight_nonnegative', sql`${t.weight} >= 0`),
   ],
 );
 
