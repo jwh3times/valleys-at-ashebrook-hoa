@@ -13,8 +13,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 - **Added the default-off foundation for live homeowner voting without exposing a homeowner voting
   route yet.** Site settings now persist a fail-closed `liveVotingEnabled` flag, and additive D1
-  migrations introduce anonymous retained `ballot_choices`, frozen election and motion eligibility
-  snapshots, member-motion voting state, and a monotonic correction revision. No `/vote`,
+  migrations introduce identity-unlinked retained `ballot_choices`, frozen election and motion
+  eligibility snapshots, member-motion voting state, and a monotonic correction revision. No `/vote`,
   `/api/vote`, casting flow, or homeowner voting UI is part of this release.
 
 ### Changed
@@ -29,11 +29,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Security
 
-- **Digital election choices are recountable but structurally separated from turnout identity.**
-  Choice rows contain no ballot, lot, owner, proxy, caster, or timestamp link, and per-property
-  eligibility remains board-only. ADR 0020 records the permanent prohibition on adding a
-  turnout-to-choice correlation field and the residual operator-level correlation risk from SQLite
-  insertion order and D1 Time Travel.
+- **Digital election choices are recountable without an explicit turnout identity link.** Choice
+  rows contain no ballot, lot, owner, proxy, caster, timestamp, or other identity/join field;
+  supported reads never correlate them to turnout, and ADR 0020 prohibits adding such a field.
+  This is not mathematical anonymity: a rare or unique snapshotted weight retained on both turnout
+  and choice rows may identify or narrow a property's selections, while SQLite insertion order and
+  D1 Time Travel add residual operator-level temporal correlation risk.
 
 ## [0.3.54] - 2026-08-05
 

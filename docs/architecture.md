@@ -54,10 +54,12 @@ The board maintains association business as structured D1 rows rather than uploa
   explicit transitions, while an in-force or historic resolution cannot be deleted.
 - `elections`, candidates, and ballots record both the existing paper workflow and the lifecycle
   foundation for later site-conducted elections. A conducted election freezes eligible properties
-  and weights when it opens. Per-lot ballots establish turnout and provenance only; anonymous
-  `ballot_choices` retain weighted candidate selections with no link back to a ballot, lot, owner,
-  proxy, caster, or timestamp. Conducted tallies remain absent while open and are derived from the
-  retained choices only when the election closes.
+  and weights when it opens. Per-lot ballots establish turnout and provenance only;
+  `ballot_choices` retain weighted candidate selections without a ballot, lot, owner, proxy,
+  caster, timestamp, or other explicit identity/join field, and supported reads never join choices
+  to turnout. This is identifier separation, not mathematical anonymity: a rare or unique weight
+  retained on both sides may identify or narrow a property's selections. Conducted tallies remain
+  absent while open and are derived from the retained choices only when the election closes.
 - `proxies` record one lot's grantor and holder for exactly one meeting or election. Member
   attendance, votes, and election ballots cite the canonical proxy row instead of carrying an
   unverified "via proxy" flag.

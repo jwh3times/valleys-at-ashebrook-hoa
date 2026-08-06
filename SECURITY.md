@@ -77,19 +77,22 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   the admin panel's visibility control. Board meetings are unaffected: `board_attendance`/
   `board_votes` reference `board_people`, not addresses, and a board meeting's roll call has always
   named board members, never homeowners.
-- **Election turnout and candidate choices have no relational link.** `ballots` records only that
-  a lot participated — election, property, snapshotted weight, and owner-or-proxy provenance. For
-  recorded paper elections, `candidates.votes` remains the board-entered aggregate and no choice
-  row exists. For the default-off conducted-election foundation, `ballot_choices` retains only an
-  anonymous id, election, candidate, and non-negative weight. It deliberately has no `ballot_id`,
-  `property_id`, owner/proxy/caster field, timestamp, shared receipt, or other correlation value;
-  none may be added through schema, types, APIs, logs, or exports. Conducted ballots are final
-  because their choices cannot be recovered for editing. `candidates.votes` remains `NULL` while
-  a conducted election is open and is derived from the retained choice rows only in the atomic
-  close operation, so there is no live tally to diff. The public `/elections` read still exposes
-  only closed/certified results and aggregate turnout; per-lot ballots and frozen eligible-property
-  rows are board-only. D1 insertion order and Time Travel remain residual operator-level
-  correlation risks that application schema cannot fully remove. See
+- **Election turnout and candidate choices have no explicit identity link or join key.** `ballots`
+  records only that a lot participated — election, property, snapshotted weight, and owner-or-proxy
+  provenance. For recorded paper elections, `candidates.votes` remains the board-entered aggregate
+  and no choice row exists. For the default-off conducted-election foundation, `ballot_choices`
+  retains an independent id, election, candidate, and non-negative weight. It deliberately has no
+  `ballot_id`, `property_id`, owner/proxy/caster field, timestamp, shared receipt, or other explicit
+  correlation field; none may be added through schema, types, APIs, logs, or exports, and supported
+  reads never join choices to turnout. This does not guarantee mathematical anonymity:
+  `ballots.weight` and `ballot_choices.weight` retain the same snapshotted value, so a rare or
+  unique weight may identify or narrow a property's selections. Conducted ballots are final because
+  the supported application cannot resolve their choices for editing. `candidates.votes` remains
+  `NULL` while a conducted election is open and is derived from the retained choice rows only in
+  the atomic close operation, so there is no live tally to diff. The public `/elections` read still
+  exposes only closed/certified results and aggregate turnout; per-lot ballots and frozen
+  eligible-property rows are board-only. SQLite insertion order and D1 Time Travel add residual
+  operator-level temporal correlation risks that application schema cannot fully remove. See
   [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) for the paper-election baseline and
   [ADR 0020](./docs/adr/0020-digital-ballot-box.md) for the retained digital ballot box and its
   limits.
