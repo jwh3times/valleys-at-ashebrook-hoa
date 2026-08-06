@@ -157,8 +157,9 @@ Markdown twins described below and never the human-readable originals.
   creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
   per-person attendance roll, or with `{ action: 'setMemberAttendance' }` fully replaces a member
   meeting's per-property attendance roll, or with `{ action: 'approve' }`/`{ action: 'unapprove' }`
-  flips `status` (`approve` returns `409` if already approved; `unapprove` clears
-  `approved_at`/`approved_by`/`approved_by_motion_id`); `PATCH` updates a meeting's fields but
+  flips `status` (`approve` returns `409` if already approved or if a child motion vote is open,
+  with the open-vote check in the conditional status update so approval cannot win that race;
+  `unapprove` clears `approved_at`/`approved_by`/`approved_by_motion_id`); `PATCH` updates a meeting's fields but
   cannot write `status`; `DELETE` returns `409` on an approved meeting (unapprove first), `409` if
   any motion belonging to it is cited as a resolution's adopting motion (see the resolutions
   bullet below), `409` if an election records it as where it was held (see the elections bullet
@@ -171,8 +172,9 @@ Markdown twins described below and never the human-readable originals.
   (unique per meeting), or with `{ action: 'setVotes' }` fully replaces a board motion's roll-call
   vote set, or with `{ action: 'setMemberVotes' }` fully replaces a member motion's per-property
   vote set, or with `{ action: 'openVoting' }`/`{ action: 'closeVoting' }` moves a member motion's
-  live-voting state. First open requires both official mode and the default-false live-voting flag,
-  a draft member meeting, no pre-entered member votes, and at least one active property; it
+  live-voting state. First open requires both official mode and the default-false live-voting flag
+  to be literal JSON booleans `true`, a draft member meeting, no pre-entered member votes, and at
+  least one active property; it
   atomically freezes every active property's weight in `motion_eligibility`. Close is reversible
   while the meeting stays draft, and reopen retains the original eligibility snapshot and any live
   votes. `setMemberVotes` returns `409` while open; after first open it stamps weights from the
@@ -233,7 +235,9 @@ Markdown twins described below and never the human-readable originals.
   reopen. `setTallies` and `setBallots` each fully replace their election's candidate-tally set or
   per-lot ballot set in one `db.batch()` (a candidate omitted from `setTallies` has its tally
   restored to `NULL`), and both return `409` for a `certified`/`void` election and for every
-  non-`recorded` election. `setBallots` stamps `weight` from
+  non-`recorded` election. Each replacement reserves the election inside that same D1 batch, so a
+  competing certification or void that wins first leaves the existing tallies/ballots intact and
+  makes the replacement return `409`. `setBallots` stamps `weight` from
   `properties.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
   same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
 meetingId: election.meetingId }` so a proxy signed for the election's own meeting also covers it.
@@ -241,8 +245,10 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   `{candidateId, termStart, termEnd?, title?}` and, in one `db.batch()`, creates `board_people`
   rows for winners who lack one, backfills `candidates.board_person_id`, opens one `board_terms`
   row per winner carrying `election_id`, sets `candidates.won`, and moves the election to
-  `certified`; it returns `409` for a winner who already holds an open term and `400` for two
-  winners resolving to the same person. `uncertify` reverses it, deleting the terms it created but
+  `certified`; its first statement reserves the closed election and re-checks the existing-person
+  open-term invariant at the mutation boundary, so concurrent certifications cannot open two terms
+  for the same person. It returns `409` for a winner who already holds an open term and `400` for
+  two winners resolving to the same person. `uncertify` reverses it, deleting the terms it created but
   never the `board_people` rows. `DELETE` removes only a `draft` election; a `certified` election
   cannot be voided directly (`void` returns `409` — uncertify first). `/api/admin/candidates`
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned, candidates
@@ -411,7 +417,8 @@ boolean`.
   also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring),
   `proxy-guards.ts` (`proxyUseError`, the shared cross-row guard `setMemberAttendance`,
   `setMemberVotes`, and `setBallots` each call before writing a `proxyId`), and `voting-state.ts`
-  (the shared SQL predicate requiring both official mode and live voting for a
+  (the shared SQL predicate requiring both official mode and live voting to be literal JSON
+  booleans `true` for a
   database-conditioned open transition). `reads.ts` also
   has the resolutions book — `fetchResolutionsFor(env, role, { includeHistoric? })` filters
   `status != 'draft'` UNCONDITIONALLY, including for a board caller, the same rule ADR 0014 sets for

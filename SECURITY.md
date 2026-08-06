@@ -102,10 +102,15 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   cannot return to draft, and a motion or parent meeting with live-voting history cannot be
   deleted. Board `setMemberVotes` corrections are refused while voting is open and use a
   state-plus-monotonic-revision compare-and-swap in one D1 batch, preventing a stale replacement
-  from erasing votes from an intervening close/reopen session.
+  from erasing votes from an intervening close/reopen session. Meeting approval conditionally
+  re-checks that no child motion vote is open. Recorded tally/ballot replacements reserve their
+  parent election in the same batch, so a racing certification or void cannot leave stale child
+  data behind; certification likewise reserves the closed election and re-checks the open-term
+  invariant so concurrent elections cannot open two terms for the same existing person.
 - **The live-voting foundation is default-off and not homeowner-accessible in this slice.**
   `liveVotingEnabled` normalizes to `false`; database-conditioned open transitions require it and
-  `officialMode` to both be true. Disabling either flag prevents new open transitions without
+  `officialMode` to both be literal JSON booleans `true` (numbers, strings, nulls, and missing keys
+  all fail closed). Disabling either flag prevents new open transitions without
   deleting existing history. This slice adds no `/vote`, `/api/vote`, casting endpoint, or
   homeowner voting UI; those later surfaces require their own fail-closed authorization and
   same-origin review before they ship.
