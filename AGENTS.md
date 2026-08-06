@@ -557,11 +557,15 @@ server-assigned `sequence` unique per election, a nullable `votes` (`NULL` = not
 delete-cascade and `properties` on delete-restrict, is unique per `(election_id, property_id)`, and
 records only turnout: a `weight` snapshot, nullable actionless `proxy_id`, nullable
 `cast_by_owner_id` referencing `owners` on delete-set-null, and `recorded_at`.
-`ballot_choices` is the anonymous retained digital ballot box: `id`, `election_id` on
+`ballot_choices` is the identity-unlinked retained digital ballot box: `id`, `election_id` on
 delete-cascade, `candidate_id` on delete-restrict, and non-negative `weight`, indexed only by
 election. It deliberately has no ballot/property/owner/proxy/caster/timestamp/shared-receipt field
-or other way to correlate a choice to a turnout row; none may be added. A conducted close derives
-final candidate totals from these retained rows, but Slice 1 has no casting route that writes them.
+or other explicit identity/correlation column; none may be added, and supported reads never join a
+choice to a turnout row. This is not mathematical anonymity: because turnout and choice rows retain
+the same snapshotted weight, a rare or unique weight may identify or narrow a property's
+selections, while SQLite insertion order and D1 Time Travel add temporal inference risk. A
+conducted close derives final candidate totals from these retained rows, but Slice 1 has no casting
+route that writes them.
 `board_terms` also carries a nullable `election_id` referencing `elections` on delete-set-null,
 recording which election produced that term; `certify` opens it, `uncertify` deletes it, and
 `DELETE /api/admin/board-terms` refuses to delete a term with one set.
