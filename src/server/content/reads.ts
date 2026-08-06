@@ -19,6 +19,7 @@ import {
   meetings,
   boardAttendance,
   motions,
+  motionEligibility,
   boardVotes,
   boardPeople,
   properties,
@@ -27,6 +28,7 @@ import {
   memberVotes,
   resolutions,
   elections,
+  electionEligibility,
   candidates,
   ballots,
   proxies,
@@ -45,6 +47,8 @@ import type {
   ElectionStatus,
   CandidateSummary,
   BallotRow,
+  EligibilityTotals,
+  ElectionEligibleProperty,
   ProxyDetail,
   UpcomingOccasion,
   MemberLot,
@@ -215,6 +219,10 @@ async function assembleMeetingDetail(
     .from(motions)
     .where(eq(motions.meetingId, id))
     .orderBy(asc(motions.sequence));
+  const eligibilityByMotion = await motionEligibilityById(
+    db,
+    motionRows.map((motion) => motion.id),
+  );
 
   // Scoped to this meeting's own motions — an unscoped read would pull every
   // roll call in the archive, including ones cast at draft or board-tier
@@ -352,10 +360,13 @@ async function assembleMeetingDetail(
     motions: motionRows.map((mo) => {
       const votes = votesByMotion.get(mo.id) ?? [];
       const mVotes = memberVotesByMotion.get(mo.id) ?? [];
+      const eligibility = eligibilityByMotion.get(mo.id);
+      if (!eligibility) throw new Error('Missing motion eligibility totals');
       return {
         id: mo.id,
         sequence: mo.sequence,
         text: mo.text,
+        votingState: mo.votingState,
         moverName: mo.moverPersonId
           ? (nameOf.get(mo.moverPersonId) ?? null)
           : null,
@@ -363,6 +374,7 @@ async function assembleMeetingDetail(
           ? (nameOf.get(mo.secondPersonId) ?? null)
           : null,
         outcome: mo.outcome,
+        ...eligibility,
         tally: tallyVotes(votes),
         votes: votes.map((v) => ({
           personId: v.personId,
@@ -667,20 +679,12 @@ export async function fetchAdminResolutions(
 
 type ElectionRow = typeof elections.$inferSelect;
 
-/** The two eligible-voter denominators, shared across every election in one call. */
-interface EligibleTotals {
-  eligibleCount: number;
-  eligibleWeight: number;
-}
-
 /**
  * COUNT(*) and SUM(vote_weight) over ACTIVE properties, from the same query —
- * the two distinct denominators ElectionTurnout needs. Reuses the aggregate
- * shape assembleMeetingDetail uses for totalActiveWeight. Computed once per
- * fetchElectionsFor/fetchAdminElections call and shared across every election
- * returned, since the active roster does not change mid-call.
+ * the current-roster fallback for a motion with no eligibility snapshot.
+ * Reuses the aggregate shape assembleMeetingDetail uses for totalActiveWeight.
  */
-async function fetchEligibleTotals(db: Db): Promise<EligibleTotals> {
+async function fetchEligibleTotals(db: Db): Promise<EligibilityTotals> {
   const [row] = await db
     .select({
       eligibleCount: count(),
@@ -688,7 +692,94 @@ async function fetchEligibleTotals(db: Db): Promise<EligibleTotals> {
     })
     .from(properties)
     .where(eq(properties.status, 'active'));
-  return row;
+  return { ...row, eligibilityFrozen: false };
+}
+
+async function electionEligibilityFor(
+  db: Db,
+  electionId: string,
+): Promise<{
+  totals: EligibilityTotals;
+  rows: ElectionEligibleProperty[];
+}> {
+  const snapshotRows = await db
+    .select({
+      propertyId: electionEligibility.propertyId,
+      address: properties.address,
+      weight: electionEligibility.weight,
+    })
+    .from(electionEligibility)
+    .innerJoin(properties, eq(electionEligibility.propertyId, properties.id))
+    .where(eq(electionEligibility.electionId, electionId))
+    .orderBy(asc(electionEligibility.propertyId));
+  if (snapshotRows.length > 0) {
+    return {
+      totals: {
+        eligibleCount: snapshotRows.length,
+        eligibleWeight: snapshotRows.reduce((sum, row) => sum + row.weight, 0),
+        eligibilityFrozen: true,
+      },
+      rows: snapshotRows,
+    };
+  }
+
+  const currentRows = await db
+    .select({
+      propertyId: properties.id,
+      address: properties.address,
+      weight: properties.voteWeight,
+    })
+    .from(properties)
+    .where(eq(properties.status, 'active'))
+    .orderBy(asc(properties.id));
+  return {
+    totals: {
+      eligibleCount: currentRows.length,
+      eligibleWeight: currentRows.reduce((sum, row) => sum + row.weight, 0),
+      eligibilityFrozen: false,
+    },
+    rows: currentRows,
+  };
+}
+
+async function motionEligibilityById(
+  db: Db,
+  motionIds: string[],
+): Promise<Map<string, EligibilityTotals>> {
+  if (motionIds.length === 0) return new Map();
+
+  const snapshotRows = await db
+    .select({
+      motionId: motionEligibility.motionId,
+      weight: motionEligibility.weight,
+    })
+    .from(motionEligibility)
+    .where(inArray(motionEligibility.motionId, motionIds));
+  const snapshots = new Map<string, EligibilityTotals>();
+  for (const row of snapshotRows) {
+    const totals = snapshots.get(row.motionId) ?? {
+      eligibleCount: 0,
+      eligibleWeight: 0,
+      eligibilityFrozen: true,
+    };
+    totals.eligibleCount += 1;
+    totals.eligibleWeight += row.weight;
+    snapshots.set(row.motionId, totals);
+  }
+
+  const result = new Map<string, EligibilityTotals>();
+  const needsFallback = motionIds.some((motionId) => !snapshots.has(motionId));
+  const fallback = needsFallback ? await fetchEligibleTotals(db) : null;
+  for (const motionId of motionIds) {
+    const snapshot = snapshots.get(motionId);
+    if (snapshot) {
+      result.set(motionId, snapshot);
+    } else {
+      if (!fallback) throw new Error('Missing eligibility fallback');
+      result.set(motionId, fallback);
+    }
+  }
+  return result;
 }
 
 /** One election's candidates, ordered by sequence. */
@@ -783,11 +874,11 @@ async function assembleElectionDetail(
   db: Db,
   row: ElectionRow,
   includeBallots: boolean,
-  eligible: EligibleTotals,
 ): Promise<ElectionDetail> {
-  const [candidateRows, turnout] = await Promise.all([
+  const [candidateRows, turnout, eligibility] = await Promise.all([
     fetchCandidatesFor(db, row.id),
     fetchTurnoutCounts(db, row.id),
+    electionEligibilityFor(db, row.id),
   ]);
   const ballotRows = includeBallots
     ? await fetchBallotRowsFor(db, row.id)
@@ -806,9 +897,9 @@ async function assembleElectionDetail(
     turnout: {
       ballotsCast: turnout.ballotsCast,
       weightCast: turnout.weightCast,
-      eligibleCount: eligible.eligibleCount,
-      eligibleWeight: eligible.eligibleWeight,
+      ...eligibility.totals,
     },
+    eligibleProperties: includeBallots ? eligibility.rows : null,
     ballots: ballotRows,
   };
 }
@@ -850,10 +941,7 @@ export async function fetchElectionsFor(
     )
     .orderBy(desc(elections.electionDate));
   if (rows.length === 0) return [];
-  const eligible = await fetchEligibleTotals(db);
-  return Promise.all(
-    rows.map((r) => assembleElectionDetail(db, r, false, eligible)),
-  );
+  return Promise.all(rows.map((r) => assembleElectionDetail(db, r, false)));
 }
 
 /**
@@ -869,10 +957,7 @@ export async function fetchAdminElections(env: Env): Promise<ElectionDetail[]> {
     .from(elections)
     .orderBy(desc(elections.electionDate));
   if (rows.length === 0) return [];
-  const eligible = await fetchEligibleTotals(db);
-  return Promise.all(
-    rows.map((r) => assembleElectionDetail(db, r, true, eligible)),
-  );
+  return Promise.all(rows.map((r) => assembleElectionDetail(db, r, true)));
 }
 
 /**

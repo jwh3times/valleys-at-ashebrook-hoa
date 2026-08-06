@@ -637,6 +637,12 @@ export type MeetingKind = 'regular' | 'special' | 'annual';
 export type MeetingStatus = 'draft' | 'approved';
 export type MotionOutcome = 'passed' | 'failed' | 'withdrawn' | 'tabled';
 export type MotionVotingState = 'none' | 'open' | 'closed';
+
+export interface EligibilityTotals {
+  eligibleCount: number;
+  eligibleWeight: number;
+  eligibilityFrozen: boolean;
+}
 export type VoteChoice = 'yes' | 'no' | 'abstain' | 'recused' | 'absent';
 
 export const MEETING_BODIES = ['board', 'member'] as const;
@@ -705,9 +711,13 @@ export interface MotionDetail {
   id: string;
   sequence: number;
   text: string;
+  votingState: MotionVotingState;
   moverName: string | null;
   secondName: string | null;
   outcome: MotionOutcome;
+  eligibleCount: number;
+  eligibleWeight: number;
+  eligibilityFrozen: boolean;
   tally: Tally;
   /** Board roll call. Populated when the parent meeting's body is 'board'. */
   votes: VoteRow[];
@@ -1059,15 +1069,24 @@ export interface ElectionSummary {
 export interface ElectionTurnout {
   ballotsCast: number;
   weightCast: number;
-  /** COUNT of ACTIVE properties — the lot denominator. */
+  /** COUNT of properties eligible when voting opened, or ACTIVE properties before then. */
   eligibleCount: number;
-  /** SUM(vote_weight) over ACTIVE properties — the weight denominator. */
+  /** Frozen eligible weight, or current ACTIVE vote weight before voting opens. */
   eligibleWeight: number;
+  eligibilityFrozen: boolean;
+}
+
+export interface ElectionEligibleProperty {
+  propertyId: string;
+  address: string;
+  weight: number;
 }
 
 export interface ElectionDetail extends ElectionSummary {
   candidates: CandidateSummary[];
   turnout: ElectionTurnout;
+  /** Board-only. Null on every public read. */
+  eligibleProperties: ElectionEligibleProperty[] | null;
   /** Board-only. Null on every public read — see Task 3. */
   ballots: BallotRow[] | null;
 }
