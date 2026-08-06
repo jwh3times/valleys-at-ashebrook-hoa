@@ -293,6 +293,46 @@ describe('motions admin route — member votes', () => {
     expect(row2?.proxyId).toBeNull();
   });
 
+  it('full-replaces at least fifteen property votes without exceeding the D1 parameter limit', async () => {
+    const id = await createMotion(await createMeeting());
+    const propertyIds: string[] = [];
+    for (let index = 0; index < 15; index += 1) {
+      propertyIds.push(await createProperty(`${index + 1} Cedar St`, index));
+    }
+
+    const response = POST(
+      req(url, 'POST', {
+        action: 'setMemberVotes',
+        motionId: id,
+        entries: propertyIds.map((propertyId, index) => ({
+          propertyId,
+          choice: index % 3 === 0 ? 'yes' : index % 3 === 1 ? 'no' : 'abstain',
+        })),
+      }),
+    );
+    await expect(response).resolves.toHaveProperty('status', 204);
+
+    const rows = await getDb(env)
+      .select()
+      .from(memberVotes)
+      .where(eq(memberVotes.motionId, id));
+    expect(rows).toHaveLength(15);
+    expect(rows.find((row) => row.propertyId === propertyIds[0])).toEqual(
+      expect.objectContaining({
+        choice: 'yes',
+        weight: 0,
+        castByOwnerId: null,
+        proxyId: null,
+      }),
+    );
+    expect(rows.find((row) => row.propertyId === propertyIds[7])).toEqual(
+      expect.objectContaining({ choice: 'no', weight: 7 }),
+    );
+    expect(rows.find((row) => row.propertyId === propertyIds[14])).toEqual(
+      expect.objectContaining({ choice: 'abstain', weight: 14 }),
+    );
+  });
+
   it('full-replace removes an omitted property', async () => {
     const meetingId = await createMeeting();
     const id = await createMotion(meetingId);

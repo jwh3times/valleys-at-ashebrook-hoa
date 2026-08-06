@@ -333,30 +333,31 @@ async function setMemberVotes(
       .bind(updatedAt, motionId, lookup.votingState, lookup.votingRevision),
   ];
   if (rows.length > 0) {
-    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+    // One bound JSON value keeps the statement below D1's parameter ceiling
+    // for a full neighborhood roster while json_extract preserves SQL NULLs,
+    // numeric zero weights, and the normalized string fields exactly.
     statements.push(
       database
         .prepare(
           `WITH replacement
-             (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id)
-           AS (VALUES ${placeholders})
+             (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id) AS (
+             SELECT
+               json_extract(value, '$.id'),
+               json_extract(value, '$.motionId'),
+               json_extract(value, '$.propertyId'),
+               json_extract(value, '$.castByOwnerId'),
+               json_extract(value, '$.weight'),
+               json_extract(value, '$.choice'),
+               json_extract(value, '$.proxyId')
+             FROM json_each(?)
+           )
            INSERT INTO member_votes
              (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id)
            SELECT id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id
            FROM replacement
            WHERE changes() = 1`,
         )
-        .bind(
-          ...rows.flatMap((row) => [
-            row.id,
-            row.motionId,
-            row.propertyId,
-            row.castByOwnerId,
-            row.weight,
-            row.choice,
-            row.proxyId,
-          ]),
-        ),
+        .bind(JSON.stringify(rows)),
     );
   }
   const [, guard, inserted] = await database.batch(statements);
