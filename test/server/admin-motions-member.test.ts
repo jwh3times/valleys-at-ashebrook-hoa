@@ -6,7 +6,11 @@ vi.mock('../../src/server/authz/context', () => ({
 }));
 
 import { DELETE, PATCH, POST } from '../../src/pages/api/admin/motions';
-import { DELETE as deleteMeeting } from '../../src/pages/api/admin/meetings';
+import {
+  DELETE as deleteMeeting,
+  PATCH as patchMeeting,
+  POST as postMeeting,
+} from '../../src/pages/api/admin/meetings';
 import { getDb } from '../../src/server/db/client';
 import {
   meetings,
@@ -293,10 +297,23 @@ describe('motions admin route — member votes', () => {
     expect(row2?.proxyId).toBeNull();
   });
 
-  it('full-replaces at least fifteen property votes without exceeding the D1 parameter limit', async () => {
+  it('atomically full-replaces at least 101 property votes with database weights', async () => {
     const id = await createMotion(await createMeeting());
+    const stalePropertyId = await createProperty('999 Cedar St', 9);
+    expect(
+      (
+        await POST(
+          req(url, 'POST', {
+            action: 'setMemberVotes',
+            motionId: id,
+            entries: [{ propertyId: stalePropertyId, choice: 'no' }],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
     const propertyIds: string[] = [];
-    for (let index = 0; index < 15; index += 1) {
+    for (let index = 0; index < 101; index += 1) {
       propertyIds.push(await createProperty(`${index + 1} Cedar St`, index));
     }
 
@@ -316,7 +333,8 @@ describe('motions admin route — member votes', () => {
       .select()
       .from(memberVotes)
       .where(eq(memberVotes.motionId, id));
-    expect(rows).toHaveLength(15);
+    expect(rows).toHaveLength(101);
+    expect(rows.some((row) => row.propertyId === stalePropertyId)).toBe(false);
     expect(rows.find((row) => row.propertyId === propertyIds[0])).toEqual(
       expect.objectContaining({
         choice: 'yes',
@@ -325,11 +343,11 @@ describe('motions admin route — member votes', () => {
         proxyId: null,
       }),
     );
-    expect(rows.find((row) => row.propertyId === propertyIds[7])).toEqual(
-      expect.objectContaining({ choice: 'no', weight: 7 }),
+    expect(rows.find((row) => row.propertyId === propertyIds[50])).toEqual(
+      expect.objectContaining({ choice: 'abstain', weight: 50 }),
     );
-    expect(rows.find((row) => row.propertyId === propertyIds[14])).toEqual(
-      expect.objectContaining({ choice: 'abstain', weight: 14 }),
+    expect(rows.find((row) => row.propertyId === propertyIds[100])).toEqual(
+      expect.objectContaining({ choice: 'no', weight: 100 }),
     );
   });
 
@@ -1036,6 +1054,84 @@ describe('motions admin route — member votes', () => {
         .from(meetings)
         .where(eq(meetings.id, meetingId)),
     ).toHaveLength(1);
+    expect(await getEligibility(motionId)).toHaveLength(1);
+  });
+
+  it('keeps meeting body creation-time immutable before and after child voting history', async () => {
+    await enableLiveVoting();
+    await createProperty('1 Oak St');
+    const meetingId = await createMeeting();
+    const motionId = await createMotion(meetingId);
+
+    expect(
+      (await patchMeeting(req(url, 'PATCH', { id: meetingId, body: 'board' })))
+        .status,
+    ).toBe(400);
+    expect((await transitionVoting('openVoting', motionId)).status).toBe(204);
+
+    expect(
+      (await patchMeeting(req(url, 'PATCH', { id: meetingId, body: 'board' })))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await getDb(env)
+          .select({ body: meetings.body })
+          .from(meetings)
+          .where(eq(meetings.id, meetingId))
+      )[0].body,
+    ).toBe('member');
+  });
+
+  it('does not approve a meeting while a child motion is open', async () => {
+    await enableLiveVoting();
+    await createProperty('1 Oak St');
+    const meetingId = await createMeeting();
+    const motionId = await createMotion(meetingId);
+    expect((await transitionVoting('openVoting', motionId)).status).toBe(204);
+
+    expect(
+      (await postMeeting(req(url, 'POST', { action: 'approve', meetingId })))
+        .status,
+    ).toBe(409);
+    expect(
+      (
+        await getDb(env)
+          .select({ status: meetings.status })
+          .from(meetings)
+          .where(eq(meetings.id, meetingId))
+      )[0].status,
+    ).toBe('draft');
+  });
+
+  it('keeps the parent draft when first open wins a race with approval', async () => {
+    await enableLiveVoting();
+    await createProperty('1 Oak St');
+    const meetingId = await createMeeting();
+    const motionId = await createMotion(meetingId);
+    const barrier = pauseNextStatement(/^\s*update\s+["`]?meetings["`]?/i);
+    try {
+      const approvalPromise = postMeeting(
+        req(url, 'POST', { action: 'approve', meetingId }),
+      );
+      await barrier.reached;
+      expect((await transitionVoting('openVoting', motionId)).status).toBe(204);
+      barrier.release();
+      expect((await approvalPromise).status).toBe(409);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+
+    expect(
+      (
+        await getDb(env)
+          .select({ body: meetings.body, status: meetings.status })
+          .from(meetings)
+          .where(eq(meetings.id, meetingId))
+      )[0],
+    ).toEqual({ body: 'member', status: 'draft' });
+    expect((await getMotion(motionId)).votingState).toBe('open');
     expect(await getEligibility(motionId)).toHaveLength(1);
   });
 });

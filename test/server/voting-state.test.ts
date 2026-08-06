@@ -42,17 +42,39 @@ describe('live voting database predicate', () => {
     expect(await predicateResults()).toEqual([0, 0]);
   });
 
-  it('requires both official mode and live voting to be true', async () => {
-    await setSiteValue(
-      JSON.stringify({ officialMode: true, liveVotingEnabled: false }),
-    );
-    expect(await predicateResults()).toEqual([0, 0]);
-  });
-
-  it('is true only when official mode and live voting are both true', async () => {
-    await setSiteValue(
-      JSON.stringify({ officialMode: true, liveVotingEnabled: true }),
-    );
-    expect(await predicateResults()).toEqual([1, 1]);
+  it.each([
+    {
+      label: 'JSON integers',
+      value: { officialMode: 1, liveVotingEnabled: 1 },
+      expected: [0, 0],
+    },
+    {
+      label: 'JSON strings',
+      value: { officialMode: 'true', liveVotingEnabled: 'true' },
+      expected: [0, 0],
+    },
+    {
+      label: 'JSON nulls',
+      value: { officialMode: null, liveVotingEnabled: null },
+      expected: [0, 0],
+    },
+    {
+      label: 'missing properties',
+      value: {},
+      expected: [0, 0],
+    },
+    {
+      label: 'literal false',
+      value: { officialMode: true, liveVotingEnabled: false },
+      expected: [0, 0],
+    },
+    {
+      label: 'literal true',
+      value: { officialMode: true, liveVotingEnabled: true },
+      expected: [1, 1],
+    },
+  ] as const)('accepts only $label booleans', async ({ value, expected }) => {
+    await setSiteValue(JSON.stringify(value));
+    expect(await predicateResults()).toEqual(expected);
   });
 });

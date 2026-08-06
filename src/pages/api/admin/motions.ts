@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, desc, eq, inArray, ne } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -13,8 +13,6 @@ import {
   motions,
   motionEligibility,
   boardVotes,
-  memberVotes,
-  properties,
   resolutions,
 } from '../../../server/db/schema';
 import {
@@ -260,13 +258,18 @@ async function setMemberVotes(
       ? new Map(eligibilityRows.map((row) => [row.propertyId, row.weight]))
       : new Map(
           (propertyIds.length > 0
-            ? await db
-                .select({
-                  id: properties.id,
-                  voteWeight: properties.voteWeight,
-                })
-                .from(properties)
-                .where(inArray(properties.id, propertyIds))
+            ? (
+                await database
+                  .prepare(
+                    `SELECT properties.id, properties.vote_weight AS voteWeight
+                     FROM properties
+                     JOIN json_each(?) AS requested
+                       ON requested.type = 'text'
+                      AND requested.value = properties.id`,
+                  )
+                  .bind(JSON.stringify(propertyIds))
+                  .all<{ id: string; voteWeight: number }>()
+              ).results
             : []
           ).map((row) => [row.id, row.voteWeight]),
         );
