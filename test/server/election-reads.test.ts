@@ -257,6 +257,112 @@ describe('election read helpers', () => {
     ]);
   });
 
+  it('keeps snapshot and fallback eligibility isolated across one multi-election read', async () => {
+    const db = getDb(env);
+    await seedElection('snapshot-one', { source: 'conducted' });
+    await seedElection('snapshot-two', { source: 'conducted' });
+    await seedElection('fallback', { source: 'recorded' });
+    await seedProperty('property-a', { voteWeight: 1 });
+    await seedProperty('property-b', { voteWeight: 2 });
+    await seedProperty('property-c', { voteWeight: 4 });
+    await db.insert(electionEligibility).values([
+      { electionId: 'snapshot-one', propertyId: 'property-a', weight: 1 },
+      { electionId: 'snapshot-one', propertyId: 'property-b', weight: 2 },
+      { electionId: 'snapshot-two', propertyId: 'property-b', weight: 7 },
+    ]);
+
+    await db
+      .update(properties)
+      .set({ voteWeight: 10 })
+      .where(eq(properties.id, 'property-a'));
+    await db
+      .update(properties)
+      .set({ voteWeight: 22, status: 'inactive' })
+      .where(eq(properties.id, 'property-b'));
+
+    const publicById = new Map(
+      (await fetchElectionsFor(env, 'visitor')).map((election) => [
+        election.id,
+        election,
+      ]),
+    );
+    expect(publicById.get('snapshot-one')?.turnout).toMatchObject({
+      eligibleCount: 2,
+      eligibleWeight: 3,
+      eligibilityFrozen: true,
+    });
+    expect(publicById.get('snapshot-two')?.turnout).toMatchObject({
+      eligibleCount: 1,
+      eligibleWeight: 7,
+      eligibilityFrozen: true,
+    });
+    expect(publicById.get('fallback')?.turnout).toMatchObject({
+      eligibleCount: 2,
+      eligibleWeight: 14,
+      eligibilityFrozen: false,
+    });
+    for (const election of publicById.values()) {
+      expect(election.eligibleProperties).toBeNull();
+    }
+
+    const adminById = new Map(
+      (await fetchAdminElections(env)).map((election) => [
+        election.id,
+        election,
+      ]),
+    );
+    expect(adminById.get('snapshot-one')?.eligibleProperties).toEqual([
+      {
+        propertyId: 'property-a',
+        address: 'property-a Ashebrook Lane',
+        weight: 1,
+      },
+      {
+        propertyId: 'property-b',
+        address: 'property-b Ashebrook Lane',
+        weight: 2,
+      },
+    ]);
+    expect(adminById.get('snapshot-two')?.eligibleProperties).toEqual([
+      {
+        propertyId: 'property-b',
+        address: 'property-b Ashebrook Lane',
+        weight: 7,
+      },
+    ]);
+    expect(adminById.get('fallback')?.eligibleProperties).toEqual([
+      {
+        propertyId: 'property-a',
+        address: 'property-a Ashebrook Lane',
+        weight: 10,
+      },
+      {
+        propertyId: 'property-c',
+        address: 'property-c Ashebrook Lane',
+        weight: 4,
+      },
+    ]);
+  });
+
+  it('reads an election archive larger than the D1 bound-parameter limit', async () => {
+    await seedProperty('property-a', { voteWeight: 3 });
+    for (let index = 0; index < 101; index += 1) {
+      await seedElection(`archive-${index.toString().padStart(3, '0')}`);
+    }
+
+    const rows = await fetchElectionsFor(env, 'visitor');
+
+    expect(rows).toHaveLength(101);
+    for (const election of rows) {
+      expect(election.turnout).toMatchObject({
+        eligibleCount: 1,
+        eligibleWeight: 3,
+        eligibilityFrozen: false,
+      });
+      expect(election.eligibleProperties).toBeNull();
+    }
+  });
+
   it('never returns the per-lot ballot list on the public read', async () => {
     await seedElection('e1', { status: 'closed', visibility: 'public' });
     await seedProperty('p1');
