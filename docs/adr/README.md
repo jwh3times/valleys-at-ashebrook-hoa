@@ -23,3 +23,6 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0015: Vote Weight Is Always Present and Always Summed](./0015-weighted-member-voting.md)
 - [ADR 0016: A Resolution Is a Durable Record with an Enforced Supersession Chain](./0016-resolutions-supersession-chain.md)
 - [ADR 0017: Elections Are Secret by Construction, and What That Does and Does Not Mean](./0017-elections-secret-by-construction.md)
+- [ADR 0018: Proxies Are Their Own Table, Not a Boolean on Every Vote](./0018-proxies-record-via-proxy-consolidation.md)
+- [ADR 0019: Homeowner Writes Are Official-Mode Gated](./0019-homeowner-writes-official-mode-gate.md)
+- [ADR 0020: Digital Ballots Are Retained Without a Turnout-to-Choice Link](./0020-digital-ballot-box.md)

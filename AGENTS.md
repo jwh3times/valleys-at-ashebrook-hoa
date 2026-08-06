@@ -6,7 +6,10 @@ This is the public and homeowner website for the Valleys at Ashebrook neighborho
 **"The Valleys at Ashebrook Residents"**. An admin-toggleable **official mode** switches the site
 to official-HOA presentation: branding, footer disclaimer, and HOA-business surfaces like `/dues`
 and homeowner proxy grants at `/proxies` are driven by the `officialMode` site setting through
-`src/lib/site.ts`.
+`src/lib/site.ts`. A separate `liveVotingEnabled` site setting now supplies the default-off
+foundation for conducted elections and member-motion voting; Slice 1 includes only board lifecycle,
+schema, and read-model support — no `/vote`, `/api/vote`, casting workflow, or homeowner voting UI
+has shipped.
 
 The app is an Astro SSR app (`output: 'server'`) running on **Cloudflare Workers** via the
 `@astrojs/cloudflare` adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2**
@@ -147,8 +150,8 @@ Markdown twins described below and never the human-readable originals.
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
   duplicate group resurfaces for review.
 - Board-only meeting record (board and member meetings — proxies recorded by the board or granted
-  online by a homeowner attach to member attendance/votes and election ballots; live-conducted
-  elections remain a later phase): `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`.
+  online by a homeowner attach to member attendance/votes and election ballots):
+  `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`.
   `GET` lists every
   meeting including drafts, or returns one full meeting detail with `?id=`; `POST`
   creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
@@ -162,14 +165,23 @@ Markdown twins described below and never the human-readable originals.
   below), `409` if an election ballot cites a proxy scoped to this meeting (closes a raw-D1-error
   path that opens once an election's `meetingId` is detached from a meeting after ballots were
   recorded against a meeting-scoped proxy — the meeting-still-linked check above can't catch that
-  case), otherwise cascading its attendance, motions, votes, and proxies. `/api/admin/motions`
+  case), and `409` if any child motion has a live-voting state or eligibility snapshot, otherwise
+  cascading its attendance, motions, votes, and proxies. `/api/admin/motions`
   supports `POST`/`PATCH`/`DELETE`. `POST` creates a motion with a server-assigned `sequence`
   (unique per meeting), or with `{ action: 'setVotes' }` fully replaces a board motion's roll-call
   vote set, or with `{ action: 'setMemberVotes' }` fully replaces a member motion's per-property
-  vote set; `PATCH` updates a motion's fields but cannot write `sequence` or move it between
-  meetings; `DELETE` returns `409` if the motion is cited as a resolution's adopting motion,
-  otherwise cascades its votes. `setAttendance`/`setMemberAttendance` and `setVotes`/`setMemberVotes`
-  each replace their full child set in one `db.batch()`. All four attendance/vote actions return
+  vote set, or with `{ action: 'openVoting' }`/`{ action: 'closeVoting' }` moves a member motion's
+  live-voting state. First open requires both official mode and the default-false live-voting flag,
+  a draft member meeting, no pre-entered member votes, and at least one active property; it
+  atomically freezes every active property's weight in `motion_eligibility`. Close is reversible
+  while the meeting stays draft, and reopen retains the original eligibility snapshot and any live
+  votes. `setMemberVotes` returns `409` while open; after first open it stamps weights from the
+  immutable snapshot and performs the full replacement as a state-plus-`voting_revision`
+  compare-and-swap in one D1 batch, so a stale correction cannot overwrite an intervening session.
+  `PATCH` cannot edit a motion while open or change its text after first open; `DELETE` returns `409`
+  if the motion is cited as a resolution's adopting motion or has any live-voting history,
+  otherwise cascading its votes. `setAttendance`/`setMemberAttendance` and board `setVotes` each
+  replace their full child set in one `db.batch()`. All four attendance/vote actions return
   `409` if the target meeting's or motion's `body` doesn't match the action — board attendance/votes
   against a member meeting/motion, or vice versa, are refused; `setMemberVotes` also returns `400`
   for an unknown `propertyId`, since it stamps `memberVotes.weight` from `properties.vote_weight` at
@@ -198,22 +210,30 @@ Markdown twins described below and never the human-readable originals.
   can never be bypassed through a plain field write; `PATCH` also returns `409` if it would clear
   `effective_date` on a non-draft resolution. `DELETE` removes only a `draft` that nothing
   supersedes.
-- Board-only elections record (the board recording an election that already happened on paper —
-  candidates, paper ballots, and tallies typed in from the paper count; live-conducted ballot
-  casting is a later phase; see
-  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md)): `/api/admin/elections`
-  supports `GET`/`POST`/`PATCH`/`DELETE`, plus actions `close`, `void`, `setTallies`,
-  `setBallots`, `certify`, and `uncertify`, all `requireBoard`-gated. `GET` returns every election
-  including drafts, each with its candidates and turnout nested and, board-only, its per-lot
-  ballot list — the same full-detail-on-list shape as `/api/admin/resolutions`. `POST` creates a
-  `draft` election, always `source: 'recorded'` in this phase; `PATCH` edits
+- Board-only elections record (recorded paper elections plus the default-off conducted-election
+  lifecycle foundation; see [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) and
+  [ADR 0020](./docs/adr/0020-digital-ballot-box.md)): `/api/admin/elections` supports
+  `GET`/`POST`/`PATCH`/`DELETE`, plus actions `open`, `close`, `void`, `setTallies`, `setBallots`,
+  `certify`, and `uncertify`, all `requireBoard`-gated. `GET` returns every election including
+  drafts and open elections, each with its candidates, turnout, and frozen/current eligibility
+  totals nested and, board-only, its per-lot eligibility and ballot lists — the same
+  full-detail-on-list shape as `/api/admin/resolutions`. `POST` creates a `draft` election with
+  create-immutable `source: 'recorded' | 'conducted'`; `PATCH` edits
   `title`/`seats`/`electionDate`/`meetingId`/`visibility` only — `status`, `source`, and
   certification provenance are transition-only and rejected on key presence by
-  `normalizeElectionInput`. `close` moves `draft` -> `closed`; `setTallies` and `setBallots` each
-  fully replace their election's candidate-tally set or per-lot ballot set in one `db.batch()` (a
-  candidate omitted from `setTallies` has its tally restored to `NULL`), and both return `409` for
-  a `certified`/`void` election and `409` for a non-`recorded` election (unreachable today —
-  written ahead of the later live-ballot phase); `setBallots` stamps `weight` from
+  `normalizeElectionInput`, and every conducted-election field is frozen after first open.
+  `open` accepts only a public- or homeowner-visible conducted draft with at least one
+  non-withdrawn candidate
+  and one active property while both official mode and the live-voting flag are true; in one D1
+  batch it freezes every active property and weight in `election_eligibility` and moves the
+  election to `open`. A recorded `close` retains its existing `draft -> closed` transition; a
+  conducted close accepts only `open`, atomically moves to `closed`, and derives every candidate's
+  final `votes = SUM(ballot_choices.weight)`, using a real zero when no choice row exists. No
+  conducted tally is populated or exposed while open, and a closed conducted election cannot
+  reopen. `setTallies` and `setBallots` each fully replace their election's candidate-tally set or
+  per-lot ballot set in one `db.batch()` (a candidate omitted from `setTallies` has its tally
+  restored to `NULL`), and both return `409` for a `certified`/`void` election and for every
+  non-`recorded` election. `setBallots` stamps `weight` from
   `properties.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
   same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
 meetingId: election.meetingId }` so a proxy signed for the election's own meeting also covers it.
@@ -225,9 +245,10 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   winners resolving to the same person. `uncertify` reverses it, deleting the terms it created but
   never the `board_people` rows. `DELETE` removes only a `draft` election; a `certified` election
   cannot be voided directly (`void` returns `409` — uncertify first). `/api/admin/candidates`
-  supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned and
-  rejected on key presence, and a candidate can be deleted only while its election is still a
-  `draft` (mark it withdrawn otherwise).
+  supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned, candidates
+  can be added or deleted only while the election is a draft, and conducted candidates become
+  immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
+  No `/vote`, `/api/vote`, digital casting action, or homeowner voting UI exists in Slice 1.
 - Board-only complete proxies record (including paper proxies entered by the board and online
   grants created by homeowners — one owner authorising one named holder to act for one lot at
   exactly one meeting or election; see
@@ -340,13 +361,14 @@ boolean`.
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
   the admin UI and the `/api/admin/reports` endpoint.
 - `src/lib/types.ts` contains shared shapes, `DEFAULT_*` fallbacks, `DOCUMENT_CATEGORIES`, the
-  `Visibility` type, admin-write input normalizers
+  `Visibility` type, fail-closed `SiteSettings.liveVotingEnabled`, admin-write input normalizers
   (`normalize{Announcement,Property,Owner,Resolution,Election,Candidate,Proxy}Input`,
   `INPUT_LIMITS`) that trim, cap, validate, and reject on write, the resolution shapes
   (`ResolutionStatus`, `RESOLUTION_STATUSES`, `ResolutionSummary`, `ResolutionDetail`,
   `ResolutionChainLink`, `ResolutionInput`), the elections shapes (`ElectionStatus`,
   `ElectionSource`, `ELECTION_STATUSES`, `ELECTION_SOURCES`, `ElectionSummary`, `ElectionDetail`,
-  `CandidateSummary`, `ElectionTurnout`, `BallotRow`, `ElectionInput`, `CandidateInput`), the
+  `CandidateSummary`, `ElectionTurnout`, `ElectionEligibleProperty`, `BallotRow`, `ElectionInput`,
+  `CandidateInput`), member-motion `MotionVotingState` and shared `EligibilityTotals`, the
   proxies shapes (`ProxyDetail`, `ProxyInput`, `MemberProxyDetail`, `MemberProxyLists`, `MemberLot`,
   and `UpcomingOccasion`), a shared
   `isoDateOrError` calendar-date validator used by both the declarative normalizers and the
@@ -386,9 +408,11 @@ boolean`.
   and `MemberVoteRow.proxyId` carry the real proxy id only when `fetchAdminMeeting`/
   `fetchAdminMeetings` call it `true`; `fetchMeetingFor`/`fetchMeetingsFor` call it `false`, and
   `viaProxy` — always present — is derived as `proxyId !== null` rather than a stored flag. `content/`
-  also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring) and
+  also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring),
   `proxy-guards.ts` (`proxyUseError`, the shared cross-row guard `setMemberAttendance`,
-  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`). `reads.ts` also
+  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`), and `voting-state.ts`
+  (the shared SQL predicate requiring both official mode and live voting for a
+  database-conditioned open transition). `reads.ts` also
   has the resolutions book — `fetchResolutionsFor(env, role, { includeHistoric? })` filters
   `status != 'draft'` UNCONDITIONALLY, including for a board caller, the same rule ADR 0014 sets for
   meetings, so a draft resolution is reachable only through the board-only `fetchAdminResolutions`;
@@ -397,15 +421,18 @@ boolean`.
   tier filter at every step, masking an out-of-tier predecessor/successor to
   `{ id: null, number: null, title: null, visible: false }` rather than omitting it, so the chain's
   true length is never hidden. See [ADR 0016](./docs/adr/0016-resolutions-supersession-chain.md).
-  `reads.ts` also has the elections record — `fetchElectionsFor(env, role)` filters
+  For motions, `assembleMeetingDetail` attaches current active-property eligibility totals until
+  first open, then frozen totals from `motion_eligibility`. `reads.ts` also has the elections record
+  — `fetchElectionsFor(env, role)` filters
   `status IN ('closed', 'certified')` UNCONDITIONALLY, including for a board caller, the same rule
   ADR 0014 sets for meetings, so a draft or void election is reachable only through the board-only
   `fetchAdminElections`; both share `assembleElectionDetail`, which always computes aggregate
-  turnout (`ballotsCast`, `weightCast`, `eligibleCount`, `eligibleWeight`) but attaches the per-lot
-  `ballots` list only for the admin caller — `ElectionDetail.ballots` is `null` on every public
-  read, since publishing per-lot turnout beside per-candidate tallies is what would make an
-  individual's choice deducible in a small race. See
-  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md). `reads.ts` also has
+  turnout (`ballotsCast`, `weightCast`, `eligibleCount`, `eligibleWeight`, `eligibilityFrozen`),
+  using current active properties before first open and `election_eligibility` afterward, but
+  attaches the per-lot `eligibleProperties` and `ballots` lists only for the admin caller — both
+  fields are `null` on every public read. It never reads or returns `ballot_choices`. See
+  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) and
+  [ADR 0020](./docs/adr/0020-digital-ballot-box.md). `reads.ts` also has
   `fetchAdminProxies(env)`, the board-only complete-register read: it returns every `ProxyDetail`
   with its property address and grantor/holder owner names resolved, the same
   full-detail-on-list shape as `fetchAdminResolutions`/`fetchAdminElections`. Homeowner proxy reads
@@ -436,7 +463,9 @@ boolean`.
 `documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`
 and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
 review; the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
-(key/value singletons `dues` and `site`), `reports` (saved AI-generated governing-documents
+(key/value singletons `dues` and `site`; the site JSON includes `officialMode` and the
+fail-closed/default-false `liveVotingEnabled` flag), `reports` (saved AI-generated
+governing-documents
 reports: `topic`, nullable `template_key` — null means freeform — `content_md` (final
 de-anonymized markdown), `sources_json` (a `{id, title, category}` snapshot), indexed
 `created_at`, and `created_by` as a plain-text board-user-id audit column with no FK; only a
@@ -449,9 +478,10 @@ authorization; `board_terms` records a term of service — `person_id`, nullable
 across terms; deleting a person with a term on record is refused with `409`), `meetings`,
 `board_attendance`, `motions`, `board_votes`, `member_attendance`, and `member_votes` (the meeting
 record — board and member meetings; proxies may be board-recorded or granted online by homeowners,
-while live-conducted elections remain a later phase — per
+with the default-off live-voting lifecycle foundation described in ADR 0020 — per
 [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md) and
-[ADR 0015](./docs/adr/0015-weighted-member-voting.md): `meetings` has `body` (`board`/`member`, the
+[ADR 0015](./docs/adr/0015-weighted-member-voting.md), and
+[ADR 0020](./docs/adr/0020-digital-ballot-box.md): `meetings` has `body` (`board`/`member`, the
 column that decides which voter model applies), `kind` (`regular`/`special`/`annual`), `date`,
 `start_time`, `location`, `title`, `summary_md`, `document_id` referencing `documents` on
 delete-set-null, `quorum_required`, `status` (`draft`/`approved`, default `draft`), `visibility`
@@ -463,9 +493,10 @@ per meeting, board mover/second referencing `board_people` on delete-restrict, p
 writes them yet, and the mover/second pickers are hidden on member meetings — and a board-entered
 `outcome` (`passed`/`failed`/`withdrawn`/`tabled`). Member motions also carry `voting_state`
 (`none`/`open`/`closed`) and a monotonic `voting_revision`: every open, close, and successful
-board vote-set replacement advances the revision, so a stale correction cannot overwrite an
+member vote-set replacement advances the revision, so a stale correction cannot overwrite an
 intervening live session even when the lifecycle state returns to `closed`; `motion_eligibility`
-freezes each active property's weight at first open and is reused unchanged on reopen.
+is unique per `(motion_id, property_id)`, cascades with its motion, restricts property deletion,
+and freezes each active property's non-negative weight at first open for unchanged reuse on reopen.
 `board_votes` is one roll-call vote per motion per `board_people` row (`choice`:
 `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
 `member_attendance` is one present/absent row per meeting per `properties` row, unique per pair,
@@ -473,9 +504,10 @@ with nullable `represented_by_owner_id` and a nullable `proxy_id` referencing `p
 carries no `ON DELETE` action, deliberately); `member_votes` is one vote per
 motion per `properties` row — that uniqueness is what enforces one vote per lot — with nullable
 `cast_by_owner_id` and the same nullable, actionless `proxy_id`, a `weight` column snapshotting
-`properties.vote_weight` as
-stamped by the route at recording time (so correcting a property's weight later cannot rewrite a
-past tally), and `choice` restricted to `yes`/`no`/`abstain` (`recused`/`absent` are board
+`properties.vote_weight` as stamped from the current property before first open or from the
+immutable `motion_eligibility` record-date row afterward (so correcting a property's weight later
+cannot rewrite a past live-voting tally), and `choice` restricted to `yes`/`no`/`abstain`
+(`recused`/`absent` are board
 roll-call concepts and are excluded). `member_attendance.proxy_id` and `member_votes.proxy_id`
 replaced a `via_proxy` boolean each carried until migration `0015`; `viaProxy` on both is now
 derived at read time (`proxy_id IS NOT NULL`), never a stored fact a caller could set
@@ -506,29 +538,33 @@ Because deleting a motion or its meeting could otherwise silently null a resolut
 provenance via the `set null` cascade, `DELETE /api/admin/motions` and `DELETE /api/admin/meetings`
 both return `409` if a resolution cites one of the motions being removed as its adopting motion.
 
-`elections`, `candidates`, and `ballots` (the elections record — the board recording an election
-that already happened on paper; live-conducted ballot casting is a later phase — per
-[ADR 0017](./docs/adr/0017-elections-secret-by-construction.md)): `elections` has a nullable
-`meeting_id` referencing `meetings` on delete-set-null (an election may stand alone), `title`,
-`seats`, `election_date`, `source` (`recorded`/`conducted`, default `recorded`, create-immutable —
-this phase only ever writes `recorded`; `conducted` is reserved for the later live-ballot phase),
-`status` (`draft`/`closed`/`certified`/`void`, default `draft`), `visibility` (default `board`),
-certification provenance `certified_at`/`certified_by`, and `created_by`. `candidates` references
-`elections` on delete-cascade, with a nullable `board_person_id` referencing `board_people` on
-delete-restrict (backfilled by `certify` for a winner who had none, so a returning board member
-keeps one identity across terms per ADR 0012), a server-assigned `sequence` unique per election, a
-nullable `votes` (`NULL` = not yet recorded, `0` = recorded as zero — the same distinction
-`tallyVotes` protects for motions), `won`, and `withdrawn`; it deliberately carries no
-`updated_at`, unlike every other table in this schema — see ADR 0017. `ballots` references
-`elections` on delete-cascade and `properties` on delete-restrict, unique per
-`(election_id, property_id)`, and records only that a lot returned a ballot: a `weight` snapshot
-of `properties.vote_weight`, a nullable `proxy_id` (actionless, see below), and a nullable
-`cast_by_owner_id` referencing
-`owners` on delete-set-null — there is deliberately no link from a ballot to a candidate, so which
-candidate a lot chose is never recorded anywhere. `board_terms` also carries a nullable
-`election_id` referencing `elections` on delete-set-null, recording which election produced that
-term; `certify` opens it, `uncertify` deletes it, and `DELETE /api/admin/board-terms` refuses to
-delete a term with one set.
+`elections`, `election_eligibility`, `candidates`, `ballots`, and `ballot_choices` (the recorded
+paper-election workflow plus the default-off conducted-election foundation — per
+[ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) and
+[ADR 0020](./docs/adr/0020-digital-ballot-box.md)): `elections` has a nullable `meeting_id`
+referencing `meetings` on delete-set-null (an election may stand alone), `title`, `seats`,
+`election_date`, create-immutable `source` (`recorded`/`conducted`, default `recorded`), `status`
+(`draft`/`open`/`closed`/`certified`/`void`, default `draft`), `visibility` (default `board`),
+certification provenance `certified_at`/`certified_by`, and `created_by`.
+`election_eligibility` is unique per `(election_id, property_id)`, cascades with its election,
+restricts property deletion, and stores the non-negative property weight frozen when a conducted
+election first opens. `candidates` references `elections` on delete-cascade, with a nullable
+`board_person_id` referencing `board_people` on delete-restrict (backfilled by `certify` for a
+winner who had none, so a returning board member keeps one identity across terms per ADR 0012), a
+server-assigned `sequence` unique per election, a nullable `votes` (`NULL` = not yet recorded,
+`0` = recorded as zero — and always `NULL` while a conducted election is open), `won`, and
+`withdrawn`; it deliberately carries no `updated_at`. `ballots` references `elections` on
+delete-cascade and `properties` on delete-restrict, is unique per `(election_id, property_id)`, and
+records only turnout: a `weight` snapshot, nullable actionless `proxy_id`, nullable
+`cast_by_owner_id` referencing `owners` on delete-set-null, and `recorded_at`.
+`ballot_choices` is the anonymous retained digital ballot box: `id`, `election_id` on
+delete-cascade, `candidate_id` on delete-restrict, and non-negative `weight`, indexed only by
+election. It deliberately has no ballot/property/owner/proxy/caster/timestamp/shared-receipt field
+or other way to correlate a choice to a turnout row; none may be added. A conducted close derives
+final candidate totals from these retained rows, but Slice 1 has no casting route that writes them.
+`board_terms` also carries a nullable `election_id` referencing `elections` on delete-set-null,
+recording which election produced that term; `certify` opens it, `uncertify` deletes it, and
+`DELETE /api/admin/board-terms` refuses to delete a term with one set.
 
 `proxies` (the proxies record — either entered from paper by the board or granted online by a
 homeowner for a lot they control, per
