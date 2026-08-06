@@ -238,16 +238,27 @@ async function approveMeeting(
   if (existing[0].status === 'approved')
     return new Response('Meeting is already approved', { status: 409 });
   const ctx = await resolveAuthContext(locals, request, env);
-  await db
-    .update(meetings)
-    .set({
-      status: 'approved',
-      approvedAt: new Date(),
-      approvedBy: ctx?.userId ?? 'unknown',
-      approvedByMotionId,
-      updatedAt: new Date(),
-    })
-    .where(eq(meetings.id, meetingId));
+  const now = Math.floor(Date.now() / 1000);
+  const approved = await env.DATABASE.prepare(
+    `UPDATE meetings
+     SET status = 'approved', approved_at = ?, approved_by = ?,
+         approved_by_motion_id = ?, updated_at = ?
+     WHERE id = ?
+       AND status = 'draft'
+       AND NOT EXISTS (
+         SELECT 1 FROM motions
+         WHERE motions.meeting_id = meetings.id
+           AND motions.voting_state = 'open'
+       )
+     RETURNING id`,
+  )
+    .bind(now, ctx?.userId ?? 'unknown', approvedByMotionId, now, meetingId)
+    .run();
+  if (approved.results.length !== 1)
+    return new Response(
+      'Meeting cannot be approved while a motion vote is open',
+      { status: 409 },
+    );
   return new Response(null, { status: 204 });
 }
 

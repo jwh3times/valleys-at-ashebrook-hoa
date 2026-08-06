@@ -11,7 +11,6 @@ import type { Db } from '../../../server/db/client';
 import {
   elections,
   candidates,
-  ballots,
   properties,
   owners,
   meetings,
@@ -131,13 +130,60 @@ async function setTallies(db: Db, body: unknown): Promise<Response> {
   const votesByCandidate = new Map(
     parsedEntries.value.map((e) => [e.candidateId, e.votes]),
   );
-  const updates = candidateRows.map((c) =>
-    db
-      .update(candidates)
-      .set({ votes: votesByCandidate.get(c.id) ?? null })
-      .where(eq(candidates.id, c.id)),
+  // Reserve the parent inside the same D1 transaction as the replacement.
+  // The temporary status is never externally visible or committed: every
+  // child update requires it, and the last statement restores the original
+  // lifecycle state. A terminal transition that wins before this batch makes
+  // the reservation a no-op, so every child is also a no-op.
+  const reservationStatus = '__replacing_tallies__';
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const statements: D1PreparedStatement[] = [
+    env.DATABASE.prepare(
+      `UPDATE elections
+       SET status = ?
+       WHERE id = ? AND source = 'recorded' AND status = ?
+         AND (SELECT COUNT(*) FROM candidates WHERE election_id = ?) = ?
+       RETURNING id`,
+    ).bind(
+      reservationStatus,
+      electionId,
+      election.status,
+      electionId,
+      candidateRows.length,
+    ),
+  ];
+  for (const candidate of candidateRows) {
+    statements.push(
+      env.DATABASE.prepare(
+        `UPDATE candidates
+         SET votes = ?
+         WHERE id = ? AND election_id = ?
+           AND EXISTS (
+             SELECT 1 FROM elections
+             WHERE id = ? AND source = 'recorded' AND status = ?
+           )`,
+      ).bind(
+        votesByCandidate.get(candidate.id) ?? null,
+        candidate.id,
+        electionId,
+        electionId,
+        reservationStatus,
+      ),
+    );
+  }
+  statements.push(
+    env.DATABASE.prepare(
+      `UPDATE elections
+       SET status = ?, updated_at = ?
+       WHERE id = ? AND source = 'recorded' AND status = ?
+       RETURNING id`,
+    ).bind(election.status, updatedAt, electionId, reservationStatus),
   );
-  if (updates.length > 0) await db.batch(updates as never);
+  const results = await env.DATABASE.batch(statements);
+  const reservation = results[0];
+  const release = results[results.length - 1];
+  if (reservation.meta.changes !== 1 || release.meta.changes !== 1)
+    return new Response(CERTIFIED_OR_VOID('tallies'), { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -285,14 +331,12 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
 
   const rows: {
     id: string;
-    electionId: string;
     propertyId: string;
     weight: number;
     proxyId: string | null;
     castByOwnerId: string | null;
-    recordedAt: Date;
   }[] = [];
-  const now = new Date();
+  const now = Math.floor(Date.now() / 1000);
   for (const e of parsedEntries.value) {
     const dbWeight = weightById.get(e.propertyId);
     if (dbWeight === undefined)
@@ -313,21 +357,73 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     const weight = e.weight ?? dbWeight;
     rows.push({
       id: crypto.randomUUID(),
-      electionId,
       propertyId: e.propertyId,
       weight,
       proxyId: e.proxyId,
       castByOwnerId: e.castByOwnerId,
-      recordedAt: now,
     });
   }
 
   // Full replace, atomically: a lot omitted from `entries` returned no
-  // ballot this time and is removed, not left at its previous value.
-  await db.batch([
-    db.delete(ballots).where(eq(ballots.electionId, electionId)),
-    ...(rows.length > 0 ? [db.insert(ballots).values(rows)] : []),
-  ] as never);
+  // ballot this time and is removed, not left at its previous value. As with
+  // tally replacement, the uncommitted temporary status is the reservation
+  // every child statement must observe. If certify/void wins first, the
+  // reservation, delete, inserts, and release all change zero rows.
+  const reservationStatus = '__replacing_ballots__';
+  const statements: D1PreparedStatement[] = [
+    env.DATABASE.prepare(
+      `UPDATE elections
+       SET status = ?
+       WHERE id = ? AND source = 'recorded' AND status = ?
+       RETURNING id`,
+    ).bind(reservationStatus, electionId, election.status),
+    env.DATABASE.prepare(
+      `DELETE FROM ballots
+       WHERE election_id = ?
+         AND EXISTS (
+           SELECT 1 FROM elections
+           WHERE id = ? AND source = 'recorded' AND status = ?
+         )`,
+    ).bind(electionId, electionId, reservationStatus),
+  ];
+  for (const row of rows) {
+    statements.push(
+      env.DATABASE.prepare(
+        `INSERT INTO ballots (
+           id, election_id, property_id, cast_by_owner_id, proxy_id,
+           weight, recorded_at
+         )
+         SELECT ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (
+           SELECT 1 FROM elections
+           WHERE id = ? AND source = 'recorded' AND status = ?
+         )`,
+      ).bind(
+        row.id,
+        electionId,
+        row.propertyId,
+        row.castByOwnerId,
+        row.proxyId,
+        row.weight,
+        now,
+        electionId,
+        reservationStatus,
+      ),
+    );
+  }
+  statements.push(
+    env.DATABASE.prepare(
+      `UPDATE elections
+       SET status = ?, updated_at = ?
+       WHERE id = ? AND source = 'recorded' AND status = ?
+       RETURNING id`,
+    ).bind(election.status, now, electionId, reservationStatus),
+  );
+  const results = await env.DATABASE.batch(statements);
+  const reservation = results[0];
+  const release = results[results.length - 1];
+  if (reservation.meta.changes !== 1 || release.meta.changes !== 1)
+    return new Response(CERTIFIED_OR_VOID('ballots'), { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -665,11 +761,13 @@ async function certifyElection(
     }
   }
 
-  // Effects, all in one batch. Each write is conditional on the election
-  // still being closed, and the status transition runs last. D1 executes a
-  // batch as one transaction, so either this batch owns the closed ->
-  // certified transition and commits every effect, or every effect is a
-  // no-op and the losing request returns 409.
+  // Effects, all in one batch. The first statement reserves this closed
+  // election with a temporary status and re-checks the existing-person
+  // open-term invariant at the mutation boundary. The temporary value is
+  // never externally visible or committed: every effect requires it, and
+  // the final statement replaces it with `certified`. A competing batch for
+  // another election that opens a term first makes this reservation a no-op,
+  // which in turn makes every dependent effect a no-op.
   //
   // Every new id is pre-generated in JS — a D1 batch cannot thread a
   // RETURNING value from one statement into the next, so the board_terms rows
@@ -677,7 +775,25 @@ async function certifyElection(
   // the batch is built.
   const ctx = await resolveAuthContext(locals, request, env);
   const now = Math.floor(Date.now() / 1000);
-  const statements: D1PreparedStatement[] = [];
+  const reservationStatus = '__certifying__';
+  const linkedPersonPlaceholders = linkedPersonIds.map(() => '?').join(', ');
+  const openTermGuard =
+    linkedPersonIds.length > 0
+      ? `AND NOT EXISTS (
+           SELECT 1 FROM board_terms
+           WHERE person_id IN (${linkedPersonPlaceholders})
+             AND term_end IS NULL
+         )`
+      : '';
+  const statements: D1PreparedStatement[] = [
+    env.DATABASE.prepare(
+      `UPDATE elections
+       SET status = ?, updated_at = ?
+       WHERE id = ? AND status = 'closed'
+         ${openTermGuard}
+       RETURNING id`,
+    ).bind(reservationStatus, now, id, ...linkedPersonIds),
+  ];
   for (const w of winners) {
     if (w.boardPersonId === null) {
       const personId = crypto.randomUUID();
@@ -686,9 +802,9 @@ async function certifyElection(
           `INSERT INTO board_people (id, full_name, created_at, updated_at)
            SELECT ?, ?, ?, ?
            WHERE EXISTS (
-             SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
+             SELECT 1 FROM elections WHERE id = ? AND status = ?
            )`,
-        ).bind(personId, w.fullName, now, now, id),
+        ).bind(personId, w.fullName, now, now, id, reservationStatus),
       );
       // Backfilled so a re-run cannot mint a second identity for the same
       // human — ADR 0012's whole point is one identity across terms.
@@ -698,9 +814,9 @@ async function certifyElection(
            SET board_person_id = ?
            WHERE id = ? AND election_id = ?
              AND EXISTS (
-               SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
+               SELECT 1 FROM elections WHERE id = ? AND status = ?
              )`,
-        ).bind(personId, w.candidateId, id, id),
+        ).bind(personId, w.candidateId, id, id, reservationStatus),
       );
       w.boardPersonId = personId;
     }
@@ -714,8 +830,12 @@ async function certifyElection(
          )
          SELECT ?, ?, ?, ?, ?, ?, ?, ?
          WHERE EXISTS (
-           SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
-         )`,
+           SELECT 1 FROM elections WHERE id = ? AND status = ?
+         )
+           AND NOT EXISTS (
+             SELECT 1 FROM board_terms
+             WHERE person_id = ? AND term_end IS NULL
+           )`,
       ).bind(
         crypto.randomUUID(),
         w.boardPersonId!,
@@ -726,6 +846,8 @@ async function certifyElection(
         now,
         now,
         id,
+        reservationStatus,
+        w.boardPersonId!,
       ),
     );
   }
@@ -736,23 +858,45 @@ async function certifyElection(
        SET won = 1
        WHERE election_id = ? AND id IN (${winnerPlaceholders})
          AND EXISTS (
-           SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
+           SELECT 1 FROM elections WHERE id = ? AND status = ?
          )`,
-    ).bind(id, ...winners.map((w) => w.candidateId), id),
+    ).bind(id, ...winners.map((w) => w.candidateId), id, reservationStatus),
   );
   statements.push(
     env.DATABASE.prepare(
       `UPDATE elections
        SET status = 'certified', certified_at = ?, certified_by = ?,
            updated_at = ?
-       WHERE id = ? AND status = 'closed'
+       WHERE id = ? AND status = ?
        RETURNING id`,
-    ).bind(now, ctx?.userId ?? 'unknown', now, id),
+    ).bind(now, ctx?.userId ?? 'unknown', now, id, reservationStatus),
   );
   const results = await env.DATABASE.batch(statements);
+  const reservation = results[0];
   const transition = results[results.length - 1];
-  if (transition.meta.changes !== 1)
+  if (reservation.meta.changes !== 1 || transition.meta.changes !== 1) {
+    if (linkedPersonIds.length > 0) {
+      const openTerms = await db
+        .select({ personId: boardTerms.personId })
+        .from(boardTerms)
+        .where(
+          and(
+            inArray(boardTerms.personId, linkedPersonIds),
+            isNull(boardTerms.termEnd),
+          ),
+        );
+      if (openTerms.length > 0) {
+        const winner = winners.find(
+          (w) => w.boardPersonId === openTerms[0].personId,
+        )!;
+        return new Response(
+          `${winner.fullName} already holds an open term — end it before certifying`,
+          { status: 409 },
+        );
+      }
+    }
     return new Response('Election is no longer closed', { status: 409 });
+  }
   return new Response(null, { status: 204 });
 }
 

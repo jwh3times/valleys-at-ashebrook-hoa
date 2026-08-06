@@ -5,8 +5,8 @@ export const LIVE_VOTING_ENABLED_SQL = `
     SELECT 1 FROM settings
     WHERE key = 'site'
       AND CASE WHEN json_valid(value)
-        THEN json_extract(value, '$.officialMode') = 1
-         AND json_extract(value, '$.liveVotingEnabled') = 1
+        THEN json_type(value, '$.officialMode') = 'true'
+         AND json_type(value, '$.liveVotingEnabled') = 'true'
         ELSE 0
       END
   )

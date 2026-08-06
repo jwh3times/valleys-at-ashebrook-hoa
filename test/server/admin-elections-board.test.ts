@@ -39,6 +39,7 @@ beforeEach(async () => {
 
 const url = 'http://localhost/api/admin/elections';
 const now = new Date();
+const originalD1Batch = env.DATABASE.batch.bind(env.DATABASE);
 
 function req(u: string, method: string, body?: unknown) {
   return {
@@ -181,6 +182,33 @@ async function enableLiveVoting(): Promise<void> {
       value: JSON.stringify({ officialMode: true, liveVotingEnabled: true }),
       updatedAt: now,
     });
+}
+
+function pauseNextBatch() {
+  let release!: () => void;
+  let reached!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const batchReached = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let paused = false;
+  const spy = vi
+    .spyOn(env.DATABASE, 'batch')
+    .mockImplementation(async (statements) => {
+      if (!paused) {
+        paused = true;
+        reached();
+        await released;
+      }
+      return originalD1Batch(statements);
+    });
+  return {
+    reached: batchReached,
+    release,
+    restore: () => spy.mockRestore(),
+  };
 }
 
 describe('elections admin route — board', () => {
@@ -836,6 +864,50 @@ describe('elections admin route — board', () => {
     const rows = await getBallotsFor(electionId);
     expect(rows.length).toBe(1);
     expect(rows[0].propertyId).toBe(p1);
+  });
+
+  it('does not replace ballots after a concurrent void commits', async () => {
+    const electionId = await createElection();
+    const originalPropertyId = await createProperty('1 Oak St', 1);
+    const replacementPropertyId = await createProperty('2 Oak St', 2);
+    expect(
+      (
+        await POST(
+          req(url, 'POST', {
+            action: 'setBallots',
+            electionId,
+            entries: [{ propertyId: originalPropertyId }],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
+    const barrier = pauseNextBatch();
+    try {
+      const replacementPromise = POST(
+        req(url, 'POST', {
+          action: 'setBallots',
+          electionId,
+          entries: [{ propertyId: replacementPropertyId }],
+        }),
+      );
+      await barrier.reached;
+      expect(
+        (await POST(req(url, 'POST', { action: 'void', id: electionId })))
+          .status,
+      ).toBe(204);
+      barrier.release();
+      expect((await replacementPromise).status).toBe(409);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+
+    expect((await getElection(electionId)).status).toBe('void');
+    const rows = await getBallotsFor(electionId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].propertyId).toBe(originalPropertyId);
+    expect(rows[0].weight).toBe(1);
   });
 
   it('setBallots on a certified election returns 409', async () => {

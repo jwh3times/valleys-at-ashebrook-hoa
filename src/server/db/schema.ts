@@ -643,10 +643,10 @@ export const candidates = sqliteTable(
       .default(false),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     // NOTE: there is deliberately NO updatedAt on this table, breaking the
-    // convention every other table follows. In PR 6, casting increments
-    // `votes`; if that touched an updatedAt, the last ballot's choice would be
-    // recoverable from persisted data alone by matching it against the newest
-    // ballots.recorded_at. Do not "fix" this omission.
+    // convention every other table follows. Conducted-election totals remain
+    // NULL while voting is open and are derived from retained choices only at
+    // close; a per-cast timestamp here would add a ballot-choice correlation
+    // surface. Do not "fix" this omission.
   },
   (t) => [
     index('candidates_election_id_idx').on(t.electionId),
