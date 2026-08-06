@@ -74,7 +74,9 @@ function election(overrides: Partial<ElectionDetail> = {}): ElectionDetail {
       weightCast: 0,
       eligibleCount: 0,
       eligibleWeight: 0,
+      eligibilityFrozen: false,
     },
+    eligibleProperties: [],
     ballots: [],
     ...overrides,
   };

@@ -1,12 +1,15 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
+import { eq } from 'drizzle-orm';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import {
   meetings,
   motions,
+  motionEligibility,
   boardVotes,
   boardAttendance,
   boardPeople,
+  properties,
 } from '../../src/server/db/schema';
 import {
   fetchMeetingsFor,
@@ -24,10 +27,12 @@ const now = new Date();
 beforeEach(async () => {
   const db = getDb(env);
   await db.delete(boardVotes);
+  await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(boardAttendance);
   await db.delete(meetings);
   await db.delete(boardPeople);
+  await db.delete(properties);
 });
 
 async function seed(
@@ -176,6 +181,110 @@ describe('meeting read helpers', () => {
       'A. Reyes',
       'B. Ortiz',
     ]);
+  });
+
+  it('uses frozen motion eligibility while never-opened motions use the current roster', async () => {
+    const db = getDb(env);
+    await db.insert(properties).values([
+      {
+        id: 'property-a',
+        address: '1 Ashebrook Lane',
+        addressNormalized: '1 ashebrook lane',
+        status: 'active',
+        voteWeight: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'property-b',
+        address: '2 Ashebrook Lane',
+        addressNormalized: '2 ashebrook lane',
+        status: 'active',
+        voteWeight: 2,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await getDb(env).insert(meetings).values({
+      id: 'member-meeting',
+      body: 'member',
+      kind: 'regular',
+      date: '2026-09-14',
+      title: 'Member meeting',
+      status: 'approved',
+      visibility: 'public',
+      createdBy: 'u1',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(motions).values([
+      {
+        id: 'frozen-motion',
+        meetingId: 'member-meeting',
+        sequence: 1,
+        text: 'Previously opened motion',
+        moverPersonId: null,
+        secondPersonId: null,
+        votingState: 'closed',
+        outcome: 'passed',
+        createdBy: 'u1',
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: 'never-opened-motion',
+        meetingId: 'member-meeting',
+        sequence: 2,
+        text: 'Never opened motion',
+        moverPersonId: null,
+        secondPersonId: null,
+        votingState: 'none',
+        outcome: 'tabled',
+        createdBy: 'u1',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await db.insert(motionEligibility).values([
+      {
+        motionId: 'frozen-motion',
+        propertyId: 'property-a',
+        weight: 1,
+      },
+      {
+        motionId: 'frozen-motion',
+        propertyId: 'property-b',
+        weight: 2,
+      },
+    ]);
+
+    // The current roster now totals one active lot and weight 11.
+    await db
+      .update(properties)
+      .set({ voteWeight: 11 })
+      .where(eq(properties.id, 'property-a'));
+    await db
+      .update(properties)
+      .set({ voteWeight: 22, status: 'inactive' })
+      .where(eq(properties.id, 'property-b'));
+
+    const detail = await fetchMeetingFor(env, 'visitor', 'member-meeting');
+    expect(detail).not.toBeNull();
+    if (!detail) return;
+    expect(detail.motions[0]).toMatchObject({
+      id: 'frozen-motion',
+      votingState: 'closed',
+      eligibleCount: 2,
+      eligibleWeight: 3,
+      eligibilityFrozen: true,
+    });
+    expect(detail.motions[1]).toMatchObject({
+      id: 'never-opened-motion',
+      votingState: 'none',
+      eligibleCount: 1,
+      eligibleWeight: 11,
+      eligibilityFrozen: false,
+    });
   });
 
   it('scopes attendance and motions to the requested meeting only', async () => {
