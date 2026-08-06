@@ -13,6 +13,7 @@ import {
   boardAttendance,
   memberAttendance,
   motions,
+  motionEligibility,
   resolutions,
   elections,
   proxies,
@@ -390,10 +391,30 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   // them. Pre-check every motion this meeting owns, not just the meeting
   // row. See ADR 0016 and the matching guard in motions.ts's DELETE.
   const meetingMotions = await db
-    .select({ id: motions.id })
+    .select({ id: motions.id, votingState: motions.votingState })
     .from(motions)
     .where(eq(motions.meetingId, id));
   if (meetingMotions.length > 0) {
+    if (meetingMotions.some((motion) => motion.votingState !== 'none'))
+      return new Response(
+        'A motion in this meeting has live-voting history — the meeting cannot be deleted.',
+        { status: 409 },
+      );
+    const frozen = await db
+      .select({ motionId: motionEligibility.motionId })
+      .from(motionEligibility)
+      .where(
+        inArray(
+          motionEligibility.motionId,
+          meetingMotions.map((motion) => motion.id),
+        ),
+      )
+      .limit(1);
+    if (frozen.length > 0)
+      return new Response(
+        'A motion in this meeting has live-voting history — the meeting cannot be deleted.',
+        { status: 409 },
+      );
     const cited = await db
       .select({ id: resolutions.id })
       .from(resolutions)
@@ -454,7 +475,32 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
         { status: 409 },
       );
   }
-  // Deleting a draft cascades its attendance, motions, and votes via FK.
-  await db.delete(meetings).where(eq(meetings.id, id));
+  // Repeat the live-history predicate in the final mutation so a child
+  // motion's first open cannot commit between the pre-checks and this cascade.
+  const deleted = await env.DATABASE.prepare(
+    `DELETE FROM meetings
+     WHERE id = ?
+       AND NOT EXISTS (
+         SELECT 1 FROM motions
+         WHERE motions.meeting_id = meetings.id
+           AND (
+             motions.voting_state <> 'none'
+             OR EXISTS (
+               SELECT 1 FROM motion_eligibility
+               WHERE motion_eligibility.motion_id = motions.id
+             )
+           )
+       )
+     RETURNING id`,
+  )
+    .bind(id)
+    .run();
+  // `meta.changes` can include cascaded attendance/motions/votes; RETURNING
+  // identifies the one parent meeting this guarded statement deleted.
+  if (deleted.results.length !== 1)
+    return new Response(
+      'A motion in this meeting has live-voting history — the meeting cannot be deleted.',
+      { status: 409 },
+    );
   return new Response(null, { status: 204 });
 };
