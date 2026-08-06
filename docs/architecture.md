@@ -58,8 +58,10 @@ The board maintains association business as structured D1 rows rather than uploa
   `ballot_choices` retain weighted candidate selections without a ballot, lot, owner, proxy,
   caster, timestamp, or other explicit identity/join field, and supported reads never join choices
   to turnout. This is identifier separation, not mathematical anonymity: a rare or unique weight
-  retained on both sides may identify or narrow a property's selections. Conducted tallies remain
-  absent while open and are derived from the retained choices only when the election closes.
+  retained on both sides may identify or narrow a property's selections, while SQLite insertion
+  order and D1 Time Travel create additional temporal inference risk for a privileged operator.
+  Conducted tallies remain absent while open and are derived from the retained choices only when
+  the election closes.
 - `proxies` record one lot's grantor and holder for exactly one meeting or election. Member
   attendance, votes, and election ballots cite the canonical proxy row instead of carrying an
   unverified "via proxy" flag.
