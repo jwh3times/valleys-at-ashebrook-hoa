@@ -79,12 +79,14 @@ async function meetingBodyForMotion(
       body: string;
       meetingId: string;
       votingState: 'none' | 'open' | 'closed';
+      votingRevision: number;
     }
 > {
   const existing = await db
     .select({
       meetingId: motions.meetingId,
       votingState: motions.votingState,
+      votingRevision: motions.votingRevision,
     })
     .from(motions)
     .where(eq(motions.id, motionId))
@@ -100,6 +102,7 @@ async function meetingBodyForMotion(
     body: meeting[0]?.body ?? '',
     meetingId: existing[0].meetingId,
     votingState: existing[0].votingState,
+    votingRevision: existing[0].votingRevision,
   };
 }
 
@@ -290,28 +293,15 @@ async function setMemberVotes(
       choice: e.choice,
     });
   }
-  // Full replace, atomically. Repeat the lifecycle/body predicate on every
-  // mutation, pinned to the exact lifecycle state observed above. A first
-  // open followed by a close can otherwise finish between preflight and this
-  // batch, allowing weights resolved before the snapshot to enter a closed
-  // motion. A lifecycle transition makes every write a no-op, and the checked
-  // guard result turns the stale correction into a 409.
+  // Full replace, atomically, as a compare-and-swap on both lifecycle state
+  // and monotonic revision. State alone is vulnerable to closed -> open ->
+  // closed ABA: the value looks unchanged even though a live session occurred.
+  // Delete first using the captured pair, then advance the revision, then gate
+  // one set-based insert on that CAS statement's changes() result. D1 executes
+  // the batch as one transaction, so a stale or competing replacement writes
+  // nothing and returns 409.
   const updatedAt = Math.floor(Date.now() / 1000);
   const statements: D1PreparedStatement[] = [
-    database
-      .prepare(
-        `UPDATE motions
-         SET updated_at = ?
-         WHERE id = ?
-           AND voting_state = ?
-           AND EXISTS (
-             SELECT 1 FROM meetings
-             WHERE meetings.id = motions.meeting_id
-               AND meetings.body = 'member'
-           )
-         RETURNING id`,
-      )
-      .bind(updatedAt, motionId, lookup.votingState),
     database
       .prepare(
         `DELETE FROM member_votes
@@ -321,46 +311,63 @@ async function setMemberVotes(
              JOIN meetings ON meetings.id = motions.meeting_id
              WHERE motions.id = ?
                AND motions.voting_state = ?
+               AND motions.voting_revision = ?
                AND meetings.body = 'member'
            )`,
       )
-      .bind(motionId, motionId, lookup.votingState),
-    ...rows.map((row) =>
+      .bind(motionId, motionId, lookup.votingState, lookup.votingRevision),
+    database
+      .prepare(
+        `UPDATE motions
+         SET updated_at = ?, voting_revision = voting_revision + 1
+         WHERE id = ?
+           AND voting_state = ?
+           AND voting_revision = ?
+           AND EXISTS (
+             SELECT 1 FROM meetings
+             WHERE meetings.id = motions.meeting_id
+               AND meetings.body = 'member'
+           )
+         RETURNING id`,
+      )
+      .bind(updatedAt, motionId, lookup.votingState, lookup.votingRevision),
+  ];
+  if (rows.length > 0) {
+    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+    statements.push(
       database
         .prepare(
-          `INSERT INTO member_votes
+          `WITH replacement
              (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id)
-           SELECT ?, ?, ?, ?, ?, ?, ?
-           WHERE EXISTS (
-             SELECT 1 FROM motions
-             JOIN meetings ON meetings.id = motions.meeting_id
-             WHERE motions.id = ?
-               AND motions.voting_state = ?
-               AND meetings.body = 'member'
-           )`,
+           AS (VALUES ${placeholders})
+           INSERT INTO member_votes
+             (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id)
+           SELECT id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id
+           FROM replacement
+           WHERE changes() = 1`,
         )
         .bind(
-          row.id,
-          row.motionId,
-          row.propertyId,
-          row.castByOwnerId,
-          row.weight,
-          row.choice,
-          row.proxyId,
-          motionId,
-          lookup.votingState,
+          ...rows.flatMap((row) => [
+            row.id,
+            row.motionId,
+            row.propertyId,
+            row.castByOwnerId,
+            row.weight,
+            row.choice,
+            row.proxyId,
+          ]),
         ),
-    ),
-  ];
-  const [guard, , ...inserts] = await database.batch(statements);
+    );
+  }
+  const [, guard, inserted] = await database.batch(statements);
   if (guard.meta.changes !== 1)
     return new Response(
-      'Member votes cannot be corrected while voting is open',
+      'Member votes changed or the motion lifecycle advanced before correction',
       {
         status: 409,
       },
     );
-  if (inserts.some((result) => result.meta.changes !== 1))
+  if (rows.length > 0 && inserted?.meta.changes !== rows.length)
     return new Response('Member vote correction was not fully recorded', {
       status: 500,
     });
@@ -378,7 +385,9 @@ async function openVoting(
     database
       .prepare(
         `UPDATE motions
-         SET voting_state = 'open', updated_at = ?
+         SET voting_state = 'open',
+             voting_revision = voting_revision + 1,
+             updated_at = ?
          WHERE id = ?
            AND ${LIVE_VOTING_ENABLED_SQL}
            AND EXISTS (
@@ -458,7 +467,9 @@ async function closeVoting(
     database
       .prepare(
         `UPDATE motions
-         SET voting_state = 'closed', updated_at = ?
+         SET voting_state = 'closed',
+             voting_revision = voting_revision + 1,
+             updated_at = ?
          WHERE id = ?
            AND voting_state = 'open'
            AND EXISTS (

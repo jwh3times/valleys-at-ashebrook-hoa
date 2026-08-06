@@ -123,6 +123,18 @@ async function seedMotion(meetingId: string, motionId: string) {
 }
 
 describe('live voting schema', () => {
+  it('stores a non-null monotonic motion voting revision defaulted to zero', async () => {
+    const columns = await pragmaRows('PRAGMA table_info(motions)');
+
+    expect(columns).toContainEqual(
+      expect.objectContaining({
+        name: 'voting_revision',
+        notnull: 1,
+        dflt_value: '0',
+      }),
+    );
+  });
+
   it('pins the immutable electorate snapshot columns and unique keys', async () => {
     const electionEligibilityColumns = (
       await pragmaRows('PRAGMA table_info(election_eligibility)')
