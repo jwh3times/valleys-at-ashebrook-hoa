@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -26,17 +26,15 @@ import {
 } from '../../../lib/types';
 import { fetchAdminElections } from '../../../server/content/reads';
 import { proxyUseError } from '../../../server/content/proxy-guards';
+import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
 
 export const prerender = false;
 
 const CERTIFIED_OR_VOID = (thing: string): string =>
   `Election is certified or void — ${thing} cannot be changed`;
-// setTallies and setBallots both check this even though no election in this PR
-// can ever be `source: 'conducted'` — normalizeElectionInput makes `source`
-// create-immutable and POST (create) always writes 'recorded'. It is written
-// now so PR 6 (live casting) cannot forget it: once `conducted` elections
-// exist, their tallies are increment-only, and a board-typed tally here would
-// silently overwrite real cast votes.
+// Once a conducted election exists, the board must never type its tallies or
+// ballot register through the recorded-election paths: doing so would replace
+// real live-voting data with board-supplied values.
 const NOT_RECORDED = (thing: string): string =>
   `${thing} can only be typed for a recorded election`;
 
@@ -334,22 +332,108 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
   return new Response(null, { status: 204 });
 }
 
-async function closeElection(db: Db, body: unknown): Promise<Response> {
+async function openElection(
+  database: D1Database,
+  body: unknown,
+): Promise<Response> {
+  const id = stringField(body, 'id');
+  if (!id) return new Response('id is required', { status: 400 });
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const [transition] = await database.batch([
+    database
+      .prepare(
+        `UPDATE elections
+         SET status = 'open', updated_at = ?
+         WHERE id = ?
+           AND source = 'conducted'
+           AND status = 'draft'
+           AND visibility <> 'board'
+           AND EXISTS (
+             SELECT 1 FROM candidates
+             WHERE candidates.election_id = elections.id
+               AND candidates.withdrawn = 0
+           )
+           AND EXISTS (
+             SELECT 1 FROM properties WHERE properties.status = 'active'
+           )
+           AND ${LIVE_VOTING_ENABLED_SQL}
+         RETURNING id`,
+      )
+      .bind(updatedAt, id),
+    database
+      .prepare(
+        `INSERT INTO election_eligibility (election_id, property_id, weight)
+         SELECT ?, properties.id, properties.vote_weight
+         FROM properties
+         WHERE properties.status = 'active'
+           AND changes() = 1`,
+      )
+      .bind(id),
+  ]);
+  if (transition.meta.changes !== 1)
+    return new Response('Election cannot be opened', { status: 409 });
+  return new Response(null, { status: 204 });
+}
+
+async function closeElection(
+  db: Db,
+  database: D1Database,
+  body: unknown,
+): Promise<Response> {
   const id = stringField(body, 'id');
   if (!id) return new Response('id is required', { status: 400 });
   const existing = await db
-    .select({ status: elections.status })
+    .select({ source: elections.source })
     .from(elections)
     .where(eq(elections.id, id))
     .limit(1);
   if (existing.length === 0)
     return new Response('Election not found', { status: 404 });
-  if (existing[0].status !== 'draft')
-    return new Response('Election is not a draft', { status: 409 });
-  await db
-    .update(elections)
-    .set({ status: 'closed', updatedAt: new Date() })
-    .where(eq(elections.id, id));
+  const updatedAt = Math.floor(Date.now() / 1000);
+  if (existing[0].source === 'recorded') {
+    const transition = await database
+      .prepare(
+        `UPDATE elections
+         SET status = 'closed', updated_at = ?
+         WHERE id = ? AND source = 'recorded' AND status = 'draft'
+         RETURNING id`,
+      )
+      .bind(updatedAt, id)
+      .run();
+    if (transition.meta.changes !== 1)
+      return new Response('Election is not a draft', { status: 409 });
+    return new Response(null, { status: 204 });
+  }
+
+  const [transition] = await database.batch([
+    database
+      .prepare(
+        `UPDATE elections
+         SET status = 'closed', updated_at = ?
+         WHERE id = ? AND source = 'conducted' AND status = 'open'
+         RETURNING id`,
+      )
+      .bind(updatedAt, id),
+    database
+      .prepare(
+        `UPDATE candidates
+         SET votes = COALESCE(
+           (SELECT SUM(ballot_choices.weight)
+            FROM ballot_choices
+            WHERE ballot_choices.candidate_id = candidates.id),
+           0
+         )
+         WHERE election_id = ?
+           AND EXISTS (
+             SELECT 1 FROM elections
+             WHERE elections.id = candidates.election_id
+               AND elections.status = 'closed'
+           )`,
+      )
+      .bind(id),
+  ]);
+  if (transition.meta.changes !== 1)
+    return new Response('Conducted election is not open', { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -695,8 +779,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const action = stringField(parsed.value, 'action');
 
   switch (action) {
+    case 'open':
+      return openElection(env.DATABASE, parsed.value);
     case 'close':
-      return closeElection(db, parsed.value);
+      return closeElection(db, env.DATABASE, parsed.value);
     case 'void':
       return voidElection(db, parsed.value);
     case 'setTallies':
@@ -727,7 +813,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     title: result.value.title!,
     seats: result.value.seats!,
     electionDate: result.value.electionDate!,
-    source: 'recorded',
+    source: result.value.source ?? 'recorded',
     status: 'draft',
     visibility: result.value.visibility ?? 'board',
     createdBy: ctx?.userId ?? 'unknown',
@@ -754,12 +840,21 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response('No fields to update', { status: 400 });
   const db = getDb(env);
   const existing = await db
-    .select({ id: elections.id, status: elections.status })
+    .select({
+      id: elections.id,
+      status: elections.status,
+      source: elections.source,
+    })
     .from(elections)
     .where(eq(elections.id, id))
     .limit(1);
   if (existing.length === 0)
     return new Response('Election not found', { status: 404 });
+  if (existing[0].source === 'conducted' && existing[0].status !== 'draft')
+    return new Response(
+      'A conducted election cannot be changed after it opens',
+      { status: 409 },
+    );
   if (existing[0].status === 'certified' || existing[0].status === 'void')
     return new Response(CERTIFIED_OR_VOID('it'), { status: 409 });
   const meetingCheck = await checkMeetingExists(db, input.meetingId);
@@ -772,7 +867,25 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   if (input.electionDate !== undefined) set.electionDate = input.electionDate;
   if (input.meetingId !== undefined) set.meetingId = input.meetingId;
   if (input.visibility !== undefined) set.visibility = input.visibility;
-  await db.update(elections).set(set).where(eq(elections.id, id));
+  const updateGuard =
+    existing[0].source === 'conducted'
+      ? and(
+          eq(elections.id, id),
+          eq(elections.source, 'conducted'),
+          eq(elections.status, 'draft'),
+        )
+      : and(
+          eq(elections.id, id),
+          eq(elections.source, 'recorded'),
+          notInArray(elections.status, ['certified', 'void']),
+        );
+  const updated = await db
+    .update(elections)
+    .set(set)
+    .where(updateGuard)
+    .returning({ id: elections.id });
+  if (updated.length !== 1)
+    return new Response('Election configuration is frozen', { status: 409 });
   return new Response(null, { status: 204 });
 };
 
@@ -799,6 +912,13 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       `Only a draft election can be deleted — one that is already ${existing[0].status} is part of the record.`,
       { status: 409 },
     );
-  await db.delete(elections).where(eq(elections.id, id));
+  const deleted = await db
+    .delete(elections)
+    .where(and(eq(elections.id, id), eq(elections.status, 'draft')))
+    .returning({ id: elections.id });
+  if (deleted.length !== 1)
+    return new Response('Only a draft election can be deleted', {
+      status: 409,
+    });
   return new Response(null, { status: 204 });
 };

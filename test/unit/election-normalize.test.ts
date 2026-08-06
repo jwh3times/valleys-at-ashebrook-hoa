@@ -65,16 +65,18 @@ describe('normalizeElectionInput', () => {
     if (!onPatch.ok) expect(onPatch.error).toMatch(/status is not editable/i);
   });
 
-  it('rejects a source key on create and on patch', () => {
+  it('accepts a conducted source only when creating an election', () => {
     const onCreate = normalizeElectionInput(
       { ...validElection, source: 'conducted' },
       'create',
     );
-    expect(onCreate.ok).toBe(false);
-    if (!onCreate.ok) expect(onCreate.error).toMatch(/source is not editable/i);
+    expect(onCreate).toMatchObject({
+      ok: true,
+      value: { source: 'conducted' },
+    });
 
     const onPatch = normalizeElectionInput(
-      { title: 'Renamed', source: 'conducted' },
+      { title: 'Renamed', source: 'recorded' },
       'patch',
     );
     expect(onPatch.ok).toBe(false);
@@ -91,7 +93,7 @@ describe('normalizeElectionInput', () => {
       'create',
     );
     expect(onCreate.ok).toBe(false);
-    if (!onCreate.ok) expect(onCreate.error).toMatch(/source is not editable/i);
+    if (!onCreate.ok) expect(onCreate.error).toMatch(/source/i);
 
     const onPatch = normalizeElectionInput(
       { title: 'Renamed', source: undefined },

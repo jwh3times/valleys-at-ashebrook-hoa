@@ -9,11 +9,14 @@ import { GET, POST, PATCH, DELETE } from '../../src/pages/api/admin/elections';
 import { getDb } from '../../src/server/db/client';
 import {
   elections,
+  electionEligibility,
   candidates,
+  ballotChoices,
   ballots,
   properties,
   owners,
   meetings,
+  settings,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -23,12 +26,15 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   const db = getDb(env);
+  await db.delete(ballotChoices);
   await db.delete(ballots);
+  await db.delete(electionEligibility);
   await db.delete(candidates);
   await db.delete(elections);
   await db.delete(owners);
   await db.delete(properties);
   await db.delete(meetings);
+  await db.delete(settings);
 });
 
 const url = 'http://localhost/api/admin/elections';
@@ -160,6 +166,23 @@ async function getBallotsFor(electionId: string) {
     .where(eq(ballots.electionId, electionId));
 }
 
+async function getEligibilityFor(electionId: string) {
+  return getDb(env)
+    .select()
+    .from(electionEligibility)
+    .where(eq(electionEligibility.electionId, electionId));
+}
+
+async function enableLiveVoting(): Promise<void> {
+  await getDb(env)
+    .insert(settings)
+    .values({
+      key: 'site',
+      value: JSON.stringify({ officialMode: true, liveVotingEnabled: true }),
+      updatedAt: now,
+    });
+}
+
 describe('elections admin route — board', () => {
   it('creates a draft election with source recorded', async () => {
     const res = await POST(
@@ -196,22 +219,21 @@ describe('elections admin route — board', () => {
     expect(rows.length).toBe(0);
   });
 
-  it('rejects a create carrying source, with 400', async () => {
+  it('creates a conducted election when source is selected at creation', async () => {
     const res = await POST(
       req(url, 'POST', {
-        title: 'X',
+        title: 'Conducted election',
         seats: 2,
         electionDate: '2026-03-01',
         source: 'conducted',
+        visibility: 'homeowner',
       }),
     );
-    expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/source is not editable/i);
-    const rows = await getDb(env)
-      .select()
-      .from(elections)
-      .where(eq(elections.title, 'X'));
-    expect(rows.length).toBe(0);
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    const row = await getElection(id);
+    expect(row.source).toBe('conducted');
+    expect(row.status).toBe('draft');
   });
 
   it('rejects seats of 0 with 400', async () => {
@@ -280,6 +302,207 @@ describe('elections admin route — board', () => {
     expect(await res.text()).toMatch(/not a draft/i);
     const row = await getElection(id);
     expect(row.status).toBe('closed');
+  });
+
+  it('open fails closed when the live-voting database flag is off', async () => {
+    const id = await createElection({
+      source: 'conducted',
+      visibility: 'homeowner',
+    });
+    await createCandidate(id, 1);
+    await createProperty('1 Flag Off Lane');
+
+    const res = await POST(req(url, 'POST', { action: 'open', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('draft');
+    expect(await getEligibilityFor(id)).toEqual([]);
+  });
+
+  it('open refuses a recorded election without creating a snapshot', async () => {
+    await enableLiveVoting();
+    const id = await createElection({ visibility: 'homeowner' });
+    await createCandidate(id, 1);
+    await createProperty('2 Recorded Lane');
+
+    const res = await POST(req(url, 'POST', { action: 'open', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('draft');
+    expect(await getEligibilityFor(id)).toEqual([]);
+  });
+
+  it('open refuses a conducted election that is not a draft', async () => {
+    await enableLiveVoting();
+    const id = await createElection({
+      source: 'conducted',
+      status: 'closed',
+      visibility: 'homeowner',
+    });
+    await createCandidate(id, 1);
+    await createProperty('3 Closed Lane');
+
+    const res = await POST(req(url, 'POST', { action: 'open', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('closed');
+    expect(await getEligibilityFor(id)).toEqual([]);
+  });
+
+  it('open refuses board-only visibility without creating a snapshot', async () => {
+    await enableLiveVoting();
+    const id = await createElection({ source: 'conducted' });
+    await createCandidate(id, 1);
+    await createProperty('4 Board Lane');
+
+    const res = await POST(req(url, 'POST', { action: 'open', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('draft');
+    expect(await getEligibilityFor(id)).toEqual([]);
+  });
+
+  it('open requires at least one non-withdrawn candidate', async () => {
+    await enableLiveVoting();
+    const id = await createElection({
+      source: 'conducted',
+      visibility: 'homeowner',
+    });
+    await createCandidate(id, 1, { withdrawn: true });
+    await createProperty('5 Candidate Lane');
+
+    const res = await POST(req(url, 'POST', { action: 'open', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('draft');
+    expect(await getEligibilityFor(id)).toEqual([]);
+  });
+
+  it('open requires at least one active property', async () => {
+    await enableLiveVoting();
+    const id = await createElection({
+      source: 'conducted',
+      visibility: 'homeowner',
+    });
+    await createCandidate(id, 1);
+    const propertyId = await createProperty('6 Inactive Lane');
+    await getDb(env)
+      .update(properties)
+      .set({ status: 'inactive' })
+      .where(eq(properties.id, propertyId));
+
+    const res = await POST(req(url, 'POST', { action: 'open', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('draft');
+    expect(await getEligibilityFor(id)).toEqual([]);
+  });
+
+  it('atomically opens once and snapshots every active property weight', async () => {
+    await enableLiveVoting();
+    const id = await createElection({
+      source: 'conducted',
+      visibility: 'homeowner',
+    });
+    const candidateId = await createCandidate(id, 1);
+    const firstPropertyId = await createProperty('7 First Lane', 2);
+    const zeroPropertyId = await createProperty('8 Zero Lane', 0);
+    const inactivePropertyId = await createProperty('9 Inactive Lane', 9);
+    await getDb(env)
+      .update(properties)
+      .set({ status: 'inactive' })
+      .where(eq(properties.id, inactivePropertyId));
+
+    const responses = await Promise.all([
+      POST(req(url, 'POST', { action: 'open', id })),
+      POST(req(url, 'POST', { action: 'open', id })),
+    ]);
+
+    expect(responses.map((res) => res.status).sort()).toEqual([204, 409]);
+    expect((await getElection(id)).status).toBe('open');
+    expect((await getCandidate(candidateId)).votes).toBeNull();
+    expect(
+      (await getEligibilityFor(id))
+        .map(({ propertyId, weight }) => ({ propertyId, weight }))
+        .sort((a, b) => a.propertyId.localeCompare(b.propertyId)),
+    ).toEqual(
+      [
+        { propertyId: firstPropertyId, weight: 2 },
+        { propertyId: zeroPropertyId, weight: 0 },
+      ].sort((a, b) => a.propertyId.localeCompare(b.propertyId)),
+    );
+  });
+
+  it('conducted close stores weighted tallies including zero and retains anonymous choices', async () => {
+    const id = await createElection({
+      source: 'conducted',
+      status: 'open',
+      visibility: 'homeowner',
+    });
+    const firstCandidateId = await createCandidate(id, 1);
+    const zeroCandidateId = await createCandidate(id, 2);
+    const noChoiceCandidateId = await createCandidate(id, 3);
+    await getDb(env)
+      .insert(ballotChoices)
+      .values([
+        {
+          id: crypto.randomUUID(),
+          electionId: id,
+          candidateId: firstCandidateId,
+          weight: 2,
+        },
+        {
+          id: crypto.randomUUID(),
+          electionId: id,
+          candidateId: firstCandidateId,
+          weight: 3,
+        },
+        {
+          id: crypto.randomUUID(),
+          electionId: id,
+          candidateId: zeroCandidateId,
+          weight: 0,
+        },
+      ]);
+    expect((await getCandidate(firstCandidateId)).votes).toBeNull();
+
+    const res = await POST(req(url, 'POST', { action: 'close', id }));
+
+    expect(res.status).toBe(204);
+    expect((await getElection(id)).status).toBe('closed');
+    expect((await getCandidate(firstCandidateId)).votes).toBe(5);
+    expect((await getCandidate(zeroCandidateId)).votes).toBe(0);
+    expect((await getCandidate(noChoiceCandidateId)).votes).toBe(0);
+    const choices = await getDb(env)
+      .select()
+      .from(ballotChoices)
+      .where(eq(ballotChoices.electionId, id));
+    expect(choices).toHaveLength(3);
+  });
+
+  it('conducted close refuses a draft election', async () => {
+    const id = await createElection({
+      source: 'conducted',
+      visibility: 'homeowner',
+    });
+
+    const res = await POST(req(url, 'POST', { action: 'close', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('draft');
+  });
+
+  it('void accepts an open conducted election', async () => {
+    const id = await createElection({
+      source: 'conducted',
+      status: 'open',
+      visibility: 'homeowner',
+    });
+
+    const res = await POST(req(url, 'POST', { action: 'void', id }));
+
+    expect(res.status).toBe(204);
+    expect((await getElection(id)).status).toBe('void');
   });
 
   it('void moves a draft to void', async () => {
@@ -656,6 +879,28 @@ describe('elections admin route — board', () => {
     expect(await res.text()).toMatch(/source is not editable/i);
     const row = await getElection(id);
     expect(row.source).toBe('recorded');
+  });
+
+  it('PATCH freezes a conducted election once it has opened', async () => {
+    for (const status of ['open', 'closed'] as const) {
+      const id = await createElection({ source: 'conducted', status });
+
+      const res = await PATCH(req(url, 'PATCH', { id, title: 'Changed' }));
+
+      expect(res.status).toBe(409);
+      expect((await getElection(id)).title).toBe('2026 Board Election');
+    }
+  });
+
+  it('PATCH preserves recorded-election edits after close', async () => {
+    const id = await createElection({ status: 'closed' });
+
+    const res = await PATCH(
+      req(url, 'PATCH', { id, title: 'Corrected historical title' }),
+    );
+
+    expect(res.status).toBe(204);
+    expect((await getElection(id)).title).toBe('Corrected historical title');
   });
 
   it('PATCH on a certified election returns 409', async () => {

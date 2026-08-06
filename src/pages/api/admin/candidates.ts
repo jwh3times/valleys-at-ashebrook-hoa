@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
@@ -21,14 +21,18 @@ const CERTIFIED_OR_VOID = (thing: string): string =>
 async function loadElectionStatus(
   db: Db,
   electionId: string,
-): Promise<{ found: false } | { found: true; status: string }> {
+): Promise<{ found: false } | { found: true; status: string; source: string }> {
   const rows = await db
-    .select({ status: elections.status })
+    .select({ status: elections.status, source: elections.source })
     .from(elections)
     .where(eq(elections.id, electionId))
     .limit(1);
   if (rows.length === 0) return { found: false };
-  return { found: true, status: rows[0].status };
+  return {
+    found: true,
+    status: rows[0].status,
+    source: rows[0].source,
+  };
 }
 
 /**
@@ -70,6 +74,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return new Response('Election not found', { status: 404 });
   if (election.status === 'certified' || election.status === 'void')
     return new Response(CERTIFIED_OR_VOID('candidates'), { status: 409 });
+  if (election.status !== 'draft')
+    return new Response(
+      'Candidates can be added only while the election is a draft',
+      {
+        status: 409,
+      },
+    );
   const boardPersonCheck = await checkBoardPersonExists(
     db,
     result.value.boardPersonId,
@@ -84,19 +95,34 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .limit(1);
   const sequence = (existing[0]?.sequence ?? 0) + 1;
   const id = crypto.randomUUID();
-  await db.insert(candidates).values({
-    id,
-    electionId,
-    // create mode guarantees fullName is present
-    fullName: result.value.fullName!,
-    boardPersonId: result.value.boardPersonId ?? null,
-    statementMd: result.value.statementMd ?? null,
-    sequence,
-    votes: null,
-    won: false,
-    withdrawn: result.value.withdrawn ?? false,
-    createdAt: new Date(),
-  });
+  const created = await env.DATABASE.prepare(
+    `INSERT INTO candidates (
+       id, election_id, full_name, board_person_id, statement_md, sequence,
+       votes, won, withdrawn, created_at
+     )
+     SELECT ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?
+     WHERE EXISTS (
+       SELECT 1 FROM elections
+       WHERE elections.id = ? AND elections.status = 'draft'
+     )`,
+  )
+    .bind(
+      id,
+      electionId,
+      result.value.fullName!,
+      result.value.boardPersonId ?? null,
+      result.value.statementMd ?? null,
+      sequence,
+      result.value.withdrawn ? 1 : 0,
+      Math.floor(Date.now() / 1000),
+      electionId,
+    )
+    .run();
+  if (created.meta.changes !== 1)
+    return new Response(
+      'Candidates can be added only while the election is a draft',
+      { status: 409 },
+    );
   return Response.json({ id }, { status: 201 });
 };
 
@@ -116,7 +142,11 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response('No fields to update', { status: 400 });
   const db = getDb(env);
   const existing = await db
-    .select({ id: candidates.id, electionId: candidates.electionId })
+    .select({
+      id: candidates.id,
+      electionId: candidates.electionId,
+      withdrawn: candidates.withdrawn,
+    })
     .from(candidates)
     .where(eq(candidates.id, id))
     .limit(1);
@@ -129,6 +159,40 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   // guards against this ever becoming fail-open.
   if (!election.found)
     return new Response('Election not found', { status: 404 });
+  if (election.source === 'conducted' && election.status === 'open') {
+    const isFirstWithdrawal =
+      Object.keys(input).length === 1 &&
+      input.withdrawn === true &&
+      existing[0].withdrawn === false;
+    if (!isFirstWithdrawal)
+      return new Response(
+        'Only a not-yet-withdrawn candidate may be withdrawn after voting opens',
+        { status: 409 },
+      );
+    const update = await env.DATABASE.prepare(
+      `UPDATE candidates
+       SET withdrawn = 1
+       WHERE id = ? AND withdrawn = 0
+         AND EXISTS (
+           SELECT 1 FROM elections
+           WHERE elections.id = candidates.election_id
+             AND elections.source = 'conducted'
+             AND elections.status = 'open'
+         )`,
+    )
+      .bind(id)
+      .run();
+    if (update.meta.changes !== 1)
+      return new Response('Candidate can no longer be withdrawn', {
+        status: 409,
+      });
+    return new Response(null, { status: 204 });
+  }
+  if (election.source === 'conducted' && election.status !== 'draft')
+    return new Response(
+      'A conducted election candidate cannot be changed after voting opens',
+      { status: 409 },
+    );
   if (election.status === 'certified' || election.status === 'void')
     return new Response(CERTIFIED_OR_VOID('this candidate'), { status: 409 });
   const boardPersonCheck = await checkBoardPersonExists(
@@ -146,7 +210,29 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     set.boardPersonId = input.boardPersonId;
   if (input.statementMd !== undefined) set.statementMd = input.statementMd;
   if (input.withdrawn !== undefined) set.withdrawn = input.withdrawn;
-  await db.update(candidates).set(set).where(eq(candidates.id, id));
+  const electionStillEditable =
+    election.source === 'conducted'
+      ? sql`EXISTS (
+          SELECT 1 FROM elections
+          WHERE elections.id = ${candidates.electionId}
+            AND elections.source = 'conducted'
+            AND elections.status = 'draft'
+        )`
+      : sql`EXISTS (
+          SELECT 1 FROM elections
+          WHERE elections.id = ${candidates.electionId}
+            AND elections.source = 'recorded'
+            AND elections.status NOT IN ('certified', 'void')
+        )`;
+  const updated = await db
+    .update(candidates)
+    .set(set)
+    .where(and(eq(candidates.id, id), electionStillEditable))
+    .returning({ id: candidates.id });
+  if (updated.length !== 1)
+    return new Response('Election candidate configuration is frozen', {
+      status: 409,
+    });
   return new Response(null, { status: 204 });
 };
 
@@ -175,6 +261,22 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
       'Only a candidate on a draft election can be deleted — once the election is closed its candidate list is part of the record; mark them withdrawn instead.',
       { status: 409 },
     );
-  await db.delete(candidates).where(eq(candidates.id, id));
+  const deleted = await db
+    .delete(candidates)
+    .where(
+      and(
+        eq(candidates.id, id),
+        sql`EXISTS (
+          SELECT 1 FROM elections
+          WHERE elections.id = ${candidates.electionId}
+            AND elections.status = 'draft'
+        )`,
+      ),
+    )
+    .returning({ id: candidates.id });
+  if (deleted.length !== 1)
+    return new Response('Election candidate configuration is frozen', {
+      status: 409,
+    });
   return new Response(null, { status: 204 });
 };
