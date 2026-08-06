@@ -695,51 +695,112 @@ async function fetchEligibleTotals(db: Db): Promise<EligibilityTotals> {
   return { ...row, eligibilityFrozen: false };
 }
 
-async function electionEligibilityFor(
-  db: Db,
-  electionId: string,
-): Promise<{
+interface ElectionEligibilityResult {
   totals: EligibilityTotals;
   rows: ElectionEligibleProperty[];
-}> {
-  const snapshotRows = await db
-    .select({
-      propertyId: electionEligibility.propertyId,
-      address: properties.address,
-      weight: electionEligibility.weight,
-    })
-    .from(electionEligibility)
-    .innerJoin(properties, eq(electionEligibility.propertyId, properties.id))
-    .where(eq(electionEligibility.electionId, electionId))
-    .orderBy(asc(electionEligibility.propertyId));
-  if (snapshotRows.length > 0) {
-    return {
-      totals: {
-        eligibleCount: snapshotRows.length,
-        eligibleWeight: snapshotRows.reduce((sum, row) => sum + row.weight, 0),
-        eligibilityFrozen: true,
-      },
-      rows: snapshotRows,
-    };
+}
+
+const ELECTION_ELIGIBILITY_BATCH_SIZE = 100;
+
+/**
+ * Loads selected election snapshots in bounded IN-query batches, then reads
+ * the current active roster at most once when one or more elections need the
+ * legacy/no-snapshot fallback. D1 permits at most 100 bound parameters per
+ * query, so even an unusually deep archive must be chunked here. Keeping this
+ * outside the per-election assembler prevents eligibility reads from growing
+ * linearly with the list length.
+ */
+async function electionEligibilityById(
+  db: Db,
+  electionIds: string[],
+): Promise<Map<string, ElectionEligibilityResult>> {
+  if (electionIds.length === 0) return new Map();
+
+  const snapshotRows: Array<{
+    electionId: string;
+    propertyId: string;
+    address: string;
+    weight: number;
+  }> = [];
+  for (
+    let start = 0;
+    start < electionIds.length;
+    start += ELECTION_ELIGIBILITY_BATCH_SIZE
+  ) {
+    const ids = electionIds.slice(
+      start,
+      start + ELECTION_ELIGIBILITY_BATCH_SIZE,
+    );
+    snapshotRows.push(
+      ...(await db
+        .select({
+          electionId: electionEligibility.electionId,
+          propertyId: electionEligibility.propertyId,
+          address: properties.address,
+          weight: electionEligibility.weight,
+        })
+        .from(electionEligibility)
+        .innerJoin(
+          properties,
+          eq(electionEligibility.propertyId, properties.id),
+        )
+        .where(inArray(electionEligibility.electionId, ids))
+        .orderBy(
+          asc(electionEligibility.electionId),
+          asc(electionEligibility.propertyId),
+        )),
+    );
+  }
+  const snapshots = new Map<string, ElectionEligibleProperty[]>();
+  for (const { electionId, ...row } of snapshotRows) {
+    const rows = snapshots.get(electionId) ?? [];
+    rows.push(row);
+    snapshots.set(electionId, rows);
   }
 
-  const currentRows = await db
-    .select({
-      propertyId: properties.id,
-      address: properties.address,
-      weight: properties.voteWeight,
-    })
-    .from(properties)
-    .where(eq(properties.status, 'active'))
-    .orderBy(asc(properties.id));
-  return {
-    totals: {
-      eligibleCount: currentRows.length,
-      eligibleWeight: currentRows.reduce((sum, row) => sum + row.weight, 0),
-      eligibilityFrozen: false,
-    },
-    rows: currentRows,
-  };
+  const needsFallback = electionIds.some(
+    (electionId) => !snapshots.has(electionId),
+  );
+  const currentRows = needsFallback
+    ? await db
+        .select({
+          propertyId: properties.id,
+          address: properties.address,
+          weight: properties.voteWeight,
+        })
+        .from(properties)
+        .where(eq(properties.status, 'active'))
+        .orderBy(asc(properties.id))
+    : null;
+  const fallback: ElectionEligibilityResult | null = currentRows
+    ? {
+        totals: {
+          eligibleCount: currentRows.length,
+          eligibleWeight: currentRows.reduce((sum, row) => sum + row.weight, 0),
+          eligibilityFrozen: false,
+        },
+        rows: currentRows,
+      }
+    : null;
+
+  const result = new Map<string, ElectionEligibilityResult>();
+  for (const electionId of electionIds) {
+    const rows = snapshots.get(electionId);
+    if (rows) {
+      result.set(electionId, {
+        totals: {
+          eligibleCount: rows.length,
+          eligibleWeight: rows.reduce((sum, row) => sum + row.weight, 0),
+          eligibilityFrozen: true,
+        },
+        rows,
+      });
+    } else {
+      if (!fallback) throw new Error('Missing election eligibility fallback');
+      result.set(electionId, fallback);
+    }
+  }
+  return result;
 }
 
 async function motionEligibilityById(
@@ -874,11 +935,11 @@ async function assembleElectionDetail(
   db: Db,
   row: ElectionRow,
   includeBallots: boolean,
+  eligibility: ElectionEligibilityResult,
 ): Promise<ElectionDetail> {
-  const [candidateRows, turnout, eligibility] = await Promise.all([
+  const [candidateRows, turnout] = await Promise.all([
     fetchCandidatesFor(db, row.id),
     fetchTurnoutCounts(db, row.id),
-    electionEligibilityFor(db, row.id),
   ]);
   const ballotRows = includeBallots
     ? await fetchBallotRowsFor(db, row.id)
@@ -941,7 +1002,17 @@ export async function fetchElectionsFor(
     )
     .orderBy(desc(elections.electionDate));
   if (rows.length === 0) return [];
-  return Promise.all(rows.map((r) => assembleElectionDetail(db, r, false)));
+  const eligibilityByElection = await electionEligibilityById(
+    db,
+    rows.map((row) => row.id),
+  );
+  return Promise.all(
+    rows.map((row) => {
+      const eligibility = eligibilityByElection.get(row.id);
+      if (!eligibility) throw new Error('Missing election eligibility totals');
+      return assembleElectionDetail(db, row, false, eligibility);
+    }),
+  );
 }
 
 /**
@@ -957,7 +1028,17 @@ export async function fetchAdminElections(env: Env): Promise<ElectionDetail[]> {
     .from(elections)
     .orderBy(desc(elections.electionDate));
   if (rows.length === 0) return [];
-  return Promise.all(rows.map((r) => assembleElectionDetail(db, r, true)));
+  const eligibilityByElection = await electionEligibilityById(
+    db,
+    rows.map((row) => row.id),
+  );
+  return Promise.all(
+    rows.map((row) => {
+      const eligibility = eligibilityByElection.get(row.id);
+      if (!eligibility) throw new Error('Missing election eligibility totals');
+      return assembleElectionDetail(db, row, true, eligibility);
+    }),
+  );
 }
 
 /**
