@@ -15,7 +15,6 @@ import {
   properties,
   owners,
   meetings,
-  boardPeople,
   boardTerms,
 } from '../../../server/db/schema';
 import {
@@ -424,6 +423,7 @@ async function closeElection(
            0
          )
          WHERE election_id = ?
+           AND changes() = 1
            AND EXISTS (
              SELECT 1 FROM elections
              WHERE elections.id = candidates.election_id
@@ -456,10 +456,16 @@ async function voidElection(db: Db, body: unknown): Promise<Response> {
     });
   if (existing[0].status === 'void')
     return new Response('Election is already void', { status: 409 });
-  await db
-    .update(elections)
-    .set({ status: 'void', updatedAt: new Date() })
-    .where(eq(elections.id, id));
+  const transition = await env.DATABASE.prepare(
+    `UPDATE elections
+     SET status = 'void', updated_at = ?
+     WHERE id = ? AND status IN ('draft', 'open', 'closed')
+     RETURNING id`,
+  )
+    .bind(Math.floor(Date.now() / 1000), id)
+    .run();
+  if (transition.meta.changes !== 1)
+    return new Response('Election is no longer voidable', { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -659,72 +665,94 @@ async function certifyElection(
     }
   }
 
-  // Effects, all in one batch. Every new id is pre-generated in JS — a D1
-  // batch cannot thread a RETURNING value from one statement into the next,
-  // so the board_terms rows below must reference person ids that already
-  // exist as JS values before the batch is built.
+  // Effects, all in one batch. Each write is conditional on the election
+  // still being closed, and the status transition runs last. D1 executes a
+  // batch as one transaction, so either this batch owns the closed ->
+  // certified transition and commits every effect, or every effect is a
+  // no-op and the losing request returns 409.
+  //
+  // Every new id is pre-generated in JS — a D1 batch cannot thread a
+  // RETURNING value from one statement into the next, so the board_terms rows
+  // below must reference person ids that already exist as JS values before
+  // the batch is built.
   const ctx = await resolveAuthContext(locals, request, env);
-  const now = new Date();
-  const statements: unknown[] = [];
+  const now = Math.floor(Date.now() / 1000);
+  const statements: D1PreparedStatement[] = [];
   for (const w of winners) {
     if (w.boardPersonId === null) {
       const personId = crypto.randomUUID();
       statements.push(
-        db.insert(boardPeople).values({
-          id: personId,
-          fullName: w.fullName,
-          createdAt: now,
-          updatedAt: now,
-        }),
+        env.DATABASE.prepare(
+          `INSERT INTO board_people (id, full_name, created_at, updated_at)
+           SELECT ?, ?, ?, ?
+           WHERE EXISTS (
+             SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
+           )`,
+        ).bind(personId, w.fullName, now, now, id),
       );
       // Backfilled so a re-run cannot mint a second identity for the same
       // human — ADR 0012's whole point is one identity across terms.
       statements.push(
-        db
-          .update(candidates)
-          .set({ boardPersonId: personId })
-          .where(eq(candidates.id, w.candidateId)),
+        env.DATABASE.prepare(
+          `UPDATE candidates
+           SET board_person_id = ?
+           WHERE id = ? AND election_id = ?
+             AND EXISTS (
+               SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
+             )`,
+        ).bind(personId, w.candidateId, id, id),
       );
       w.boardPersonId = personId;
     }
   }
   for (const w of winners) {
     statements.push(
-      db.insert(boardTerms).values({
-        id: crypto.randomUUID(),
-        personId: w.boardPersonId!,
-        title: w.title,
-        termStart: w.termStart,
-        termEnd: w.termEnd,
-        electionId: id,
-        createdAt: now,
-        updatedAt: now,
-      }),
+      env.DATABASE.prepare(
+        `INSERT INTO board_terms (
+           id, person_id, title, term_start, term_end, election_id,
+           created_at, updated_at
+         )
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (
+           SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
+         )`,
+      ).bind(
+        crypto.randomUUID(),
+        w.boardPersonId!,
+        w.title,
+        w.termStart,
+        w.termEnd,
+        id,
+        now,
+        now,
+        id,
+      ),
     );
   }
+  const winnerPlaceholders = winners.map(() => '?').join(', ');
   statements.push(
-    db
-      .update(candidates)
-      .set({ won: true })
-      .where(
-        inArray(
-          candidates.id,
-          winners.map((w) => w.candidateId),
-        ),
-      ),
+    env.DATABASE.prepare(
+      `UPDATE candidates
+       SET won = 1
+       WHERE election_id = ? AND id IN (${winnerPlaceholders})
+         AND EXISTS (
+           SELECT 1 FROM elections WHERE id = ? AND status = 'closed'
+         )`,
+    ).bind(id, ...winners.map((w) => w.candidateId), id),
   );
   statements.push(
-    db
-      .update(elections)
-      .set({
-        status: 'certified',
-        certifiedAt: now,
-        certifiedBy: ctx?.userId ?? 'unknown',
-        updatedAt: now,
-      })
-      .where(eq(elections.id, id)),
+    env.DATABASE.prepare(
+      `UPDATE elections
+       SET status = 'certified', certified_at = ?, certified_by = ?,
+           updated_at = ?
+       WHERE id = ? AND status = 'closed'
+       RETURNING id`,
+    ).bind(now, ctx?.userId ?? 'unknown', now, id),
   );
-  await db.batch(statements as never);
+  const results = await env.DATABASE.batch(statements);
+  const transition = results[results.length - 1];
+  if (transition.meta.changes !== 1)
+    return new Response('Election is no longer closed', { status: 409 });
   return new Response(null, { status: 204 });
 }
 
