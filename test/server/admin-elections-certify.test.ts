@@ -178,6 +178,55 @@ describe('elections admin route — certify/uncertify', () => {
     expect((await getTermsFor(electionId)).length).toBe(1);
   });
 
+  it('void racing certify leaves exactly one complete terminal state', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const candidateId = await createCandidate(electionId, 1);
+    const certifyPromise = POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId, termStart: '2026-01-01' }],
+      }),
+    );
+
+    // Let certification clear its status preflight before the conflicting
+    // terminal transition is queued.
+    await Promise.resolve();
+    await env.DATABASE.prepare('SELECT 1').first();
+    const voidPromise = POST(
+      req(url, 'POST', { action: 'void', id: electionId }),
+    );
+    const [certifyResponse, voidResponse] = await Promise.all([
+      certifyPromise,
+      voidPromise,
+    ]);
+
+    expect(
+      [certifyResponse.status, voidResponse.status].sort((a, b) => a - b),
+    ).toEqual([204, 409]);
+    const election = await getElection(electionId);
+    const candidate = await getCandidate(candidateId);
+    const terms = await getTermsFor(electionId);
+    if (election.status === 'certified') {
+      expect(certifyResponse.status).toBe(204);
+      expect(voidResponse.status).toBe(409);
+      expect(election.certifiedAt).toBeInstanceOf(Date);
+      expect(election.certifiedBy).toBe('b');
+      expect(candidate.won).toBe(true);
+      expect(candidate.boardPersonId).not.toBeNull();
+      expect(terms).toHaveLength(1);
+    } else {
+      expect(election.status).toBe('void');
+      expect(voidResponse.status).toBe(204);
+      expect(certifyResponse.status).toBe(409);
+      expect(election.certifiedAt).toBeNull();
+      expect(election.certifiedBy).toBeNull();
+      expect(candidate.won).toBe(false);
+      expect(candidate.boardPersonId).toBeNull();
+      expect(terms).toHaveLength(0);
+    }
+  });
+
   it('certify creates a board person for a winner who had none', async () => {
     const electionId = await createElection({ seats: 1 });
     const c1 = await createCandidate(electionId, 1);

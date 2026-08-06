@@ -480,6 +480,27 @@ describe('elections admin route — board', () => {
     expect(choices).toHaveLength(3);
   });
 
+  it('a losing conducted close does not recompute the stored tallies', async () => {
+    const id = await createElection({
+      source: 'conducted',
+      status: 'closed',
+      visibility: 'homeowner',
+    });
+    const candidateId = await createCandidate(id, 1, { votes: 9 });
+    await getDb(env).insert(ballotChoices).values({
+      id: crypto.randomUUID(),
+      electionId: id,
+      candidateId,
+      weight: 3,
+    });
+
+    const res = await POST(req(url, 'POST', { action: 'close', id }));
+
+    expect(res.status).toBe(409);
+    expect((await getElection(id)).status).toBe('closed');
+    expect((await getCandidate(candidateId)).votes).toBe(9);
+  });
+
   it('conducted close refuses a draft election', async () => {
     const id = await createElection({
       source: 'conducted',
