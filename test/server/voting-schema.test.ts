@@ -207,10 +207,12 @@ describe('live voting schema', () => {
     ]);
   });
 
-  it('rejects duplicate election and motion electorate entries', async () => {
+  it('rejects duplicate parent entries but allows the property under other parents', async () => {
     await seedProperty('duplicate-property');
     await seedElection('duplicate-election');
+    await seedElection('duplicate-election-2');
     await seedMotion('duplicate-meeting', 'duplicate-motion');
+    await seedMotion('duplicate-meeting-2', 'duplicate-motion-2');
 
     const electionInsert = env.DATABASE.prepare(
       'INSERT INTO election_eligibility (election_id, property_id, weight) VALUES (?, ?, ?)',
@@ -221,6 +223,9 @@ describe('live voting schema', () => {
     await expect(
       electionInsert.bind('duplicate-election', 'duplicate-property', 2).run(),
     ).rejects.toThrow();
+    await electionInsert
+      .bind('duplicate-election-2', 'duplicate-property', 2)
+      .run();
 
     const motionInsert = env.DATABASE.prepare(
       'INSERT INTO motion_eligibility (motion_id, property_id, weight) VALUES (?, ?, ?)',
@@ -229,6 +234,28 @@ describe('live voting schema', () => {
     await expect(
       motionInsert.bind('duplicate-motion', 'duplicate-property', 2).run(),
     ).rejects.toThrow();
+    await motionInsert
+      .bind('duplicate-motion-2', 'duplicate-property', 2)
+      .run();
+
+    const electionRows = await env.DATABASE.prepare(
+      'SELECT election_id FROM election_eligibility WHERE property_id = ? ORDER BY election_id',
+    )
+      .bind('duplicate-property')
+      .all();
+    const motionRows = await env.DATABASE.prepare(
+      'SELECT motion_id FROM motion_eligibility WHERE property_id = ? ORDER BY motion_id',
+    )
+      .bind('duplicate-property')
+      .all();
+    expect(electionRows.results.map((row) => row.election_id)).toEqual([
+      'duplicate-election',
+      'duplicate-election-2',
+    ]);
+    expect(motionRows.results.map((row) => row.motion_id)).toEqual([
+      'duplicate-motion',
+      'duplicate-motion-2',
+    ]);
   });
 
   it('rejects negative weights in choices and both electorate snapshots', async () => {
