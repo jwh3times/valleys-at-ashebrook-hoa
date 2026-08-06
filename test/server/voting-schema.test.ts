@@ -160,6 +160,19 @@ describe('live voting schema', () => {
         unique: 1,
       }),
     );
+
+    const electionIndexColumns = (
+      await pragmaRows(
+        'PRAGMA index_info(election_eligibility_parent_property_unq)',
+      )
+    ).map((column) => column.name);
+    const motionIndexColumns = (
+      await pragmaRows(
+        'PRAGMA index_info(motion_eligibility_parent_property_unq)',
+      )
+    ).map((column) => column.name);
+    expect(electionIndexColumns).toEqual(['election_id', 'property_id']);
+    expect(motionIndexColumns).toEqual(['motion_id', 'property_id']);
   });
 
   it('pins the live voting foreign-key delete actions', async () => {

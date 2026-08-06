@@ -636,6 +636,7 @@ export type MeetingBody = 'board' | 'member';
 export type MeetingKind = 'regular' | 'special' | 'annual';
 export type MeetingStatus = 'draft' | 'approved';
 export type MotionOutcome = 'passed' | 'failed' | 'withdrawn' | 'tabled';
+export type MotionVotingState = 'none' | 'open' | 'closed';
 export type VoteChoice = 'yes' | 'no' | 'abstain' | 'recused' | 'absent';
 
 export const MEETING_BODIES = ['board', 'member'] as const;
