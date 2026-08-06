@@ -7,8 +7,9 @@
 
 ADR 0017 made recorded paper elections secret by construction by storing turnout separately from
 board-entered aggregate tallies. A site-conducted election needs more than an increment-only tally:
-the association must retain enough ballot evidence to reproduce the result, while the database
-must still be unable to answer how a named owner, proxy, or property voted.
+the association must retain enough ballot evidence to reproduce the result, while the schema and
+supported application reads must provide no explicit identifier or join that maps a selection to a
+named owner, proxy, or property. Residual inference risks remain part of the boundary below.
 
 The live-voting feature is being delivered in independently safe slices. Slice 1 supplies only the
 default-off setting, additive schema, frozen-electorate read model, and board-only lifecycle
