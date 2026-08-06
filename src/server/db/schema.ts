@@ -571,7 +571,7 @@ export const elections = sqliteTable(
       .notNull()
       .default('recorded'),
     status: text('status', {
-      enum: ['draft', 'closed', 'certified', 'void'],
+      enum: ['draft', 'open', 'closed', 'certified', 'void'],
     })
       .notNull()
       .default('draft'),

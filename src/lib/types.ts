@@ -1032,16 +1032,15 @@ export function normalizeResolutionInput(
   return { ok: true, value: out };
 }
 
-export type ElectionStatus = 'draft' | 'closed' | 'certified' | 'void';
+export type ElectionStatus = 'draft' | 'open' | 'closed' | 'certified' | 'void';
 export type ElectionSource = 'recorded' | 'conducted';
 export const ELECTION_STATUSES = [
   'draft',
+  'open',
   'closed',
   'certified',
   'void',
 ] as const;
-// 'conducted' is reserved for PR 6 (live casting); normalizeElectionInput
-// rejects `source` outright today, so no `enumField` call reads this yet.
 export const ELECTION_SOURCES = ['recorded', 'conducted'] as const;
 
 export interface CandidateSummary {
@@ -1106,6 +1105,7 @@ export interface ElectionInput {
   electionDate?: string;
   meetingId?: string | null;
   visibility?: Visibility;
+  source?: ElectionSource;
 }
 
 export interface CandidateInput {
@@ -1142,13 +1142,17 @@ export function normalizeElectionInput(
     return fail(
       'status is not editable — use close, certify, uncertify, or void',
     );
-  // Create-immutable. Every guard in this feature tests `source`; if `source`
-  // itself were patchable, flipping it would BE the bypass — one PATCH turns
-  // "the board can never type a tally" into "the board can type any tally".
-  if ('source' in r)
+  // Create-immutable. Every lifecycle guard tests `source`; if it were
+  // patchable, flipping it would bypass the conducted-election boundary.
+  if (mode === 'patch' && 'source' in r)
     return fail(
       'source is not editable — it is fixed when the election is created',
     );
+  if (mode === 'create' && 'source' in r) {
+    const source = enumField(r, 'source', ELECTION_SOURCES, 'create');
+    if (!source.ok) return source;
+    out.source = source.value;
+  }
   if ('certifiedAt' in r || 'certifiedBy' in r)
     return fail(
       'certification provenance is not editable — use certify or uncertify',

@@ -181,6 +181,24 @@ describe('candidates admin route — board', () => {
     expect(await res.text()).toMatch(/certified or void/i);
   });
 
+  it('rejects a create once an election is no longer a draft', async () => {
+    for (const status of ['open', 'closed'] as const) {
+      const electionId = await createElection({
+        source: status === 'open' ? 'conducted' : 'recorded',
+        status,
+      });
+
+      const res = await POST(req(url, 'POST', { electionId, fullName: 'A' }));
+
+      expect(res.status).toBe(409);
+      const rows = await getDb(env)
+        .select()
+        .from(candidates)
+        .where(eq(candidates.electionId, electionId));
+      expect(rows).toEqual([]);
+    }
+  });
+
   it('rejects a create with an unknown boardPersonId with 400', async () => {
     const electionId = await createElection();
     const res = await POST(
@@ -274,6 +292,42 @@ describe('candidates admin route — board', () => {
     const res = await PATCH(req(url, 'PATCH', { id, fullName: 'X' }));
     expect(res.status).toBe(409);
     expect(await res.text()).toMatch(/certified or void/i);
+  });
+
+  it('PATCH on an open conducted election permits only the first withdrawal', async () => {
+    const electionId = await createElection({
+      source: 'conducted',
+      status: 'open',
+    });
+    const candidateId = await createCandidateRow(electionId, 1);
+    const patchCandidate = async (
+      payload: Record<string, unknown>,
+    ): Promise<number> =>
+      (await PATCH(req(url, 'PATCH', { id: candidateId, ...payload }))).status;
+
+    expect(await patchCandidate({ withdrawn: true })).toBe(204);
+    expect(await patchCandidate({ withdrawn: false })).toBe(409);
+    expect(await patchCandidate({ fullName: 'Changed' })).toBe(409);
+    expect(await patchCandidate({ withdrawn: true })).toBe(409);
+    expect(await getCandidate(candidateId)).toMatchObject({
+      fullName: 'Candidate 1',
+      withdrawn: true,
+    });
+  });
+
+  it('PATCH freezes a conducted candidate after the election closes', async () => {
+    const electionId = await createElection({
+      source: 'conducted',
+      status: 'closed',
+    });
+    const candidateId = await createCandidateRow(electionId, 1);
+
+    const res = await PATCH(
+      req(url, 'PATCH', { id: candidateId, fullName: 'Changed' }),
+    );
+
+    expect(res.status).toBe(409);
+    expect((await getCandidate(candidateId)).fullName).toBe('Candidate 1');
   });
 
   it('PATCH with no fields to update returns 400', async () => {
