@@ -1,4 +1,5 @@
 ---
+# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md
 name: ship
 description: Ship the current branch — refresh docs, write the CHANGELOG entry for the version this merge will mint, run fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
 ---
@@ -117,7 +118,7 @@ The full `test`, `test:server`, and `build` suites are **not** run here; CI owns
 These are the cheap gates that catch most mistakes in seconds:
 
 ```bash
-npm run agents:check   # .agents/skills mirror still matches .claude/ (CI gate)
+npm run sync:agents -- --check # generated agent trees match their authored inputs (CI gate)
 npm run format:check   # Prettier over the WHOLE repo — .md, .astro, .ts, .tsx, .json, .css
 npm run check          # astro check (Astro + TypeScript type check)
 ```

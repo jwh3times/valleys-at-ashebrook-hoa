@@ -1,7 +1,11 @@
 # ADR 0011: Claude-Sourced Agent Assets, Generated Mirror for Codex
 
-**Status:** Accepted (implemented — `scripts/sync-agent-skills.ts`, `npm run agents:sync`)
+**Status:** Superseded by [ADR 0021](./0021-authored-agent-skills-generate-tool-specific-trees.md)
 **Date:** 2026-07-24
+
+This ADR is retained as the historical record of the former Claude-authored architecture. Its
+commands, source-of-truth direction, and assumptions about Codex agent support are no longer
+current; ADR 0021 governs all new work.
 
 ## Context
 

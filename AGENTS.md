@@ -47,8 +47,8 @@ npm run test:watch        # Vitest in watch mode
 npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)
 npm run format            # Prettier write
 npm run format:check      # Prettier check, enforced by CI
-npm run agents:sync       # regenerate .agents/skills (Codex) from .claude/
-npm run agents:check      # fail if that mirror drifted, enforced by CI
+npm run sync:agents       # regenerate the Claude skills and Codex agents
+npm run sync:agents -- --check # fail if generated agent trees drifted, enforced by CI
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run db:generate       # generate Drizzle migration files
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
@@ -70,9 +70,9 @@ npx vitest run -t "shows an empty message"
 npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 ```
 
-CI (`.github/workflows/build.yml`) runs `format:check`, `agents:check`, `lint:coercions`, `check`, `test`,
-`test:server`, then `build` on every PR and push to `main`; run the relevant checks locally
-before pushing. On every
+CI (`.github/workflows/build.yml`) runs `format:check`, `sync:agents -- --check`, `lint:coercions`,
+`check`, `test`, `test:server`, then `build` on every PR and push to `main`; run the relevant checks
+locally before pushing. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
 creates a GitHub release using the `package.json` major/minor release line. The project uses the
 third semver segment as a build number (`<major>.<minor>.<build>`). The first tag for a new line
@@ -804,20 +804,20 @@ Project subagents live in `.claude/agents/`: `docs-updater` keeps `AGENTS.md`, `
 `SETUP.md`, `SECURITY.md`, and `CHANGELOG.md` in sync with the code; `code-reviewer` reviews diffs
 against tier-enforcement, board-only, and fail-closed access rules before merging.
 
-**One source of truth, two CLIs.** `.claude/` is the source: subagents in `.claude/agents/*.md`,
-skills in `.claude/skills/<name>/`. Codex cannot read either — it discovers project skills at
-`.agents/skills/<name>/SKILL.md` — so `scripts/sync-agent-skills.ts` generates that mirror and it
-is committed. Each Claude subagent mirrors as a Codex skill (Codex has no project-level subagent
-registry) with the Claude-only `tools:`/`model:` frontmatter dropped and a "delegated role"
-preamble added; skills mirror verbatim under a provenance banner. **Never hand-edit
-`.agents/skills/`** — edit the `.claude/` source and run `npm run agents:sync`. Three things keep
-the mirror honest: a `PostToolUse` hook in `.claude/settings.json` re-syncs whenever a source file
-is written, `npm run agents:check` fails CI on drift, and the same check runs inside `/ship`. See
-[ADR 0011](./docs/adr/0011-claude-sourced-agent-assets-mirrored-for-codex.md).
+**One source of truth, two CLIs.** `.agents/skills` is the authored source for complete skill
+directories. Run `npm run format` before `npm run sync:agents`; the latter regenerates
+`.claude/skills` for Claude Code and `.codex/agents` from authored `.claude/agents`. Never edit
+generated trees or reintroduce skill symlinks: with `core.symlinks=false`, Git stages linked
+contents as duplicate files. Each authored Claude custom agent is rendered as a Codex custom-agent
+TOML file, preserving its name, description, and developer instructions. The `PostToolUse` hook in
+`.claude/settings.json` re-syncs after authored inputs change, and CI plus `/ship` run
+`npm run sync:agents -- --check` to reject generated-tree drift. See
+[ADR 0021](./docs/adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
 
 The user-invokable `ship` skill (`.claude/skills/ship/`) takes a branch from code-complete to an
 open PR: it invokes `docs-updater` scoped to that branch's diff, writes the `CHANGELOG.md` section
 for the version `scripts/next-version.sh` predicts (see the Changelog Version workflow above), runs
-the fast `agents:check`/`format:check`/`check` gates, then pushes and opens or updates the PR.
+the fast `sync:agents -- --check`/`format:check`/`check` gates, then pushes and opens or updates
+the PR.
 Documentation is kept in sync at ship time through that `docs-updater` pass, so there is no
 per-turn docs hook.
