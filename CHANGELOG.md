@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.57] - 2026-08-06
+
+### Security
+
+- **Updated `js-yaml` to the patched 4.3.1 release.** The lockfile now resolves Astro's YAML
+  parser dependency outside the range affected by quadratic CPU consumption during `!!omap`
+  parsing (GHSA-5p4m-2wfm-xmqj).
+
 ## [0.3.56] - 2026-08-06
 
 ### Added
