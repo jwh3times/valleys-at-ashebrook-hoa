@@ -20,6 +20,7 @@ export const CLAUDE_SKILL_DIR = '.claude/skills';
 export const AGENT_SOURCE_DIR = '.claude/agents';
 export const CODEX_AGENT_DIR = '.codex/agents';
 export const GENERATED_SKILL_COMMENT = '# GENERATED — do not edit. Source:';
+const GENERATED_ROOTS_DISPLAY = `${CLAUDE_SKILL_DIR}, ${CODEX_AGENT_DIR}`;
 
 export type Frontmatter = { data: Record<string, string>; body: string };
 
@@ -68,19 +69,12 @@ export function renderCodexAgent(source: string, sourceRel: string): Buffer {
   if (!data.name || !data.description) {
     throw new Error(`${sourceRel} requires name and description frontmatter`);
   }
-  if (body.includes('"""')) {
-    throw new Error(
-      `${sourceRel} contains an unsupported triple-quote delimiter`,
-    );
-  }
   const rendered = [
     '# GENERATED — do not edit.',
     `# Source: ${sourceRel}`,
     `name = ${JSON.stringify(data.name)}`,
     `description = ${JSON.stringify(data.description)}`,
-    'developer_instructions = """',
-    body,
-    '"""',
+    `developer_instructions = ${JSON.stringify(body)}`,
     '',
   ].join('\n');
   return Buffer.from(rendered, 'utf8');
@@ -442,10 +436,14 @@ async function main(): Promise<void> {
   if (process.argv.includes('--check')) {
     const drift = diff();
     if (!hasDrift(drift)) {
-      console.log('Generated agent trees are in sync.');
+      console.log(
+        `Generated agent trees (${GENERATED_ROOTS_DISPLAY}) are in sync.`,
+      );
       return;
     }
-    console.error('Generated agent trees are out of sync:');
+    console.error(
+      `Generated agent trees (${GENERATED_ROOTS_DISPLAY}) are out of sync:`,
+    );
     for (const entry of drift.missing) console.error(`  missing      ${entry}`);
     for (const entry of drift.stale) console.error(`  stale        ${entry}`);
     for (const entry of drift.extraneous)

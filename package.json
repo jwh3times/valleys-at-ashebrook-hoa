@@ -60,6 +60,7 @@
     "pdfjs-dist": "^6.2.108",
     "prettier": "^3.9.6",
     "prettier-plugin-astro": "^0.14.1",
+    "smol-toml": "^1.7.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "wrangler": "^4.110.0",
