@@ -591,7 +591,7 @@ export default function MeetingsManager() {
     await run(
       async () => {
         await openMotionVoting(motion.id);
-        resetMotion();
+        if (editingMotionId === motion.id) resetMotion();
         await reloadDetail(meetingId);
       },
       motion.votingState === 'closed' ? 'Voting reopened.' : 'Voting opened.',
@@ -604,7 +604,7 @@ export default function MeetingsManager() {
   ) {
     await run(async () => {
       await closeMotionVoting(motion.id);
-      resetMotion();
+      if (editingMotionId === motion.id) resetMotion();
       await reloadDetail(meetingId);
     }, 'Voting closed.');
   }

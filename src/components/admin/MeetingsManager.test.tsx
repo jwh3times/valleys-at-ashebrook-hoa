@@ -1165,6 +1165,150 @@ describe('MeetingsManager', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('preserves edits to another motion when opening voting', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion(), otherMotion],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' }), otherMotion],
+        }),
+      );
+    mocked.openMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion repair the pool fence/i,
+      }),
+    );
+    const motionInput = screen.getByLabelText(/^motion$/i);
+    await userEvent.clear(motionInput);
+    await userEvent.type(motionInput, 'Repair the pool fence this fall');
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Edit motion')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Repair the pool fence this fall',
+    );
+  });
+
+  it('preserves an add-motion draft when opening voting', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({ ...memberMeeting, motions: [memberMotion()] }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' })],
+        }),
+      );
+    mocked.openMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Add more shade trees',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Edit motion')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Add more shade trees',
+    );
+  });
+
+  it('preserves edits to another motion when closing voting', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' }), otherMotion],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'closed' }), otherMotion],
+        }),
+      );
+    mocked.closeMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion repair the pool fence/i,
+      }),
+    );
+    const motionInput = screen.getByLabelText(/^motion$/i);
+    await userEvent.clear(motionInput);
+    await userEvent.type(motionInput, 'Repair the pool fence this fall');
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: /reopen voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Edit motion')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Repair the pool fence this fall',
+    );
+  });
+
   it('offers Close voting for an open member motion', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
     mocked.fetchMeeting
