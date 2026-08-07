@@ -100,6 +100,16 @@ function lstatOrUndefined(target: string): fs.Stats | undefined {
   }
 }
 
+function requireAuthoredDirectory(dir: string): void {
+  const stat = lstatOrUndefined(dir);
+  if (stat?.isSymbolicLink()) {
+    throw new Error(`Authored tree contains unsupported link: ${dir}`);
+  }
+  if (!stat?.isDirectory()) {
+    throw new Error(`Authored tree must be a real directory: ${dir}`);
+  }
+}
+
 /** List authored files, rejecting every kind of link before it can be read. */
 function listRealFiles(dir: string, prefix = ''): string[] {
   const files: string[] = [];
@@ -141,11 +151,7 @@ function listGeneratedFiles(dir: string, prefix = ''): string[] {
 function planSkills(root: string): GeneratedTreePlan {
   const files = new Map<string, Buffer>();
   const sourceRoot = path.join(root, ...SKILL_SOURCE_DIR.split('/'));
-  const sourceRootStat = lstatOrUndefined(sourceRoot);
-  if (!sourceRootStat) return { root: CLAUDE_SKILL_DIR, files };
-  if (sourceRootStat.isSymbolicLink()) {
-    throw new Error(`Authored tree contains unsupported link: ${sourceRoot}`);
-  }
+  requireAuthoredDirectory(sourceRoot);
 
   for (const entry of fs.readdirSync(sourceRoot, { withFileTypes: true })) {
     if (entry.name === '.DS_Store') continue;
@@ -174,11 +180,7 @@ function planSkills(root: string): GeneratedTreePlan {
 function planAgents(root: string): GeneratedTreePlan {
   const files = new Map<string, Buffer>();
   const sourceRoot = path.join(root, ...AGENT_SOURCE_DIR.split('/'));
-  const sourceRootStat = lstatOrUndefined(sourceRoot);
-  if (!sourceRootStat) return { root: CODEX_AGENT_DIR, files };
-  if (sourceRootStat.isSymbolicLink()) {
-    throw new Error(`Authored tree contains unsupported link: ${sourceRoot}`);
-  }
+  requireAuthoredDirectory(sourceRoot);
 
   for (const entry of fs.readdirSync(sourceRoot, { withFileTypes: true })) {
     if (entry.isSymbolicLink()) {
@@ -210,6 +212,33 @@ export type Drift = {
   extraneous: string[];
 };
 
+function generatedFileDrift(
+  treeRoot: string,
+  rel: string,
+  expected: Buffer,
+): 'missing' | 'stale' | undefined {
+  const parts = rel.split('/');
+  let current = treeRoot;
+  for (let index = 0; index < parts.length; index += 1) {
+    current = path.join(current, parts[index]);
+    const stat = lstatOrUndefined(current);
+    if (!stat) return 'missing';
+
+    const isLeaf = index === parts.length - 1;
+    if (!isLeaf) {
+      if (stat.isSymbolicLink() || !stat.isDirectory()) return 'missing';
+      continue;
+    }
+    if (
+      stat.isSymbolicLink() ||
+      !stat.isFile() ||
+      !fs.readFileSync(current).equals(expected)
+    ) {
+      return 'stale';
+    }
+  }
+}
+
 /** Compare the generated filesystem seam without modifying it. */
 export function diff(
   root: string = REPO_ROOT,
@@ -220,7 +249,10 @@ export function diff(
   for (const tree of plans) {
     const treeRoot = path.join(root, ...tree.root.split('/'));
     const treeRootStat = lstatOrUndefined(treeRoot);
-    if (treeRootStat?.isSymbolicLink()) {
+    if (
+      treeRootStat &&
+      (treeRootStat.isSymbolicLink() || !treeRootStat.isDirectory())
+    ) {
       for (const rel of tree.files.keys()) {
         drift.missing.push(displayPath(tree, rel));
       }
@@ -228,15 +260,10 @@ export function diff(
       continue;
     }
     for (const [rel, expected] of tree.files) {
-      const target = path.join(treeRoot, ...rel.split('/'));
-      const stat = lstatOrUndefined(target);
-      if (!stat) {
+      const targetDrift = generatedFileDrift(treeRoot, rel, expected);
+      if (targetDrift === 'missing') {
         drift.missing.push(displayPath(tree, rel));
-      } else if (
-        stat.isSymbolicLink() ||
-        !stat.isFile() ||
-        !fs.readFileSync(target).equals(expected)
-      ) {
+      } else if (targetDrift === 'stale') {
         drift.stale.push(displayPath(tree, rel));
       }
     }
