@@ -17,14 +17,15 @@ It provides:
 - 🗳️ **Meeting record** — board-authored, board-approved minutes at `/meetings`: date,
   attendance, motions, and roll-call votes for board meetings, plus weighted per-property
   attendance and votes for member meetings, including paper proxies the board records against a
-  lot's attendance, vote, or ballot; a default-off guarded casting API and eligible-caller server
-  read model now use the frozen live-voting snapshot, but no homeowner or admin voting UI has shipped
+  lot's attendance, vote, or ballot; a default-off live-voting workflow lets the board open,
+  close, and reopen member motions against a frozen eligible-lot and weight snapshot
 - 📜 **Resolutions book** — standing rules the board adopts, published at `/resolutions`;
   amending a resolution creates a new one that supersedes the old, forming a walkable chain
 - 🏛️ **Elections** — recorded paper elections plus a default-off conducted-election lifecycle and
   identity-unlinked ballot-box schema; `/elections` publishes only closed/certified candidates,
-  results, and aggregate turnout; the guarded casting API records final conducted ballots, but no
-  homeowner or admin voting UI has shipped
+  results, and aggregate turnout; when the board enables live voting, verified homeowners cast
+  final ballots at `/vote` while the board opens, monitors, closes, and reviews elections in the
+  admin panel
 - 📝 **Homeowner proxies** — in official mode, a verified homeowner can grant or revoke a proxy
   for one of their lots at an upcoming member meeting or election and review proxies they granted
   or hold at `/proxies`; the board can still record and administer paper proxies
@@ -45,8 +46,10 @@ It provides:
 
 Homeowners can create accounts (verified against the owner roster via a one-time code) to access
 homeowner-only content. When the board enables official mode, verified homeowners can also conduct
-supported association business such as granting or revoking a proxy for a lot they control.
-Content visibility has three tiers: public, homeowner, and board.
+supported association business such as granting or revoking a proxy for a lot they control. If the
+separate live-voting setting is also enabled, eligible homeowners can cast final election ballots
+and member-motion votes for their own lots or proxies they hold. Content visibility has three tiers:
+public, homeowner, and board.
 
 ## Tech stack
 
@@ -134,8 +137,8 @@ src/server/db/migrations/   D1 migration files
 
 Board members go to `/admin`, sign in with their email + password (Better Auth), and manage
 announcements, documents, duplicate cleanup, dues, site text, the board roster, meetings,
-resolutions, recorded elections, proxies, and saved AI reports through on-screen forms. Board admin
-sign-in access itself is also managed in the admin app, under **Board access**: a board
+resolutions, recorded and conducted elections, proxies, and saved AI reports through on-screen
+forms. Board admin sign-in access itself is also managed in the admin app, under **Board access**: a board
 admin can promote another account to `board` and demote a board admin (the last
 remaining board admin can't be demoted), which supports handing the site off to a new
 board over time. A board admin can't escalate their own access beyond `board`, and
@@ -144,6 +147,32 @@ board sessions. A separate **The Board** tab records who serves on the board and
 service, independent of who can sign in. The _first_ board account is bootstrapped through a
 permanent, fail-closed `POST /api/bootstrap/board` endpoint that self-disables once any board
 account exists — see SETUP.md §6.
+
+## Live voting workflow
+
+Live voting remains disabled by default and should stay disabled until the association formally
+adopts the process and the board is ready to operate it. The board workflow is:
+
+1. In **Site settings**, enable official mode and then **Live voting**. Both settings must be on to
+   open an occasion or accept a cast. Turning either one off globally pauses every open occasion
+   without closing it or deleting its frozen electorate, turnout, votes, or choices; restoring both
+   settings resumes an occasion that is still open.
+2. For an election, create a **Conducted** draft in **Elections**, choose public or homeowner
+   visibility, and add the candidates. **Open** freezes the active lots and their voting weights.
+   The **Active** view shows turnout by lot count and weight plus the turnout/eligibility registers,
+   but never live candidate totals or a lot-to-choice link. **Close** is final, derives candidate
+   totals, and moves the election to **History**, where the existing certify/uncertify/void record
+   workflow continues; a conducted election cannot reopen.
+3. For a member motion, create or edit the motion under a draft member meeting, then use **Open
+   voting**. First open freezes the same active-lot denominator. The board can monitor the recorded
+   motion tally and frozen eligible weight, **Close voting**, and **Reopen voting** while the meeting
+   remains draft; reopening retains the original snapshot and votes. The bulk vote editor is not
+   available while the motion is open.
+4. A verified eligible homeowner follows **Vote** to `/vote`, chooses the lot and owner or valid
+   held proxy, selects up to the election's seat count or chooses Yes/No/Abstain for a motion, and
+   reviews the selection and provenance in a confirmation dialog. The dialog warns that the ballot
+   or vote cannot be changed or recovered after it is cast. A successful cast is final and is
+   replaced by a receipt containing only the occasion title and lot address, never the selection.
 
 ## Contributing & support
 

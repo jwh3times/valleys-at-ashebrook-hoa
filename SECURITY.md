@@ -129,12 +129,17 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   `409` rather than relying on the earlier preflight. Turning off either flag pauses new opens and
   casts without deleting open state, snapshots, turnout, votes, or retained choices; re-enabling
   resumes an occasion that is still open.
-- **Slice 2 ships an API and private read model, not a voting experience.** `POST /api/vote`
-  accepts only `castBallot` and `castMotionVote`. The server-only `fetchOpenVotingFor` projection
-  returns visible open occasions and eligible lots the caller controls directly or through a held
-  proxy, their frozen weights and provenance options, candidates for elections, and only a
-  `hasCast` receipt — never a ballot choice or live tally. There is no GET voting API, `/vote` page,
-  navigation entry, homeowner voting UI, or new admin UI in this slice.
+- **The homeowner voting experience preserves finality and selection non-disclosure.** There is no
+  GET voting API: the feature-gated SSR `/vote` page calls the server-only `fetchOpenVotingFor`
+  projection, which returns visible open occasions and eligible lots the caller controls directly
+  or through a held proxy, their frozen weights and provenance options, election candidates, and
+  only a `hasCast` receipt — never a retained ballot choice or live conducted-election tally. Before
+  `POST /api/vote` sends either `castBallot` or `castMotionVote`, the modal review names the pending
+  selection and owner/proxy provenance and warns that the ballot or vote cannot be changed or
+  recovered after it is cast. A successful exact-204 response replaces the form with a receipt that
+  contains only the occasion title and lot address; choices cannot be displayed, recovered, edited,
+  or replaced through the supported application. Admin election history likewise exposes turnout
+  and final aggregate results without a lot-to-choice link.
 - **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
   owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
   by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in

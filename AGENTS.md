@@ -10,7 +10,9 @@ and homeowner proxy grants at `/proxies` are driven by the `officialMode` site s
 conducted elections and member-motion voting. The guarded `POST /api/vote`, caller-specific
 server read model, atomic casting, and homeowner `/vote` experience are all feature-gated on both
 settings. The page offers final conducted-election and member-motion voting only to verified
-callers, with per-lot receipts that never reveal selections; no new admin UI has shipped.
+callers, with per-lot receipts that never reveal selections. The admin Site, Elections, and
+Meetings panels expose the default-off enable/pause control, conducted-election Active/History
+lifecycle and turnout monitoring, and member-motion open/close/reopen controls.
 
 The app is an Astro SSR app (`output: 'server'`) running on **Cloudflare Workers** via the
 `@astrojs/cloudflare` adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2**
@@ -270,8 +272,10 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   can be added or deleted only while the election is a draft, and conducted candidates become
   immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
   The homeowner cast path is `POST /api/vote`, reached only through the feature-gated `/vote` page
-  for verified callers. The page renders no-vote receipts that contain only the item title and lot
-  address; no new admin UI exists yet.
+  for verified callers. The page renders selection-free receipts that contain only the item title
+  and lot address. The admin Elections panel separates draft/open Active records from
+  closed/certified/void History, exposes conducted Open/Close and count/weight turnout monitoring,
+  and never exposes a live conducted tally or editable conducted ballot/choice rows.
 - Board-only complete proxies record (including paper proxies entered by the board and online
   grants created by homeowners — one owner authorising one named holder to act for one lot at
   exactly one meeting or election; see
@@ -369,16 +373,19 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`), meeting-record helpers
   (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
   `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
-  `setVotes`, `setMemberVotes`), resolutions-book helpers (`fetchResolutions`,
+  `openMotionVoting`, `closeMotionVoting`, `setVotes`, `setMemberVotes`), resolutions-book helpers (`fetchResolutions`,
   `saveResolution`, `deleteResolution`, `adoptResolution`, `supersedeResolution`,
   `repealResolution`), and elections-record helpers (`fetchElections`, `saveElection`,
-  `deleteElection`, `closeElection`, `voidElection`, `certifyElection`, `uncertifyElection`,
+  `deleteElection`, `openElection`, `closeElection`, `voidElection`, `certifyElection`, `uncertifyElection`,
   `setTallies`, `setBallots`, `saveCandidate`, `deleteCandidate`) — the board-only `GET` for
   resolutions, elections, and proxies already returns every record's full detail, so unlike
   meetings/motions none of them has a separate single-record fetch — and proxies-record helpers
   (`fetchProxies`, `saveProxy`, `deleteProxy`). `setMemberAttendance`, `setMemberVotes`, and
   `setBallots` each take a `proxyId?: string | null` per entry, replacing the old `viaProxy?:
 boolean`.
+- `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for final election
+  ballots and member-motion votes; failed responses surface their server message and never create a
+  receipt.
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both

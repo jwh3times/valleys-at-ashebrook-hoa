@@ -74,7 +74,7 @@ helpers. Draft meetings and resolutions, plus draft or void elections, stay on b
 reads even when the caller has the board role; the public read path always enforces its publication
 status independently of role.
 
-## Live Homeowner Voting API
+## Live Homeowner Voting
 
 Live voting is inert by default. The `liveVotingEnabled` site setting normalizes to `false`, and
 opening or casting requires it and `officialMode` to be literal JSON booleans `true` in the
@@ -95,8 +95,21 @@ turnout plus every identity-unlinked retained choice is one checked D1 batch.
 conducted elections and member motions only when the caller controls an eligible snapshotted lot
 directly or holds an occasion-scoped proxy. It includes frozen weights, valid owner/proxy options,
 election candidates, and a per-lot `hasCast` receipt; it never returns retained election choices or
-live tallies. Slice 2 has no GET voting API, `/vote` page, navigation entry, homeowner voting UI, or
-new admin UI.
+live conducted-election tallies. There is no GET voting API: the feature-gated SSR `/vote` page
+calls this read model directly and renders sign-in, property-verification, empty, or eligible ballot
+states. Each election or motion form requires an explicit review step that names the selection and
+owner/proxy provenance and warns that the cast cannot be changed or recovered. The exact-204
+success state contains only the occasion title and lot address, never a selection.
+
+The board operates the lifecycle from `/admin`. Site settings persist the explicit global toggle;
+the Elections panel separates draft/open **Active** records from closed/certified/void **History**.
+A conducted election is prepared with candidates and a public or homeowner visibility tier, opened
+to freeze its electorate, monitored through count/weight turnout and board-only eligibility/turnout
+registers, then closed to derive final candidate totals and move to History. It cannot reopen. A
+member motion is opened from its draft member meeting, monitored with its tally and frozen eligible
+weight, and may be closed and reopened while the meeting stays draft; the original snapshot and
+votes survive those cycles. When either feature flag is off, open election and motion rows are
+marked **Paused globally** and cannot accept new casts or lifecycle opens.
 
 ## Official-Mode Homeowner Actions
 

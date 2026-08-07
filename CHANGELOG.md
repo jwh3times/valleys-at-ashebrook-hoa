@@ -7,14 +7,42 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.58] - 2026-08-07
+
 ### Added
 
-- **Added the feature-gated homeowner voting experience.** When official mode and live voting are
-  both enabled, verified homeowners can use `/vote` to review and cast a final ballot for their own
-  lot or a held proxy. The page uses an explicit finality confirmation, shows candidate statements
-  through the safe Markdown renderer, and replaces each successful form with a selection-free
-  receipt. Header account links expose Vote only to callers with a verified property while both
-  settings are on.
+- **Completed the default-off live homeowner voting experience.** When official mode and live voting
+  are both enabled, verified homeowners can use `/vote` to cast a conducted-election ballot or
+  member-motion vote for their own lot or an occasion-valid proxy they hold. The review dialog names
+  the pending selection and provenance, warns that the cast cannot be changed or recovered, and
+  replaces an exact-204 success with a selection-free receipt.
+- **Added board controls for the complete live-voting lifecycle.** Site settings can enable or
+  globally pause voting; the Elections panel separates draft/open **Active** records from durable
+  **History**, opens and closes conducted elections, and monitors turnout by count and weight. The
+  Meetings panel opens, closes, and reopens member-motion voting while preserving its frozen
+  electorate and votes.
+
+### Changed
+
+- Opening an election or motion freezes active lots and voting weights as the historic denominator.
+  Disabling official mode or live voting pauses new opens and casts without closing an occasion or
+  deleting snapshots, turnout, votes, or retained choices; restoring both settings resumes an
+  occasion that is still open. Closing a conducted election atomically derives its final aggregate
+  candidate totals and moves it to History, while a closed member motion may reopen against its
+  original snapshot.
+
+### Security
+
+- The voting route requires the `Origin` header to equal the request URL's origin exactly before it
+  processes JSON, session, role, or resource input. Casting repeats official-mode/live-voting,
+  visibility, own-lot or held-proxy authority, frozen eligibility and weight, open-state, and
+  one-cast checks inside the atomic D1 mutation, so a racing pause, close, authority change, or
+  duplicate leaves no partial write.
+- Conducted turnout and retained choices remain structurally non-linked: choice rows carry only
+  election, candidate, and frozen weight, with no ballot, lot, owner, proxy, caster, timestamp,
+  shared receipt, or other identity join field. No live candidate tally or lot-to-choice history is
+  exposed; totals appear only after close. Rare weights, SQLite insertion order, and D1 Time Travel
+  remain documented residual inference limits rather than a claim of mathematical anonymity.
 
 ## [0.3.57] - 2026-08-06
 
