@@ -158,6 +158,12 @@ describe('accountNav live voting link', () => {
       { href: '/vote', label: 'Vote' },
     ]);
   });
+
+  it('fails closed for a visitor context that still carries property IDs', () => {
+    expect(
+      accountNav({ role: 'visitor', propertyIds: ['p1'] }, bothOn).links,
+    ).toEqual([{ href: '/verify-property', label: 'Verify your property' }]);
+  });
 });
 
 describe('editable disclaimer + about copy', () => {

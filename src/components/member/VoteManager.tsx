@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import ReportMarkdown from '../react/ReportMarkdown';
 import { castBallot, castMotionVote } from '../../lib/voting';
 import type {
@@ -48,6 +48,23 @@ function defaultProvenance(lot: VotingLot): Provenance {
   if (lot.ownerOptions[0])
     return { castByOwnerId: lot.ownerOptions[0].id, proxyId: null };
   return { castByOwnerId: null, proxyId: lot.proxyOptions[0]?.id ?? null };
+}
+
+function provenanceSummary(lot: VotingLot, provenance: Provenance): string {
+  if (provenance.castByOwnerId !== null) {
+    const owner = lot.ownerOptions.find(
+      (option) => option.id === provenance.castByOwnerId,
+    );
+    return owner
+      ? `Voting as ${owner.fullName}`
+      : 'Voting authority unavailable';
+  }
+  const proxy = lot.proxyOptions.find(
+    (option) => option.id === provenance.proxyId,
+  );
+  return proxy
+    ? `Voting by proxy for ${proxy.grantingAddress} (${proxy.holderName})`
+    : 'Voting authority unavailable';
 }
 
 function ProvenancePicker({
@@ -129,6 +146,7 @@ function ElectionBallot({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [received, setReceived] = useState(false);
+  const reviewButtonRef = useRef<HTMLButtonElement>(null);
   const toggleCandidate = (candidateId: string) => {
     setCandidateIds((selected) => {
       if (selected.includes(candidateId))
@@ -161,60 +179,64 @@ function ElectionBallot({
   if (received) return <Receipt item={item} address={lot.address} />;
   return (
     <article className="vote-card">
-      <p className="vote-card__lot">
-        Ballot for <strong>{lot.address}</strong>
-      </p>
-      <p className="vote-card__instruction">
-        Choose up to {item.seats} candidate{item.seats === 1 ? '' : 's'}.
-      </p>
-      {error && (
-        <p className="form-message form-message--error" role="alert">
-          {error}
+      <div inert={reviewing} aria-hidden={reviewing ? 'true' : undefined}>
+        <p className="vote-card__lot">
+          Ballot for <strong>{lot.address}</strong>
         </p>
-      )}
-      <fieldset className="vote-candidates" disabled={busy}>
-        <legend className="sr-only">Candidates</legend>
-        {item.candidates.map((candidate) => (
-          <label className="vote-candidate" key={candidate.id}>
-            <input
-              type="checkbox"
-              aria-label={candidate.fullName}
-              checked={candidateIds.includes(candidate.id)}
-              disabled={
-                !candidateIds.includes(candidate.id) &&
-                candidateIds.length >= item.seats
-              }
-              onChange={() => toggleCandidate(candidate.id)}
-            />
-            <span>
-              <strong>{candidate.fullName}</strong>
-              {candidate.statementMd && (
-                <span className="vote-candidate__statement">
-                  <ReportMarkdown text={candidate.statementMd} />
-                </span>
-              )}
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <ProvenancePicker
-        lot={lot}
-        value={provenance}
-        onChange={setProvenance}
-        disabled={busy}
-      />
-      <button
-        className="btn vote-card__review"
-        type="button"
-        disabled={
-          busy ||
-          candidateIds.length === 0 ||
-          (provenance.proxyId === null && provenance.castByOwnerId === null)
-        }
-        onClick={() => setReviewing(true)}
-      >
-        Review ballot
-      </button>
+        <p className="vote-card__instruction">
+          Choose up to {item.seats} candidate{item.seats === 1 ? '' : 's'}.
+        </p>
+        {error && (
+          <p className="form-message form-message--error" role="alert">
+            {error}
+          </p>
+        )}
+        <fieldset className="vote-candidates" disabled={busy || reviewing}>
+          <legend className="sr-only">Candidates</legend>
+          {item.candidates.map((candidate) => (
+            <label className="vote-candidate" key={candidate.id}>
+              <input
+                type="checkbox"
+                aria-label={candidate.fullName}
+                checked={candidateIds.includes(candidate.id)}
+                disabled={
+                  !candidateIds.includes(candidate.id) &&
+                  candidateIds.length >= item.seats
+                }
+                onChange={() => toggleCandidate(candidate.id)}
+              />
+              <span>
+                <strong>{candidate.fullName}</strong>
+                {candidate.statementMd && (
+                  <span className="vote-candidate__statement">
+                    <ReportMarkdown text={candidate.statementMd} />
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <ProvenancePicker
+          lot={lot}
+          value={provenance}
+          onChange={setProvenance}
+          disabled={busy || reviewing}
+        />
+        <button
+          ref={reviewButtonRef}
+          className="btn vote-card__review"
+          type="button"
+          disabled={
+            busy ||
+            reviewing ||
+            candidateIds.length === 0 ||
+            (provenance.proxyId === null && provenance.castByOwnerId === null)
+          }
+          onClick={() => setReviewing(true)}
+        >
+          Review ballot
+        </button>
+      </div>
       {reviewing && (
         <FinalityDialog
           title="Review ballot"
@@ -222,6 +244,7 @@ function ElectionBallot({
           onConfirm={submit}
           busy={busy}
           confirmLabel="Cast final ballot"
+          returnFocusRef={reviewButtonRef}
         >
           <p>Your ballot cannot be changed or recovered after it is cast.</p>
           <p>
@@ -234,6 +257,7 @@ function ElectionBallot({
               )
               .join(', ')}
           </p>
+          <p>{provenanceSummary(lot, provenance)}</p>
         </FinalityDialog>
       )}
     </article>
@@ -254,6 +278,7 @@ function MotionBallot({
   const [busy, setBusy] = useState(false);
   const [received, setReceived] = useState(false);
   const id = useId();
+  const reviewButtonRef = useRef<HTMLButtonElement>(null);
   const submit = async () => {
     if (!choice) return;
     setBusy(true);
@@ -278,47 +303,51 @@ function MotionBallot({
   if (received) return <Receipt item={item} address={lot.address} />;
   return (
     <article className="vote-card">
-      <p className="vote-card__lot">
-        Vote for <strong>{lot.address}</strong>
-      </p>
-      <p className="vote-card__motion-text">{item.text}</p>
-      {error && (
-        <p className="form-message form-message--error" role="alert">
-          {error}
+      <div inert={reviewing} aria-hidden={reviewing ? 'true' : undefined}>
+        <p className="vote-card__lot">
+          Vote for <strong>{lot.address}</strong>
         </p>
-      )}
-      <fieldset className="vote-choices" disabled={busy}>
-        <legend>Your vote</legend>
-        {(['yes', 'no', 'abstain'] as const).map((value) => (
-          <label key={value}>
-            <input
-              type="radio"
-              name={`${id}-choice`}
-              checked={choice === value}
-              onChange={() => setChoice(value)}
-            />
-            {value[0].toUpperCase() + value.slice(1)}
-          </label>
-        ))}
-      </fieldset>
-      <ProvenancePicker
-        lot={lot}
-        value={provenance}
-        onChange={setProvenance}
-        disabled={busy}
-      />
-      <button
-        className="btn vote-card__review"
-        type="button"
-        disabled={
-          busy ||
-          choice === null ||
-          (provenance.proxyId === null && provenance.castByOwnerId === null)
-        }
-        onClick={() => setReviewing(true)}
-      >
-        Review vote
-      </button>
+        <p className="vote-card__motion-text">{item.text}</p>
+        {error && (
+          <p className="form-message form-message--error" role="alert">
+            {error}
+          </p>
+        )}
+        <fieldset className="vote-choices" disabled={busy || reviewing}>
+          <legend>Your vote</legend>
+          {(['yes', 'no', 'abstain'] as const).map((value) => (
+            <label key={value}>
+              <input
+                type="radio"
+                name={`${id}-choice`}
+                checked={choice === value}
+                onChange={() => setChoice(value)}
+              />
+              {value[0].toUpperCase() + value.slice(1)}
+            </label>
+          ))}
+        </fieldset>
+        <ProvenancePicker
+          lot={lot}
+          value={provenance}
+          onChange={setProvenance}
+          disabled={busy || reviewing}
+        />
+        <button
+          ref={reviewButtonRef}
+          className="btn vote-card__review"
+          type="button"
+          disabled={
+            busy ||
+            reviewing ||
+            choice === null ||
+            (provenance.proxyId === null && provenance.castByOwnerId === null)
+          }
+          onClick={() => setReviewing(true)}
+        >
+          Review vote
+        </button>
+      </div>
       {reviewing && (
         <FinalityDialog
           title="Review vote"
@@ -326,8 +355,11 @@ function MotionBallot({
           onConfirm={submit}
           busy={busy}
           confirmLabel="Cast final vote"
+          returnFocusRef={reviewButtonRef}
         >
           <p>Your vote cannot be changed or recovered after it is cast.</p>
+          <p>Choice: {choice && choice[0].toUpperCase() + choice.slice(1)}</p>
+          <p>{provenanceSummary(lot, provenance)}</p>
         </FinalityDialog>
       )}
     </article>
@@ -341,6 +373,7 @@ function FinalityDialog({
   onConfirm,
   busy,
   confirmLabel,
+  returnFocusRef,
 }: {
   title: string;
   children: React.ReactNode;
@@ -348,19 +381,55 @@ function FinalityDialog({
   onConfirm: () => void;
   busy: boolean;
   confirmLabel: string;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const firstButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    firstButtonRef.current?.focus();
+    return () => returnFocusRef.current?.focus();
+  }, [returnFocusRef]);
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && !busy) {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled)',
+      ) ?? [],
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <div className="vote-dialog-backdrop" role="presentation">
       <div
+        ref={dialogRef}
         className="vote-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        onKeyDown={handleKeyDown}
       >
         <h3>{title}</h3>
         {children}
         <div className="btn-row">
           <button
+            ref={firstButtonRef}
             type="button"
             className="btn btn--outline"
             onClick={onCancel}

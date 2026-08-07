@@ -8,7 +8,7 @@ async function cast(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(action),
   });
-  if (response.ok) return;
+  if (response.status === 204) return;
 
   const message = (await response.text()).trim();
   throw new Error(message || `Voting request failed (${response.status})`);

@@ -118,6 +118,11 @@ export function accountNav(
           : []),
       ],
     };
+  if (auth.role !== 'homeowner')
+    return {
+      signedIn: true,
+      links: [{ href: '/verify-property', label: 'Verify your property' }],
+    };
   if (auth.propertyIds.length === 0)
     return {
       signedIn: true,
