@@ -288,6 +288,12 @@ export const motions = sqliteTable(
     secondOwnerId: text('second_owner_id').references(() => owners.id, {
       onDelete: 'restrict',
     }),
+    votingState: text('voting_state', {
+      enum: ['none', 'open', 'closed'],
+    })
+      .notNull()
+      .default('none'),
+    votingRevision: integer('voting_revision').notNull().default(0),
     outcome: text('outcome', {
       enum: ['passed', 'failed', 'withdrawn', 'tabled'],
     }).notNull(),
@@ -300,6 +306,26 @@ export const motions = sqliteTable(
   (t) => [
     index('motions_meeting_id_idx').on(t.meetingId),
     uniqueIndex('motions_meeting_sequence_unq').on(t.meetingId, t.sequence),
+  ],
+);
+
+export const motionEligibility = sqliteTable(
+  'motion_eligibility',
+  {
+    motionId: text('motion_id')
+      .notNull()
+      .references(() => motions.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    weight: integer('weight').notNull(),
+  },
+  (t) => [
+    uniqueIndex('motion_eligibility_parent_property_unq').on(
+      t.motionId,
+      t.propertyId,
+    ),
+    check('motion_eligibility_weight_nonnegative', sql`${t.weight} >= 0`),
   ],
 );
 
@@ -546,7 +572,7 @@ export const elections = sqliteTable(
       .notNull()
       .default('recorded'),
     status: text('status', {
-      enum: ['draft', 'closed', 'certified', 'void'],
+      enum: ['draft', 'open', 'closed', 'certified', 'void'],
     })
       .notNull()
       .default('draft'),
@@ -562,6 +588,26 @@ export const elections = sqliteTable(
   (t) => [
     index('elections_status_idx').on(t.status),
     index('elections_meeting_id_idx').on(t.meetingId),
+  ],
+);
+
+export const electionEligibility = sqliteTable(
+  'election_eligibility',
+  {
+    electionId: text('election_id')
+      .notNull()
+      .references(() => elections.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    weight: integer('weight').notNull(),
+  },
+  (t) => [
+    uniqueIndex('election_eligibility_parent_property_unq').on(
+      t.electionId,
+      t.propertyId,
+    ),
+    check('election_eligibility_weight_nonnegative', sql`${t.weight} >= 0`),
   ],
 );
 
@@ -597,10 +643,10 @@ export const candidates = sqliteTable(
       .default(false),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     // NOTE: there is deliberately NO updatedAt on this table, breaking the
-    // convention every other table follows. In PR 6, casting increments
-    // `votes`; if that touched an updatedAt, the last ballot's choice would be
-    // recoverable from persisted data alone by matching it against the newest
-    // ballots.recorded_at. Do not "fix" this omission.
+    // convention every other table follows. Conducted-election totals remain
+    // NULL while voting is open and are derived from retained choices only at
+    // close; a per-cast timestamp here would add a ballot-choice correlation
+    // surface. Do not "fix" this omission.
   },
   (t) => [
     index('candidates_election_id_idx').on(t.electionId),
@@ -608,6 +654,24 @@ export const candidates = sqliteTable(
       t.electionId,
       t.sequence,
     ),
+  ],
+);
+
+export const ballotChoices = sqliteTable(
+  'ballot_choices',
+  {
+    id: text('id').primaryKey(),
+    electionId: text('election_id')
+      .notNull()
+      .references(() => elections.id, { onDelete: 'cascade' }),
+    candidateId: text('candidate_id')
+      .notNull()
+      .references(() => candidates.id, { onDelete: 'restrict' }),
+    weight: integer('weight').notNull(),
+  },
+  (t) => [
+    index('ballot_choices_election_id_idx').on(t.electionId),
+    check('ballot_choices_weight_nonnegative', sql`${t.weight} >= 0`),
   ],
 );
 

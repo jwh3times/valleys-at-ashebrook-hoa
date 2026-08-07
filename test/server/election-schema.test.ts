@@ -350,4 +350,27 @@ describe('elections schema', () => {
     expect(names).toContain('created_at');
     expect(names).not.toContain('updated_at');
   });
+
+  it('ballot choices contain only anonymous choice data', async () => {
+    const db = getDb(env);
+    const cols = await db.run(sql`PRAGMA table_info(ballot_choices)`);
+    const ballotChoiceColumns = cols.results.map(
+      (column) => (column as Record<string, unknown>).name,
+    );
+
+    expect(ballotChoiceColumns).toEqual([
+      'id',
+      'election_id',
+      'candidate_id',
+      'weight',
+    ]);
+    expect(ballotChoiceColumns).not.toContain('ballot_id');
+    expect(ballotChoiceColumns).not.toContain('property_id');
+    expect(ballotChoiceColumns).not.toContain('created_at');
+    expect(
+      cols.results.find(
+        (column) => (column as Record<string, unknown>).name === 'id',
+      ),
+    ).toEqual(expect.objectContaining({ pk: 1 }));
+  });
 });

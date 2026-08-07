@@ -156,27 +156,36 @@ artifact on its own._
 
 ### 9. Live Homeowner Voting and Conducted Elections
 
-**Status:** Not implemented; recorded-election and proxy foundations are shipped
-**Gate:** Official adoption and a board decision
+**Status:** Slice 1 foundation complete; voting API/read-model and homeowner/admin UI slices pending
+**Enablement gate:** Official adoption and a board decision; implementation may proceed behind the
+default-off feature flag
 **Likely size:** Large
 
 The site records elections conducted on paper, aggregate tallies, per-lot turnout, certification,
-board terms, paper proxies, and official-mode homeowner proxy grants. The remaining milestone is
-to conduct member-motion votes and elections through the site at `/vote`.
+board terms, paper proxies, and official-mode homeowner proxy grants. Slice 1 now adds the
+default-off live-voting setting, retained choice and eligibility-snapshot schema, and board-only
+election/member-motion lifecycle transitions. The site does not yet conduct votes through
+`/vote`; the voting API/read model and homeowner/admin experience remain later slices.
 
-The approved design direction preserves election secrecy by construction: a turnout row records
-that a lot cast a ballot, while anonymous choice rows carry only election, candidate, and weight —
-never a lot, ballot, owner, proxy, or timestamp link. No live tally is exposed; aggregate results
-are derived when the board closes voting. Every write remains official-mode-gated, tier-filtered,
-and scoped to a verified lot or a proxy held by the caller.
+The approved design direction provides application-level identifier separation: a turnout row
+records that a lot cast a ballot, while choice rows carry only election, candidate, and weight —
+never a direct lot, ballot, owner, proxy, or timestamp link. This is not mathematical anonymity:
+rare weights, SQLite insertion order, and D1 Time Travel retain inference risk. No live tally is
+exposed; aggregate results are derived when the board closes voting. The later casting API remains
+planned to be official-mode-gated, tier-filtered, and scoped to a verified lot or a proxy held by
+the caller.
 
-Before implementation:
+The reviewed implementation direction is recorded in
+[Live Homeowner Voting and Conducted Elections](./docs/specs/2026-08-05-live-homeowner-voting-design.md).
 
-- Promote the existing ignored design notes into a reviewed implementation specification.
-- Pin origin/CSRF expectations, concurrent double-cast behavior, batch atomicity, and final-ballot
-  semantics in Worker tests.
-- Extend the structural member-route gate to cover nested routes and `/api/vote`.
-- Split delivery into reviewable schema/lifecycle, voting API/read, and homeowner UX stages.
+Remaining delivery:
+
+- Build and security-review the strict-origin voting API, eligible-caller read model, and atomic
+  casting paths.
+- Extend the structural member-route gate to cover nested routes and `/api/vote` when that route
+  is introduced.
+- Add the homeowner `/vote` and admin lifecycle/history interfaces without enabling the default-off
+  production setting.
 
 _Product angle: per-election pricing on top of a subscription._
 

@@ -79,6 +79,7 @@ export interface SiteSettings {
   welcomeBody: string;
   /** When true, the site presents as the official HOA site (dues/board surfaces on, disclaimer off). */
   officialMode: boolean;
+  liveVotingEnabled: boolean;
   /** Footer "not affiliated" disclaimer (unofficial mode only); blank ⇒ built-in copy. */
   disclaimerText: string;
   /** /about page body; blank lines separate paragraphs; blank ⇒ built-in copy. */
@@ -93,6 +94,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   welcomeBody:
     'This is an independent, resident-run website for neighbors in The Valleys at Ashebrook. Here you can read the latest announcements, view the community calendar, and find documents.',
   officialMode: false,
+  liveVotingEnabled: false,
   disclaimerText: '',
   aboutBody: '',
 };
@@ -120,6 +122,7 @@ export function normalizeSiteSettings(raw: unknown): SiteSettings {
     welcomeHeading: str(r.welcomeHeading, DEFAULT_SITE_SETTINGS.welcomeHeading),
     welcomeBody: str(r.welcomeBody, DEFAULT_SITE_SETTINGS.welcomeBody),
     officialMode: r.officialMode === true,
+    liveVotingEnabled: r.liveVotingEnabled === true,
     disclaimerText: str(r.disclaimerText, DEFAULT_SITE_SETTINGS.disclaimerText),
     aboutBody: str(r.aboutBody, DEFAULT_SITE_SETTINGS.aboutBody),
   };
@@ -633,6 +636,13 @@ export type MeetingBody = 'board' | 'member';
 export type MeetingKind = 'regular' | 'special' | 'annual';
 export type MeetingStatus = 'draft' | 'approved';
 export type MotionOutcome = 'passed' | 'failed' | 'withdrawn' | 'tabled';
+export type MotionVotingState = 'none' | 'open' | 'closed';
+
+export interface EligibilityTotals {
+  eligibleCount: number;
+  eligibleWeight: number;
+  eligibilityFrozen: boolean;
+}
 export type VoteChoice = 'yes' | 'no' | 'abstain' | 'recused' | 'absent';
 
 export const MEETING_BODIES = ['board', 'member'] as const;
@@ -701,9 +711,13 @@ export interface MotionDetail {
   id: string;
   sequence: number;
   text: string;
+  votingState: MotionVotingState;
   moverName: string | null;
   secondName: string | null;
   outcome: MotionOutcome;
+  eligibleCount: number;
+  eligibleWeight: number;
+  eligibilityFrozen: boolean;
   tally: Tally;
   /** Board roll call. Populated when the parent meeting's body is 'board'. */
   votes: VoteRow[];
@@ -1018,16 +1032,15 @@ export function normalizeResolutionInput(
   return { ok: true, value: out };
 }
 
-export type ElectionStatus = 'draft' | 'closed' | 'certified' | 'void';
+export type ElectionStatus = 'draft' | 'open' | 'closed' | 'certified' | 'void';
 export type ElectionSource = 'recorded' | 'conducted';
 export const ELECTION_STATUSES = [
   'draft',
+  'open',
   'closed',
   'certified',
   'void',
 ] as const;
-// 'conducted' is reserved for PR 6 (live casting); normalizeElectionInput
-// rejects `source` outright today, so no `enumField` call reads this yet.
 export const ELECTION_SOURCES = ['recorded', 'conducted'] as const;
 
 export interface CandidateSummary {
@@ -1055,15 +1068,24 @@ export interface ElectionSummary {
 export interface ElectionTurnout {
   ballotsCast: number;
   weightCast: number;
-  /** COUNT of ACTIVE properties — the lot denominator. */
+  /** COUNT of properties eligible when voting opened, or ACTIVE properties before then. */
   eligibleCount: number;
-  /** SUM(vote_weight) over ACTIVE properties — the weight denominator. */
+  /** Frozen eligible weight, or current ACTIVE vote weight before voting opens. */
   eligibleWeight: number;
+  eligibilityFrozen: boolean;
+}
+
+export interface ElectionEligibleProperty {
+  propertyId: string;
+  address: string;
+  weight: number;
 }
 
 export interface ElectionDetail extends ElectionSummary {
   candidates: CandidateSummary[];
   turnout: ElectionTurnout;
+  /** Board-only. Null on every public read. */
+  eligibleProperties: ElectionEligibleProperty[] | null;
   /** Board-only. Null on every public read — see Task 3. */
   ballots: BallotRow[] | null;
 }
@@ -1083,6 +1105,7 @@ export interface ElectionInput {
   electionDate?: string;
   meetingId?: string | null;
   visibility?: Visibility;
+  source?: ElectionSource;
 }
 
 export interface CandidateInput {
@@ -1119,13 +1142,17 @@ export function normalizeElectionInput(
     return fail(
       'status is not editable — use close, certify, uncertify, or void',
     );
-  // Create-immutable. Every guard in this feature tests `source`; if `source`
-  // itself were patchable, flipping it would BE the bypass — one PATCH turns
-  // "the board can never type a tally" into "the board can type any tally".
-  if ('source' in r)
+  // Create-immutable. Every lifecycle guard tests `source`; if it were
+  // patchable, flipping it would bypass the conducted-election boundary.
+  if (mode === 'patch' && 'source' in r)
     return fail(
       'source is not editable — it is fixed when the election is created',
     );
+  if (mode === 'create' && 'source' in r) {
+    const source = enumField(r, 'source', ELECTION_SOURCES, 'create');
+    if (!source.ok) return source;
+    out.source = source.value;
+  }
   if ('certifiedAt' in r || 'certifiedBy' in r)
     return fail(
       'certification provenance is not editable — use certify or uncertify',

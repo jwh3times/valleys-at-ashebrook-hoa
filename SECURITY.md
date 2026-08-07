@@ -77,24 +77,43 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   the admin panel's visibility control. Board meetings are unaffected: `board_attendance`/
   `board_votes` reference `board_people`, not addresses, and a board meeting's roll call has always
   named board members, never homeowners.
-- **Elections are secret by construction: no table links a ballot to a candidate.** `ballots`
-  records only that a lot returned a ballot for an election — `election_id`, `property_id`, a
-  `vote_weight` snapshot, and cast-by/proxy provenance (`cast_by_owner_id`, `proxy_id`) — and there
-  is deliberately no
-  `ballot_id -> candidate_id` table, so "did lot 42 vote" is answerable and "who did lot 42 vote
-  for" is not recorded anywhere, by anyone, at any tier. `candidates.votes` holds only the
-  board-entered aggregate tally per candidate, typed in from a paper count rather than derived from
-  any per-ballot row, and is nullable so "not yet tallied" is distinguishable from "tallied at
-  zero." `candidates` deliberately carries no `updated_at`, unlike every other table in this
-  schema, because a later phase that increments `votes` as ballots are cast would otherwise let the
-  last ballot's choice be paired to the newest `ballots.recorded_at`. The public `/elections` page
-  and `fetchElectionsFor` publish only aggregate turnout (`ballotsCast`, `weightCast`,
-  `eligibleCount`, `eligibleWeight`) alongside candidates and results — the per-lot ballot list
-  (`ElectionDetail.ballots`) is board-only, since publishing it beside per-candidate tallies is
-  exactly what would make an individual's choice deducible in a small race. This guarantee, and its
-  limits once a later phase lets residents cast ballots through the system itself, are documented
-  in full in [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md); refer to it rather
-  than restating those limits here.
+- **Election turnout and candidate choices have no explicit identity link or join key.** `ballots`
+  records only that a lot participated — election, property, snapshotted weight, and owner-or-proxy
+  provenance. For recorded paper elections, `candidates.votes` remains the board-entered aggregate
+  and no choice row exists. For the default-off conducted-election foundation, `ballot_choices`
+  retains an independent id, election, candidate, and non-negative weight. It deliberately has no
+  `ballot_id`, `property_id`, owner/proxy/caster field, timestamp, shared receipt, or other explicit
+  correlation field; none may be added through schema, types, APIs, logs, or exports, and supported
+  reads never join choices to turnout. This does not guarantee mathematical anonymity:
+  `ballots.weight` and `ballot_choices.weight` retain the same snapshotted value, so a rare or
+  unique weight may identify or narrow a property's selections. Conducted ballots are final because
+  the supported application cannot resolve their choices for editing. `candidates.votes` remains
+  `NULL` while a conducted election is open and is derived from the retained choice rows only in
+  the atomic close operation, so there is no live tally to diff. The public `/elections` read still
+  exposes only closed/certified results and aggregate turnout; per-lot ballots and frozen
+  eligible-property rows are board-only. SQLite insertion order and D1 Time Travel add residual
+  operator-level temporal correlation risks that application schema cannot fully remove. See
+  [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) for the paper-election baseline and
+  [ADR 0020](./docs/adr/0020-digital-ballot-box.md) for the retained digital ballot box and its
+  limits.
+- **Live-vote eligibility and lifecycle history are immutable records.**
+  `election_eligibility` and `motion_eligibility` freeze the active properties and vote weights at
+  first open, so later roster edits cannot rewrite the record-date electorate. An opened election
+  cannot return to draft, and a motion or parent meeting with live-voting history cannot be
+  deleted. Board `setMemberVotes` corrections are refused while voting is open and use a
+  state-plus-monotonic-revision compare-and-swap in one D1 batch, preventing a stale replacement
+  from erasing votes from an intervening close/reopen session. Meeting approval conditionally
+  re-checks that no child motion vote is open. Recorded tally/ballot replacements reserve their
+  parent election in the same batch, so a racing certification or void cannot leave stale child
+  data behind; certification likewise reserves the closed election and re-checks the open-term
+  invariant so concurrent elections cannot open two terms for the same existing person.
+- **The live-voting foundation is default-off and not homeowner-accessible in this slice.**
+  `liveVotingEnabled` normalizes to `false`; database-conditioned open transitions require it and
+  `officialMode` to both be literal JSON booleans `true` (numbers, strings, nulls, and missing keys
+  all fail closed). Disabling either flag prevents new open transitions without
+  deleting existing history. This slice adds no `/vote`, `/api/vote`, casting endpoint, or
+  homeowner voting UI; those later surfaces require their own fail-closed authorization and
+  same-origin review before they ship.
 - **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
   owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
   by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in

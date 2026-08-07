@@ -35,6 +35,7 @@ beforeEach(async () => {
 
 const url = 'http://localhost/api/admin/elections';
 const now = new Date();
+const originalD1Batch = env.DATABASE.batch.bind(env.DATABASE);
 
 function req(u: string, method: string, body?: unknown) {
   return {
@@ -154,6 +155,33 @@ async function getTermsFor(electionId: string) {
     .where(eq(boardTerms.electionId, electionId));
 }
 
+function pauseNextBatch() {
+  let release!: () => void;
+  let reached!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const batchReached = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let paused = false;
+  const spy = vi
+    .spyOn(env.DATABASE, 'batch')
+    .mockImplementation(async (statements) => {
+      if (!paused) {
+        paused = true;
+        reached();
+        await released;
+      }
+      return originalD1Batch(statements);
+    });
+  return {
+    reached: batchReached,
+    release,
+    restore: () => spy.mockRestore(),
+  };
+}
+
 describe('elections admin route — certify/uncertify', () => {
   it('certify moves closed to certified and marks the winners', async () => {
     const electionId = await createElection({ seats: 2 });
@@ -176,6 +204,105 @@ describe('elections admin route — certify/uncertify', () => {
     // One-batch property: the status flip alone is not enough — a batch that
     // flipped status but skipped the term insert must also fail this test.
     expect((await getTermsFor(electionId)).length).toBe(1);
+  });
+
+  it('void racing certify leaves exactly one complete terminal state', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const candidateId = await createCandidate(electionId, 1);
+    const certifyPromise = POST(
+      req(url, 'POST', {
+        action: 'certify',
+        id: electionId,
+        winners: [{ candidateId, termStart: '2026-01-01' }],
+      }),
+    );
+
+    // Let certification clear its status preflight before the conflicting
+    // terminal transition is queued.
+    await Promise.resolve();
+    await env.DATABASE.prepare('SELECT 1').first();
+    const voidPromise = POST(
+      req(url, 'POST', { action: 'void', id: electionId }),
+    );
+    const [certifyResponse, voidResponse] = await Promise.all([
+      certifyPromise,
+      voidPromise,
+    ]);
+
+    expect(
+      [certifyResponse.status, voidResponse.status].sort((a, b) => a - b),
+    ).toEqual([204, 409]);
+    const election = await getElection(electionId);
+    const candidate = await getCandidate(candidateId);
+    const terms = await getTermsFor(electionId);
+    if (election.status === 'certified') {
+      expect(certifyResponse.status).toBe(204);
+      expect(voidResponse.status).toBe(409);
+      expect(election.certifiedAt).toBeInstanceOf(Date);
+      expect(election.certifiedBy).toBe('b');
+      expect(candidate.won).toBe(true);
+      expect(candidate.boardPersonId).not.toBeNull();
+      expect(terms).toHaveLength(1);
+    } else {
+      expect(election.status).toBe('void');
+      expect(voidResponse.status).toBe(204);
+      expect(certifyResponse.status).toBe(409);
+      expect(election.certifiedAt).toBeNull();
+      expect(election.certifiedBy).toBeNull();
+      expect(candidate.won).toBe(false);
+      expect(candidate.boardPersonId).toBeNull();
+      expect(terms).toHaveLength(0);
+    }
+  });
+
+  it('does not replace tallies after a concurrent certification commits', async () => {
+    const electionId = await createElection({ seats: 1 });
+    const candidateId = await createCandidate(electionId, 1);
+    expect(
+      (
+        await POST(
+          req(url, 'POST', {
+            action: 'setTallies',
+            electionId,
+            entries: [{ candidateId, votes: 7 }],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
+    const barrier = pauseNextBatch();
+    try {
+      const replacementPromise = POST(
+        req(url, 'POST', {
+          action: 'setTallies',
+          electionId,
+          entries: [{ candidateId, votes: 99 }],
+        }),
+      );
+      await barrier.reached;
+      expect(
+        (
+          await POST(
+            req(url, 'POST', {
+              action: 'certify',
+              id: electionId,
+              winners: [{ candidateId, termStart: '2026-01-01' }],
+            }),
+          )
+        ).status,
+      ).toBe(204);
+      barrier.release();
+      expect((await replacementPromise).status).toBe(409);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+
+    expect((await getElection(electionId)).status).toBe('certified');
+    const candidate = await getCandidate(candidateId);
+    expect(candidate.votes).toBe(7);
+    expect(candidate.won).toBe(true);
+    expect(await getTermsFor(electionId)).toHaveLength(1);
   });
 
   it('certify creates a board person for a winner who had none', async () => {
@@ -539,6 +666,79 @@ describe('elections admin route — certify/uncertify', () => {
     );
     expect((await getElection(electionId)).status).toBe('closed');
     expect((await getCandidate(c1)).won).toBe(false);
+  });
+
+  it('allows only one concurrent certification to open a term for the same existing board person', async () => {
+    const personId = await createBoardPerson('Shared Incumbent');
+    const losingElectionId = await createElection({
+      seats: 2,
+      title: 'Losing election',
+    });
+    const sharedLosingCandidateId = await createCandidate(losingElectionId, 1, {
+      fullName: 'Shared Incumbent',
+      boardPersonId: personId,
+    });
+    const newLosingCandidateId = await createCandidate(losingElectionId, 2, {
+      fullName: 'Would-be New Person',
+    });
+    const winningElectionId = await createElection({
+      seats: 1,
+      title: 'Winning election',
+    });
+    const winningCandidateId = await createCandidate(winningElectionId, 1, {
+      fullName: 'Shared Incumbent',
+      boardPersonId: personId,
+    });
+
+    const barrier = pauseNextBatch();
+    try {
+      const losingPromise = POST(
+        req(url, 'POST', {
+          action: 'certify',
+          id: losingElectionId,
+          winners: [
+            {
+              candidateId: sharedLosingCandidateId,
+              termStart: '2026-01-01',
+            },
+            {
+              candidateId: newLosingCandidateId,
+              termStart: '2026-01-01',
+            },
+          ],
+        }),
+      );
+      await barrier.reached;
+      expect(
+        (
+          await POST(
+            req(url, 'POST', {
+              action: 'certify',
+              id: winningElectionId,
+              winners: [
+                { candidateId: winningCandidateId, termStart: '2026-01-01' },
+              ],
+            }),
+          )
+        ).status,
+      ).toBe(204);
+      barrier.release();
+      expect((await losingPromise).status).toBe(409);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+
+    expect((await getElection(winningElectionId)).status).toBe('certified');
+    expect((await getTermsFor(winningElectionId)).length).toBe(1);
+    expect((await getCandidate(winningCandidateId)).won).toBe(true);
+
+    expect((await getElection(losingElectionId)).status).toBe('closed');
+    expect((await getTermsFor(losingElectionId)).length).toBe(0);
+    expect((await getCandidate(sharedLosingCandidateId)).won).toBe(false);
+    expect((await getCandidate(newLosingCandidateId)).won).toBe(false);
+    expect((await getCandidate(newLosingCandidateId)).boardPersonId).toBeNull();
+    expect(await getDb(env).select().from(boardPeople)).toHaveLength(1);
   });
 
   it('certify prioritizes the withdrawn check over the open-term check, with 400', async () => {
