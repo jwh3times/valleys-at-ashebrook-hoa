@@ -128,7 +128,8 @@ function listRealFiles(dir: string, prefix = ''): string[] {
 
 /** List generated leaves without traversing generated-tree links. */
 function listGeneratedFiles(dir: string, prefix = ''): string[] {
-  if (!lstatOrUndefined(dir)) return [];
+  const stat = lstatOrUndefined(dir);
+  if (!stat || stat.isSymbolicLink() || !stat.isDirectory()) return [];
 
   const files: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -146,7 +147,11 @@ function listGeneratedFiles(dir: string, prefix = ''): string[] {
 function planSkills(root: string): GeneratedTreePlan {
   const files = new Map<string, Buffer>();
   const sourceRoot = path.join(root, ...SKILL_SOURCE_DIR.split('/'));
-  if (!lstatOrUndefined(sourceRoot)) return { root: CLAUDE_SKILL_DIR, files };
+  const sourceRootStat = lstatOrUndefined(sourceRoot);
+  if (!sourceRootStat) return { root: CLAUDE_SKILL_DIR, files };
+  if (sourceRootStat.isSymbolicLink()) {
+    throw new Error(`Authored tree contains unsupported link: ${sourceRoot}`);
+  }
 
   for (const entry of fs.readdirSync(sourceRoot, { withFileTypes: true })) {
     if (entry.name === '.DS_Store') continue;
@@ -175,7 +180,11 @@ function planSkills(root: string): GeneratedTreePlan {
 function planAgents(root: string): GeneratedTreePlan {
   const files = new Map<string, Buffer>();
   const sourceRoot = path.join(root, ...AGENT_SOURCE_DIR.split('/'));
-  if (!lstatOrUndefined(sourceRoot)) return { root: CODEX_AGENT_DIR, files };
+  const sourceRootStat = lstatOrUndefined(sourceRoot);
+  if (!sourceRootStat) return { root: CODEX_AGENT_DIR, files };
+  if (sourceRootStat.isSymbolicLink()) {
+    throw new Error(`Authored tree contains unsupported link: ${sourceRoot}`);
+  }
 
   for (const entry of fs.readdirSync(sourceRoot, { withFileTypes: true })) {
     if (entry.isSymbolicLink()) {
@@ -216,6 +225,14 @@ export function diff(
 
   for (const tree of plans) {
     const treeRoot = path.join(root, ...tree.root.split('/'));
+    const treeRootStat = lstatOrUndefined(treeRoot);
+    if (treeRootStat?.isSymbolicLink()) {
+      for (const rel of tree.files.keys()) {
+        drift.missing.push(displayPath(tree, rel));
+      }
+      drift.extraneous.push(tree.root);
+      continue;
+    }
     for (const [rel, expected] of tree.files) {
       const target = path.join(treeRoot, ...rel.split('/'));
       const stat = lstatOrUndefined(target);

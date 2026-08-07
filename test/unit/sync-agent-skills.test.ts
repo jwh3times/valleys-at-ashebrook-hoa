@@ -140,6 +140,38 @@ describe('generated-tree planning and synchronization', () => {
     expect(planned(plans, '.codex/agents/docs-updater.toml')).toBeDefined();
   });
 
+  it('rejects a linked authored skills root without traversing it', () => {
+    const root = fixtureRepo();
+    const external = path.join(root, 'external-skills');
+    write(root, 'external-skills/demo/SKILL.md', skillSource);
+    fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+    fs.symlinkSync(
+      external,
+      path.join(root, '.agents', 'skills'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    expect(() => plan(root)).toThrow(
+      'Authored tree contains unsupported link:',
+    );
+  });
+
+  it('rejects a linked authored agents root without traversing it', () => {
+    const root = fixtureRepo();
+    const external = path.join(root, 'external-agents');
+    write(root, 'external-agents/docs-updater.md', agentSource);
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.symlinkSync(
+      external,
+      path.join(root, '.claude', 'agents'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    expect(() => plan(root)).toThrow(
+      'Authored tree contains unsupported link:',
+    );
+  });
+
   it('reports missing, stale, and extraneous generated files without writing', () => {
     const root = fixtureRepo();
     seedAuthoredSources(root);
@@ -150,6 +182,32 @@ describe('generated-tree planning and synchronization', () => {
       missing: ['.codex/agents/docs-updater.toml'],
       stale: ['.claude/skills/demo/SKILL.md'],
       extraneous: ['.claude/skills/orphan/SKILL.md'],
+    });
+  });
+
+  it('reports a generated-tree root junction without traversing it', () => {
+    const root = fixtureRepo();
+    const external = path.join(root, 'external-generated-skills');
+    seedAuthoredSources(root);
+    write(
+      root,
+      'external-generated-skills/demo/SKILL.md',
+      renderSkillMirror(skillSource, '.agents/skills/demo/SKILL.md'),
+    );
+    fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+    fs.symlinkSync(
+      external,
+      path.join(root, '.claude', 'skills'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    expect(diff(root)).toEqual({
+      missing: [
+        '.claude/skills/demo/SKILL.md',
+        '.codex/agents/docs-updater.toml',
+      ],
+      stale: [],
+      extraneous: ['.claude/skills'],
     });
   });
 
