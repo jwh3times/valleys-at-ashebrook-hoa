@@ -47,6 +47,15 @@ function isMemberApi(path: string): boolean {
   return path === '/api/member' || path.startsWith('/api/member/');
 }
 
+/**
+ * The live homeowner-voting API surface. Kept separate from isMemberApi so
+ * proxy routes remain available whenever official mode is on, independent of
+ * the live-voting feature flag.
+ */
+function isVotingApi(path: string): boolean {
+  return path === '/api/vote' || path.startsWith('/api/vote/');
+}
+
 function applySecurityHeaders(headers: Headers): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -66,12 +75,12 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   // Surface site settings (incl. officialMode) to page renders. Skip the DB read
   // for most API/file routes, which do not render chrome — they get inert
   // defaults. The homeowner-write surface is the exception: the backstop below
-  // gates on the real officialMode, so it needs the real settings here too.
-  // requireMemberApi (src/server/authz/member-guards.ts) still re-reads settings
-  // itself rather than trusting this value — a deliberate double read, since a
-  // guard must not be spoofable by whatever a caller managed to put on locals.
+  // gates on the real feature flags, so it needs the real settings here too.
+  // The per-route guards still re-read settings themselves rather than trusting
+  // this value — a deliberate double read, since a guard must not be spoofable
+  // by whatever a caller managed to put on locals.
   context.locals.site =
-    path.startsWith('/api') && !isMemberApi(path)
+    path.startsWith('/api') && !isMemberApi(path) && !isVotingApi(path)
       ? { ...DEFAULT_SITE_SETTINGS }
       : await getSiteSettings(env);
 
@@ -90,15 +99,19 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     } else {
       response = await next();
     }
-  } else if (isMemberApi(path)) {
-    // Production backstop for the homeowner-write surface, mirroring the
-    // admin-API backstop above and requireMemberApi's codes exactly: mode
-    // off is 404 (never advertise the surface), anonymous is 401, a
-    // visitor-role caller is 403. Every handler under src/pages/api/member/
-    // also calls requireMemberApi itself — that per-route call is the
-    // enforced and tested layer (see member-routes-all-gated.test.ts); this
-    // exists so a route shipped without its guard is not exposed meanwhile.
-    if (!context.locals.site.officialMode) {
+  } else if (isMemberApi(path) || isVotingApi(path)) {
+    // Production backstop for the homeowner-write and live-voting surfaces,
+    // mirroring the admin-API backstop above and the per-route guard codes:
+    // disabled surfaces are 404 (never advertise them), anonymous is 401, and
+    // a visitor-role caller is 403. Every handler under src/pages/api/member/
+    // calls requireMemberApi, while /api/vote calls requireVotingApi. Those
+    // per-route calls are the enforced and tested layer (see
+    // member-routes-all-gated.test.ts); this exists so a route shipped without
+    // its guard is not exposed meanwhile.
+    if (
+      !context.locals.site.officialMode ||
+      (isVotingApi(path) && !context.locals.site.liveVotingEnabled)
+    ) {
       response = new Response('Not found', { status: 404 });
     } else if (!ctx) {
       response = new Response('Unauthorized', { status: 401 });
