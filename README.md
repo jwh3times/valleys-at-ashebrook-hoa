@@ -17,13 +17,14 @@ It provides:
 - 🗳️ **Meeting record** — board-authored, board-approved minutes at `/meetings`: date,
   attendance, motions, and roll-call votes for board meetings, plus weighted per-property
   attendance and votes for member meetings, including paper proxies the board records against a
-  lot's attendance, vote, or ballot; a default-off board lifecycle and eligibility-snapshot
-  foundation for live member-motion voting is present, but no homeowner voting API or UI has shipped
+  lot's attendance, vote, or ballot; a default-off guarded casting API and eligible-caller server
+  read model now use the frozen live-voting snapshot, but no homeowner or admin voting UI has shipped
 - 📜 **Resolutions book** — standing rules the board adopts, published at `/resolutions`;
   amending a resolution creates a new one that supersedes the old, forming a walkable chain
 - 🏛️ **Elections** — recorded paper elections plus a default-off conducted-election lifecycle and
   identity-unlinked ballot-box schema; `/elections` publishes only closed/certified candidates,
-  results, and aggregate turnout, and no digital casting API or homeowner voting UI has shipped
+  results, and aggregate turnout; the guarded casting API records final conducted ballots, but no
+  homeowner or admin voting UI has shipped
 - 📝 **Homeowner proxies** — in official mode, a verified homeowner can grant or revoke a proxy
   for one of their lots at an upcoming member meeting or election and review proxies they granted
   or hold at `/proxies`; the board can still record and administer paper proxies

@@ -7,6 +7,31 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.56] - 2026-08-06
+
+### Added
+
+- **Added the default-off homeowner casting API and eligible-caller read model.** `POST /api/vote`
+  accepts final conducted-election ballots and one-time member-motion votes for a verified lot or
+  an occasion-scoped proxy the caller holds. The server-only open-voting projection returns visible
+  open occasions, caller-controlled eligible lots, frozen weights, valid owner/proxy options,
+  election candidates, and only a per-lot `hasCast` receipt. There is still no GET voting API,
+  `/vote` page, navigation entry, homeowner voting UI, or new admin UI.
+
+### Security
+
+- **Made the voting surface fail closed before input or resource processing.** Both middleware and
+  the route guard require official mode and live voting first, then exact equality between the
+  required `Origin` header and request origin, JSON media type, an authenticated session, and the
+  homeowner role. Unknown or out-of-tier occasions remain `404`, and own-lot or held-proxy
+  authority is checked server-side.
+- **Kept record-date weights and race checks inside the atomic write boundary.** Election turnout
+  and identity-unlinked retained choices are inserted together using only the frozen eligibility
+  snapshot; motion votes use the corresponding frozen motion weight. Mutation predicates repeat
+  visibility, authority, open state, feature flags, and one-cast-per-lot checks, so a racing close,
+  global pause, authority change, or duplicate cast records nothing and returns `409`. Disabling
+  official mode or live voting pauses new casts without deleting snapshots or voting history.
+
 ## [0.3.55] - 2026-08-06
 
 ### Added
