@@ -14,8 +14,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - **Completed the default-off live homeowner voting experience.** When official mode and live voting
   are both enabled, verified homeowners can use `/vote` to cast a conducted-election ballot or
   member-motion vote for their own lot or an occasion-valid proxy they hold. The review dialog names
-  the pending selection and provenance, warns that the cast cannot be changed or recovered, and
-  replaces an exact-204 success with a selection-free receipt.
+  the pending selection and provenance, moves and traps keyboard focus, supports Escape/cancel with
+  focus restoration, disables background voting controls, and warns that the homeowner cannot
+  change, recover, or recast through `/vote`. An exact-204 success becomes a selection-free receipt;
+  conducted-election choices are application-wide undisplayable and irreplaceable, while attributed
+  member-motion votes remain board-correctable after close.
 - **Added board controls for the complete live-voting lifecycle.** Site settings can enable or
   globally pause voting; the Elections panel separates draft/open **Active** records from durable
   **History**, opens and closes conducted elections, and monitors turnout by count and weight. The

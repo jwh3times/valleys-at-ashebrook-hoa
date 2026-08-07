@@ -170,9 +170,13 @@ adopts the process and the board is ready to operate it. The board workflow is:
    available while the motion is open.
 4. A verified eligible homeowner follows **Vote** to `/vote`, chooses the lot and owner or valid
    held proxy, selects up to the election's seat count or chooses Yes/No/Abstain for a motion, and
-   reviews the selection and provenance in a confirmation dialog. The dialog warns that the ballot
-   or vote cannot be changed or recovered after it is cast. A successful cast is final and is
-   replaced by a receipt containing only the occasion title and lot address, never the selection.
+   reviews the selection and provenance in a labeled confirmation dialog. The dialog moves and
+   traps keyboard focus, supports Escape or **Go back** cancellation with focus restoration, and
+   disables every background voting control while open. It warns that the homeowner cannot change,
+   recover, or recast the submitted selection through `/vote`. A successful cast is replaced by a
+   receipt containing only the occasion title and lot address, never the selection. For conducted
+   elections, choices are then undisplayable and irreplaceable throughout the application; a vote
+   on a member motion remains attributable and can be corrected by the board after voting closes.
 
 ## Contributing & support
 
