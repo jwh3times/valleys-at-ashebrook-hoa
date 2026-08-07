@@ -75,7 +75,11 @@ describe('VoteManager', () => {
     fireEvent.click(screen.getByLabelText('Candidate One'));
     fireEvent.click(screen.getByRole('button', { name: /review ballot/i }));
 
-    expect(screen.getByText(/cannot be changed or recovered/i)).toBeVisible();
+    const dialog = screen.getByRole('dialog', { name: 'Review ballot' });
+    expect(
+      within(dialog).getByText(/ballot cannot be changed or recovered/i),
+    ).toBeVisible();
+    expect(within(dialog).queryByText(/board can correct/i)).toBeNull();
     expect(mocked.castBallot).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /cast final ballot/i }));
@@ -91,6 +95,48 @@ describe('VoteManager', () => {
       castByOwnerId: 'o1',
       proxyId: null,
     });
+  });
+
+  it('associates block candidate statements outside the clickable candidate label', () => {
+    const richElection: OpenVotingItem = {
+      ...election,
+      candidates: [
+        {
+          ...election.candidates[0],
+          statementMd: '## Priorities\n- Keep reserves funded',
+        },
+        election.candidates[1],
+      ],
+    };
+    const { rerender } = render(<VoteManager items={[richElection]} />);
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Candidate One',
+    }) as HTMLInputElement;
+    const descriptionId = checkbox.getAttribute('aria-describedby');
+    expect(descriptionId).toBeTruthy();
+    const statement = document.getElementById(descriptionId!);
+    expect(statement).not.toBeNull();
+    expect(statement!.closest('label')).toBeNull();
+    expect(
+      within(statement!).getByRole('heading', { name: 'Priorities' }),
+    ).toBeVisible();
+    expect(checkbox).toHaveAccessibleDescription(
+      /priorities keep reserves funded/i,
+    );
+
+    const label = checkbox.labels?.[0];
+    expect(label).toHaveTextContent('Candidate One');
+    expect(label).not.toContainElement(statement);
+    fireEvent.click(within(label!).getByText('Candidate One'));
+    expect(checkbox).toBeChecked();
+
+    rerender(<VoteManager items={[richElection]} />);
+    expect(
+      screen
+        .getByRole('checkbox', { name: 'Candidate One' })
+        .getAttribute('aria-describedby'),
+    ).toBe(descriptionId);
   });
 
   it('enforces the seat limit and accepts a proxy provenance selection', async () => {
@@ -130,12 +176,33 @@ describe('VoteManager', () => {
     );
   });
 
-  it('casts a motion choice with the selected owner', async () => {
+  it('explains board correction and replaces a motion vote with a selection-free receipt', async () => {
     render(<VoteManager items={[motion]} />);
     fireEvent.click(screen.getByLabelText('Yes'));
     fireEvent.click(screen.getByRole('button', { name: /review vote/i }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Review vote' });
+    expect(
+      within(dialog).getByText(/cannot change or recast this vote here/i),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        /board can correct the recorded vote after voting closes/i,
+      ),
+    ).toBeVisible();
+    expect(
+      within(dialog).queryByText(/cannot be changed or recovered/i),
+    ).toBeNull();
+
     fireEvent.click(screen.getByRole('button', { name: /cast final vote/i }));
 
+    const receiptHeading = await screen.findByRole('heading', {
+      name: /vote received for 101 example street/i,
+    });
+    const receipt = receiptHeading.closest('article');
+    expect(receipt).not.toBeNull();
+    expect(within(receipt!).getByText('Member meeting')).toBeVisible();
+    expect(within(receipt!).queryByText(/^yes$/i)).toBeNull();
     await waitFor(() =>
       expect(mocked.castMotionVote).toHaveBeenCalledWith({
         motionId: 'm1',
@@ -145,6 +212,28 @@ describe('VoteManager', () => {
         proxyId: null,
       }),
     );
+  });
+
+  it('labels an existing motion receipt Vote recorded without disclosing a choice', () => {
+    render(
+      <VoteManager
+        items={[
+          {
+            ...motion,
+            lots: motion.lots.map((lot) => ({ ...lot, hasCast: true })),
+          },
+        ]}
+      />,
+    );
+
+    const receiptHeading = screen.getByRole('heading', {
+      name: 'Vote recorded',
+    });
+    const receipt = receiptHeading.closest('article');
+    expect(receipt).not.toBeNull();
+    expect(within(receipt!).getByText('101 Example Street')).toBeVisible();
+    expect(within(receipt!).getByText('Member meeting')).toBeVisible();
+    expect(within(receipt!).queryByText(/^(yes|no|abstain)$/i)).toBeNull();
   });
 
   it('shows a server failure and keeps the form available for correction', async () => {

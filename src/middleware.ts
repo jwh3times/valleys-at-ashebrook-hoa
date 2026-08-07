@@ -4,6 +4,10 @@
 import type { MiddlewareHandler } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getAuthContext } from './server/authz/context';
+import {
+  jsonContentError,
+  sameOriginError,
+} from './server/authz/voting-guards';
 import { getSiteSettings } from './server/content/settings';
 import { DEFAULT_SITE_SETTINGS } from './lib/types';
 
@@ -68,9 +72,43 @@ function applySecurityHeaders(headers: Headers): void {
 }
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
+  const path = context.url.pathname;
+
+  if (isVotingApi(path)) {
+    // Voting's request-order contract runs before session resolution: feature
+    // flags, exact Origin, JSON media type, authentication, then role. The
+    // route repeats the same checks through requireVotingApi because direct
+    // handler tests and other callers do not pass through middleware.
+    context.locals.site = await getSiteSettings(env);
+    let response: Response;
+    if (
+      !context.locals.site.officialMode ||
+      !context.locals.site.liveVotingEnabled
+    ) {
+      response = new Response('Not found', { status: 404 });
+    } else {
+      const requestError =
+        sameOriginError(context.request) ?? jsonContentError(context.request);
+      if (requestError) {
+        response = requestError;
+      } else {
+        const ctx = await getAuthContext(context.request, env);
+        context.locals.authContext = ctx;
+        if (!ctx) {
+          response = new Response('Unauthorized', { status: 401 });
+        } else if (ctx.role === 'visitor') {
+          response = new Response('Forbidden', { status: 403 });
+        } else {
+          response = await next();
+        }
+      }
+    }
+    applySecurityHeaders(response.headers);
+    return response;
+  }
+
   const ctx = await getAuthContext(context.request, env);
   context.locals.authContext = ctx;
-  const path = context.url.pathname;
 
   // Surface site settings (incl. officialMode) to page renders. Skip the DB read
   // for most API/file routes, which do not render chrome — they get inert
@@ -80,7 +118,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   // this value — a deliberate double read, since a guard must not be spoofable
   // by whatever a caller managed to put on locals.
   context.locals.site =
-    path.startsWith('/api') && !isMemberApi(path) && !isVotingApi(path)
+    path.startsWith('/api') && !isMemberApi(path)
       ? { ...DEFAULT_SITE_SETTINGS }
       : await getSiteSettings(env);
 
@@ -99,19 +137,14 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     } else {
       response = await next();
     }
-  } else if (isMemberApi(path) || isVotingApi(path)) {
-    // Production backstop for the homeowner-write and live-voting surfaces,
-    // mirroring the admin-API backstop above and the per-route guard codes:
-    // disabled surfaces are 404 (never advertise them), anonymous is 401, and
-    // a visitor-role caller is 403. Every handler under src/pages/api/member/
-    // calls requireMemberApi, while /api/vote calls requireVotingApi. Those
-    // per-route calls are the enforced and tested layer (see
-    // member-routes-all-gated.test.ts); this exists so a route shipped without
-    // its guard is not exposed meanwhile.
-    if (
-      !context.locals.site.officialMode ||
-      (isVotingApi(path) && !context.locals.site.liveVotingEnabled)
-    ) {
+  } else if (isMemberApi(path)) {
+    // Production backstop for the homeowner-write surface, mirroring the
+    // admin-API backstop above and the per-route guard codes: disabled
+    // surfaces are 404 (never advertise them), anonymous is 401, and a
+    // visitor-role caller is 403. Every handler under src/pages/api/member/
+    // also calls requireMemberApi; this exists so a route shipped without its
+    // guard is not exposed in the meantime.
+    if (!context.locals.site.officialMode) {
       response = new Response('Not found', { status: 404 });
     } else if (!ctx) {
       response = new Response('Unauthorized', { status: 401 });

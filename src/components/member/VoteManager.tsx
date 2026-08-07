@@ -168,6 +168,7 @@ function ElectionBallot({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [received, setReceived] = useState(false);
+  const candidateGroupId = useId();
   const reviewButtonRef = useRef<HTMLButtonElement>(null);
   const backgroundBlocked = reviewing || reviewBlocked;
   const openReview = () => {
@@ -231,28 +232,38 @@ function ElectionBallot({
           disabled={busy || backgroundBlocked}
         >
           <legend className="sr-only">Candidates</legend>
-          {item.candidates.map((candidate) => (
-            <label className="vote-candidate" key={candidate.id}>
-              <input
-                type="checkbox"
-                aria-label={candidate.fullName}
-                checked={candidateIds.includes(candidate.id)}
-                disabled={
-                  !candidateIds.includes(candidate.id) &&
-                  candidateIds.length >= item.seats
-                }
-                onChange={() => toggleCandidate(candidate.id)}
-              />
-              <span>
-                <strong>{candidate.fullName}</strong>
-                {candidate.statementMd && (
-                  <span className="vote-candidate__statement">
-                    <ReportMarkdown text={candidate.statementMd} />
-                  </span>
-                )}
-              </span>
-            </label>
-          ))}
+          {item.candidates.map((candidate) => {
+            const inputId = `${candidateGroupId}-${candidate.id}`;
+            const statementId = `${inputId}-statement`;
+            return (
+              <div className="vote-candidate" key={candidate.id}>
+                <input
+                  id={inputId}
+                  type="checkbox"
+                  aria-label={candidate.fullName}
+                  aria-describedby={
+                    candidate.statementMd ? statementId : undefined
+                  }
+                  checked={candidateIds.includes(candidate.id)}
+                  disabled={
+                    !candidateIds.includes(candidate.id) &&
+                    candidateIds.length >= item.seats
+                  }
+                  onChange={() => toggleCandidate(candidate.id)}
+                />
+                <div className="vote-candidate__content">
+                  <label htmlFor={inputId}>
+                    <strong>{candidate.fullName}</strong>
+                  </label>
+                  {candidate.statementMd && (
+                    <div id={statementId} className="vote-candidate__statement">
+                      <ReportMarkdown text={candidate.statementMd} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </fieldset>
         <ProvenancePicker
           lot={lot}
@@ -412,7 +423,11 @@ function MotionBallot({
           confirmLabel="Cast final vote"
           returnFocusRef={reviewButtonRef}
         >
-          <p>Your vote cannot be changed or recovered after it is cast.</p>
+          <p>You cannot change or recast this vote here after it is cast.</p>
+          <p>
+            The motion vote remains attributable, so the board can correct the
+            recorded vote after voting closes.
+          </p>
           <p>Choice: {choice && choice[0].toUpperCase() + choice.slice(1)}</p>
           <p>{provenanceSummary(lot, provenance)}</p>
         </FinalityDialog>
@@ -516,12 +531,15 @@ function Receipt({
   recorded?: boolean;
 }) {
   const title = item.kind === 'election' ? item.title : item.meetingTitle;
+  const receiptKind = item.kind === 'election' ? 'Ballot' : 'Vote';
   return (
     <article className="vote-receipt" aria-live="polite">
       <span aria-hidden="true">✓</span>
       <div>
         <h3>
-          {recorded ? 'Ballot recorded' : `Ballot received for ${address}`}
+          {recorded
+            ? `${receiptKind} recorded`
+            : `${receiptKind} received for ${address}`}
         </h3>
         <p>{title}</p>
         {recorded && <p>{address}</p>}

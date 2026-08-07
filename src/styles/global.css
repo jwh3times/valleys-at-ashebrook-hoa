@@ -2085,6 +2085,10 @@ body.body--bare {
 .vote-candidate input {
   margin-top: 4px;
 }
+.vote-candidate__content {
+  flex: 1;
+  min-width: 0;
+}
 .vote-candidate__statement {
   color: var(--text-muted);
   display: block;
