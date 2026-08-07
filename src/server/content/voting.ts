@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type {
   CastBallotInput,
   CastMotionVoteInput,
+  VoteAction,
   VoteWriteResult,
 } from '../../lib/types';
 import type { AuthContext } from '../authz/guards';
@@ -24,6 +25,102 @@ import { visibleTiers } from './visibility';
 import { LIVE_VOTING_ENABLED_SQL } from './voting-state';
 
 type VoteErrorStatus = 400 | 403 | 404 | 409;
+type VoteActionResult =
+  { ok: true; value: VoteAction } | { ok: false; error: string };
+
+function normalizationFailure(error: string): { ok: false; error: string } {
+  return { ok: false, error };
+}
+
+function voteRecord(raw: unknown): Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>)
+    : {};
+}
+
+function requiredVoteId(
+  raw: Record<string, unknown>,
+  key: string,
+): { ok: true; value: string } | { ok: false; error: string } {
+  const value = raw[key];
+  if (typeof value !== 'string' || value.trim() === '')
+    return normalizationFailure(`${key} is required`);
+  return { ok: true, value: value.trim() };
+}
+
+function voteProvenanceId(
+  raw: Record<string, unknown>,
+  key: 'castByOwnerId' | 'proxyId',
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  const value = raw[key];
+  if (value === undefined || value === null) return { ok: true, value: null };
+  if (typeof value !== 'string' || value.trim() === '')
+    return normalizationFailure(`${key} must be a non-empty id or null`);
+  return { ok: true, value: value.trim() };
+}
+
+export function normalizeVoteAction(raw: unknown): VoteActionResult {
+  const record = voteRecord(raw);
+  const action = record.action;
+  if (action !== 'castBallot' && action !== 'castMotionVote')
+    return normalizationFailure('Unknown action');
+
+  const propertyId = requiredVoteId(record, 'propertyId');
+  if (!propertyId.ok) return propertyId;
+  const castByOwnerId = voteProvenanceId(record, 'castByOwnerId');
+  if (!castByOwnerId.ok) return castByOwnerId;
+  const proxyId = voteProvenanceId(record, 'proxyId');
+  if (!proxyId.ok) return proxyId;
+  if ((castByOwnerId.value === null) === (proxyId.value === null))
+    return normalizationFailure(
+      'Exactly one of castByOwnerId or proxyId is required',
+    );
+
+  if (action === 'castBallot') {
+    const electionId = requiredVoteId(record, 'electionId');
+    if (!electionId.ok) return electionId;
+    if (!Array.isArray(record.candidateIds) || record.candidateIds.length === 0)
+      return normalizationFailure(
+        'candidateIds must contain at least one candidate',
+      );
+    const candidateIds: string[] = [];
+    for (const rawId of record.candidateIds) {
+      if (typeof rawId !== 'string' || rawId.trim() === '')
+        return normalizationFailure('candidateIds must contain non-empty ids');
+      candidateIds.push(rawId.trim());
+    }
+    if (new Set(candidateIds).size !== candidateIds.length)
+      return normalizationFailure('candidateIds must not contain duplicates');
+    return {
+      ok: true,
+      value: {
+        action,
+        electionId: electionId.value,
+        propertyId: propertyId.value,
+        candidateIds,
+        castByOwnerId: castByOwnerId.value,
+        proxyId: proxyId.value,
+      },
+    };
+  }
+
+  const motionId = requiredVoteId(record, 'motionId');
+  if (!motionId.ok) return motionId;
+  const choice = record.choice;
+  if (choice !== 'yes' && choice !== 'no' && choice !== 'abstain')
+    return normalizationFailure('choice must be yes, no, or abstain');
+  return {
+    ok: true,
+    value: {
+      action,
+      motionId: motionId.value,
+      propertyId: propertyId.value,
+      choice,
+      castByOwnerId: castByOwnerId.value,
+      proxyId: proxyId.value,
+    },
+  };
+}
 
 function failure(status: VoteErrorStatus, message: string): VoteWriteResult {
   return { ok: false, status, message };
