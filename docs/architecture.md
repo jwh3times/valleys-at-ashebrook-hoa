@@ -48,20 +48,23 @@ The board maintains association business as structured D1 rows rather than uploa
 - `board_people` and `board_terms` record service independently of site login access.
 - `meetings`, attendance, motions, and roll-call votes record board and member meetings. Member
   attendance and voting are property-based. A live-voting motion freezes active properties and
-  weights on first open, retains that record-date snapshot across close/reopen cycles, and uses a
-  monotonic revision to keep stale board corrections from overwriting a later session.
+  weights on first open, retains that record-date snapshot across close/reopen cycles, stamps live
+  votes only from those frozen weights, and uses a monotonic revision to keep stale board
+  corrections from overwriting a later session.
 - `resolutions` form a permanent supersession chain: adopting, superseding, and repealing are
   explicit transitions, while an in-force or historic resolution cannot be deleted.
 - `elections`, candidates, and ballots record both the existing paper workflow and the lifecycle
-  foundation for later site-conducted elections. A conducted election freezes eligible properties
-  and weights when it opens. Per-lot ballots establish turnout and provenance only;
-  `ballot_choices` retain weighted candidate selections without a ballot, lot, owner, proxy,
-  caster, timestamp, or other explicit identity/join field, and supported reads never join choices
-  to turnout. This is identifier separation, not mathematical anonymity: a rare or unique weight
-  retained on both sides may identify or narrow a property's selections, while SQLite insertion
-  order and D1 Time Travel create additional temporal inference risk for a privileged operator.
-  Conducted tallies remain absent while open and are derived from the retained choices only when
-  the election closes.
+  for site-conducted elections. A conducted election freezes eligible properties and weights when
+  it first opens. A cast atomically records per-lot turnout/provenance and separate weighted
+  `ballot_choices`; each side takes its weight only from that frozen record-date snapshot.
+  `ballot_choices` have no ballot, lot, owner, proxy, caster, timestamp, shared receipt, or other
+  explicit identity/join field, and supported reads never join choices to turnout. This is
+  identifier separation, not mathematical anonymity: a rare or unique weight retained on both
+  sides may identify or narrow a property's selections, while SQLite insertion order and D1 Time
+  Travel create additional temporal inference risk for a privileged operator. Conducted ballots
+  are final because the application exposes only whether a lot has cast, never the choices needed
+  to display or replace one. Tallies remain absent while open and are derived from retained choices
+  only when the election closes.
 - `proxies` record one lot's grantor and holder for exactly one meeting or election. Member
   attendance, votes, and election ballots cite the canonical proxy row instead of carrying an
   unverified "via proxy" flag.
@@ -71,10 +74,29 @@ helpers. Draft meetings and resolutions, plus draft or void elections, stay on b
 reads even when the caller has the board role; the public read path always enforces its publication
 status independently of role.
 
+## Live Homeowner Voting API
+
 Live voting is inert by default. The `liveVotingEnabled` site setting normalizes to `false`, and
-opening a conducted election or member-motion vote requires both that flag and official mode in
-the database-conditioned transition. This slice provides board-only preparation and lifecycle
-foundations; no `/vote`, `/api/vote`, ballot-casting workflow, or homeowner voting UI has shipped.
+opening or casting requires it and `officialMode` to be literal JSON booleans `true` in the
+database-conditioned mutation. Turning either flag off is a global pause: new opens and casts stop,
+but open lifecycle state, eligibility snapshots, turnout, votes, and retained choices remain intact;
+re-enabling resumes any occasion that is still open.
+
+`POST /api/vote` is the only shipped voting endpoint. Middleware provides a namespace backstop, and
+the handler independently applies this order before parsing an action: both feature flags (`404`),
+exact equality between the supplied `Origin` header and the request URL's origin (`403`), JSON media
+type (`415`), authenticated session (`401`), then `homeowner`-or-higher role (`403`). Resource lookup
+re-applies visibility, and mutation SQL re-checks own-lot or held-proxy authority, snapshot
+eligibility and frozen weight, open state, feature flags, and duplicate-cast absence. A racing close,
+pause, authority change, or duplicate therefore yields `409` without a partial write. Election
+turnout plus every anonymous retained choice is one checked D1 batch.
+
+`fetchOpenVotingFor` is a server-only, caller-specific read model. It returns visible open
+conducted elections and member motions only when the caller controls an eligible snapshotted lot
+directly or holds an occasion-scoped proxy. It includes frozen weights, valid owner/proxy options,
+election candidates, and a per-lot `hasCast` receipt; it never returns retained election choices or
+live tallies. Slice 2 has no GET voting API, `/vote` page, navigation entry, homeowner voting UI, or
+new admin UI.
 
 ## Official-Mode Homeowner Actions
 
