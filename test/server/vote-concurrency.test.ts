@@ -248,6 +248,17 @@ describe('atomic motion casting', () => {
       votes: await motionVoteCount('motion-open'),
     });
   });
+
+  it('serializes cast versus the global pause to one of two complete states', async () => {
+    const [cast] = await Promise.all([castMotion(), pauseVoting()]);
+    expect([
+      { cast: 204, votes: 1 },
+      { cast: 409, votes: 0 },
+    ]).toContainEqual({
+      cast,
+      votes: await motionVoteCount('motion-open'),
+    });
+  });
 });
 
 function ballotInput(): CastBallotInput {
