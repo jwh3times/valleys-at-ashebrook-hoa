@@ -218,4 +218,22 @@ describe('VoteManager', () => {
       within(dialog).getByText(/voting by proxy for 102 example street/i),
     ).toBeVisible();
   });
+
+  it('disables sibling voting cards until the active review is cancelled', async () => {
+    render(<VoteManager items={[election, motion]} />);
+    const siblingChoice = screen.getByLabelText('Yes');
+    const siblingReview = screen.getByRole('button', { name: /review vote/i });
+    fireEvent.click(screen.getByLabelText('Candidate One'));
+    fireEvent.click(screen.getByRole('button', { name: /review ballot/i }));
+
+    expect(siblingChoice).toBeDisabled();
+    expect(siblingReview).toBeDisabled();
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    await waitFor(() => expect(siblingChoice).toBeEnabled());
+    expect(siblingReview).toBeDisabled();
+
+    fireEvent.click(siblingChoice);
+    expect(siblingReview).toBeEnabled();
+  });
 });
