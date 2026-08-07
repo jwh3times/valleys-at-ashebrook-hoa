@@ -134,12 +134,16 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   projection, which returns visible open occasions and eligible lots the caller controls directly
   or through a held proxy, their frozen weights and provenance options, election candidates, and
   only a `hasCast` receipt — never a retained ballot choice or live conducted-election tally. Before
-  `POST /api/vote` sends either `castBallot` or `castMotionVote`, the modal review names the pending
-  selection and owner/proxy provenance and warns that the ballot or vote cannot be changed or
-  recovered after it is cast. A successful exact-204 response replaces the form with a receipt that
-  contains only the occasion title and lot address; choices cannot be displayed, recovered, edited,
-  or replaced through the supported application. Admin election history likewise exposes turnout
-  and final aggregate results without a lot-to-choice link.
+  `POST /api/vote` sends either `castBallot` or `castMotionVote`, the labeled modal review names the
+  pending selection and owner/proxy provenance, moves and traps focus, supports Escape/cancel with
+  focus restoration, and disables background voting controls. It warns that the homeowner cannot
+  change, recover, or recast that submitted selection through `/vote`. A successful exact-204
+  response replaces the form with a receipt containing only the occasion title and lot address.
+  Only conducted-election choices are undisplayable, unrecoverable, uneditable, and irreplaceable
+  throughout the supported application because they have no identity link. Member-motion votes
+  remain attributable and board-visible, and the board-only correction workflow may replace them
+  after voting closes. Admin election history exposes turnout and final aggregate results without a
+  lot-to-choice link.
 - **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
   owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
   by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in

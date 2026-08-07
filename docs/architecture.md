@@ -98,8 +98,12 @@ election candidates, and a per-lot `hasCast` receipt; it never returns retained 
 live conducted-election tallies. There is no GET voting API: the feature-gated SSR `/vote` page
 calls this read model directly and renders sign-in, property-verification, empty, or eligible ballot
 states. Each election or motion form requires an explicit review step that names the selection and
-owner/proxy provenance and warns that the cast cannot be changed or recovered. The exact-204
-success state contains only the occasion title and lot address, never a selection.
+owner/proxy provenance and warns that the homeowner cannot change, recover, or recast it through
+`/vote`. The labeled modal moves and traps focus, supports Escape/cancel with focus restoration,
+and disables background voting controls. The exact-204 success state contains only the occasion
+title and lot address, never a selection. Conducted-election choices remain application-wide
+undisplayable and irreplaceable; member-motion votes remain attributable and board-correctable
+after close.
 
 The board operates the lifecycle from `/admin`. Site settings persist the explicit global toggle;
 the Elections panel separates draft/open **Active** records from closed/certified/void **History**.

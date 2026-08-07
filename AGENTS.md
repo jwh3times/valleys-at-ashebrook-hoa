@@ -9,8 +9,10 @@ and homeowner proxy grants at `/proxies` are driven by the `officialMode` site s
 `src/lib/site.ts`. A separate `liveVotingEnabled` site setting supplies the default-off gate for
 conducted elections and member-motion voting. The guarded `POST /api/vote`, caller-specific
 server read model, atomic casting, and homeowner `/vote` experience are all feature-gated on both
-settings. The page offers final conducted-election and member-motion voting only to verified
-callers, with per-lot receipts that never reveal selections. The admin Site, Elections, and
+settings. The page offers one-time homeowner submission of ballots for conducted elections and
+votes on member motions only to verified callers, with per-lot receipts that never reveal selections.
+Conducted-election choices are application-wide undisplayable and irreplaceable; member-motion
+votes remain attributable and board-correctable after close. The admin Site, Elections, and
 Meetings panels expose the default-off enable/pause control, conducted-election Active/History
 lifecycle and turnout monitoring, and member-motion open/close/reopen controls.
 
@@ -273,7 +275,9 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
   The homeowner cast path is `POST /api/vote`, reached only through the feature-gated `/vote` page
   for verified callers. The page renders selection-free receipts that contain only the item title
-  and lot address. The admin Elections panel separates draft/open Active records from
+  and lot address. Its labeled review modal summarizes the pending selection and provenance, moves
+  and traps focus, supports Escape/cancel with focus restoration, and disables every background
+  voting control. The admin Elections panel separates draft/open Active records from
   closed/certified/void History, exposes conducted Open/Close and count/weight turnout monitoring,
   and never exposes a live conducted tally or editable conducted ballot/choice rows.
 - Board-only complete proxies record (including paper proxies entered by the board and online
@@ -383,9 +387,9 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   (`fetchProxies`, `saveProxy`, `deleteProxy`). `setMemberAttendance`, `setMemberVotes`, and
   `setBallots` each take a `proxyId?: string | null` per entry, replacing the old `viaProxy?:
 boolean`.
-- `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for final election
-  ballots and member-motion votes; failed responses surface their server message and never create a
-  receipt.
+- `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for one-time
+  homeowner election-ballot and member-motion submissions; failed responses surface their server
+  message and never create a receipt.
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
