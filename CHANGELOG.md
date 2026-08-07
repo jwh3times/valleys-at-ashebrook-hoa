@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.60] - 2026-08-07
+
+### Changed
+
+- **Agent synchronization now starts from `.agents/skills`.** Each authored skill is a complete
+  directory source, so synchronization safely replaces former junctions, regenerates
+  `.claude/skills` for Claude Code, and emits `.codex/agents` custom-agent TOML from the authored
+  Claude agent definitions. Format first, then run `npm run sync:agents`; generated trees should
+  not be edited or replaced with skill symlinks.
+
+## [0.3.59] - 2026-08-07
+
+### Changed
+
+- Bumped the direct development dependencies `@cloudflare/workers-types` from 5.20260801.1 to
+  5.20260804.1 and `@testing-library/user-event` from 14.6.1 to 14.6.3.
+
 ## [0.3.58] - 2026-08-07
 
 ### Added
