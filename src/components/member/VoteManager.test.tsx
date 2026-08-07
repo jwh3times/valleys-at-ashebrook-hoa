@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import VoteManager from './VoteManager';
 import * as voting from '../../lib/voting';
 import type { OpenVotingItem } from '../../lib/types';
@@ -152,5 +158,64 @@ describe('VoteManager', () => {
 
     expect(await screen.findByText('This lot has already voted')).toBeVisible();
     expect(screen.getByLabelText('Candidate One')).toBeEnabled();
+  });
+
+  it('keeps keyboard focus modal and restores it after Escape', async () => {
+    render(<VoteManager items={[election]} />);
+    fireEvent.click(screen.getByLabelText('Candidate One'));
+    const review = screen.getByRole('button', { name: /review ballot/i });
+    fireEvent.click(review);
+
+    const dialog = screen.getByRole('dialog', { name: 'Review ballot' });
+    const goBack = within(dialog).getByRole('button', { name: 'Go back' });
+    const cast = within(dialog).getByRole('button', {
+      name: 'Cast final ballot',
+    });
+    await waitFor(() => expect(goBack).toHaveFocus());
+
+    cast.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(goBack).toHaveFocus();
+    goBack.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(cast).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(review).toHaveFocus();
+  });
+
+  it('disables the ballot controls behind an open confirmation', () => {
+    render(<VoteManager items={[election]} />);
+    fireEvent.click(screen.getByLabelText('Candidate One'));
+    const review = screen.getByRole('button', { name: /review ballot/i });
+    fireEvent.click(review);
+
+    expect(screen.getByLabelText('Candidate One')).toBeDisabled();
+    expect(screen.getByLabelText(/vote as an owner/i)).toBeDisabled();
+    expect(review).toBeDisabled();
+  });
+
+  it('reviews election selections with the selected owner provenance', () => {
+    render(<VoteManager items={[election]} />);
+    fireEvent.click(screen.getByLabelText('Candidate One'));
+    fireEvent.click(screen.getByRole('button', { name: /review ballot/i }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Review ballot' });
+    expect(within(dialog).getByText('Candidate One')).toBeVisible();
+    expect(within(dialog).getByText(/voting as owner one/i)).toBeVisible();
+  });
+
+  it('reviews the motion choice with proxy provenance', () => {
+    render(<VoteManager items={[motion]} />);
+    fireEvent.click(screen.getByLabelText('No'));
+    fireEvent.click(screen.getByLabelText(/vote by proxy/i));
+    fireEvent.click(screen.getByRole('button', { name: /review vote/i }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Review vote' });
+    expect(within(dialog).getByText(/choice: no/i)).toBeVisible();
+    expect(
+      within(dialog).getByText(/voting by proxy for 102 example street/i),
+    ).toBeVisible();
   });
 });

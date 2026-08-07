@@ -59,4 +59,21 @@ describe('voting write helpers', () => {
       }),
     });
   });
+
+  it('rejects a non-204 success response without issuing a receipt', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
+    );
+
+    await expect(
+      castMotionVote({
+        motionId: 'm1',
+        propertyId: 'p1',
+        choice: 'yes',
+        castByOwnerId: 'o1',
+        proxyId: null,
+      }),
+    ).rejects.toThrow('Voting request failed (200)');
+  });
 });
