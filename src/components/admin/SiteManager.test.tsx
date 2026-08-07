@@ -13,6 +13,7 @@ vi.mock('../../lib/content', () => ({
     welcomeHeading: '',
     welcomeBody: '',
     officialMode: false,
+    liveVotingEnabled: false,
     disclaimerText: '',
     aboutBody: '',
   }),
@@ -52,6 +53,22 @@ describe('SiteManager official-mode toggle', () => {
     expect(saveSite.mock.calls[0][0]).toMatchObject({
       disclaimerText: 'Custom disclaimer.',
       aboutBody: 'Para one.\n\nPara two.',
+    });
+  });
+
+  it('saves liveVotingEnabled: true after enabling live voting', async () => {
+    render(<SiteManager />);
+    const toggle = await screen.findByRole('checkbox', {
+      name: /live voting/i,
+    });
+    expect(toggle).not.toBeChecked();
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: /save settings/i }));
+
+    await waitFor(() => expect(saveSite).toHaveBeenCalledTimes(1));
+    expect(saveSite.mock.calls[0][0]).toMatchObject({
+      liveVotingEnabled: true,
     });
   });
 });
