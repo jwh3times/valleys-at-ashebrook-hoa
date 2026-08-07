@@ -282,3 +282,23 @@ describe('isAuthoredPath', () => {
     expect(isAuthoredPath('.claude/agents/nested/docs-updater.md')).toBe(false);
   });
 });
+
+describe('repository hook integration', () => {
+  it('runs the agent synchronizer after Claude writes', () => {
+    const settings = JSON.parse(
+      fs.readFileSync(path.resolve('.claude/settings.json'), 'utf8'),
+    ) as {
+      hooks: {
+        PostToolUse: Array<{ hooks: Array<{ command: string }> }>;
+      };
+    };
+
+    expect(
+      settings.hooks.PostToolUse.flatMap((group) =>
+        group.hooks.map((hook) => hook.command),
+      ),
+    ).toEqual([
+      'node --experimental-strip-types scripts/sync-agent-skills.ts --hook',
+    ]);
+  });
+});
