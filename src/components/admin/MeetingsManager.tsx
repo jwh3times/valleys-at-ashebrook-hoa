@@ -1461,6 +1461,7 @@ export default function MeetingsManager() {
                                 <button
                                   className="row-link"
                                   aria-label={`Open voting for ${mo.text}`}
+                                  disabled={busy}
                                   onClick={() =>
                                     handleOpenMotionVoting(m.id, mo)
                                   }
@@ -1473,6 +1474,7 @@ export default function MeetingsManager() {
                                 <button
                                   className="row-link"
                                   aria-label={`Close voting for ${mo.text}`}
+                                  disabled={busy}
                                   onClick={() =>
                                     handleCloseMotionVoting(m.id, mo)
                                   }
@@ -1485,6 +1487,7 @@ export default function MeetingsManager() {
                                 <button
                                   className="row-link"
                                   aria-label={`Reopen voting for ${mo.text}`}
+                                  disabled={busy}
                                   onClick={() =>
                                     handleOpenMotionVoting(m.id, mo)
                                   }
@@ -1495,6 +1498,7 @@ export default function MeetingsManager() {
                             <button
                               className="row-link"
                               aria-label={`Edit motion ${mo.text}`}
+                              disabled={busy}
                               onClick={() => startEditMotion(mo)}
                             >
                               Edit

@@ -12,6 +12,16 @@ vi.mock('../../lib/content');
 const mocked = vi.mocked(admin);
 const mockedContent = vi.mocked(content);
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchBoardPeople.mockResolvedValue([]);
@@ -1307,6 +1317,135 @@ describe('MeetingsManager', () => {
     expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
       'Repair the pool fence this fall',
     );
+  });
+
+  it('locks motion controls while opening voting and resets the same-target editor on success', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    const pending = deferred<void>();
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion(), otherMotion],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' }), otherMotion],
+        }),
+      );
+    mocked.openMotionVoting.mockReturnValue(pending.promise);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion approve the annual budget/i,
+      }),
+    );
+    await userEvent.clear(screen.getByLabelText(/^motion$/i));
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the amended annual budget',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(mocked.openMotionVoting).toHaveBeenCalledWith('mo1'),
+    );
+    const editOtherDisabled = screen
+      .getByRole('button', { name: /edit motion repair the pool fence/i })
+      .hasAttribute('disabled');
+    const otherLifecycleDisabled = screen
+      .getByRole('button', { name: /open voting for repair the pool fence/i })
+      .hasAttribute('disabled');
+
+    pending.resolve(undefined);
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(editOtherDisabled).toBe(true);
+    expect(otherLifecycleDisabled).toBe(true);
+    expect(screen.queryByText('Edit motion')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue('');
+  });
+
+  it('restores motion controls and preserves the editor when opening voting is rejected', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    const pending = deferred<void>();
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        ...memberMeeting,
+        motions: [memberMotion(), otherMotion],
+      }),
+    );
+    mocked.openMotionVoting.mockReturnValue(pending.promise);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion approve the annual budget/i,
+      }),
+    );
+    await userEvent.clear(screen.getByLabelText(/^motion$/i));
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the amended annual budget',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(mocked.openMotionVoting).toHaveBeenCalledWith('mo1'),
+    );
+    const editOtherButton = screen.getByRole('button', {
+      name: /edit motion repair the pool fence/i,
+    });
+    const otherLifecycleButton = screen.getByRole('button', {
+      name: /open voting for repair the pool fence/i,
+    });
+    const editOtherDisabled = editOtherButton.hasAttribute('disabled');
+    const otherLifecycleDisabled =
+      otherLifecycleButton.hasAttribute('disabled');
+
+    pending.reject(new Error('Voting cannot open while another update runs.'));
+    expect(
+      await screen.findByText(/voting cannot open while another update runs/i),
+    ).toBeInTheDocument();
+    expect(editOtherDisabled).toBe(true);
+    expect(otherLifecycleDisabled).toBe(true);
+    expect(editOtherButton).toBeEnabled();
+    expect(otherLifecycleButton).toBeEnabled();
+    expect(screen.getByText('Edit motion')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Approve the amended annual budget',
+    );
+    expect(mocked.fetchMeeting).toHaveBeenCalledTimes(1);
   });
 
   it('offers Close voting for an open member motion', async () => {
