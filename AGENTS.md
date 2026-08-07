@@ -6,10 +6,10 @@ This is the public and homeowner website for the Valleys at Ashebrook neighborho
 **"The Valleys at Ashebrook Residents"**. An admin-toggleable **official mode** switches the site
 to official-HOA presentation: branding, footer disclaimer, and HOA-business surfaces like `/dues`
 and homeowner proxy grants at `/proxies` are driven by the `officialMode` site setting through
-`src/lib/site.ts`. A separate `liveVotingEnabled` site setting now supplies the default-off
-foundation for conducted elections and member-motion voting; Slice 1 includes only board lifecycle,
-schema, and read-model support — no `/vote`, `/api/vote`, casting workflow, or homeowner voting UI
-has shipped.
+`src/lib/site.ts`. A separate `liveVotingEnabled` site setting supplies the default-off gate for
+conducted elections and member-motion voting. Slice 2 adds the guarded `POST /api/vote`, a
+caller-specific server read model, and atomic casting, but no `/vote` page, navigation entry,
+homeowner voting UI, or new admin UI has shipped.
 
 The app is an Astro SSR app (`output: 'server'`) running on **Cloudflare Workers** via the
 `@astrojs/cloudflare` adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2**
@@ -133,6 +133,20 @@ Markdown twins described below and never the human-readable originals.
 
 - Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`.
 - Gated document download from R2 with tier checks: `GET /api/files/[id]`.
+- Default-off live homeowner voting: `POST /api/vote` accepts `castBallot` and `castMotionVote`
+  only; there is no GET voting endpoint. Middleware is the namespace backstop and the handler calls
+  `requireVotingApi` independently. Its fixed guard order is: literal-boolean `officialMode` plus
+  `liveVotingEnabled` (`404`), exact equality of the required `Origin` header with
+  `new URL(request.url).origin` (`403`), `application/json` media type (`415`), authenticated
+  session (`401`), then `homeowner`-or-higher role (`403`). Only then are the action and resource
+  resolved. Out-of-tier or unknown occasions are masked as `404`; own-lot or occasion-scoped
+  held-proxy authority, frozen-snapshot eligibility and weight, open state, both feature flags, and
+  one cast per lot are re-checked inside the mutation SQL. Election turnout and identity-unlinked
+  retained choices are a single checked D1 batch, and a race with close, pause, authority change,
+  or another cast returns `409` without a partial write. Conducted ballots are final: supported
+  reads expose only `hasCast`, never choices for display or replacement. Turning either flag off
+  pauses new opens and casts without deleting lifecycle state, snapshots, turnout, votes, or
+  choices; an occasion still open resumes when both flags return true.
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}`,
   `/api/admin/{properties,owners,members}`, and `/api/admin/{board-people,board-terms}`.
   `GET /api/admin/board-people` returns board people with their terms nested, mirroring the
@@ -254,7 +268,8 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned, candidates
   can be added or deleted only while the election is a draft, and conducted candidates become
   immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
-  No `/vote`, `/api/vote`, digital casting action, or homeowner voting UI exists in Slice 1.
+  Slice 2's homeowner cast path is the separate `POST /api/vote`; no `/vote` page, homeowner voting
+  UI, or new admin UI exists yet.
 - Board-only complete proxies record (including paper proxies entered by the board and online
   grants created by homeowners — one owner authorising one named holder to act for one lot at
   exactly one meeting or election; see
@@ -375,8 +390,10 @@ boolean`.
   `ElectionSource`, `ELECTION_STATUSES`, `ELECTION_SOURCES`, `ElectionSummary`, `ElectionDetail`,
   `CandidateSummary`, `ElectionTurnout`, `ElectionEligibleProperty`, `BallotRow`, `ElectionInput`,
   `CandidateInput`), member-motion `MotionVotingState` and shared `EligibilityTotals`, the
-  proxies shapes (`ProxyDetail`, `ProxyInput`, `MemberProxyDetail`, `MemberProxyLists`, `MemberLot`,
-  and `UpcomingOccasion`), a shared
+  caller-specific voting read shapes (`OpenVotingItem`, `OpenElectionVoting`, `OpenMotionVoting`,
+  `VotingLot`, `VotingOwnerOption`, `VotingProxyOption`), cast inputs/results (`VoteAction`,
+  `CastBallotInput`, `CastMotionVoteInput`, `VoteWriteResult`), the proxies shapes (`ProxyDetail`,
+  `ProxyInput`, `MemberProxyDetail`, `MemberProxyLists`, `MemberLot`, and `UpcomingOccasion`), a shared
   `isoDateOrError` calendar-date validator used by both the declarative normalizers and the
   resolutions route's `adopt`/`supersede` and the elections route's `certify` transition
   arguments, and `MemberAttendanceRow`/`MemberVoteRow`/`BallotRow`'s `proxyId` field (board-only,
@@ -396,7 +413,8 @@ boolean`.
 - `auth/`: Better Auth config, Resend and Twilio senders.
 - `authz/`: `getAuthContext`, `resolveAuthContext` (middleware-first caller resolution with a
   fail-closed fallback), `requireRole`, `requireBoard`, `requireMemberApi` (official-mode-first
-  homeowner-write gate), per-property access checks, and Turnstile checks.
+  homeowner-write gate), `requireVotingApi` (feature flags, exact Origin, JSON media type, session,
+  then homeowner role, in that order), per-property access checks, and Turnstile checks.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
@@ -416,10 +434,15 @@ boolean`.
   `viaProxy` — always present — is derived as `proxyId !== null` rather than a stored flag. `content/`
   also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring),
   `proxy-guards.ts` (`proxyUseError`, the shared cross-row guard `setMemberAttendance`,
-  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`), and `voting-state.ts`
+  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`), `voting-state.ts`
   (the shared SQL predicate requiring both official mode and live voting to be literal JSON
-  booleans `true` for a
-  database-conditioned open transition). `reads.ts` also
+  booleans `true` for database-conditioned open and cast transitions), `voting-reads.ts`
+  (`fetchOpenVotingFor`, the server-only caller-specific projection of visible open occasions,
+  eligible own/proxied lots, frozen weights, valid provenance options, candidates, and `hasCast`
+  receipts; it never reads `ballot_choices` or returns live tallies), and `voting.ts`
+  (`normalizeVoteAction`, preflight error mapping, and atomic election/motion casting whose SQL
+  repeats visibility, authority, frozen eligibility, open state, feature flags, and duplicate
+  exclusion at the mutation boundary). `reads.ts` also
   has the resolutions book — `fetchResolutionsFor(env, role, { includeHistoric? })` filters
   `status != 'draft'` UNCONDITIONALLY, including for a board caller, the same rule ADR 0014 sets for
   meetings, so a draft resolution is reachable only through the board-only `fetchAdminResolutions`;
@@ -571,8 +594,10 @@ or other explicit identity/correlation column; none may be added, and supported 
 choice to a turnout row. This is not mathematical anonymity: because turnout and choice rows retain
 the same snapshotted weight, a rare or unique weight may identify or narrow a property's
 selections, while SQLite insertion order and D1 Time Travel add temporal inference risk. A
-conducted close derives final candidate totals from these retained rows, but Slice 1 has no casting
-route that writes them.
+conducted `POST /api/vote` cast writes the per-lot turnout row and every independent choice row in
+one checked D1 batch, taking both weights from `election_eligibility`. The supported caller read
+returns only `hasCast`, so a conducted ballot is final; conducted close derives final candidate
+totals from the retained rows.
 `board_terms` also carries a nullable `election_id` referencing `elections` on delete-set-null,
 recording which election produced that term; `certify` opens it, `uncertify` deletes it, and
 `DELETE /api/admin/board-terms` refuses to delete a term with one set.
@@ -700,6 +725,15 @@ first and returns `404`, then anonymous is `401` and an authenticated visitor is
 are scoped again through `AuthContext.propertyIds` (and active roster rows where identity matters),
 so homeowner role alone never grants access to an arbitrary lot. See
 [ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md).
+
+The live-voting API has the same middleware-plus-handler structure but a stricter fixed route-gate
+order: both feature flags (`404`), exact required-Origin equality (`403`), JSON media type (`415`),
+session (`401`), then homeowner rank (`403`). `test/server/member-routes-all-gated.test.ts` includes
+`/api/vote`, while `voting-guards.test.ts` pins that order and Origin behavior. A successful
+preflight still grants no general lot authority: `voting.ts` repeats the caller's active own-lot or
+occasion-scoped held-proxy predicate inside the insert, together with visibility, frozen
+eligibility, open state, both feature flags, and duplicate exclusion. `voting-reads.ts` applies the
+same caller and tier boundary to its server-only open-voting projection.
 
 ## Testing Guidelines
 

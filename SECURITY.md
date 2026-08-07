@@ -78,42 +78,63 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   `board_votes` reference `board_people`, not addresses, and a board meeting's roll call has always
   named board members, never homeowners.
 - **Election turnout and candidate choices have no explicit identity link or join key.** `ballots`
-  records only that a lot participated — election, property, snapshotted weight, and owner-or-proxy
-  provenance. For recorded paper elections, `candidates.votes` remains the board-entered aggregate
-  and no choice row exists. For the default-off conducted-election foundation, `ballot_choices`
-  retains an independent id, election, candidate, and non-negative weight. It deliberately has no
-  `ballot_id`, `property_id`, owner/proxy/caster field, timestamp, shared receipt, or other explicit
-  correlation field; none may be added through schema, types, APIs, logs, or exports, and supported
-  reads never join choices to turnout. This does not guarantee mathematical anonymity:
-  `ballots.weight` and `ballot_choices.weight` retain the same snapshotted value, so a rare or
-  unique weight may identify or narrow a property's selections. Conducted ballots are final because
-  the supported application cannot resolve their choices for editing. `candidates.votes` remains
-  `NULL` while a conducted election is open and is derived from the retained choice rows only in
-  the atomic close operation, so there is no live tally to diff. The public `/elections` read still
-  exposes only closed/certified results and aggregate turnout; per-lot ballots and frozen
-  eligible-property rows are board-only. SQLite insertion order and D1 Time Travel add residual
-  operator-level temporal correlation risks that application schema cannot fully remove. See
+  records only that a lot participated — election, property, frozen record-date weight, and
+  owner-or-proxy provenance. A successful conducted ballot atomically inserts that turnout row and
+  one independent `ballot_choices` row per selection, using only the weight frozen in
+  `election_eligibility` when the election first opened. Each choice retains an independent id,
+  election, candidate, and non-negative weight. It deliberately has no `ballot_id`, `property_id`,
+  owner/proxy/caster field, timestamp, shared receipt, or other explicit correlation field; none may
+  be added through schema, types, APIs, logs, or exports, and supported reads never join choices to
+  turnout. This does not guarantee mathematical anonymity: `ballots.weight` and
+  `ballot_choices.weight` retain the same snapshotted value, so a rare or unique weight may identify
+  or narrow a property's selections. Conducted ballots are final: the caller-specific read model
+  returns only a per-lot `hasCast` receipt and never resolves retained choices for display, editing,
+  or replacement. `candidates.votes` remains `NULL` while a conducted election is open and is
+  derived from the retained choice rows only in the atomic close operation, so there is no live
+  tally to diff. For recorded paper elections, `candidates.votes` remains the board-entered
+  aggregate and no choice row exists. The public `/elections` read still exposes only
+  closed/certified results and aggregate turnout; per-lot ballots and frozen eligible-property rows
+  are board-only. SQLite insertion order and D1 Time Travel add residual operator-level temporal
+  correlation risks that application schema cannot fully remove. See
   [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) for the paper-election baseline and
   [ADR 0020](./docs/adr/0020-digital-ballot-box.md) for the retained digital ballot box and its
   limits.
 - **Live-vote eligibility and lifecycle history are immutable records.**
-  `election_eligibility` and `motion_eligibility` freeze the active properties and vote weights at
-  first open, so later roster edits cannot rewrite the record-date electorate. An opened election
-  cannot return to draft, and a motion or parent meeting with live-voting history cannot be
-  deleted. Board `setMemberVotes` corrections are refused while voting is open and use a
+  `election_eligibility` and `motion_eligibility` are the record-date snapshots: they freeze every
+  active property and its vote weight at first open, and every live ballot or motion vote stamps its
+  weight only from the corresponding frozen row. Later roster or weight edits therefore cannot
+  change eligibility, rewrite a cast vote, or alter the historic tally. An opened election cannot
+  return to draft, and a motion or parent meeting with live-voting history cannot be deleted. Board
+  `setMemberVotes` corrections are refused while voting is open and use a
   state-plus-monotonic-revision compare-and-swap in one D1 batch, preventing a stale replacement
   from erasing votes from an intervening close/reopen session. Meeting approval conditionally
   re-checks that no child motion vote is open. Recorded tally/ballot replacements reserve their
   parent election in the same batch, so a racing certification or void cannot leave stale child
   data behind; certification likewise reserves the closed election and re-checks the open-term
   invariant so concurrent elections cannot open two terms for the same existing person.
-- **The live-voting foundation is default-off and not homeowner-accessible in this slice.**
-  `liveVotingEnabled` normalizes to `false`; database-conditioned open transitions require it and
-  `officialMode` to both be literal JSON booleans `true` (numbers, strings, nulls, and missing keys
-  all fail closed). Disabling either flag prevents new open transitions without
-  deleting existing history. This slice adds no `/vote`, `/api/vote`, casting endpoint, or
-  homeowner voting UI; those later surfaces require their own fail-closed authorization and
-  same-origin review before they ship.
+- **The live-voting API is default-off, same-origin, and independently guarded.** Middleware and
+  `POST /api/vote` both enforce the surface. The route guard's fixed order is: require
+  `officialMode` and `liveVotingEnabled` to be literal JSON booleans `true` (`404` otherwise);
+  require the request's `Origin` header to equal `new URL(request.url).origin` exactly (`403` when
+  missing or different); require an `application/json` media type (`415` otherwise); resolve a
+  session (`401` when anonymous); then require at least the `homeowner` role (`403` otherwise).
+  Only after those gates does input normalization run. Resource reads then mask out-of-tier or
+  unknown elections and motions as `404`, while own-lot and held-proxy authority, frozen-snapshot
+  eligibility, open state, and one-cast-per-lot constraints are checked server-side.
+- **Casting re-checks authority and live state at the mutation boundary.** The insert predicates
+  repeat the caller's own-lot or occasion-scoped held-proxy authority, visibility tier, frozen
+  eligibility, open lifecycle state, and both feature flags inside D1. Election turnout and all
+  retained choices are one checked batch; motion voting checks the single insert result. A close,
+  duplicate cast, authority change, or global-pause race therefore records nothing and maps to
+  `409` rather than relying on the earlier preflight. Turning off either flag pauses new opens and
+  casts without deleting open state, snapshots, turnout, votes, or retained choices; re-enabling
+  resumes an occasion that is still open.
+- **Slice 2 ships an API and private read model, not a voting experience.** `POST /api/vote`
+  accepts only `castBallot` and `castMotionVote`. The server-only `fetchOpenVotingFor` projection
+  returns visible open occasions and eligible lots the caller controls directly or through a held
+  proxy, their frozen weights and provenance options, candidates for elections, and only a
+  `hasCast` receipt — never a ballot choice or live tally. There is no GET voting API, `/vote` page,
+  navigation entry, homeowner voting UI, or new admin UI in this slice.
 - **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
   owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
   by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in
