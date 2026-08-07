@@ -9,6 +9,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import ElectionsManager from './ElectionsManager';
 import * as admin from '../../lib/admin';
+import * as content from '../../lib/content';
 import { ELECTION_STATUSES } from '../../lib/types';
 import type {
   ElectionDetail,
@@ -17,14 +18,27 @@ import type {
 } from '../../lib/types';
 
 vi.mock('../../lib/admin');
+vi.mock('../../lib/content');
 
 const mocked = vi.mocked(admin);
+const mockedContent = vi.mocked(content);
 
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchProperties.mockResolvedValue([]);
   mocked.fetchBoardPeople.mockResolvedValue([]);
   mocked.fetchProxies.mockResolvedValue([]);
+  mockedContent.fetchSiteSettings.mockResolvedValue({
+    siteName: 'The Valleys at Ashebrook Residents',
+    tagline: '',
+    contactEmail: '',
+    welcomeHeading: '',
+    welcomeBody: '',
+    officialMode: true,
+    liveVotingEnabled: true,
+    disclaimerText: '',
+    aboutBody: '',
+  });
 });
 
 function candidate(
@@ -89,7 +103,7 @@ describe('ElectionsManager', () => {
     expect(await screen.findByText(/no elections yet/i)).toBeInTheDocument();
   });
 
-  it('groups elections by status with drafts first', async () => {
+  it('keeps draft and open elections in Active and settled elections in History', async () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e-void', title: 'Void one', status: 'void' }),
       election({
@@ -98,30 +112,243 @@ describe('ElectionsManager', () => {
         status: 'certified',
       }),
       election({ id: 'e-closed', title: 'Closed one', status: 'closed' }),
+      election({ id: 'e-open', title: 'Open one', status: 'open' }),
       election({ id: 'e-draft', title: 'Draft one', status: 'draft' }),
     ]);
     render(<ElectionsManager />);
     await screen.findByText('Draft one');
 
+    expect(screen.getByText('Open one')).toBeInTheDocument();
+    expect(screen.queryByText('Closed one')).not.toBeInTheDocument();
+    expect(screen.queryByText('Certified one')).not.toBeInTheDocument();
+    expect(screen.queryByText('Void one')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^history$/i }));
+
+    expect(screen.queryByText('Draft one')).not.toBeInTheDocument();
+    expect(screen.queryByText('Open one')).not.toBeInTheDocument();
+    expect(screen.getByText('Closed one')).toBeInTheDocument();
+    expect(screen.getByText('Certified one')).toBeInTheDocument();
+    expect(screen.getByText('Void one')).toBeInTheDocument();
+
     const headings = screen
       .getAllByRole('heading', { level: 2 })
-      .map((h) => h.textContent);
-    expect(headings).toEqual(['Draft', 'Closed', 'Certified', 'Void']);
+      .map((heading) => heading.textContent);
+    expect(headings).toEqual(['Closed', 'Certified', 'Void']);
+  });
 
-    // Pin real DOM order, not just heading presence: each election's title
-    // must land in the right group, in the right order. Read titles from
-    // .admin-row-title specifically — a plain textContent scan would false-
-    // match "Void" against the Void action button rendered on the Closed
-    // group's own row.
-    const titles = Array.from(
-      document.querySelectorAll('.panel-list .admin-row-title'),
-    ).map((el) => el.textContent);
-    expect(titles).toEqual([
-      'Draft one',
-      'Closed one',
-      'Certified one',
-      'Void one',
+  it('offers Recorded and Conducted election sources on create', async () => {
+    mocked.fetchElections.mockResolvedValue([]);
+    render(<ElectionsManager />);
+    await screen.findByText(/no elections yet/i);
+
+    const source = screen.getByLabelText(/^election type$/i);
+    expect(
+      within(source).getByRole('option', { name: 'Recorded' }),
+    ).toHaveValue('recorded');
+    expect(
+      within(source).getByRole('option', { name: 'Conducted' }),
+    ).toHaveValue('conducted');
+  });
+
+  it('opens a draft conducted election instead of closing it', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        id: 'e1',
+        title: 'Conducted election',
+        source: 'conducted',
+      }),
     ]);
+    mocked.openElection.mockResolvedValue(undefined);
+    render(<ElectionsManager />);
+    await screen.findByText('Conducted election');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /open conducted election/i }),
+    );
+
+    await waitFor(() => expect(mocked.openElection).toHaveBeenCalledWith('e1'));
+    expect(
+      screen.queryByRole('button', { name: /close conducted election/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows turnout only while a conducted election is open', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Open conducted election',
+        source: 'conducted',
+        status: 'open',
+        candidates: [candidate({ votes: 42 })],
+        turnout: {
+          ballotsCast: 2,
+          weightCast: 4,
+          eligibleCount: 5,
+          eligibleWeight: 8,
+          eligibilityFrozen: true,
+        },
+      }),
+    ]);
+    render(<ElectionsManager />);
+    const title = await screen.findByText('Open conducted election');
+    const card = title.closest('.panel-card') as HTMLElement;
+
+    expect(within(card).getByText(/2 of 5 ballots cast/i)).toBeInTheDocument();
+    expect(within(card).getByText(/4 of 8 weight cast/i)).toBeInTheDocument();
+    expect(within(card).queryByText(/42 votes/i)).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(card).getByRole('button', { name: /details/i }),
+    );
+    expect(
+      within(card).queryByLabelText(/tally — alice/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(card).queryByRole('button', { name: /save tallies/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(card).queryByRole('button', { name: /save ballots/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('marks an open conducted election paused globally without removing Close', async () => {
+    mockedContent.fetchSiteSettings.mockResolvedValueOnce({
+      siteName: 'The Valleys at Ashebrook Residents',
+      tagline: '',
+      contactEmail: '',
+      welcomeHeading: '',
+      welcomeBody: '',
+      officialMode: true,
+      liveVotingEnabled: false,
+      disclaimerText: '',
+      aboutBody: '',
+    });
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Paused election',
+        source: 'conducted',
+        status: 'open',
+      }),
+    ]);
+    render(<ElectionsManager />);
+    const title = await screen.findByText('Paused election');
+    const card = title.closest('.panel-card') as HTMLElement;
+
+    expect(within(card).getByText('Paused globally')).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', { name: /close paused election/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows closed conducted totals and the frozen eligible denominator read-only', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Closed conducted election',
+        source: 'conducted',
+        status: 'closed',
+        candidates: [candidate({ votes: 6 })],
+        turnout: {
+          ballotsCast: 3,
+          weightCast: 6,
+          eligibleCount: 4,
+          eligibleWeight: 9,
+          eligibilityFrozen: true,
+        },
+      }),
+    ]);
+    render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
+    const title = screen.getByText('Closed conducted election');
+    const card = title.closest('.panel-card') as HTMLElement;
+    await userEvent.click(
+      within(card).getByRole('button', { name: /details/i }),
+    );
+
+    expect(within(card).getByText(/^alice$/i)).toBeInTheDocument();
+    expect(within(card).getByText(/6 votes/i)).toBeInTheDocument();
+    expect(within(card).getByText(/9 eligible weight/i)).toBeInTheDocument();
+    expect(
+      within(card).queryByLabelText(/tally — alice/i),
+    ).not.toBeInTheDocument();
+    expect(
+      within(card).queryByRole('button', { name: /save ballots/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows eligibility and turnout provenance without a selection field', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Provenance election',
+        source: 'conducted',
+        status: 'open',
+        eligibleProperties: [
+          { propertyId: 'p1', address: '100 Main St', weight: 2 },
+          { propertyId: 'p2', address: '102 Main St', weight: 3 },
+        ],
+        ballots: [
+          {
+            propertyId: 'p1',
+            address: '100 Main St',
+            weight: 2,
+            viaProxy: false,
+            castByOwnerId: null,
+            proxyId: null,
+          },
+        ],
+      }),
+    ]);
+    render(<ElectionsManager />);
+    const title = await screen.findByText('Provenance election');
+    const card = title.closest('.panel-card') as HTMLElement;
+    await userEvent.click(
+      within(card).getByRole('button', { name: /details/i }),
+    );
+
+    const eligibility = within(card)
+      .getByText('Eligibility register')
+      .closest('.panel-card') as HTMLElement;
+    expect(within(eligibility).getByText('100 Main St')).toBeInTheDocument();
+    expect(within(eligibility).getByText('102 Main St')).toBeInTheDocument();
+    expect(within(eligibility).getByText(/weight 2/i)).toBeInTheDocument();
+
+    const turnout = within(card)
+      .getByText('Turnout register')
+      .closest('.panel-card') as HTMLElement;
+    expect(within(turnout).getByText('100 Main St')).toBeInTheDocument();
+    expect(within(turnout).getByText(/weight 2/i)).toBeInTheDocument();
+    expect(within(turnout).queryByText(/selection/i)).not.toBeInTheDocument();
+    expect(within(turnout).queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(within(turnout).queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  it('retains tally and ballot editors for recorded elections', async () => {
+    mocked.fetchProperties.mockResolvedValue([property()]);
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Recorded election',
+        status: 'closed',
+        candidates: [candidate()],
+      }),
+    ]);
+    render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
+    const title = screen.getByText('Recorded election');
+    const card = title.closest('.panel-card') as HTMLElement;
+    await userEvent.click(
+      within(card).getByRole('button', { name: /details/i }),
+    );
+
+    expect(within(card).getByLabelText(/tally — alice/i)).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', { name: /save tallies/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', { name: /save ballots/i }),
+    ).toBeInTheDocument();
   });
 
   it('adds an election and reloads', async () => {
@@ -149,6 +376,7 @@ describe('ElectionsManager', () => {
           electionDate: '2026-01-15',
           meetingId: null,
           visibility: 'board',
+          source: 'recorded',
         },
         undefined,
       ),
@@ -188,11 +416,12 @@ describe('ElectionsManager', () => {
     ]);
     mocked.certifyElection.mockResolvedValue(undefined);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(screen.getByLabelText(/winner — alice/i));
     await userEvent.click(screen.getByLabelText(/winner — bob/i));
     await userEvent.type(
@@ -235,11 +464,12 @@ describe('ElectionsManager', () => {
       }),
     ]);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(
       screen.getByRole('button', { name: /^certify election$/i }),
     );
@@ -264,11 +494,12 @@ describe('ElectionsManager', () => {
     ]);
     mocked.setTallies.mockResolvedValue(undefined);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     const aliceTally = screen.getByLabelText(/tally — alice/i);
     await userEvent.clear(aliceTally);
     await userEvent.type(aliceTally, '42');
@@ -301,11 +532,12 @@ describe('ElectionsManager', () => {
     ]);
     mocked.setTallies.mockResolvedValue(undefined);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     // Alice gets a real tally; Bob's field is left untouched (blank), the
     // same as a board member who has not yet counted Bob's ballots.
     const aliceTally = screen.getByLabelText(/tally — alice/i);
@@ -340,11 +572,12 @@ describe('ElectionsManager', () => {
       new Error('votes must be a non-negative integer'),
     );
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     const aliceTally = screen.getByLabelText(
       /tally — alice/i,
     ) as HTMLInputElement;
@@ -402,11 +635,12 @@ describe('ElectionsManager', () => {
       new Error('Close the election before certifying it'),
     );
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(screen.getByLabelText(/winner — alice/i));
     await userEvent.type(
       screen.getByLabelText(/term start — alice/i),
@@ -481,9 +715,7 @@ describe('ElectionsManager', () => {
     render(<ElectionsManager />);
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.type(screen.getByLabelText(/^full name$/i), 'Alice');
     await userEvent.click(
       screen.getByRole('button', { name: /^add candidate$/i }),
@@ -511,9 +743,7 @@ describe('ElectionsManager', () => {
     render(<ElectionsManager />);
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(
       screen.getByRole('button', { name: /edit candidate alice/i }),
     );
@@ -557,11 +787,12 @@ describe('ElectionsManager', () => {
     ]);
     mocked.setBallots.mockResolvedValue(undefined);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     // p1: returned a ballot, weight left untouched, no owner to cast by.
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 100 main st/i),
@@ -672,11 +903,12 @@ describe('ElectionsManager', () => {
     ]);
     mocked.setBallots.mockResolvedValue(undefined);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 100 main st/i),
     );
@@ -739,11 +971,12 @@ describe('ElectionsManager', () => {
     ]);
     mocked.setBallots.mockResolvedValue(undefined);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 100 main st/i),
     );
@@ -801,11 +1034,12 @@ describe('ElectionsManager', () => {
       },
     ]);
     render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
     await screen.findByText('Board Election 2026');
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /candidates & ballots/i }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 100 main st/i),
     );
