@@ -3,13 +3,30 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { getSiteSettings } from '../../src/server/content/settings';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
-import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
+import {
+  DEFAULT_SITE_SETTINGS,
+  normalizeSiteSettings,
+} from '../../src/lib/types';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
 describe('getSiteSettings', () => {
+  it('normalizes live voting as a fail-closed boolean', () => {
+    expect(DEFAULT_SITE_SETTINGS.liveVotingEnabled).toBe(false);
+    expect(
+      normalizeSiteSettings({ officialMode: true }).liveVotingEnabled,
+    ).toBe(false);
+    expect(
+      normalizeSiteSettings({ officialMode: true, liveVotingEnabled: true })
+        .liveVotingEnabled,
+    ).toBe(true);
+    expect(
+      normalizeSiteSettings({ liveVotingEnabled: 'true' }).liveVotingEnabled,
+    ).toBe(false);
+  });
+
   it('returns defaults (official mode off) when no row exists', async () => {
     const s = await getSiteSettings(env);
     expect(s.officialMode).toBe(false);

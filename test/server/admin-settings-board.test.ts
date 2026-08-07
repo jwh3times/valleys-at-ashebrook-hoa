@@ -6,8 +6,10 @@ vi.mock('../../src/server/authz/context', () => ({
 }));
 
 import { PUT } from '../../src/pages/api/admin/dues';
+import { PUT as putSiteSettings } from '../../src/pages/api/admin/site';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
+import { normalizeSiteSettings } from '../../src/lib/types';
 import { eq } from 'drizzle-orm';
 
 beforeAll(async () => {
@@ -32,5 +34,35 @@ describe('admin dues — board', () => {
       amount: '250',
       notes: 'annual',
     });
+  });
+
+  it('persists the live voting setting', async () => {
+    const body = {
+      siteName: 'The Valleys at Ashebrook Residents',
+      tagline: 'Welcome to our community',
+      contactEmail: 'board@example.test',
+      welcomeHeading: 'Welcome to the Valleys at Ashebrook',
+      welcomeBody: 'Welcome neighbors.',
+      officialMode: true,
+      liveVotingEnabled: true,
+      disclaimerText: '',
+      aboutBody: '',
+    };
+    const res = await putSiteSettings({
+      request: new Request('http://localhost/api/admin/site', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    } as never);
+    expect(res.status).toBe(204);
+    const [row] = await getDb(env)
+      .select()
+      .from(settings)
+      .where(eq(settings.key, 'site'));
+
+    expect(normalizeSiteSettings(JSON.parse(row.value)).liveVotingEnabled).toBe(
+      true,
+    );
   });
 });

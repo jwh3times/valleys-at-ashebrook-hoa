@@ -47,14 +47,21 @@ The board maintains association business as structured D1 rows rather than uploa
 
 - `board_people` and `board_terms` record service independently of site login access.
 - `meetings`, attendance, motions, and roll-call votes record board and member meetings. Member
-  attendance and voting are property-based and use a snapshotted vote weight where historical
-  totals must not change with the current roster.
+  attendance and voting are property-based. A live-voting motion freezes active properties and
+  weights on first open, retains that record-date snapshot across close/reopen cycles, and uses a
+  monotonic revision to keep stale board corrections from overwriting a later session.
 - `resolutions` form a permanent supersession chain: adopting, superseding, and repealing are
   explicit transitions, while an in-force or historic resolution cannot be deleted.
-- `elections`, candidates, and ballots record elections already conducted on paper. Per-lot
-  ballots establish turnout and provenance only; candidate choices are not stored per ballot, so
-  public election reads expose aggregate turnout and results without making an individual's choice
-  recoverable.
+- `elections`, candidates, and ballots record both the existing paper workflow and the lifecycle
+  foundation for later site-conducted elections. A conducted election freezes eligible properties
+  and weights when it opens. Per-lot ballots establish turnout and provenance only;
+  `ballot_choices` retain weighted candidate selections without a ballot, lot, owner, proxy,
+  caster, timestamp, or other explicit identity/join field, and supported reads never join choices
+  to turnout. This is identifier separation, not mathematical anonymity: a rare or unique weight
+  retained on both sides may identify or narrow a property's selections, while SQLite insertion
+  order and D1 Time Travel create additional temporal inference risk for a privileged operator.
+  Conducted tallies remain absent while open and are derived from the retained choices only when
+  the election closes.
 - `proxies` record one lot's grantor and holder for exactly one meeting or election. Member
   attendance, votes, and election ballots cite the canonical proxy row instead of carrying an
   unverified "via proxy" flag.
@@ -63,6 +70,11 @@ Public meeting, resolution, and election pages are rendered server-side from tie
 helpers. Draft meetings and resolutions, plus draft or void elections, stay on board-only admin
 reads even when the caller has the board role; the public read path always enforces its publication
 status independently of role.
+
+Live voting is inert by default. The `liveVotingEnabled` site setting normalizes to `false`, and
+opening a conducted election or member-motion vote requires both that flag and official mode in
+the database-conditioned transition. This slice provides board-only preparation and lifecycle
+foundations; no `/vote`, `/api/vote`, ballot-casting workflow, or homeowner voting UI has shipped.
 
 ## Official-Mode Homeowner Actions
 
@@ -129,4 +141,5 @@ header controlled by this repo.
 
 ## Related Decisions
 
-See [ADR index](./adr/README.md) for durable architecture and operating decisions.
+See [ADR 0020](./adr/0020-digital-ballot-box.md) for the digital ballot-box and frozen-electorate
+boundary, and the [ADR index](./adr/README.md) for all durable architecture and operating decisions.

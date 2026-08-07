@@ -1,6 +1,6 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import {
   meetings,
@@ -186,5 +186,16 @@ describe('meeting schema', () => {
     await expect(
       db.insert(motions).values({ id: 'mo2', text: 'B', ...base }),
     ).rejects.toThrow();
+  });
+
+  it('defaults a motion voting state to none', async () => {
+    const cols = await getDb(env).run(sql`PRAGMA table_info(motions)`);
+    const motionVotingState = cols.results.find(
+      (column) => (column as Record<string, unknown>).name === 'voting_state',
+    ) as Record<string, unknown> | undefined;
+
+    expect(motionVotingState).toBeDefined();
+    expect(motionVotingState?.notnull).toBe(1);
+    expect(motionVotingState?.dflt_value).toBe("'none'");
   });
 });

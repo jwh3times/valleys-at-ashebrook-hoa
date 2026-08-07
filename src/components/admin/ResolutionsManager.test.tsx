@@ -67,9 +67,13 @@ function meetingDetailWithMotion(
         id: 'mo1',
         sequence: 1,
         text: 'Approve the budget',
+        votingState: 'none' as const,
         moverName: null,
         secondName: null,
         outcome: 'passed' as const,
+        eligibleCount: 0,
+        eligibleWeight: 0,
+        eligibilityFrozen: false,
         tally: {
           yes: 0,
           no: 0,

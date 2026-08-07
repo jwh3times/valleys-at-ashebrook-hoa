@@ -7,6 +7,35 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.55] - 2026-08-06
+
+### Added
+
+- **Added the default-off foundation for live homeowner voting without exposing a homeowner voting
+  route yet.** Site settings now persist a fail-closed `liveVotingEnabled` flag, and additive D1
+  migrations introduce identity-unlinked retained `ballot_choices`, frozen election and motion
+  eligibility snapshots, member-motion voting state, and a monotonic correction revision. No `/vote`,
+  `/api/vote`, casting flow, or homeowner voting UI is part of this release.
+
+### Changed
+
+- **Conducted elections and member motions now have atomic board-only lifecycle foundations.**
+  Opening freezes the active-property electorate and weights; conducted-election configuration and
+  motion text are then protected as historical facts. Conducted elections publish no live tally
+  and derive final candidate totals from retained choices only when closing. Motion close/reopen
+  retains its original snapshot and votes, while state-plus-revision compare-and-swap prevents a
+  stale board correction from overwriting an intervening session. Election, motion, and meeting
+  deletion guards retain every record that has live-voting history.
+
+### Security
+
+- **Digital election choices are recountable without an explicit turnout identity link.** Choice
+  rows contain no ballot, lot, owner, proxy, caster, timestamp, or other identity/join field;
+  supported reads never correlate them to turnout, and ADR 0020 prohibits adding such a field.
+  This is not mathematical anonymity: a rare or unique snapshotted weight retained on both turnout
+  and choice rows may identify or narrow a property's selections, while SQLite insertion order and
+  D1 Time Travel add residual operator-level temporal correlation risk.
+
 ## [0.3.54] - 2026-08-05
 
 ### Security
