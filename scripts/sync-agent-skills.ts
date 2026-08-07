@@ -389,9 +389,12 @@ export function isAuthoredPath(
     ? file.slice(base.length + 1)
     : file;
   if (rel.startsWith('..')) return false;
+  const agentPath = rel.startsWith(`${AGENT_SOURCE_DIR}/`)
+    ? rel.slice(AGENT_SOURCE_DIR.length + 1)
+    : '';
   return (
     rel.startsWith(`${SKILL_SOURCE_DIR}/`) ||
-    rel.startsWith(`${AGENT_SOURCE_DIR}/`)
+    (agentPath.endsWith('.md') && !agentPath.includes('/'))
   );
 }
 
@@ -414,17 +417,19 @@ async function runHook(): Promise<void> {
         tool_input?: { file_path?: string; path?: string };
       };
       const touched = payload.tool_input?.file_path ?? payload.tool_input?.path;
-      if (touched && !isAuthoredPath(touched)) return;
+      if (!touched || !isAuthoredPath(touched)) return;
+    } else {
+      return;
     }
     const { written, removed } = sync();
     const changed = written.length + removed.length;
     if (changed > 0) {
       console.log(
-        `agents:sync regenerated ${changed} file(s) in generated trees.`,
+        `sync:agents regenerated ${changed} file(s) in generated trees.`,
       );
     }
   } catch (error) {
-    console.log(`agents:sync hook skipped: ${(error as Error).message}`);
+    console.log(`sync:agents hook skipped: ${(error as Error).message}`);
   }
 }
 
