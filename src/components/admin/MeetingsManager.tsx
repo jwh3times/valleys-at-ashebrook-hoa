@@ -147,12 +147,14 @@ export default function MeetingsManager() {
     setMsg,
     run,
   } = useAdminResource<MeetingSummary[]>(fetchMeetings, []);
-  const [liveVotingEnabled, setLiveVotingEnabled] = useState(false);
+  const [votingAvailable, setVotingAvailable] = useState(false);
 
   useEffect(() => {
     fetchSiteSettings()
-      .then((site) => setLiveVotingEnabled(site.liveVotingEnabled))
-      .catch(() => setLiveVotingEnabled(false));
+      .then((site) =>
+        setVotingAvailable(site.officialMode && site.liveVotingEnabled),
+      )
+      .catch(() => setVotingAvailable(false));
   }, []);
 
   // The board roster backs attendance, mover/second pickers, and the roll
@@ -589,6 +591,7 @@ export default function MeetingsManager() {
     await run(
       async () => {
         await openMotionVoting(motion.id);
+        resetMotion();
         await reloadDetail(meetingId);
       },
       motion.votingState === 'closed' ? 'Voting reopened.' : 'Voting opened.',
@@ -601,6 +604,7 @@ export default function MeetingsManager() {
   ) {
     await run(async () => {
       await closeMotionVoting(motion.id);
+      resetMotion();
       await reloadDetail(meetingId);
     }, 'Voting closed.');
   }
@@ -1416,7 +1420,7 @@ export default function MeetingsManager() {
                                 )}
                               {m.body === 'member' &&
                                 mo.votingState === 'open' &&
-                                !liveVotingEnabled && (
+                                !votingAvailable && (
                                   <span className="pinned-badge">
                                     {' '}
                                     Paused globally

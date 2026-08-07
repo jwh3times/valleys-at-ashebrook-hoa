@@ -94,13 +94,15 @@ export default function ElectionsManager() {
     setMsg,
     run,
   } = useAdminResource<ElectionDetail[]>(fetchElections, []);
-  const [liveVotingEnabled, setLiveVotingEnabled] = useState(false);
+  const [votingAvailable, setVotingAvailable] = useState(false);
   const [view, setView] = useState<'active' | 'history'>('active');
 
   useEffect(() => {
     fetchSiteSettings()
-      .then((site) => setLiveVotingEnabled(site.liveVotingEnabled))
-      .catch(() => setLiveVotingEnabled(false));
+      .then((site) =>
+        setVotingAvailable(site.officialMode && site.liveVotingEnabled),
+      )
+      .catch(() => setVotingAvailable(false));
   }, []);
 
   // The property roster backs the ballot picker — loaded once alongside the
@@ -652,7 +654,7 @@ export default function ElectionsManager() {
                             </span>
                             {e.source === 'conducted' &&
                               e.status === 'open' &&
-                              !liveVotingEnabled && (
+                              !votingAvailable && (
                                 <span className="pinned-badge">
                                   {' '}
                                   Paused globally

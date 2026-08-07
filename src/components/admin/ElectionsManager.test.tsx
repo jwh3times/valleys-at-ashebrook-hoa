@@ -151,15 +151,18 @@ describe('ElectionsManager', () => {
     ).toHaveValue('conducted');
   });
 
-  it('opens a draft conducted election instead of closing it', async () => {
-    mocked.fetchElections.mockResolvedValue([
-      election({
-        id: 'e1',
-        title: 'Conducted election',
-        source: 'conducted',
-      }),
-    ]);
+  it('reconciles conducted Open and Close controls from successive server states', async () => {
+    const draft = election({
+      id: 'e1',
+      title: 'Conducted election',
+      source: 'conducted',
+    });
+    mocked.fetchElections
+      .mockResolvedValueOnce([draft])
+      .mockResolvedValueOnce([{ ...draft, status: 'open' }])
+      .mockResolvedValueOnce([{ ...draft, status: 'closed' }]);
     mocked.openElection.mockResolvedValue(undefined);
+    mocked.closeElection.mockResolvedValue(undefined);
     render(<ElectionsManager />);
     await screen.findByText('Conducted election');
 
@@ -169,8 +172,55 @@ describe('ElectionsManager', () => {
 
     await waitFor(() => expect(mocked.openElection).toHaveBeenCalledWith('e1'));
     expect(
+      await screen.findByRole('button', { name: /close conducted election/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /open conducted election/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /close conducted election/i }),
+    );
+    await waitFor(() =>
+      expect(mocked.closeElection).toHaveBeenCalledWith('e1'),
+    );
+    expect(screen.queryByText('Conducted election')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^history$/i }));
+    expect(await screen.findByText('Conducted election')).toBeInTheDocument();
+    expect(
       screen.queryByRole('button', { name: /close conducted election/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it('surfaces a readable election lifecycle error without falsely opening', async () => {
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        id: 'e1',
+        title: 'Conducted election',
+        source: 'conducted',
+      }),
+    ]);
+    mocked.openElection.mockRejectedValue(
+      new Error('Official mode and live voting must both be enabled.'),
+    );
+    render(<ElectionsManager />);
+    await screen.findByText('Conducted election');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /open conducted election/i }),
+    );
+
+    expect(
+      await screen.findByText(/official mode and live voting/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /open conducted election/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /close conducted election/i }),
+    ).not.toBeInTheDocument();
+    expect(mocked.fetchElections).toHaveBeenCalledTimes(1);
   });
 
   it('shows turnout only while a conducted election is open', async () => {
@@ -237,6 +287,37 @@ describe('ElectionsManager', () => {
     expect(within(card).getByText('Paused globally')).toBeInTheDocument();
     expect(
       within(card).getByRole('button', { name: /close paused election/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('marks an open conducted election paused when official mode is off', async () => {
+    mockedContent.fetchSiteSettings.mockResolvedValueOnce({
+      siteName: 'The Valleys at Ashebrook Residents',
+      tagline: '',
+      contactEmail: '',
+      welcomeHeading: '',
+      welcomeBody: '',
+      officialMode: false,
+      liveVotingEnabled: true,
+      disclaimerText: '',
+      aboutBody: '',
+    });
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Official mode paused election',
+        source: 'conducted',
+        status: 'open',
+      }),
+    ]);
+    render(<ElectionsManager />);
+    const title = await screen.findByText('Official mode paused election');
+    const card = title.closest('.panel-card') as HTMLElement;
+
+    expect(within(card).getByText('Paused globally')).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', {
+        name: /close official mode paused election/i,
+      }),
     ).toBeInTheDocument();
   });
 
