@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   GENERATED_SKILL_COMMENT,
   diff,
+  hasDrift,
   isAuthoredPath,
   normalizeLf,
   parseFrontmatter,
@@ -59,6 +60,23 @@ function write(root: string, rel: string, contents: string | Buffer): void {
 function seedAuthoredSources(root: string): void {
   write(root, '.agents/skills/demo/SKILL.md', skillSource);
   write(root, '.claude/agents/docs-updater.md', agentSource);
+}
+
+function snapshotTree(root: string): Map<string, Buffer> {
+  const snapshot = new Map<string, Buffer>();
+  const visit = (dir: string, prefix = ''): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const target = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(target, rel);
+      } else if (entry.isFile()) {
+        snapshot.set(rel, fs.readFileSync(target));
+      }
+    }
+  };
+  visit(root);
+  return snapshot;
 }
 
 function planned(
@@ -185,6 +203,15 @@ describe('generated-tree planning and synchronization', () => {
     });
   });
 
+  it('leaves generated files unchanged when check mode reports drift', () => {
+    const root = fixtureRepo();
+    seedAuthoredSources(root);
+    const before = snapshotTree(root);
+
+    expect(hasDrift(diff(root))).toBe(true);
+    expect(snapshotTree(root)).toEqual(before);
+  });
+
   it('reports a generated-tree root junction without traversing it', () => {
     const root = fixtureRepo();
     const external = path.join(root, 'external-generated-skills');
@@ -245,11 +272,13 @@ describe('generated-tree planning and synchronization', () => {
 });
 
 describe('isAuthoredPath', () => {
-  it('matches only authored inputs in either path spelling', () => {
+  it('classifies only authored inputs as hook sources', () => {
     expect(isAuthoredPath('.agents/skills/ship/SKILL.md')).toBe(true);
     expect(isAuthoredPath('.claude/agents/docs-updater.md')).toBe(true);
     expect(isAuthoredPath('.agents\\skills\\ship\\SKILL.md')).toBe(true);
     expect(isAuthoredPath('.claude/skills/ship/SKILL.md')).toBe(false);
     expect(isAuthoredPath('.codex/agents/docs-updater.toml')).toBe(false);
+    expect(isAuthoredPath('.claude/agents/docs-updater.txt')).toBe(false);
+    expect(isAuthoredPath('.claude/agents/nested/docs-updater.md')).toBe(false);
   });
 });
