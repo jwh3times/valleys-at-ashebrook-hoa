@@ -1099,6 +1099,48 @@ export interface BallotRow {
   proxyId: string | null;
 }
 
+export interface VotingOwnerOption {
+  id: string;
+  fullName: string;
+}
+
+export interface VotingProxyOption {
+  id: string;
+  holderName: string;
+  grantingAddress: string;
+}
+
+export interface VotingLot {
+  propertyId: string;
+  address: string;
+  weight: number;
+  hasCast: boolean;
+  ownerOptions: VotingOwnerOption[];
+  proxyOptions: VotingProxyOption[];
+}
+
+export interface OpenElectionVotingItem {
+  kind: 'election';
+  id: string;
+  title: string;
+  date: string;
+  seats: number;
+  candidates: { id: string; fullName: string; statementMd: string | null }[];
+  lots: VotingLot[];
+}
+
+export interface OpenMotionVotingItem {
+  kind: 'motion';
+  id: string;
+  text: string;
+  meetingId: string;
+  meetingTitle: string;
+  meetingDate: string;
+  lots: VotingLot[];
+}
+
+export type OpenVotingItem = OpenElectionVotingItem | OpenMotionVotingItem;
+
 export interface ElectionInput {
   title?: string;
   seats?: number;
