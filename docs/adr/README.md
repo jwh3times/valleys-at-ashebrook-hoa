@@ -16,7 +16,7 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0008: AI Assistant Privacy Gate](./0008-ai-assistant-privacy-gate.md)
 - [ADR 0009: RAG Index Corpus Separate from the Download Library](./0009-rag-index-separate-from-download-library.md)
 - [ADR 0010: OCR of Scanned Documents Runs as an Operator Offline Job](./0010-ocr-scanned-documents-operator-job.md)
-- [ADR 0011: Claude-Sourced Agent Assets, Generated Mirror for Codex](./0011-claude-sourced-agent-assets-mirrored-for-codex.md)
+- [ADR 0011: Claude-Sourced Agent Assets, Generated Mirror for Codex](./0011-claude-sourced-agent-assets-mirrored-for-codex.md) — superseded by ADR 0021
 - [ADR 0012: Board Record Modeled as Structured Rows, Separate from Auth Users](./0012-board-record-as-structured-rows.md)
 - [ADR 0013: The Admin API Is Gated in Middleware, Not Only Per Route](./0013-admin-api-gated-in-middleware.md)
 - [ADR 0014: Meeting Approval Is a Status Gate, Not a Visibility Tier](./0014-meeting-record-status-gate.md)
@@ -26,3 +26,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0018: Proxies Are Their Own Table, Not a Boolean on Every Vote](./0018-proxies-record-via-proxy-consolidation.md)
 - [ADR 0019: Homeowner Writes Are Official-Mode Gated](./0019-homeowner-writes-official-mode-gate.md)
 - [ADR 0020: Digital Ballots Are Retained Without an Explicit Turnout-to-Choice Link](./0020-digital-ballot-box.md)
+- [ADR 0021: Authored Agent Skills Generate Tool-Specific Trees](./0021-authored-agent-skills-generate-tool-specific-trees.md)

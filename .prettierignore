@@ -3,3 +3,5 @@ node_modules/
 .astro/
 coverage/
 package-lock.json
+.claude/skills/
+.codex/agents/
