@@ -1099,6 +1099,70 @@ export interface BallotRow {
   proxyId: string | null;
 }
 
+export interface VotingOwnerOption {
+  id: string;
+  fullName: string;
+}
+
+export interface VotingProxyOption {
+  id: string;
+  holderName: string;
+  grantingAddress: string;
+}
+
+export interface VotingLot {
+  propertyId: string;
+  address: string;
+  weight: number;
+  hasCast: boolean;
+  ownerOptions: VotingOwnerOption[];
+  proxyOptions: VotingProxyOption[];
+}
+
+export interface OpenElectionVotingItem {
+  kind: 'election';
+  id: string;
+  title: string;
+  date: string;
+  seats: number;
+  candidates: { id: string; fullName: string; statementMd: string | null }[];
+  lots: VotingLot[];
+}
+
+export interface OpenMotionVotingItem {
+  kind: 'motion';
+  id: string;
+  text: string;
+  meetingId: string;
+  meetingTitle: string;
+  meetingDate: string;
+  lots: VotingLot[];
+}
+
+export type OpenVotingItem = OpenElectionVotingItem | OpenMotionVotingItem;
+
+export interface CastBallotInput {
+  action: 'castBallot';
+  electionId: string;
+  propertyId: string;
+  candidateIds: string[];
+  castByOwnerId: string | null;
+  proxyId: string | null;
+}
+
+export interface CastMotionVoteInput {
+  action: 'castMotionVote';
+  motionId: string;
+  propertyId: string;
+  choice: 'yes' | 'no' | 'abstain';
+  castByOwnerId: string | null;
+  proxyId: string | null;
+}
+
+export type VoteAction = CastBallotInput | CastMotionVoteInput;
+export type VoteWriteResult =
+  { ok: true } | { ok: false; status: 400 | 403 | 404 | 409; message: string };
+
 export interface ElectionInput {
   title?: string;
   seats?: number;
