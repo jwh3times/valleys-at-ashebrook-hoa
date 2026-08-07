@@ -290,6 +290,37 @@ navigation.
 If the HOA board formally adopts the site, a board member can enable official mode from `/admin` ->
 **Site Settings**. The change is stored in D1 and takes effect on the next SSR page request.
 
+## Live Voting Rollout
+
+Live Voting is a separate, default-off operational gate. Homeowner `/vote` and `/api/vote`
+surfaces are available only while both **Official Mode** and **Live Voting** are enabled in
+`/admin` -> **Site Settings**. Do not enable Live Voting in production until the board has formally
+adopted the site for official business and recorded its authorization of the live-voting process.
+
+Turning Live Voting off is the emergency pause. It blocks new opens and casts but does not close an
+open election or motion, replace its frozen electorate, or delete received ballots, motion votes,
+or lifecycle history. Turning it back on resumes every item that was already open, so review all
+active elections and motions before re-enabling it.
+
+After every production deploy, confirm in **Site Settings** that **Live Voting** remains off
+(`liveVotingEnabled: false`). The safe code default is false, but the D1 setting persists across
+deploys and is not reset by a new build. Before the first production enablement:
+
+- [ ] Confirm the board's formal adoption and live-voting authorization are recorded.
+- [ ] Confirm the deployed revision passed CI and Live Voting is still off after deployment.
+- [ ] In a non-production environment, smoke-test an eligible homeowner and held-proxy cast for a
+      conducted election and a member motion, including selection-free receipts.
+- [ ] Verify a second or stale cast is rejected, open elections expose turnout but no live tally,
+      and closing derives the expected weighted result.
+- [ ] Pause an open test item by turning Live Voting off, confirm voting surfaces are hidden, then
+      turn it back on and confirm the lifecycle, frozen eligibility, and received casts resume
+      unchanged.
+- [ ] Review every production item that would resume, then have the designated board operator
+      enable both required settings and verify `/vote` with a controlled eligible account.
+
+This rollout uses the existing D1 site setting and standard deployment steps; it adds no Cloudflare
+resource, binding, or secret.
+
 ## Public Architecture
 
 See [docs/architecture.md](./docs/architecture.md) for a public architecture overview and
