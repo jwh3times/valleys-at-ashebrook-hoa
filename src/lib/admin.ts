@@ -499,6 +499,26 @@ export async function deleteMotion(id: string): Promise<void> {
     throw new Error((await res.text()) || `Delete failed: ${res.status}`);
 }
 
+export async function openMotionVoting(id: string): Promise<void> {
+  const res = await fetch('/api/admin/motions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'openVoting', id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Open voting failed: ${res.status}`);
+}
+
+export async function closeMotionVoting(id: string): Promise<void> {
+  const res = await fetch('/api/admin/motions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'closeVoting', id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Close voting failed: ${res.status}`);
+}
+
 export async function setVotes(
   motionId: string,
   entries: { personId: string; choice: VoteChoice }[],
@@ -630,15 +650,27 @@ export async function saveElection(
   data: ElectionInput,
   id?: string,
 ): Promise<void> {
+  const { source, ...patchData } = data;
+  void source;
   const res = await fetch('/api/admin/elections', {
     method: id ? 'PATCH' : 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
+    body: JSON.stringify(id ? { id, ...patchData } : data),
   });
   if (!res.ok)
     throw new Error(
       (await res.text()) || `Save election failed: ${res.status}`,
     );
+}
+
+export async function openElection(id: string): Promise<void> {
+  const res = await fetch('/api/admin/elections', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'open', id }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Open failed: ${res.status}`);
 }
 
 export async function deleteElection(id: string): Promise<void> {

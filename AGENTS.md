@@ -7,9 +7,14 @@ This is the public and homeowner website for the Valleys at Ashebrook neighborho
 to official-HOA presentation: branding, footer disclaimer, and HOA-business surfaces like `/dues`
 and homeowner proxy grants at `/proxies` are driven by the `officialMode` site setting through
 `src/lib/site.ts`. A separate `liveVotingEnabled` site setting supplies the default-off gate for
-conducted elections and member-motion voting. Slice 2 adds the guarded `POST /api/vote`, a
-caller-specific server read model, and atomic casting, but no `/vote` page, navigation entry,
-homeowner voting UI, or new admin UI has shipped.
+conducted elections and member-motion voting. The guarded `POST /api/vote`, caller-specific
+server read model, atomic casting, and homeowner `/vote` experience are all feature-gated on both
+settings. The page offers one-time homeowner submission of ballots for conducted elections and
+votes on member motions only to verified callers, with per-lot receipts that never reveal selections.
+Conducted-election choices are application-wide undisplayable and irreplaceable; member-motion
+votes remain attributable and board-correctable after close. The admin Site, Elections, and
+Meetings panels expose the default-off enable/pause control, conducted-election Active/History
+lifecycle and turnout monitoring, and member-motion open/close/reopen controls.
 
 The app is an Astro SSR app (`output: 'server'`) running on **Cloudflare Workers** via the
 `@astrojs/cloudflare` adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2**
@@ -268,8 +273,13 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned, candidates
   can be added or deleted only while the election is a draft, and conducted candidates become
   immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
-  Slice 2's homeowner cast path is the separate `POST /api/vote`; no `/vote` page, homeowner voting
-  UI, or new admin UI exists yet.
+  The homeowner cast path is `POST /api/vote`, reached only through the feature-gated `/vote` page
+  for verified callers. The page renders selection-free receipts that contain only the item title
+  and lot address. Its labeled review modal summarizes the pending selection and provenance, moves
+  and traps focus, supports Escape/cancel with focus restoration, and disables every background
+  voting control. The admin Elections panel separates draft/open Active records from
+  closed/certified/void History, exposes conducted Open/Close and count/weight turnout monitoring,
+  and never exposes a live conducted tally or editable conducted ballot/choice rows.
 - Board-only complete proxies record (including paper proxies entered by the board and online
   grants created by homeowners — one owner authorising one named holder to act for one lot at
   exactly one meeting or election; see
@@ -367,16 +377,19 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`), meeting-record helpers
   (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
   `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
-  `setVotes`, `setMemberVotes`), resolutions-book helpers (`fetchResolutions`,
+  `openMotionVoting`, `closeMotionVoting`, `setVotes`, `setMemberVotes`), resolutions-book helpers (`fetchResolutions`,
   `saveResolution`, `deleteResolution`, `adoptResolution`, `supersedeResolution`,
   `repealResolution`), and elections-record helpers (`fetchElections`, `saveElection`,
-  `deleteElection`, `closeElection`, `voidElection`, `certifyElection`, `uncertifyElection`,
+  `deleteElection`, `openElection`, `closeElection`, `voidElection`, `certifyElection`, `uncertifyElection`,
   `setTallies`, `setBallots`, `saveCandidate`, `deleteCandidate`) — the board-only `GET` for
   resolutions, elections, and proxies already returns every record's full detail, so unlike
   meetings/motions none of them has a separate single-record fetch — and proxies-record helpers
   (`fetchProxies`, `saveProxy`, `deleteProxy`). `setMemberAttendance`, `setMemberVotes`, and
   `setBallots` each take a `proxyId?: string | null` per entry, replacing the old `viaProxy?:
 boolean`.
+- `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for one-time
+  homeowner election-ballot and member-motion submissions; failed responses surface their server
+  message and never create a receipt.
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both

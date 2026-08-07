@@ -10,12 +10,15 @@ import {
   setMemberAttendance,
   saveMotion,
   deleteMotion,
+  openMotionVoting,
+  closeMotionVoting,
   setVotes,
   setMemberVotes,
   fetchBoardPeople,
   fetchProperties,
   fetchProxies,
 } from '../../lib/admin';
+import { fetchSiteSettings } from '../../lib/content';
 import {
   MEETING_BODIES,
   MEETING_KINDS,
@@ -144,6 +147,15 @@ export default function MeetingsManager() {
     setMsg,
     run,
   } = useAdminResource<MeetingSummary[]>(fetchMeetings, []);
+  const [votingAvailable, setVotingAvailable] = useState(false);
+
+  useEffect(() => {
+    fetchSiteSettings()
+      .then((site) =>
+        setVotingAvailable(site.officialMode && site.liveVotingEnabled),
+      )
+      .catch(() => setVotingAvailable(false));
+  }, []);
 
   // The board roster backs attendance, mover/second pickers, and the roll
   // call — loaded once alongside the meetings, independent of useAdminResource
@@ -571,6 +583,35 @@ export default function MeetingsManager() {
       await reloadDetail(meetingId);
     }, 'Motion removed.');
   }
+
+  async function handleOpenMotionVoting(
+    meetingId: string,
+    motion: MotionDetail,
+  ) {
+    await run(
+      async () => {
+        await openMotionVoting(motion.id);
+        if (editingMotionId === motion.id) resetMotion();
+        await reloadDetail(meetingId);
+      },
+      motion.votingState === 'closed' ? 'Voting reopened.' : 'Voting opened.',
+    );
+  }
+
+  async function handleCloseMotionVoting(
+    meetingId: string,
+    motion: MotionDetail,
+  ) {
+    await run(async () => {
+      await closeMotionVoting(motion.id);
+      if (editingMotionId === motion.id) resetMotion();
+      await reloadDetail(meetingId);
+    }, 'Voting closed.');
+  }
+
+  const editingOpenMotion =
+    detail?.motions.find((motion) => motion.id === editingMotionId)
+      ?.votingState === 'open';
 
   return (
     <div className="admin-panel">
@@ -1214,7 +1255,8 @@ export default function MeetingsManager() {
                             ))}
                           </div>
                         )
-                      : activeProperties.length > 0 && (
+                      : activeProperties.length > 0 &&
+                        !editingOpenMotion && (
                           <div style={{ marginBottom: '16px' }}>
                             <div className="panel-editor__title">Votes</div>
                             {activeProperties.map((p) => {
@@ -1365,7 +1407,26 @@ export default function MeetingsManager() {
                       detail!.motions.map((mo) => (
                         <div key={mo.id} className="list-row">
                           <div className="admin-row-main">
-                            <div className="admin-row-title">{mo.text}</div>
+                            <div className="admin-row-title">
+                              {mo.text}
+                              {m.body === 'member' &&
+                                mo.votingState !== 'none' && (
+                                  <span className="pinned-badge">
+                                    {' '}
+                                    {mo.votingState === 'open'
+                                      ? 'Voting open'
+                                      : 'Voting closed'}
+                                  </span>
+                                )}
+                              {m.body === 'member' &&
+                                mo.votingState === 'open' &&
+                                !votingAvailable && (
+                                  <span className="pinned-badge">
+                                    {' '}
+                                    Paused globally
+                                  </span>
+                                )}
+                            </div>
                             <div className="admin-row-sub">
                               {m.body === 'board' ? (
                                 <>
@@ -1383,14 +1444,61 @@ export default function MeetingsManager() {
                                   no · {mo.memberTally.abstain} abstain
                                   {!mo.memberTally.recorded &&
                                     ' (no votes recorded)'}
+                                  {mo.eligibilityFrozen && (
+                                    <>
+                                      {' '}
+                                      · {mo.eligibleWeight} eligible weight{' '}
+                                      (frozen)
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>
                           </div>
                           <div className="row-actions">
+                            {m.body === 'member' &&
+                              mo.votingState === 'none' && (
+                                <button
+                                  className="row-link"
+                                  aria-label={`Open voting for ${mo.text}`}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    handleOpenMotionVoting(m.id, mo)
+                                  }
+                                >
+                                  Open voting
+                                </button>
+                              )}
+                            {m.body === 'member' &&
+                              mo.votingState === 'open' && (
+                                <button
+                                  className="row-link"
+                                  aria-label={`Close voting for ${mo.text}`}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    handleCloseMotionVoting(m.id, mo)
+                                  }
+                                >
+                                  Close voting
+                                </button>
+                              )}
+                            {m.body === 'member' &&
+                              mo.votingState === 'closed' && (
+                                <button
+                                  className="row-link"
+                                  aria-label={`Reopen voting for ${mo.text}`}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    handleOpenMotionVoting(m.id, mo)
+                                  }
+                                >
+                                  Reopen voting
+                                </button>
+                              )}
                             <button
                               className="row-link"
                               aria-label={`Edit motion ${mo.text}`}
+                              disabled={busy}
                               onClick={() => startEditMotion(mo)}
                             >
                               Edit

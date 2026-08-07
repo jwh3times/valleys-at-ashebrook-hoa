@@ -156,36 +156,34 @@ artifact on its own._
 
 ### 9. Live Homeowner Voting and Conducted Elections
 
-**Status:** Slice 1 foundation complete; voting API/read-model and homeowner/admin UI slices pending
-**Enablement gate:** Official adoption and a board decision; implementation may proceed behind the
-default-off feature flag
+**Status:** Implemented in Phase 1; remains disabled by default
+**Enablement gate:** Official adoption, a board decision, and an operator smoke test; enabling the
+deployed setting is a separate board operation
 **Likely size:** Large
 
 The site records elections conducted on paper, aggregate tallies, per-lot turnout, certification,
-board terms, paper proxies, and official-mode homeowner proxy grants. Slice 1 now adds the
-default-off live-voting setting, retained choice and eligibility-snapshot schema, and board-only
-election/member-motion lifecycle transitions. The site does not yet conduct votes through
-`/vote`; the voting API/read model and homeowner/admin experience remain later slices.
+board terms, paper proxies, and official-mode homeowner proxy grants. Phase 1 adds the default-off
+live-voting setting, retained choice and eligibility-snapshot schema, board-only election and
+member-motion lifecycle controls, strict-origin atomic casting, the caller-specific read model, the
+verified-homeowner `/vote` experience, and admin Active/History monitoring.
 
-The approved design direction provides application-level identifier separation: a turnout row
+The implementation provides application-level identifier separation: a turnout row
 records that a lot cast a ballot, while choice rows carry only election, candidate, and weight —
 never a direct lot, ballot, owner, proxy, or timestamp link. This is not mathematical anonymity:
 rare weights, SQLite insertion order, and D1 Time Travel retain inference risk. No live tally is
-exposed; aggregate results are derived when the board closes voting. The later casting API remains
-planned to be official-mode-gated, tier-filtered, and scoped to a verified lot or a proxy held by
-the caller.
+exposed for a conducted election; aggregate results are derived when the board closes voting. The
+casting route is gated by official mode and the separate live-voting setting, tier-filtered, exact-
+Origin protected, and scoped to a verified lot or an occasion-valid proxy held by the caller.
+
+The board prepares and opens conducted elections or member motions, monitors frozen-denominator
+turnout, pauses all open voting by disabling either feature flag, and closes the occasion without
+losing its history. Closed conducted elections appear in the admin History view and cannot reopen;
+member motions may reopen while their meeting remains draft and retain the original snapshot and
+votes. Homeowners explicitly review their selection and provenance, receive a finality warning,
+and after a successful cast see only a selection-free receipt.
 
 The reviewed implementation direction is recorded in
 [Live Homeowner Voting and Conducted Elections](./docs/specs/2026-08-05-live-homeowner-voting-design.md).
-
-Remaining delivery:
-
-- Build and security-review the strict-origin voting API, eligible-caller read model, and atomic
-  casting paths.
-- Extend the structural member-route gate to cover nested routes and `/api/vote` when that route
-  is introduced.
-- Add the homeowner `/vote` and admin lifecycle/history interfaces without enabling the default-off
-  production setting.
 
 _Product angle: per-election pricing on top of a subscription._
 

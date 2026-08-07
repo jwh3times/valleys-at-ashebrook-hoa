@@ -59,6 +59,23 @@ export default function SiteManager() {
             adopts this site.
           </p>
         </div>
+        <div className="field" style={{ margin: '18px 0 0' }}>
+          <label style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={site.liveVotingEnabled}
+              onChange={(event) =>
+                setSite({ ...site, liveVotingEnabled: event.target.checked })
+              }
+            />
+            <span>Live voting</span>
+          </label>
+          <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+            Enables homeowner election ballots and member-motion votes. Turning
+            this off pauses every open vote without closing it or deleting
+            received votes.
+          </p>
+        </div>
       </div>
 
       <div className="panel-card" style={{ maxWidth: '620px' }}>
