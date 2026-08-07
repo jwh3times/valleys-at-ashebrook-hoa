@@ -89,7 +89,7 @@ type (`415`), authenticated session (`401`), then `homeowner`-or-higher role (`4
 re-applies visibility, and mutation SQL re-checks own-lot or held-proxy authority, snapshot
 eligibility and frozen weight, open state, feature flags, and duplicate-cast absence. A racing close,
 pause, authority change, or duplicate therefore yields `409` without a partial write. Election
-turnout plus every anonymous retained choice is one checked D1 batch.
+turnout plus every identity-unlinked retained choice is one checked D1 batch.
 
 `fetchOpenVotingFor` is a server-only, caller-specific read model. It returns visible open
 conducted elections and member motions only when the caller controls an eligible snapshotted lot
