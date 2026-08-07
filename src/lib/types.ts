@@ -1160,89 +1160,8 @@ export interface CastMotionVoteInput {
 }
 
 export type VoteAction = CastBallotInput | CastMotionVoteInput;
-export type VoteActionResult = InputResult<VoteAction>;
 export type VoteWriteResult =
   { ok: true } | { ok: false; status: 400 | 403 | 404 | 409; message: string };
-
-function requiredVoteId(
-  raw: Record<string, unknown>,
-  key: string,
-): InputResult<string> {
-  const value = raw[key];
-  if (typeof value !== 'string' || value.trim() === '')
-    return fail(`${key} is required`);
-  return { ok: true, value: value.trim() };
-}
-
-function voteProvenanceId(
-  raw: Record<string, unknown>,
-  key: 'castByOwnerId' | 'proxyId',
-): InputResult<string | null> {
-  const value = raw[key];
-  if (value === undefined || value === null) return { ok: true, value: null };
-  if (typeof value !== 'string' || value.trim() === '')
-    return fail(`${key} must be a non-empty id or null`);
-  return { ok: true, value: value.trim() };
-}
-
-export function normalizeVoteAction(raw: unknown): VoteActionResult {
-  const record = asRecord(raw);
-  const action = record.action;
-  if (action !== 'castBallot' && action !== 'castMotionVote')
-    return fail('Unknown action');
-
-  const propertyId = requiredVoteId(record, 'propertyId');
-  if (!propertyId.ok) return propertyId;
-  const castByOwnerId = voteProvenanceId(record, 'castByOwnerId');
-  if (!castByOwnerId.ok) return castByOwnerId;
-  const proxyId = voteProvenanceId(record, 'proxyId');
-  if (!proxyId.ok) return proxyId;
-  if ((castByOwnerId.value === null) === (proxyId.value === null))
-    return fail('Exactly one of castByOwnerId or proxyId is required');
-
-  if (action === 'castBallot') {
-    const electionId = requiredVoteId(record, 'electionId');
-    if (!electionId.ok) return electionId;
-    if (!Array.isArray(record.candidateIds) || record.candidateIds.length === 0)
-      return fail('candidateIds must contain at least one candidate');
-    const candidateIds: string[] = [];
-    for (const rawId of record.candidateIds) {
-      if (typeof rawId !== 'string' || rawId.trim() === '')
-        return fail('candidateIds must contain non-empty ids');
-      candidateIds.push(rawId.trim());
-    }
-    if (new Set(candidateIds).size !== candidateIds.length)
-      return fail('candidateIds must not contain duplicates');
-    return {
-      ok: true,
-      value: {
-        action,
-        electionId: electionId.value,
-        propertyId: propertyId.value,
-        candidateIds,
-        castByOwnerId: castByOwnerId.value,
-        proxyId: proxyId.value,
-      },
-    };
-  }
-
-  const motionId = requiredVoteId(record, 'motionId');
-  if (!motionId.ok) return motionId;
-  const choice = record.choice;
-  if (choice !== 'yes' && choice !== 'no' && choice !== 'abstain')
-    return fail('choice must be yes, no, or abstain');
-  return {
-    ok: true,
-    value: {
-      action,
-      motionId: motionId.value,
-      propertyId: propertyId.value,
-      choice,
-      castByOwnerId: castByOwnerId.value,
-      proxyId: proxyId.value,
-    },
-  };
-}
 
 export interface ElectionInput {
   title?: string;

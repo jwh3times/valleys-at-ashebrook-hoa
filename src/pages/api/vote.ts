@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
-import { normalizeVoteAction } from '../../lib/types';
 import { requireVotingApi } from '../../server/authz/voting-guards';
 import {
   castElectionBallot,
   castMotionVote,
+  normalizeVoteAction,
 } from '../../server/content/voting';
 import { readJson } from '../../server/http';
 

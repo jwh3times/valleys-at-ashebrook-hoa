@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeVoteAction } from '../../src/lib/types';
+import { normalizeVoteAction } from '../../src/server/content/voting';
 
 describe('normalizeVoteAction', () => {
   it('normalizes an owner-cast election ballot', () => {
