@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Added
+
+- **Added the feature-gated homeowner voting experience.** When official mode and live voting are
+  both enabled, verified homeowners can use `/vote` to review and cast a final ballot for their own
+  lot or a held proxy. The page uses an explicit finality confirmation, shows candidate statements
+  through the safe Markdown renderer, and replaces each successful form with a selection-free
+  receipt. Header account links expose Vote only to callers with a verified property while both
+  settings are on.
+
 ## [0.3.57] - 2026-08-06
 
 ### Security

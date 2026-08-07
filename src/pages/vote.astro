@@ -1,0 +1,46 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import VoteManager from '../components/member/VoteManager.tsx';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import { fetchOpenVotingFor } from '../server/content/voting-reads';
+
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+if (!site.officialMode || !site.liveVotingEnabled) {
+  return Astro.rewrite('/404');
+}
+
+const ctx = Astro.locals.authContext ?? null;
+const verified =
+  ctx !== null && ctx.role !== 'visitor' && ctx.propertyIds.length > 0;
+const items = verified ? await fetchOpenVotingFor(env, ctx) : [];
+---
+
+<BaseLayout
+  title="Vote"
+  description="Cast your final ballot for open association voting."
+>
+  <div class="page-section vote-page">
+    <p class="eyebrow">Member voting</p>
+    <h1 class="page-title">Open ballots</h1>
+    {
+      !ctx ? (
+        <p class="page-lead">
+          Sign in to review and cast ballots for your verified property.{' '}
+          <a href="/login">Sign in</a> or <a href="/register">register</a>.
+        </p>
+      ) : !verified ? (
+        <p class="page-lead">
+          Verify your property before you can vote.{' '}
+          <a href="/verify-property">Verify your property</a>.
+        </p>
+      ) : items.length === 0 ? (
+        <p class="page-lead">
+          There are no open ballots for your verified properties.
+        </p>
+      ) : (
+        <VoteManager client:load items={items} />
+      )
+    }
+  </div>
+</BaseLayout>

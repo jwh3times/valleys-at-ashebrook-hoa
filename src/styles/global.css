@@ -2023,3 +2023,158 @@ body.body--bare {
   font-size: 13.5px;
   color: var(--text-muted);
 }
+
+/* Homeowner live voting: a quiet, paper-ballot treatment that keeps the
+   irreversible action visually singular. */
+.vote-page {
+  max-width: 860px;
+}
+.vote-manager {
+  display: grid;
+  gap: 32px;
+}
+.vote-item {
+  border-top: 3px solid var(--navy, #163a5f);
+  padding-top: 20px;
+}
+.vote-item__heading h2 {
+  margin: 0 0 8px;
+}
+.vote-item__motion {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+.vote-card {
+  background: #fff;
+  border: 1px solid #cad5df;
+  box-shadow: 0 8px 20px rgb(22 58 95 / 8%);
+  margin-top: 16px;
+  padding: 22px;
+}
+.vote-card__lot {
+  color: var(--navy, #163a5f);
+  margin: 0 0 8px;
+}
+.vote-card__instruction,
+.vote-card__motion-text {
+  margin: 0 0 18px;
+}
+.vote-candidates,
+.vote-choices,
+.vote-provenance {
+  border: 0;
+  margin: 18px 0;
+  padding: 0;
+}
+.vote-candidates {
+  display: grid;
+  gap: 10px;
+}
+.vote-candidate {
+  align-items: start;
+  border: 1px solid #d6e0e8;
+  display: flex;
+  gap: 11px;
+  padding: 14px;
+}
+.vote-candidate:has(input:checked) {
+  background: #f1f6fa;
+  border-color: var(--navy, #163a5f);
+}
+.vote-candidate input {
+  margin-top: 4px;
+}
+.vote-candidate__statement {
+  color: var(--text-muted);
+  display: block;
+  font-size: 14px;
+  margin-top: 5px;
+}
+.vote-choices label,
+.vote-provenance label {
+  display: block;
+  margin: 9px 0;
+}
+.vote-choices input,
+.vote-provenance input {
+  margin-right: 8px;
+}
+.vote-provenance {
+  border-top: 1px solid #d6e0e8;
+  padding-top: 14px;
+}
+.vote-provenance legend {
+  color: var(--navy, #163a5f);
+  font-size: 14px;
+  font-weight: 700;
+}
+.vote-card__review {
+  margin-top: 6px;
+}
+.vote-dialog-backdrop {
+  align-items: center;
+  background: rgb(14 29 45 / 58%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 30;
+}
+.vote-dialog {
+  background: #fff;
+  border-top: 5px solid var(--navy, #163a5f);
+  box-shadow: 0 20px 60px rgb(0 0 0 / 30%);
+  max-width: 520px;
+  padding: 28px;
+  width: 100%;
+}
+.vote-dialog h3 {
+  margin-top: 0;
+}
+.vote-receipt {
+  align-items: flex-start;
+  background: #eef8f1;
+  border: 1px solid #9bc9a9;
+  color: #164e2b;
+  display: flex;
+  gap: 13px;
+  margin-top: 16px;
+  padding: 20px;
+}
+.vote-receipt > span {
+  align-items: center;
+  background: #207447;
+  border-radius: 50%;
+  color: #fff;
+  display: inline-flex;
+  font-weight: 800;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+.vote-receipt h3,
+.vote-receipt p {
+  margin: 0;
+}
+.vote-receipt p {
+  margin-top: 4px;
+}
+@media (max-width: 560px) {
+  .vote-card,
+  .vote-dialog {
+    padding: 18px;
+  }
+  .vote-dialog-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vote-card,
+  .vote-dialog,
+  .vote-receipt {
+    transition: none;
+  }
+}
