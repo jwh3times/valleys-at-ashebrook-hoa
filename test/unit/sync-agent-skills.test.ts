@@ -1,17 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
-  REPO_ROOT,
-  parseFrontmatter,
-  yamlScalar,
-  banner,
-  renderSkillMirror,
-  renderAgentMirror,
-  isSourcePath,
-  plan,
+  GENERATED_SKILL_COMMENT,
   diff,
-  hasDrift,
-  GENERATED_MARKER,
+  isAuthoredPath,
+  normalizeLf,
+  parseFrontmatter,
+  plan,
+  renderCodexAgent,
+  renderSkillMirror,
+  sync,
 } from '../../scripts/sync-agent-skills.ts';
 
 const agentSource = `---
@@ -36,137 +36,162 @@ description: Ship the branch.
 Do the thing.
 `;
 
+const fixtureRoots: string[] = [];
+
+afterEach(() => {
+  for (const root of fixtureRoots.splice(0)) {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function fixtureRepo(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-agent-skills-'));
+  fixtureRoots.push(root);
+  return root;
+}
+
+function write(root: string, rel: string, contents: string | Buffer): void {
+  const target = path.join(root, ...rel.split('/'));
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, contents);
+}
+
+function seedAuthoredSources(root: string): void {
+  write(root, '.agents/skills/demo/SKILL.md', skillSource);
+  write(root, '.claude/agents/docs-updater.md', agentSource);
+}
+
+function planned(
+  plans: ReturnType<typeof plan>,
+  target: string,
+): Buffer | undefined {
+  const root = target.startsWith('.claude/skills/')
+    ? '.claude/skills'
+    : target.startsWith('.codex/agents/')
+      ? '.codex/agents'
+      : '';
+  const rel = target.slice(root.length + 1);
+  return plans.find((candidate) => candidate.root === root)?.files.get(rel);
+}
+
 describe('parseFrontmatter', () => {
   it('reads flat key/value pairs and leaves the body untouched', () => {
     const { data, body } = parseFrontmatter(skillSource);
     expect(data).toEqual({ name: 'ship', description: 'Ship the branch.' });
     expect(body).toBe('# Ship\n\nDo the thing.');
   });
-
-  it('folds a wrapped value back into its key', () => {
-    const { data } = parseFrontmatter(
-      '---\ndescription: one\n  two\nname: x\n---\n\nbody\n',
-    );
-    expect(data.description).toBe('one two');
-    expect(data.name).toBe('x');
-  });
-
-  it('treats a file without frontmatter as all body', () => {
-    expect(parseFrontmatter('just text\n')).toEqual({
-      data: {},
-      body: 'just text',
-    });
-  });
-});
-
-describe('yamlScalar', () => {
-  it('leaves ordinary prose bare', () => {
-    expect(yamlScalar('Ship the branch — open a PR.')).toBe(
-      'Ship the branch — open a PR.',
-    );
-  });
-
-  it('quotes a value that would otherwise parse as a mapping', () => {
-    expect(yamlScalar('Use when: the branch is ready')).toBe(
-      '"Use when: the branch is ready"',
-    );
-  });
 });
 
 describe('renderSkillMirror', () => {
-  const out = renderSkillMirror(skillSource, '.claude/skills/ship/SKILL.md');
+  const crlfSkillSource = `---\r\nname: ship\r\ndescription: Ship the branch.\r\n---\r\n\r\n# Ship\r\n`;
 
-  it('keeps the frontmatter Codex reads', () => {
-    expect(
-      out.startsWith('---\nname: ship\ndescription: Ship the branch.\n---'),
-    ).toBe(true);
+  it('puts the generated YAML comment on line 2 and normalizes LF', () => {
+    const out = renderSkillMirror(
+      crlfSkillSource,
+      '.agents/skills/ship/SKILL.md',
+    ).toString('utf8');
+    expect(out.split('\n').slice(0, 4)).toEqual([
+      '---',
+      '# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md',
+      'name: ship',
+      'description: Ship the branch.',
+    ]);
+    expect(out).not.toContain('\r');
+    expect(parseFrontmatter(out).data.name).toBe('ship');
   });
 
-  it('stamps provenance under the frontmatter so pruning can identify it', () => {
-    expect(out).toContain(GENERATED_MARKER);
-    expect(out.indexOf(banner('.claude/skills/ship/SKILL.md'))).toBeGreaterThan(
-      out.indexOf('---\nname'),
-    );
-  });
-
-  it('preserves the body verbatim and ends with a single newline', () => {
-    expect(out).toContain('# Ship\n\nDo the thing.');
-    expect(out.endsWith('Do the thing.\n')).toBe(true);
+  it('normalizes a lone carriage return', () => {
+    expect(normalizeLf('a\rb\r\nc')).toBe('a\nb\nc');
+    expect(GENERATED_SKILL_COMMENT).toBe('# GENERATED — do not edit. Source:');
   });
 });
 
-describe('renderAgentMirror', () => {
-  const out = renderAgentMirror(agentSource, '.claude/agents/docs-updater.md');
-
-  it('carries the name and description into the skill frontmatter', () => {
-    expect(out).toContain('name: docs-updater');
-    expect(out).toContain('description: Keeps the docs current.');
-  });
-
-  it('drops Claude-only frontmatter that Codex cannot honor', () => {
-    expect(out).not.toContain('tools:');
-    expect(out).not.toContain('model: sonnet');
-  });
-
-  it('explains that this is a delegated role with foreign tool names', () => {
-    expect(out).toContain('**Delegated role.**');
-    expect(out).toContain('.claude/agents/docs-updater.md');
-    expect(out).toContain('use your equivalents');
-  });
-
-  it('preserves the instruction body', () => {
+describe('renderCodexAgent', () => {
+  it('renders current Codex custom-agent TOML fields', () => {
+    const out = renderCodexAgent(
+      agentSource,
+      '.claude/agents/docs-updater.md',
+    ).toString('utf8');
+    expect(out).toContain('name = "docs-updater"');
+    expect(out).toContain('description = "Keeps the docs current."');
+    expect(out).toContain('developer_instructions = """');
     expect(out).toContain('You keep documentation current.');
+    expect(out).not.toContain('tools =');
+    expect(out).not.toContain('model =');
   });
 });
 
-describe('isSourcePath', () => {
-  it('matches the sources and the mirror it generates', () => {
-    expect(isSourcePath('.claude/agents/code-reviewer.md')).toBe(true);
-    expect(isSourcePath('.claude/skills/ship/SKILL.md')).toBe(true);
-    expect(isSourcePath('.agents/skills/ship/SKILL.md')).toBe(true);
-  });
-
-  // A hook payload carries whatever separator the machine Claude Code runs on
-  // uses, so both spellings must resolve the same way wherever the tests run.
-  it('resolves windows and posix absolute paths identically', () => {
-    expect(isSourcePath('C:\\repo\\.claude\\agents\\x.md', 'C:\\repo')).toBe(
-      true,
+describe('generated-tree planning and synchronization', () => {
+  it('plans every file in an authored skill and both generated trees', () => {
+    const root = fixtureRepo();
+    write(root, '.agents/skills/demo/SKILL.md', skillSource);
+    write(
+      root,
+      '.agents/skills/demo/scripts/run.sh',
+      Buffer.from([0, 1, 2, 255]),
     );
-    expect(isSourcePath('/repo/.claude/skills/ship/SKILL.md', '/repo')).toBe(
-      true,
+    write(root, '.claude/agents/docs-updater.md', agentSource);
+
+    const plans = plan(root);
+    expect(planned(plans, '.claude/skills/demo/SKILL.md')).toBeDefined();
+    expect(planned(plans, '.claude/skills/demo/scripts/run.sh')).toEqual(
+      Buffer.from([0, 1, 2, 255]),
     );
-    expect(isSourcePath('.claude\\agents\\x.md')).toBe(true);
+    expect(planned(plans, '.codex/agents/docs-updater.toml')).toBeDefined();
   });
 
-  it('accepts an absolute path inside this repo', () => {
-    expect(
-      isSourcePath(path.join(REPO_ROOT, '.claude', 'agents', 'x.md')),
-    ).toBe(true);
-  });
+  it('reports missing, stale, and extraneous generated files without writing', () => {
+    const root = fixtureRepo();
+    seedAuthoredSources(root);
+    write(root, '.claude/skills/demo/SKILL.md', 'stale');
+    write(root, '.claude/skills/orphan/SKILL.md', 'extra');
 
-  it('ignores everything else', () => {
-    expect(isSourcePath('src/pages/index.astro')).toBe(false);
-    expect(isSourcePath('.claude/settings.json')).toBe(false);
-    expect(isSourcePath('/somewhere/else/.claude/agents/x.md')).toBe(false);
-  });
-});
-
-describe('the checked-in mirror', () => {
-  it('covers every agent and skill exactly once', () => {
-    const names = plan().map((p) => p.name);
-    expect(names).toContain('ship');
-    expect(names).toContain('code-reviewer');
-    expect(names).toContain('docs-updater');
-    expect(new Set(names).size).toBe(names.length);
-  });
-
-  it('is in sync with .claude/ — run `npm run agents:sync` if this fails', () => {
-    expect(diff()).toEqual({
-      missing: [],
-      stale: [],
-      extra: [],
-      orphaned: [],
+    expect(diff(root)).toEqual({
+      missing: ['.codex/agents/docs-updater.toml'],
+      stale: ['.claude/skills/demo/SKILL.md'],
+      extraneous: ['.claude/skills/orphan/SKILL.md'],
     });
-    expect(hasDrift(diff())).toBe(false);
+  });
+
+  it('unlinks a generated-tree junction without deleting its target', () => {
+    const root = fixtureRepo();
+    const external = path.join(root, 'junction-target');
+    write(root, 'junction-target/keep.txt', 'keep');
+    write(root, '.agents/skills/demo/SKILL.md', skillSource);
+    fs.mkdirSync(path.join(root, '.claude', 'skills'), { recursive: true });
+    fs.symlinkSync(
+      external,
+      path.join(root, '.claude', 'skills', 'demo'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    sync(root);
+
+    expect(fs.readFileSync(path.join(external, 'keep.txt'), 'utf8')).toBe(
+      'keep',
+    );
+    expect(
+      fs
+        .lstatSync(path.join(root, '.claude', 'skills', 'demo'))
+        .isSymbolicLink(),
+    ).toBe(false);
+  });
+
+  it('becomes a no-op when synchronized twice', () => {
+    const root = fixtureRepo();
+    seedAuthoredSources(root);
+
+    sync(root);
+    expect(sync(root)).toEqual({ written: [], removed: [] });
+  });
+});
+
+describe('isAuthoredPath', () => {
+  it('matches only authored inputs in either path spelling', () => {
+    expect(isAuthoredPath('.agents/skills/ship/SKILL.md')).toBe(true);
+    expect(isAuthoredPath('.claude/agents/docs-updater.md')).toBe(true);
+    expect(isAuthoredPath('.agents\\skills\\ship\\SKILL.md')).toBe(true);
+    expect(isAuthoredPath('.claude/skills/ship/SKILL.md')).toBe(false);
+    expect(isAuthoredPath('.codex/agents/docs-updater.toml')).toBe(false);
   });
 });
