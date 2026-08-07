@@ -9,6 +9,7 @@ import type {
 } from '../../lib/types';
 
 export default function VoteManager({ items }: { items: OpenVotingItem[] }) {
+  const [activeReview, setActiveReview] = useState<string | null>(null);
   return (
     <div className="vote-manager">
       {items.map((item) => (
@@ -22,8 +23,13 @@ export default function VoteManager({ items }: { items: OpenVotingItem[] }) {
               <p className="vote-item__motion">{item.text}</p>
             )}
           </div>
-          {item.lots.map((lot) =>
-            lot.hasCast ? (
+          {item.lots.map((lot) => {
+            const reviewKey = `${item.kind}:${item.id}:${lot.propertyId}`;
+            const reviewBlocked =
+              activeReview !== null && activeReview !== reviewKey;
+            const onReviewingChange = (reviewing: boolean) =>
+              setActiveReview(reviewing ? reviewKey : null);
+            return lot.hasCast ? (
               <Receipt
                 key={lot.propertyId}
                 item={item}
@@ -31,11 +37,23 @@ export default function VoteManager({ items }: { items: OpenVotingItem[] }) {
                 recorded
               />
             ) : item.kind === 'election' ? (
-              <ElectionBallot key={lot.propertyId} item={item} lot={lot} />
+              <ElectionBallot
+                key={lot.propertyId}
+                item={item}
+                lot={lot}
+                reviewBlocked={reviewBlocked}
+                onReviewingChange={onReviewingChange}
+              />
             ) : (
-              <MotionBallot key={lot.propertyId} item={item} lot={lot} />
-            ),
-          )}
+              <MotionBallot
+                key={lot.propertyId}
+                item={item}
+                lot={lot}
+                reviewBlocked={reviewBlocked}
+                onReviewingChange={onReviewingChange}
+              />
+            );
+          })}
         </section>
       ))}
     </div>
@@ -136,9 +154,13 @@ function ProvenancePicker({
 function ElectionBallot({
   item,
   lot,
+  reviewBlocked,
+  onReviewingChange,
 }: {
   item: OpenElectionVotingItem;
   lot: VotingLot;
+  reviewBlocked: boolean;
+  onReviewingChange: (reviewing: boolean) => void;
 }) {
   const [candidateIds, setCandidateIds] = useState<string[]>([]);
   const [provenance, setProvenance] = useState(() => defaultProvenance(lot));
@@ -147,6 +169,15 @@ function ElectionBallot({
   const [busy, setBusy] = useState(false);
   const [received, setReceived] = useState(false);
   const reviewButtonRef = useRef<HTMLButtonElement>(null);
+  const backgroundBlocked = reviewing || reviewBlocked;
+  const openReview = () => {
+    setReviewing(true);
+    onReviewingChange(true);
+  };
+  const closeReview = () => {
+    setReviewing(false);
+    onReviewingChange(false);
+  };
   const toggleCandidate = (candidateId: string) => {
     setCandidateIds((selected) => {
       if (selected.includes(candidateId))
@@ -166,12 +197,13 @@ function ElectionBallot({
         candidateIds,
         ...provenance,
       });
+      closeReview();
       setReceived(true);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : 'Unable to cast your ballot',
       );
-      setReviewing(false);
+      closeReview();
     } finally {
       setBusy(false);
     }
@@ -179,7 +211,10 @@ function ElectionBallot({
   if (received) return <Receipt item={item} address={lot.address} />;
   return (
     <article className="vote-card">
-      <div inert={reviewing} aria-hidden={reviewing ? 'true' : undefined}>
+      <div
+        inert={backgroundBlocked}
+        aria-hidden={backgroundBlocked ? 'true' : undefined}
+      >
         <p className="vote-card__lot">
           Ballot for <strong>{lot.address}</strong>
         </p>
@@ -191,7 +226,10 @@ function ElectionBallot({
             {error}
           </p>
         )}
-        <fieldset className="vote-candidates" disabled={busy || reviewing}>
+        <fieldset
+          className="vote-candidates"
+          disabled={busy || backgroundBlocked}
+        >
           <legend className="sr-only">Candidates</legend>
           {item.candidates.map((candidate) => (
             <label className="vote-candidate" key={candidate.id}>
@@ -220,7 +258,7 @@ function ElectionBallot({
           lot={lot}
           value={provenance}
           onChange={setProvenance}
-          disabled={busy || reviewing}
+          disabled={busy || backgroundBlocked}
         />
         <button
           ref={reviewButtonRef}
@@ -228,11 +266,11 @@ function ElectionBallot({
           type="button"
           disabled={
             busy ||
-            reviewing ||
+            backgroundBlocked ||
             candidateIds.length === 0 ||
             (provenance.proxyId === null && provenance.castByOwnerId === null)
           }
-          onClick={() => setReviewing(true)}
+          onClick={openReview}
         >
           Review ballot
         </button>
@@ -240,7 +278,7 @@ function ElectionBallot({
       {reviewing && (
         <FinalityDialog
           title="Review ballot"
-          onCancel={() => setReviewing(false)}
+          onCancel={closeReview}
           onConfirm={submit}
           busy={busy}
           confirmLabel="Cast final ballot"
@@ -267,9 +305,13 @@ function ElectionBallot({
 function MotionBallot({
   item,
   lot,
+  reviewBlocked,
+  onReviewingChange,
 }: {
   item: OpenMotionVotingItem;
   lot: VotingLot;
+  reviewBlocked: boolean;
+  onReviewingChange: (reviewing: boolean) => void;
 }) {
   const [choice, setChoice] = useState<'yes' | 'no' | 'abstain' | null>(null);
   const [provenance, setProvenance] = useState(() => defaultProvenance(lot));
@@ -279,6 +321,15 @@ function MotionBallot({
   const [received, setReceived] = useState(false);
   const id = useId();
   const reviewButtonRef = useRef<HTMLButtonElement>(null);
+  const backgroundBlocked = reviewing || reviewBlocked;
+  const openReview = () => {
+    setReviewing(true);
+    onReviewingChange(true);
+  };
+  const closeReview = () => {
+    setReviewing(false);
+    onReviewingChange(false);
+  };
   const submit = async () => {
     if (!choice) return;
     setBusy(true);
@@ -290,12 +341,13 @@ function MotionBallot({
         choice,
         ...provenance,
       });
+      closeReview();
       setReceived(true);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : 'Unable to cast your vote',
       );
-      setReviewing(false);
+      closeReview();
     } finally {
       setBusy(false);
     }
@@ -303,7 +355,10 @@ function MotionBallot({
   if (received) return <Receipt item={item} address={lot.address} />;
   return (
     <article className="vote-card">
-      <div inert={reviewing} aria-hidden={reviewing ? 'true' : undefined}>
+      <div
+        inert={backgroundBlocked}
+        aria-hidden={backgroundBlocked ? 'true' : undefined}
+      >
         <p className="vote-card__lot">
           Vote for <strong>{lot.address}</strong>
         </p>
@@ -313,7 +368,7 @@ function MotionBallot({
             {error}
           </p>
         )}
-        <fieldset className="vote-choices" disabled={busy || reviewing}>
+        <fieldset className="vote-choices" disabled={busy || backgroundBlocked}>
           <legend>Your vote</legend>
           {(['yes', 'no', 'abstain'] as const).map((value) => (
             <label key={value}>
@@ -331,7 +386,7 @@ function MotionBallot({
           lot={lot}
           value={provenance}
           onChange={setProvenance}
-          disabled={busy || reviewing}
+          disabled={busy || backgroundBlocked}
         />
         <button
           ref={reviewButtonRef}
@@ -339,11 +394,11 @@ function MotionBallot({
           type="button"
           disabled={
             busy ||
-            reviewing ||
+            backgroundBlocked ||
             choice === null ||
             (provenance.proxyId === null && provenance.castByOwnerId === null)
           }
-          onClick={() => setReviewing(true)}
+          onClick={openReview}
         >
           Review vote
         </button>
@@ -351,7 +406,7 @@ function MotionBallot({
       {reviewing && (
         <FinalityDialog
           title="Review vote"
-          onCancel={() => setReviewing(false)}
+          onCancel={closeReview}
           onConfirm={submit}
           busy={busy}
           confirmLabel="Cast final vote"
