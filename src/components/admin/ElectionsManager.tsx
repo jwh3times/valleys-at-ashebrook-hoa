@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   fetchElections,
   saveElection,
+  openElection,
   deleteElection,
   closeElection,
   voidElection,
@@ -15,9 +16,11 @@ import {
   fetchBoardPeople,
   fetchProxies,
 } from '../../lib/admin';
+import { fetchSiteSettings } from '../../lib/content';
 import type {
   ElectionDetail,
   ElectionStatus,
+  ElectionSource,
   ElectionInput,
   CandidateInput,
   CandidateSummary,
@@ -34,6 +37,7 @@ import ProxyPicker, { proxiesForOccasion } from './ProxyPicker';
 // (awaiting certification), then the settled states.
 const STATUS_GROUPS: { status: ElectionStatus; label: string }[] = [
   { status: 'draft', label: 'Draft' },
+  { status: 'open', label: 'Open' },
   { status: 'closed', label: 'Closed' },
   { status: 'certified', label: 'Certified' },
   { status: 'void', label: 'Void' },
@@ -51,6 +55,7 @@ const emptyElection = {
   electionDate: '',
   meetingId: '',
   visibility: 'board' as Visibility,
+  source: 'recorded' as ElectionSource,
 };
 
 const emptyCandidate = { fullName: '', statementMd: '', boardPersonId: '' };
@@ -89,6 +94,16 @@ export default function ElectionsManager() {
     setMsg,
     run,
   } = useAdminResource<ElectionDetail[]>(fetchElections, []);
+  const [votingAvailable, setVotingAvailable] = useState(false);
+  const [view, setView] = useState<'active' | 'history'>('active');
+
+  useEffect(() => {
+    fetchSiteSettings()
+      .then((site) =>
+        setVotingAvailable(site.officialMode && site.liveVotingEnabled),
+      )
+      .catch(() => setVotingAvailable(false));
+  }, []);
 
   // The property roster backs the ballot picker — loaded once alongside the
   // elections, independent of useAdminResource since it isn't the panel's
@@ -209,6 +224,7 @@ export default function ElectionsManager() {
       electionDate: e.electionDate,
       meetingId: e.meetingId ?? '',
       visibility: e.visibility,
+      source: e.source,
     });
     setMsg('');
     toTop();
@@ -244,6 +260,7 @@ export default function ElectionsManager() {
           electionDate: electionForm.electionDate,
           meetingId: electionForm.meetingId || null,
           visibility: electionForm.visibility,
+          source: electionForm.source,
         };
         await saveElection(data, editingElectionId ?? undefined);
         resetElection();
@@ -251,6 +268,13 @@ export default function ElectionsManager() {
       },
       editingElectionId ? 'Election updated.' : 'Election added.',
     );
+  }
+
+  async function handleOpen(e: ElectionDetail) {
+    await run(async () => {
+      await openElection(e.id);
+      await reload();
+    }, 'Election opened.');
   }
 
   async function handleClose(e: ElectionDetail) {
@@ -417,11 +441,10 @@ export default function ElectionsManager() {
         <h1>Elections</h1>
       </div>
       <p className="admin-panel__intro">
-        Board elections recorded after the fact. An election starts as a draft,
-        is closed once voting ends, and is certified once winners and their
-        terms are entered — certifying is what seats the winners on the board.
-        Each step is a deliberate action, not an edit, so the record stays
-        legible.
+        Record paper elections or conduct homeowner voting through the site. An
+        election stays active while it is a draft or open; closed, certified,
+        and void elections remain in History as a durable association record.
+        Certifying seats the winners on the board.
       </p>
 
       {msg && (
@@ -521,6 +544,28 @@ export default function ElectionsManager() {
             ))}
           </select>
         </div>
+        {!editingElectionId && (
+          <div className="field" style={{ marginBottom: '16px' }}>
+            <label htmlFor="election-source">Election type</label>
+            <select
+              id="election-source"
+              value={electionForm.source}
+              onChange={(event) =>
+                setElectionForm({
+                  ...electionForm,
+                  source: event.target.value as ElectionSource,
+                })
+              }
+            >
+              <option value="recorded">Recorded</option>
+              <option value="conducted">Conducted</option>
+            </select>
+            <p className="muted" style={{ marginTop: '6px' }}>
+              Recorded elections preserve paper results. Conducted elections
+              accept homeowner ballots through this site once opened.
+            </p>
+          </div>
+        )}
         <div className="btn-row">
           <button className="btn btn--small" type="submit" disabled={busy}>
             {busy
@@ -541,13 +586,48 @@ export default function ElectionsManager() {
         </div>
       </form>
 
+      <div
+        className="btn-row"
+        aria-label="Election view"
+        style={{ marginBottom: '18px' }}
+      >
+        <button
+          type="button"
+          className={
+            view === 'active' ? 'btn btn--small' : 'btn btn--outline btn--small'
+          }
+          aria-pressed={view === 'active'}
+          onClick={() => setView('active')}
+        >
+          Active
+        </button>
+        <button
+          type="button"
+          className={
+            view === 'history'
+              ? 'btn btn--small'
+              : 'btn btn--outline btn--small'
+          }
+          aria-pressed={view === 'history'}
+          onClick={() => setView('history')}
+        >
+          History
+        </button>
+      </div>
+
       <div className="panel-list">
         {loading ? (
           <p className="loading panel-pad">Loading…</p>
         ) : elections.length === 0 ? (
           <p className="muted panel-pad">No elections yet.</p>
         ) : (
-          STATUS_GROUPS.map(({ status, label }) => {
+          STATUS_GROUPS.filter(({ status }) =>
+            view === 'active'
+              ? status === 'draft' || status === 'open'
+              : status === 'closed' ||
+                status === 'certified' ||
+                status === 'void',
+          ).map(({ status, label }) => {
             const group = elections.filter((e) => e.status === status);
             if (group.length === 0) return null;
             return (
@@ -555,7 +635,8 @@ export default function ElectionsManager() {
                 <h2 style={{ marginBottom: '10px' }}>{label}</h2>
                 {group.map((e) => {
                   const editable =
-                    e.status === 'draft' || e.status === 'closed';
+                    e.status === 'draft' ||
+                    (e.source === 'recorded' && e.status === 'closed');
                   return (
                     <div
                       key={e.id}
@@ -564,7 +645,22 @@ export default function ElectionsManager() {
                     >
                       <div className="list-row">
                         <div className="admin-row-main">
-                          <div className="admin-row-title">{e.title}</div>
+                          <div className="admin-row-title">
+                            {e.title}{' '}
+                            <span className="pinned-badge">
+                              {e.source === 'conducted'
+                                ? 'Conducted'
+                                : 'Recorded'}
+                            </span>
+                            {e.source === 'conducted' &&
+                              e.status === 'open' &&
+                              !votingAvailable && (
+                                <span className="pinned-badge">
+                                  {' '}
+                                  Paused globally
+                                </span>
+                              )}
+                          </div>
                           <div className="admin-row-sub">
                             {e.electionDate} · {e.seats}{' '}
                             {e.seats === 1 ? 'seat' : 'seats'} ·{' '}
@@ -574,6 +670,13 @@ export default function ElectionsManager() {
                               : 'candidates'}{' '}
                             · {e.turnout.ballotsCast} of{' '}
                             {e.turnout.eligibleCount} ballots cast
+                            {e.source === 'conducted' && (
+                              <>
+                                {' '}
+                                · {e.turnout.weightCast} of{' '}
+                                {e.turnout.eligibleWeight} weight cast
+                              </>
+                            )}
                           </div>
                         </div>
                         <div className="row-actions">
@@ -590,24 +693,32 @@ export default function ElectionsManager() {
                             className="row-link"
                             aria-label={
                               expandedId === e.id
-                                ? `Hide candidates & ballots for ${e.title}`
-                                : `Candidates & ballots for ${e.title}`
+                                ? `Hide details for ${e.title}`
+                                : `Details for ${e.title}`
                             }
                             onClick={() => toggleExpand(e.id)}
                           >
-                            {expandedId === e.id
-                              ? 'Hide candidates & ballots'
-                              : 'Candidates & ballots'}
+                            {expandedId === e.id ? 'Hide details' : 'Details'}
                           </button>
                           {e.status === 'draft' && (
                             <>
-                              <button
-                                className="row-link"
-                                aria-label={`Close ${e.title}`}
-                                onClick={() => handleClose(e)}
-                              >
-                                Close
-                              </button>
+                              {e.source === 'conducted' ? (
+                                <button
+                                  className="row-link"
+                                  aria-label={`Open ${e.title}`}
+                                  onClick={() => handleOpen(e)}
+                                >
+                                  Open
+                                </button>
+                              ) : (
+                                <button
+                                  className="row-link"
+                                  aria-label={`Close ${e.title}`}
+                                  onClick={() => handleClose(e)}
+                                >
+                                  Close
+                                </button>
+                              )}
                               <button
                                 className="row-link row-link--danger"
                                 aria-label={`Delete ${e.title}`}
@@ -616,6 +727,15 @@ export default function ElectionsManager() {
                                 Delete
                               </button>
                             </>
+                          )}
+                          {e.status === 'open' && (
+                            <button
+                              className="row-link"
+                              aria-label={`Close ${e.title}`}
+                              onClick={() => handleClose(e)}
+                            >
+                              Close
+                            </button>
                           )}
                           {e.status === 'closed' && (
                             <button
@@ -672,11 +792,16 @@ export default function ElectionsManager() {
                                         </span>
                                       )}
                                     </div>
-                                    <div className="admin-row-sub">
-                                      {c.votes === null
-                                        ? 'No tally recorded'
-                                        : `${c.votes} votes`}
-                                    </div>
+                                    {!(
+                                      e.source === 'conducted' &&
+                                      e.status === 'open'
+                                    ) && (
+                                      <div className="admin-row-sub">
+                                        {c.votes === null
+                                          ? 'No tally recorded'
+                                          : `${c.votes} votes`}
+                                      </div>
+                                    )}
                                   </div>
                                   {editable && (
                                     <div className="row-actions">
@@ -810,48 +935,132 @@ export default function ElectionsManager() {
                             )}
                           </div>
 
-                          {editable && e.candidates.length > 0 && (
-                            <form
-                              className="panel-card"
-                              onSubmit={(evt) => submitTallies(evt, e)}
-                              style={{ marginBottom: '14px' }}
-                            >
-                              <div className="panel-editor__title">Tallies</div>
-                              {e.candidates.map((c) => (
-                                <div
-                                  key={c.id}
-                                  className="field"
-                                  style={{ margin: '0 0 10px' }}
-                                >
-                                  <label htmlFor={`tally-${e.id}-${c.id}`}>
-                                    Tally — {c.fullName}
-                                  </label>
-                                  <input
-                                    id={`tally-${e.id}-${c.id}`}
-                                    type="number"
-                                    value={tallyForm[c.id] ?? ''}
-                                    onChange={(evt) =>
-                                      setTallyForm((prev) => ({
-                                        ...prev,
-                                        [c.id]: evt.target.value,
-                                      }))
-                                    }
-                                  />
+                          {e.source === 'conducted' && (
+                            <>
+                              <div
+                                className="panel-card"
+                                style={{ marginBottom: '14px' }}
+                              >
+                                <div className="panel-editor__title">
+                                  Eligibility register
                                 </div>
-                              ))}
-                              <div className="btn-row">
-                                <button
-                                  className="btn btn--small"
-                                  type="submit"
-                                  disabled={busy}
-                                >
-                                  {busy ? 'Saving…' : 'Save tallies'}
-                                </button>
+                                <p className="muted">
+                                  {e.turnout.eligibleWeight} eligible weight ·{' '}
+                                  {e.turnout.eligibleCount}{' '}
+                                  {e.turnout.eligibleCount === 1
+                                    ? 'lot'
+                                    : 'lots'}{' '}
+                                  ·{' '}
+                                  {e.turnout.eligibilityFrozen
+                                    ? 'Frozen at open'
+                                    : 'Current roster'}
+                                </p>
+                                {(e.eligibleProperties?.length ?? 0) === 0 ? (
+                                  <p className="muted">
+                                    No eligible properties recorded.
+                                  </p>
+                                ) : (
+                                  e.eligibleProperties!.map((property) => (
+                                    <div
+                                      key={property.propertyId}
+                                      className="list-row"
+                                    >
+                                      <div className="admin-row-main">
+                                        <div className="admin-row-title">
+                                          {property.address}
+                                        </div>
+                                      </div>
+                                      <div className="admin-row-sub">
+                                        Weight {property.weight}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
                               </div>
-                            </form>
+
+                              <div
+                                className="panel-card"
+                                style={{ marginBottom: '14px' }}
+                              >
+                                <div className="panel-editor__title">
+                                  Turnout register
+                                </div>
+                                {(e.ballots?.length ?? 0) === 0 ? (
+                                  <p className="muted">
+                                    No ballots received yet.
+                                  </p>
+                                ) : (
+                                  e.ballots!.map((ballot) => (
+                                    <div
+                                      key={ballot.propertyId}
+                                      className="list-row"
+                                    >
+                                      <div className="admin-row-main">
+                                        <div className="admin-row-title">
+                                          {ballot.address}
+                                        </div>
+                                        {ballot.viaProxy && (
+                                          <div className="admin-row-sub">
+                                            Via proxy
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="admin-row-sub">
+                                        Weight {ballot.weight}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </>
                           )}
 
-                          {editable && (
+                          {e.source === 'recorded' &&
+                            editable &&
+                            e.candidates.length > 0 && (
+                              <form
+                                className="panel-card"
+                                onSubmit={(evt) => submitTallies(evt, e)}
+                                style={{ marginBottom: '14px' }}
+                              >
+                                <div className="panel-editor__title">
+                                  Tallies
+                                </div>
+                                {e.candidates.map((c) => (
+                                  <div
+                                    key={c.id}
+                                    className="field"
+                                    style={{ margin: '0 0 10px' }}
+                                  >
+                                    <label htmlFor={`tally-${e.id}-${c.id}`}>
+                                      Tally — {c.fullName}
+                                    </label>
+                                    <input
+                                      id={`tally-${e.id}-${c.id}`}
+                                      type="number"
+                                      value={tallyForm[c.id] ?? ''}
+                                      onChange={(evt) =>
+                                        setTallyForm((prev) => ({
+                                          ...prev,
+                                          [c.id]: evt.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                                <div className="btn-row">
+                                  <button
+                                    className="btn btn--small"
+                                    type="submit"
+                                    disabled={busy}
+                                  >
+                                    {busy ? 'Saving…' : 'Save tallies'}
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+
+                          {e.source === 'recorded' && editable && (
                             <form
                               className="panel-card"
                               onSubmit={(evt) => submitBallots(evt, e)}

@@ -3,11 +3,24 @@ import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MeetingsManager from './MeetingsManager';
 import * as admin from '../../lib/admin';
+import * as content from '../../lib/content';
 import { tallyVotes } from '../../lib/types';
 
 vi.mock('../../lib/admin');
+vi.mock('../../lib/content');
 
 const mocked = vi.mocked(admin);
+const mockedContent = vi.mocked(content);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -15,6 +28,17 @@ beforeEach(() => {
   mocked.fetchProperties.mockResolvedValue([]);
   mocked.fetchMeeting.mockResolvedValue(meetingDetail());
   mocked.fetchProxies.mockResolvedValue([]);
+  mockedContent.fetchSiteSettings.mockResolvedValue({
+    siteName: 'The Valleys at Ashebrook Residents',
+    tagline: '',
+    contactEmail: '',
+    welcomeHeading: '',
+    welcomeBody: '',
+    officialMode: true,
+    liveVotingEnabled: true,
+    disclaimerText: '',
+    aboutBody: '',
+  });
 });
 
 const meeting = {
@@ -54,6 +78,30 @@ function meetingDetail(
     memberAttendance: [],
     totalActiveWeight: 0,
     motions: [],
+    ...overrides,
+  };
+}
+
+function memberMotion(
+  overrides: Partial<
+    Awaited<ReturnType<typeof admin.fetchMeeting>>['motions'][number]
+  > = {},
+) {
+  return {
+    id: 'mo1',
+    sequence: 1,
+    text: 'Approve the annual budget',
+    votingState: 'none' as const,
+    moverName: null,
+    secondName: null,
+    outcome: 'passed' as const,
+    eligibleCount: 0,
+    eligibleWeight: 0,
+    eligibilityFrozen: false,
+    tally: tallyVotes([]),
+    votes: [],
+    memberVotes: [],
+    memberTally: tallyVotes([]),
     ...overrides,
   };
 }
@@ -1085,5 +1133,687 @@ describe('MeetingsManager', () => {
         },
       ]),
     );
+  });
+
+  it('offers Open voting for a member motion with no live-voting history', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({ ...memberMeeting, motions: [memberMotion()] }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' })],
+        }),
+      );
+    mocked.openMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.openMotionVoting).toHaveBeenCalledWith('mo1'),
+    );
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('preserves edits to another motion when opening voting', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion(), otherMotion],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' }), otherMotion],
+        }),
+      );
+    mocked.openMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion repair the pool fence/i,
+      }),
+    );
+    const motionInput = screen.getByLabelText(/^motion$/i);
+    await userEvent.clear(motionInput);
+    await userEvent.type(motionInput, 'Repair the pool fence this fall');
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Edit motion')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Repair the pool fence this fall',
+    );
+  });
+
+  it('preserves an add-motion draft when opening voting', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({ ...memberMeeting, motions: [memberMotion()] }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' })],
+        }),
+      );
+    mocked.openMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Add more shade trees',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Edit motion')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Add more shade trees',
+    );
+  });
+
+  it('preserves edits to another motion when closing voting', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' }), otherMotion],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'closed' }), otherMotion],
+        }),
+      );
+    mocked.closeMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion repair the pool fence/i,
+      }),
+    );
+    const motionInput = screen.getByLabelText(/^motion$/i);
+    await userEvent.clear(motionInput);
+    await userEvent.type(motionInput, 'Repair the pool fence this fall');
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: /reopen voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Edit motion')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Repair the pool fence this fall',
+    );
+  });
+
+  it('locks motion controls while opening voting and resets the same-target editor on success', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    const pending = deferred<void>();
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion(), otherMotion],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' }), otherMotion],
+        }),
+      );
+    mocked.openMotionVoting.mockReturnValue(pending.promise);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion approve the annual budget/i,
+      }),
+    );
+    await userEvent.clear(screen.getByLabelText(/^motion$/i));
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the amended annual budget',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(mocked.openMotionVoting).toHaveBeenCalledWith('mo1'),
+    );
+    const editOtherDisabled = screen
+      .getByRole('button', { name: /edit motion repair the pool fence/i })
+      .hasAttribute('disabled');
+    const otherLifecycleDisabled = screen
+      .getByRole('button', { name: /open voting for repair the pool fence/i })
+      .hasAttribute('disabled');
+
+    pending.resolve(undefined);
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(editOtherDisabled).toBe(true);
+    expect(otherLifecycleDisabled).toBe(true);
+    expect(screen.queryByText('Edit motion')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue('');
+  });
+
+  it('restores motion controls and preserves the editor when opening voting is rejected', async () => {
+    const otherMotion = memberMotion({
+      id: 'mo2',
+      sequence: 2,
+      text: 'Repair the pool fence',
+    });
+    const pending = deferred<void>();
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        ...memberMeeting,
+        motions: [memberMotion(), otherMotion],
+      }),
+    );
+    mocked.openMotionVoting.mockReturnValue(pending.promise);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion approve the annual budget/i,
+      }),
+    );
+    await userEvent.clear(screen.getByLabelText(/^motion$/i));
+    await userEvent.type(
+      screen.getByLabelText(/^motion$/i),
+      'Approve the amended annual budget',
+    );
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+    await waitFor(() =>
+      expect(mocked.openMotionVoting).toHaveBeenCalledWith('mo1'),
+    );
+    const editOtherButton = screen.getByRole('button', {
+      name: /edit motion repair the pool fence/i,
+    });
+    const otherLifecycleButton = screen.getByRole('button', {
+      name: /open voting for repair the pool fence/i,
+    });
+    const editOtherDisabled = editOtherButton.hasAttribute('disabled');
+    const otherLifecycleDisabled =
+      otherLifecycleButton.hasAttribute('disabled');
+
+    pending.reject(new Error('Voting cannot open while another update runs.'));
+    expect(
+      await screen.findByText(/voting cannot open while another update runs/i),
+    ).toBeInTheDocument();
+    expect(editOtherDisabled).toBe(true);
+    expect(otherLifecycleDisabled).toBe(true);
+    expect(editOtherButton).toBeEnabled();
+    expect(otherLifecycleButton).toBeEnabled();
+    expect(screen.getByText('Edit motion')).toBeInTheDocument();
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Approve the amended annual budget',
+    );
+    expect(mocked.fetchMeeting).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers Close voting for an open member motion', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' })],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'closed' })],
+        }),
+      );
+    mocked.closeMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.closeMotionVoting).toHaveBeenCalledWith('mo1'),
+    );
+    expect(
+      await screen.findByRole('button', {
+        name: /reopen voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers Reopen voting for a closed member motion', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'closed' })],
+        }),
+      )
+      .mockResolvedValueOnce(
+        meetingDetail({
+          ...memberMeeting,
+          motions: [memberMotion({ votingState: 'open' })],
+        }),
+      );
+    mocked.openMotionVoting.mockResolvedValue(undefined);
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /reopen voting for approve the annual budget/i,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.openMotionVoting).toHaveBeenCalledWith('mo1'),
+    );
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: /reopen voting for approve the annual budget/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('marks an open member motion paused globally', async () => {
+    mockedContent.fetchSiteSettings.mockResolvedValueOnce({
+      siteName: 'The Valleys at Ashebrook Residents',
+      tagline: '',
+      contactEmail: '',
+      welcomeHeading: '',
+      welcomeBody: '',
+      officialMode: true,
+      liveVotingEnabled: false,
+      disclaimerText: '',
+      aboutBody: '',
+    });
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        ...memberMeeting,
+        motions: [memberMotion({ votingState: 'open' })],
+      }),
+    );
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    const motionTitle = await screen.findByText('Approve the annual budget');
+    const motionRow = motionTitle.closest('.list-row') as HTMLElement;
+    expect(within(motionRow).getByText('Paused globally')).toBeInTheDocument();
+  });
+
+  it('marks an open member motion paused when official mode is off', async () => {
+    mockedContent.fetchSiteSettings.mockResolvedValueOnce({
+      siteName: 'The Valleys at Ashebrook Residents',
+      tagline: '',
+      contactEmail: '',
+      welcomeHeading: '',
+      welcomeBody: '',
+      officialMode: false,
+      liveVotingEnabled: true,
+      disclaimerText: '',
+      aboutBody: '',
+    });
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        ...memberMeeting,
+        motions: [memberMotion({ votingState: 'open' })],
+      }),
+    );
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    const motionTitle = await screen.findByText('Approve the annual budget');
+    const motionRow = motionTitle.closest('.list-row') as HTMLElement;
+    expect(within(motionRow).getByText('Paused globally')).toBeInTheDocument();
+  });
+
+  it('surfaces a readable motion lifecycle error without falsely opening', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({ ...memberMeeting, motions: [memberMotion()] }),
+    );
+    mocked.openMotionVoting.mockRejectedValue(
+      new Error('Official mode and live voting must both be enabled.'),
+    );
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+
+    expect(
+      await screen.findByText(/official mode and live voting/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(mocked.fetchMeeting).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears a pre-open vote draft and reseeds from authoritative votes after close', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 2,
+        owners: [],
+      },
+    ]);
+    const authoritativeVote = {
+      propertyId: 'prop1',
+      address: '12 Oak Lane',
+      choice: 'yes' as const,
+      weight: 2,
+      castByName: null,
+      viaProxy: false,
+      proxyId: null,
+    };
+    mocked.openMotionVoting.mockResolvedValue(undefined);
+    mocked.closeMotionVoting.mockResolvedValue(undefined);
+    mocked.saveMotion.mockResolvedValue(undefined);
+    mocked.setMemberVotes.mockResolvedValue(undefined);
+    mocked.fetchMeeting.mockImplementation(async () => {
+      const votingState =
+        mocked.closeMotionVoting.mock.calls.length > 0
+          ? 'closed'
+          : mocked.openMotionVoting.mock.calls.length > 0
+            ? 'open'
+            : 'none';
+      return meetingDetail({
+        ...memberMeeting,
+        motions: [
+          memberMotion({
+            votingState,
+            eligibleCount: votingState === 'none' ? 0 : 1,
+            eligibleWeight: votingState === 'none' ? 0 : 2,
+            eligibilityFrozen: votingState !== 'none',
+            memberVotes: votingState === 'none' ? [] : [authoritativeVote],
+            memberTally:
+              votingState === 'none'
+                ? tallyVotes([])
+                : tallyVotes([authoritativeVote]),
+          }),
+        ],
+      });
+    });
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion approve the annual budget/i,
+      }),
+    );
+
+    const vote = screen.getByLabelText('Vote — 12 Oak Lane');
+    await userEvent.selectOptions(vote, 'no');
+    expect(vote).toHaveValue('no');
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /open voting for approve the annual budget/i,
+      }),
+    );
+    expect(
+      await screen.findByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /close voting for approve the annual budget/i,
+      }),
+    );
+    expect(
+      await screen.findByRole('button', {
+        name: /reopen voting for approve the annual budget/i,
+      }),
+    ).toBeInTheDocument();
+
+    // Lifecycle success must leave the add form clean. If the old edit state
+    // survives, the pre-open "no" value reappears here and can overwrite the
+    // live-session vote through setMemberVotes.
+    expect(screen.getByLabelText('Vote — 12 Oak Lane')).toHaveValue('');
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /edit motion approve the annual budget/i,
+      }),
+    );
+    expect(screen.getByLabelText('Vote — 12 Oak Lane')).toHaveValue('yes');
+
+    await userEvent.click(screen.getByRole('button', { name: /save motion/i }));
+    await waitFor(() =>
+      expect(mocked.setMemberVotes).toHaveBeenLastCalledWith('mo1', [
+        {
+          propertyId: 'prop1',
+          choice: 'yes',
+          castByOwnerId: null,
+          proxyId: null,
+        },
+      ]),
+    );
+  });
+
+  it('hides only the bulk member-vote editor while editing an open motion', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'prop1',
+        address: '12 Oak Lane',
+        unit: null,
+        status: 'active',
+        notes: null,
+        voteWeight: 2,
+        owners: [],
+      },
+    ]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        ...memberMeeting,
+        motions: [memberMotion({ votingState: 'open' })],
+      }),
+    );
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: /edit motion approve the annual budget/i,
+      }),
+    );
+
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
+      'Approve the annual budget',
+    );
+    expect(
+      screen.queryByLabelText('Vote — 12 Oak Lane'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the historical weighted tally with its frozen eligible weight after close', async () => {
+    mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchMeeting.mockResolvedValue(
+      meetingDetail({
+        ...memberMeeting,
+        motions: [
+          memberMotion({
+            votingState: 'closed',
+            eligibleCount: 4,
+            eligibleWeight: 10,
+            eligibilityFrozen: true,
+            memberTally: {
+              yes: 6,
+              no: 2,
+              abstain: 1,
+              recused: 0,
+              absent: 0,
+              recorded: true,
+            },
+          }),
+        ],
+      }),
+    );
+    render(<MeetingsManager />);
+    await screen.findByText('Annual member meeting');
+    await userEvent.click(
+      screen.getByRole('button', { name: /attendance & motions/i }),
+    );
+
+    const motionTitle = await screen.findByText('Approve the annual budget');
+    const motionRow = motionTitle.closest('.list-row') as HTMLElement;
+    expect(within(motionRow).getByText(/weighted 6 yes/i)).toBeInTheDocument();
+    expect(
+      within(motionRow).getByText(/10 eligible weight \(frozen\)/i),
+    ).toBeInTheDocument();
   });
 });

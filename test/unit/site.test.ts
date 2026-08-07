@@ -95,26 +95,74 @@ describe('accountNav proxies link', () => {
   };
 
   it('offers /proxies to a verified homeowner in official mode', () => {
-    const nav = accountNav(homeowner, true);
+    const nav = accountNav(homeowner, {
+      officialMode: true,
+      liveVotingEnabled: false,
+    });
     expect(nav.links).toContainEqual({ href: '/proxies', label: 'Proxies' });
   });
 
   it('hides /proxies when official mode is off (and when the arg is omitted)', () => {
-    expect(accountNav(homeowner, false).links).toEqual([]);
+    expect(
+      accountNav(homeowner, { officialMode: false, liveVotingEnabled: false })
+        .links,
+    ).toEqual([]);
     expect(accountNav(homeowner).links).toEqual([]);
   });
 
   it('does not offer /proxies to unverified users, anonymous, or board (board keeps Admin)', () => {
     expect(
-      accountNav({ role: 'homeowner', propertyIds: [] }, true).links,
+      accountNav(
+        { role: 'homeowner', propertyIds: [] },
+        { officialMode: true, liveVotingEnabled: false },
+      ).links,
     ).toEqual([{ href: '/verify-property', label: 'Verify your property' }]);
-    expect(accountNav(null, true).links).toEqual([
+    expect(
+      accountNav(null, { officialMode: true, liveVotingEnabled: false }).links,
+    ).toEqual([
       { href: '/login', label: 'Sign in' },
       { href: '/register', label: 'Register' },
     ]);
-    expect(accountNav({ role: 'board', propertyIds: [] }, true).links).toEqual([
-      { href: '/admin', label: 'Admin' },
+    expect(
+      accountNav(
+        { role: 'board', propertyIds: [] },
+        { officialMode: true, liveVotingEnabled: false },
+      ).links,
+    ).toEqual([{ href: '/admin', label: 'Admin' }]);
+  });
+});
+
+describe('accountNav live voting link', () => {
+  const homeowner = { role: 'homeowner' as const, propertyIds: ['p1'] };
+  const bothOn = { officialMode: true, liveVotingEnabled: true };
+
+  it('shows Proxies in official mode and Vote only when both flags are on', () => {
+    expect(
+      accountNav(homeowner, { officialMode: true, liveVotingEnabled: false })
+        .links,
+    ).toEqual([{ href: '/proxies', label: 'Proxies' }]);
+    expect(accountNav(homeowner, bothOn).links).toEqual([
+      { href: '/proxies', label: 'Proxies' },
+      { href: '/vote', label: 'Vote' },
     ]);
+  });
+
+  it('adds Vote alongside Admin only for board members with verified properties', () => {
+    expect(
+      accountNav({ role: 'board', propertyIds: [] }, bothOn).links,
+    ).toEqual([{ href: '/admin', label: 'Admin' }]);
+    expect(
+      accountNav({ role: 'board', propertyIds: ['p1'] }, bothOn).links,
+    ).toEqual([
+      { href: '/admin', label: 'Admin' },
+      { href: '/vote', label: 'Vote' },
+    ]);
+  });
+
+  it('fails closed for a visitor context that still carries property IDs', () => {
+    expect(
+      accountNav({ role: 'visitor', propertyIds: ['p1'] }, bothOn).links,
+    ).toEqual([{ href: '/verify-property', label: 'Verify your property' }]);
   });
 });
 
