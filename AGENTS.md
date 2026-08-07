@@ -812,7 +812,7 @@ contents as duplicate files. Each authored Claude custom agent is rendered as a 
 TOML file, preserving its name, description, and developer instructions. The `PostToolUse` hook in
 `.claude/settings.json` re-syncs after authored inputs change, and CI plus `/ship` run
 `npm run sync:agents -- --check` to reject generated-tree drift. See
-[ADR 0011](./docs/adr/0011-claude-sourced-agent-assets-mirrored-for-codex.md).
+[ADR 0021](./docs/adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
 
 The user-invokable `ship` skill (`.claude/skills/ship/`) takes a branch from code-complete to an
 open PR: it invokes `docs-updater` scoped to that branch's diff, writes the `CHANGELOG.md` section

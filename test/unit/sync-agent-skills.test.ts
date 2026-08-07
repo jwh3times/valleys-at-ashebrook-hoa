@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import {
   GENERATED_SKILL_COMMENT,
   diff,
@@ -60,6 +62,16 @@ function write(root: string, rel: string, contents: string | Buffer): void {
 function seedAuthoredSources(root: string): void {
   write(root, '.agents/skills/demo/SKILL.md', skillSource);
   write(root, '.claude/agents/docs-updater.md', agentSource);
+}
+
+function runFixtureCli(root: string, ...args: string[]) {
+  const script = 'scripts/sync-agent-skills.ts';
+  write(root, script, fs.readFileSync(path.resolve(script)));
+  return spawnSync(
+    process.execPath,
+    ['--experimental-strip-types', path.join(root, script), ...args],
+    { cwd: root, encoding: 'utf8' },
+  );
 }
 
 function snapshotTree(root: string): Map<string, Buffer> {
@@ -132,10 +144,34 @@ describe('renderCodexAgent', () => {
     ).toString('utf8');
     expect(out).toContain('name = "docs-updater"');
     expect(out).toContain('description = "Keeps the docs current."');
-    expect(out).toContain('developer_instructions = """');
-    expect(out).toContain('You keep documentation current.');
+    expect(parseToml(out).developer_instructions).toBe(
+      'You keep documentation current.\n\nUse the Grep tool to check.',
+    );
     expect(out).not.toContain('tools =');
     expect(out).not.toContain('model =');
+  });
+
+  it('renders backslashes as valid TOML instruction text', () => {
+    const source = `---
+name: docs-updater
+description: Keeps the docs current.
+---
+
+Use sqliteTable\\( and "quoted" text.
+Then continue.
+`;
+
+    const out = renderCodexAgent(
+      source,
+      '.claude/agents/docs-updater.md',
+    ).toString('utf8');
+
+    expect(out).toContain(
+      'developer_instructions = "Use sqliteTable\\\\( and \\"quoted\\" text.\\nThen continue."',
+    );
+    expect(parseToml(out).developer_instructions).toBe(
+      'Use sqliteTable\\( and "quoted" text.\nThen continue.',
+    );
   });
 });
 
@@ -300,5 +336,32 @@ describe('repository hook integration', () => {
     ).toEqual([
       'node --experimental-strip-types scripts/sync-agent-skills.ts --hook',
     ]);
+  });
+});
+
+describe('check-mode CLI output', () => {
+  it('names both generated roots when drift is present', () => {
+    const root = fixtureRepo();
+    seedAuthoredSources(root);
+
+    const result = runFixtureCli(root, '--check');
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Generated agent trees (.claude/skills, .codex/agents) are out of sync:',
+    );
+  });
+
+  it('names both generated roots when they are in sync', () => {
+    const root = fixtureRepo();
+    seedAuthoredSources(root);
+    sync(root);
+
+    const result = runFixtureCli(root, '--check');
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      'Generated agent trees (.claude/skills, .codex/agents) are in sync.',
+    );
   });
 });
