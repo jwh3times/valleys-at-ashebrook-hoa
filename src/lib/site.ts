@@ -42,6 +42,10 @@ const BASE_NAV: NavLink[] = [
 ];
 
 type ModeName = Pick<SiteSettings, 'officialMode' | 'siteName'>;
+export type VotingMode = Pick<
+  SiteSettings,
+  'officialMode' | 'liveVotingEnabled'
+>;
 
 /** Primary nav links; the Dues link only appears in official mode. */
 export function navLinks(officialMode: boolean): NavLink[] {
@@ -92,7 +96,7 @@ export interface AccountNav {
  */
 export function accountNav(
   auth: AccountNavAuth | null,
-  officialMode = false,
+  mode: VotingMode = { officialMode: false, liveVotingEnabled: false },
 ): AccountNav {
   if (!auth)
     return {
@@ -103,16 +107,29 @@ export function accountNav(
       ],
     };
   if (auth.role === 'board')
-    return { signedIn: true, links: [{ href: '/admin', label: 'Admin' }] };
+    return {
+      signedIn: true,
+      links: [
+        { href: '/admin', label: 'Admin' },
+        ...(auth.propertyIds.length > 0 &&
+        mode.officialMode &&
+        mode.liveVotingEnabled
+          ? [{ href: '/vote', label: 'Vote' }]
+          : []),
+      ],
+    };
   if (auth.propertyIds.length === 0)
     return {
       signedIn: true,
       links: [{ href: '/verify-property', label: 'Verify your property' }],
     };
-  if (officialMode)
+  if (mode.officialMode)
     return {
       signedIn: true,
-      links: [{ href: '/proxies', label: 'Proxies' }],
+      links: [
+        { href: '/proxies', label: 'Proxies' },
+        ...(mode.liveVotingEnabled ? [{ href: '/vote', label: 'Vote' }] : []),
+      ],
     };
   return { signedIn: true, links: [] };
 }

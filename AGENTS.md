@@ -7,9 +7,10 @@ This is the public and homeowner website for the Valleys at Ashebrook neighborho
 to official-HOA presentation: branding, footer disclaimer, and HOA-business surfaces like `/dues`
 and homeowner proxy grants at `/proxies` are driven by the `officialMode` site setting through
 `src/lib/site.ts`. A separate `liveVotingEnabled` site setting supplies the default-off gate for
-conducted elections and member-motion voting. Slice 2 adds the guarded `POST /api/vote`, a
-caller-specific server read model, and atomic casting, but no `/vote` page, navigation entry,
-homeowner voting UI, or new admin UI has shipped.
+conducted elections and member-motion voting. The guarded `POST /api/vote`, caller-specific
+server read model, atomic casting, and homeowner `/vote` experience are all feature-gated on both
+settings. The page offers final conducted-election and member-motion voting only to verified
+callers, with per-lot receipts that never reveal selections; no new admin UI has shipped.
 
 The app is an Astro SSR app (`output: 'server'`) running on **Cloudflare Workers** via the
 `@astrojs/cloudflare` adapter, backed by Cloudflare **D1** (SQLite via Drizzle ORM), **R2**
@@ -268,8 +269,9 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned, candidates
   can be added or deleted only while the election is a draft, and conducted candidates become
   immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
-  Slice 2's homeowner cast path is the separate `POST /api/vote`; no `/vote` page, homeowner voting
-  UI, or new admin UI exists yet.
+  The homeowner cast path is `POST /api/vote`, reached only through the feature-gated `/vote` page
+  for verified callers. The page renders no-vote receipts that contain only the item title and lot
+  address; no new admin UI exists yet.
 - Board-only complete proxies record (including paper proxies entered by the board and online
   grants created by homeowners — one owner authorising one named holder to act for one lot at
   exactly one meeting or election; see
