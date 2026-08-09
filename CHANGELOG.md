@@ -7,7 +7,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.3.65] - 2026-08-09
+## [0.3.66] - 2026-08-09
 
 ### Fixed
 
@@ -23,6 +23,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   register, certify, uncertify, void, delete — is now decided in one place rather than by a single
   catch-all condition inside the list rendering, so each control matches the rule the server
   actually enforces.
+
+## [0.3.65] - 2026-08-09
+
+### Fixed
+
+- **A lot deactivated while voting is open stays votable, and no longer takes the caller's other
+  proxies with it.** The `/vote` page resolved a caller's lots from the general homeowner access
+  set, which excludes inactive properties, while the cast endpoint correctly used the frozen
+  electorate recorded when the occasion opened. Deactivating a lot mid-election therefore removed
+  it from the page — along with any proxies that caller held for entirely unrelated lots — even
+  though a ballot for it would still have been accepted. Both paths now resolve lots the same way,
+  and eligibility remains the frozen snapshot's decision.
 
 ## [0.3.64] - 2026-08-09
 
