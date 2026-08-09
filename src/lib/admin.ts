@@ -25,44 +25,110 @@ import type {
 } from './types';
 import type { ReportListItem, ReportDetail } from './reports';
 
+/**
+ * Every admin write goes through here, so that a failure surfaces the
+ * server's own message.
+ *
+ * The routes go to real trouble over those messages — "Proxy is in use
+ * (attendance) — remove those records first", "Inactive lots cannot be
+ * recorded present: …" — and 22 of the 63 hand-written error branches this
+ * replaces threw `Delete failed: 409` instead, discarding the explanation
+ * the board needed. The contract is now a property of the module rather
+ * than something each caller remembers.
+ *
+ * `fallback` is used only when the response body is empty.
+ */
+async function adminRequest<T = void>(
+  url: string,
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  body?: unknown,
+  fallback = 'Request failed',
+): Promise<T> {
+  // A GET is issued as `fetch(url)` with no init at all, matching what the
+  // read helpers did before — the call shape is observable from tests.
+  const res =
+    method === 'GET'
+      ? await fetch(url)
+      : await fetch(url, {
+          method,
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body ?? {}),
+        });
+  if (!res.ok)
+    throw new Error((await res.text()) || `${fallback}: ${res.status}`);
+  // 204 is the norm for admin writes; only reads and creates carry a body.
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** The `{ action, … }` POST shape 22 of the admin endpoints use. */
+async function adminAction<T = void>(
+  url: string,
+  action: string,
+  payload: Record<string, unknown> = {},
+  fallback = 'Action failed',
+): Promise<T> {
+  return adminRequest<T>(url, 'POST', { action, ...payload }, fallback);
+}
+
+/**
+ * Create-or-update: an id means PATCH with the id folded in, no id means
+ * POST. Nine `save*` helpers were spelling this out identically.
+ */
+async function adminSave<T = void>(
+  url: string,
+  data: unknown,
+  id: string | undefined,
+  fallback = 'Save failed',
+): Promise<T> {
+  return adminRequest<T>(
+    url,
+    id ? 'PATCH' : 'POST',
+    id ? { id, ...(data as object) } : data,
+    fallback,
+  );
+}
+
 // ---------- Announcements ----------
 export async function saveAnnouncement(
   data: Omit<Announcement, 'id'>,
   id?: string,
 ): Promise<void> {
   if (id) {
-    const res = await fetch('/api/admin/announcements', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, ...data }),
-    });
-    if (!res.ok)
-      throw new Error((await res.text()) || `Update failed: ${res.status}`);
+    await adminRequest(
+      '/api/admin/announcements',
+      'PATCH',
+      { id, ...data },
+      'Update failed',
+    );
   } else {
-    const res = await fetch('/api/admin/announcements', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok)
-      throw new Error((await res.text()) || `Create failed: ${res.status}`);
+    await adminRequest(
+      '/api/admin/announcements',
+      'POST',
+      data,
+      'Create failed',
+    );
   }
 }
 
 export async function deleteAnnouncement(id: string): Promise<void> {
-  const res = await fetch('/api/admin/announcements', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/announcements',
+    'DELETE',
+    { id },
+    'Delete failed',
+  );
 }
 
 // ---------- Documents ----------
 export async function fetchAdminDocuments(): Promise<AdminDocumentItem[]> {
-  const res = await fetch('/api/admin/documents');
-  if (!res.ok) throw new Error(`admin documents ${res.status}`);
-  return (await res.json()) as AdminDocumentItem[];
+  return adminRequest<AdminDocumentItem[]>(
+    '/api/admin/documents',
+    'GET',
+    undefined,
+    'Load admin documents failed',
+  );
 }
 
 export class DuplicateError extends Error {
@@ -125,72 +191,66 @@ export async function uploadDocument(
     if (body.warning === 'near-duplicate')
       throw new DuplicateError('near', { similar: body.similar });
   }
-  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+  // Same contract as adminRequest, spelled out because this one posts
+  // FormData and has to inspect a 409 body for the duplicate cases first.
+  if (!res.ok)
+    throw new Error((await res.text()) || `Upload failed: ${res.status}`);
 }
 
 export async function fetchDuplicates(): Promise<DuplicatesView> {
-  const res = await fetch('/api/admin/duplicates');
-  if (!res.ok) throw new Error(`duplicates ${res.status}`);
-  return (await res.json()) as DuplicatesView;
+  return adminRequest<DuplicatesView>(
+    '/api/admin/duplicates',
+    'GET',
+    undefined,
+    'Load duplicates failed',
+  );
 }
 
 export async function resolveDuplicates(
   keepIds: string[],
   deleteIds: string[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/duplicates', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'resolve', keepIds, deleteIds }),
-  });
-  if (!res.ok) throw new Error(`Resolve failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/duplicates',
+    'POST',
+    { action: 'resolve', keepIds, deleteIds },
+    'Resolve failed',
+  );
 }
 
 export async function editDocument(
   id: string,
   patch: { title?: string; category?: string; visibility?: string },
 ): Promise<void> {
-  const res = await fetch('/api/admin/documents', {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id, ...patch }),
-  });
-  if (!res.ok) throw new Error(`Edit failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/documents',
+    'PATCH',
+    { id, ...patch },
+    'Edit failed',
+  );
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  const res = await fetch('/api/admin/documents', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  await adminRequest('/api/admin/documents', 'DELETE', { id }, 'Delete failed');
 }
 
 // ---------- Settings (singletons) ----------
 export async function saveDues(dues: DuesSettings): Promise<void> {
-  const res = await fetch('/api/admin/dues', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(dues),
-  });
-  if (!res.ok) throw new Error(`Save dues failed: ${res.status}`);
+  await adminRequest('/api/admin/dues', 'PUT', dues, 'Save dues failed');
 }
 
 export async function saveSite(site: SiteSettings): Promise<void> {
-  const res = await fetch('/api/admin/site', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(site),
-  });
-  if (!res.ok) throw new Error(`Save site failed: ${res.status}`);
+  await adminRequest('/api/admin/site', 'PUT', site, 'Save site failed');
 }
 
 // ---------- Roster (board-only reads + writes) ----------
 export async function fetchProperties(): Promise<PropertyWithOwners[]> {
-  const res = await fetch('/api/admin/properties');
-  if (!res.ok) throw new Error(`Load homes failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    '/api/admin/properties',
+    'GET',
+    undefined,
+    'Load homes failed',
+  );
 }
 
 export async function saveProperty(
@@ -203,13 +263,7 @@ export async function saveProperty(
   },
   id?: string,
 ): Promise<void> {
-  const res = await fetch('/api/admin/properties', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save home failed: ${res.status}`);
+  await adminSave('/api/admin/properties', data, id, 'Save home failed');
 }
 
 export async function saveOwner(
@@ -223,20 +277,17 @@ export async function saveOwner(
   },
   id?: string,
 ): Promise<void> {
-  const res = await fetch('/api/admin/owners', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save owner failed: ${res.status}`);
+  await adminSave('/api/admin/owners', data, id, 'Save owner failed');
 }
 
 // ---------- Members / access ----------
 export async function fetchMembers(): Promise<MembersView> {
-  const res = await fetch('/api/admin/members');
-  if (!res.ok) throw new Error(`Load members failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    '/api/admin/members',
+    'GET',
+    undefined,
+    'Load members failed',
+  );
 }
 
 export async function memberAction(payload: {
@@ -245,92 +296,85 @@ export async function memberAction(payload: {
   queueId?: string;
   propertyId?: string;
 }): Promise<void> {
-  const res = await fetch('/api/admin/members', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`Action failed: ${res.status}`);
+  await adminRequest('/api/admin/members', 'POST', payload, 'Action failed');
 }
 
 // ---------- Board membership (handoff) ----------
 export async function fetchBoardMembers(): Promise<MemberUser[]> {
-  const res = await fetch('/api/admin/roles');
-  if (!res.ok) throw new Error(`Load board failed: ${res.status}`);
-  const data = (await res.json()) as { board: MemberUser[] };
+  const data = await adminRequest<{ board: MemberUser[] }>(
+    '/api/admin/roles',
+    'GET',
+    undefined,
+    'Load board failed',
+  );
   return data.board;
 }
 
 export async function promoteToBoard(email: string): Promise<void> {
-  const res = await fetch('/api/admin/roles', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'promote', email }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Promote failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/roles',
+    'POST',
+    { action: 'promote', email },
+    'Promote failed',
+  );
 }
 
 export async function demoteFromBoard(userId: string): Promise<void> {
-  const res = await fetch('/api/admin/roles', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'demote', userId }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Demote failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/roles',
+    'POST',
+    { action: 'demote', userId },
+    'Demote failed',
+  );
 }
 
 // ---------- Reports ----------
 export async function fetchReports(): Promise<ReportListItem[]> {
-  const res = await fetch('/api/admin/reports');
-  if (!res.ok) throw new Error(`reports ${res.status}`);
-  return (await res.json()) as ReportListItem[];
+  return adminRequest<ReportListItem[]>(
+    '/api/admin/reports',
+    'GET',
+    undefined,
+    'Load reports failed',
+  );
 }
 
 export async function fetchReport(id: string): Promise<ReportDetail> {
-  const res = await fetch(`/api/admin/reports?id=${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`report ${res.status}`);
-  return (await res.json()) as ReportDetail;
+  return adminRequest<ReportDetail>(
+    `/api/admin/reports?id=${encodeURIComponent(id)}`,
+    'GET',
+    undefined,
+    'Load report failed',
+  );
 }
 
 export async function deleteReport(id: string): Promise<void> {
-  const res = await fetch('/api/admin/reports', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+  await adminRequest('/api/admin/reports', 'DELETE', { id }, 'Delete failed');
 }
 
 // ---------- Board roster ----------
 export async function fetchBoardPeople(): Promise<BoardPersonWithTerms[]> {
-  const res = await fetch('/api/admin/board-people');
-  if (!res.ok) throw new Error(`Load board failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    '/api/admin/board-people',
+    'GET',
+    undefined,
+    'Load board failed',
+  );
 }
 
 export async function saveBoardPerson(
   data: { fullName?: string; userId?: string | null },
   id?: string,
 ): Promise<void> {
-  const res = await fetch('/api/admin/board-people', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save person failed: ${res.status}`);
+  await adminSave('/api/admin/board-people', data, id, 'Save person failed');
 }
 
 export async function deleteBoardPerson(id: string): Promise<void> {
-  const res = await fetch('/api/admin/board-people', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/board-people',
+    'DELETE',
+    { id },
+    'Delete failed',
+  );
 }
 
 export async function saveBoardTerm(
@@ -342,23 +386,16 @@ export async function saveBoardTerm(
   },
   id?: string,
 ): Promise<void> {
-  const res = await fetch('/api/admin/board-terms', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save term failed: ${res.status}`);
+  await adminSave('/api/admin/board-terms', data, id, 'Save term failed');
 }
 
 export async function deleteBoardTerm(id: string): Promise<void> {
-  const res = await fetch('/api/admin/board-terms', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/board-terms',
+    'DELETE',
+    { id },
+    'Delete failed',
+  );
 }
 
 // ---------- Meetings ----------
@@ -366,73 +403,62 @@ export async function deleteBoardTerm(id: string): Promise<void> {
 // server-side read helper in src/server/content/reads.ts, and this module is
 // entirely admin-scoped, so the prefix would carry no information here.
 export async function fetchMeetings(): Promise<MeetingSummary[]> {
-  const res = await fetch('/api/admin/meetings');
-  if (!res.ok) throw new Error(`Load meetings failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    '/api/admin/meetings',
+    'GET',
+    undefined,
+    'Load meetings failed',
+  );
 }
 
 export async function fetchMeeting(id: string): Promise<MeetingDetail> {
-  const res = await fetch(`/api/admin/meetings?id=${encodeURIComponent(id)}`);
-  if (!res.ok) throw new Error(`Load meeting failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    `/api/admin/meetings?id=${encodeURIComponent(id)}`,
+    'GET',
+    undefined,
+    'Load meeting failed',
+  );
 }
 
 export async function saveMeeting(
   data: MeetingInput,
   id?: string,
 ): Promise<void> {
-  const res = await fetch('/api/admin/meetings', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save meeting failed: ${res.status}`);
+  await adminSave('/api/admin/meetings', data, id, 'Save meeting failed');
 }
 
 export async function deleteMeeting(id: string): Promise<void> {
-  const res = await fetch('/api/admin/meetings', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest('/api/admin/meetings', 'DELETE', { id }, 'Delete failed');
 }
 
 export async function approveMeeting(meetingId: string): Promise<void> {
-  const res = await fetch('/api/admin/meetings', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'approve', meetingId }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Approve failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/meetings',
+    'POST',
+    { action: 'approve', meetingId },
+    'Approve failed',
+  );
 }
 
 export async function unapproveMeeting(meetingId: string): Promise<void> {
-  const res = await fetch('/api/admin/meetings', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'unapprove', meetingId }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Unapprove failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/meetings',
+    'POST',
+    { action: 'unapprove', meetingId },
+    'Unapprove failed',
+  );
 }
 
 export async function setAttendance(
   meetingId: string,
   entries: { personId: string; present: boolean }[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/meetings', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'setAttendance', meetingId, entries }),
-  });
-  if (!res.ok)
-    throw new Error(
-      (await res.text()) || `Save attendance failed: ${res.status}`,
-    );
+  await adminRequest(
+    '/api/admin/meetings',
+    'POST',
+    { action: 'setAttendance', meetingId, entries },
+    'Save attendance failed',
+  );
 }
 
 export async function setMemberAttendance(
@@ -444,19 +470,16 @@ export async function setMemberAttendance(
     proxyId?: string | null;
   }[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/meetings', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+  await adminRequest(
+    '/api/admin/meetings',
+    'POST',
+    {
       action: 'setMemberAttendance',
       meetingId,
       entries,
-    }),
-  });
-  if (!res.ok)
-    throw new Error(
-      (await res.text()) || `Save attendance failed: ${res.status}`,
-    );
+    },
+    'Save attendance failed',
+  );
 }
 
 // ---------- Motions ----------
@@ -465,71 +488,57 @@ export async function saveMotion(
   id?: string,
 ): Promise<string | undefined> {
   if (id) {
-    const res = await fetch('/api/admin/motions', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id, ...data }),
-    });
-    if (!res.ok)
-      throw new Error(
-        (await res.text()) || `Save motion failed: ${res.status}`,
-      );
+    await adminRequest(
+      '/api/admin/motions',
+      'PATCH',
+      { id, ...data },
+      'Save motion failed',
+    );
     return undefined;
   }
-  const res = await fetch('/api/admin/motions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save motion failed: ${res.status}`);
   // Create returns { id } — the caller needs it right away to record the
   // roll call for the motion it just created.
-  const body = (await res.json()) as { id: string };
+  const body = await adminRequest<{ id: string }>(
+    '/api/admin/motions',
+    'POST',
+    data,
+    'Save motion failed',
+  );
   return body.id;
 }
 
 export async function deleteMotion(id: string): Promise<void> {
-  const res = await fetch('/api/admin/motions', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest('/api/admin/motions', 'DELETE', { id }, 'Delete failed');
 }
 
 export async function openMotionVoting(id: string): Promise<void> {
-  const res = await fetch('/api/admin/motions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'openVoting', id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Open voting failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/motions',
+    'POST',
+    { action: 'openVoting', id },
+    'Open voting failed',
+  );
 }
 
 export async function closeMotionVoting(id: string): Promise<void> {
-  const res = await fetch('/api/admin/motions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'closeVoting', id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Close voting failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/motions',
+    'POST',
+    { action: 'closeVoting', id },
+    'Close voting failed',
+  );
 }
 
 export async function setVotes(
   motionId: string,
   entries: { personId: string; choice: VoteChoice }[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/motions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'setVotes', motionId, entries }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save votes failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/motions',
+    'POST',
+    { action: 'setVotes', motionId, entries },
+    'Save votes failed',
+  );
 }
 
 export async function setMemberVotes(
@@ -541,13 +550,12 @@ export async function setMemberVotes(
     proxyId?: string | null;
   }[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/motions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'setMemberVotes', motionId, entries }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save votes failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/motions',
+    'POST',
+    { action: 'setMemberVotes', motionId, entries },
+    'Save votes failed',
+  );
 }
 
 // ---------- Resolutions ----------
@@ -555,34 +563,28 @@ export async function setMemberVotes(
 // tier filter — see fetchAdminResolutions), so unlike meetings/motions there
 // is no separate single-record fetch: the list read IS the detail read.
 export async function fetchResolutions(): Promise<ResolutionDetail[]> {
-  const res = await fetch('/api/admin/resolutions');
-  if (!res.ok) throw new Error(`Load resolutions failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    '/api/admin/resolutions',
+    'GET',
+    undefined,
+    'Load resolutions failed',
+  );
 }
 
 export async function saveResolution(
   data: ResolutionInput,
   id?: string,
 ): Promise<void> {
-  const res = await fetch('/api/admin/resolutions', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
-  });
-  if (!res.ok)
-    throw new Error(
-      (await res.text()) || `Save resolution failed: ${res.status}`,
-    );
+  await adminSave('/api/admin/resolutions', data, id, 'Save resolution failed');
 }
 
 export async function deleteResolution(id: string): Promise<void> {
-  const res = await fetch('/api/admin/resolutions', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/resolutions',
+    'DELETE',
+    { id },
+    'Delete failed',
+  );
 }
 
 export async function adoptResolution(
@@ -590,18 +592,17 @@ export async function adoptResolution(
   effectiveDate: string,
   motionId?: string | null,
 ): Promise<void> {
-  const res = await fetch('/api/admin/resolutions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+  await adminRequest(
+    '/api/admin/resolutions',
+    'POST',
+    {
       action: 'adopt',
       id,
       effectiveDate,
       motionId: motionId || undefined,
-    }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Adopt failed: ${res.status}`);
+    },
+    'Adopt failed',
+  );
 }
 
 export async function supersedeResolution(
@@ -610,29 +611,27 @@ export async function supersedeResolution(
   effectiveDate: string,
   motionId?: string | null,
 ): Promise<void> {
-  const res = await fetch('/api/admin/resolutions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
+  await adminRequest(
+    '/api/admin/resolutions',
+    'POST',
+    {
       action: 'supersede',
       id,
       supersedesId,
       effectiveDate,
       motionId: motionId || undefined,
-    }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Supersede failed: ${res.status}`);
+    },
+    'Supersede failed',
+  );
 }
 
 export async function repealResolution(id: string): Promise<void> {
-  const res = await fetch('/api/admin/resolutions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'repeal', id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Repeal failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/resolutions',
+    'POST',
+    { action: 'repeal', id },
+    'Repeal failed',
+  );
 }
 
 // ---------- Elections ----------
@@ -641,9 +640,12 @@ export async function repealResolution(id: string): Promise<void> {
 // resolutions there is no separate single-election fetch: the list read IS
 // the detail read.
 export async function fetchElections(): Promise<ElectionDetail[]> {
-  const res = await fetch('/api/admin/elections');
-  if (!res.ok) throw new Error(`Load elections failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    '/api/admin/elections',
+    'GET',
+    undefined,
+    'Load elections failed',
+  );
 }
 
 export async function saveElection(
@@ -652,55 +654,43 @@ export async function saveElection(
 ): Promise<void> {
   const { source, ...patchData } = data;
   void source;
-  const res = await fetch('/api/admin/elections', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...patchData } : data),
-  });
-  if (!res.ok)
-    throw new Error(
-      (await res.text()) || `Save election failed: ${res.status}`,
-    );
+  await adminRequest(
+    '/api/admin/elections',
+    id ? 'PATCH' : 'POST',
+    id ? { id, ...patchData } : data,
+    'Save election failed',
+  );
 }
 
 export async function openElection(id: string): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'open', id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Open failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/elections',
+    'POST',
+    { action: 'open', id },
+    'Open failed',
+  );
 }
 
 export async function deleteElection(id: string): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest('/api/admin/elections', 'DELETE', { id }, 'Delete failed');
 }
 
 export async function closeElection(id: string): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'close', id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Close failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/elections',
+    'POST',
+    { action: 'close', id },
+    'Close failed',
+  );
 }
 
 export async function voidElection(id: string): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'void', id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Void failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/elections',
+    'POST',
+    { action: 'void', id },
+    'Void failed',
+  );
 }
 
 // Per-winner term fields — a single shared termStart would be wrong for a
@@ -715,36 +705,33 @@ export async function certifyElection(
     title?: string | null;
   }[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'certify', id, winners }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Certify failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/elections',
+    'POST',
+    { action: 'certify', id, winners },
+    'Certify failed',
+  );
 }
 
 export async function uncertifyElection(id: string): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'uncertify', id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Uncertify failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/elections',
+    'POST',
+    { action: 'uncertify', id },
+    'Uncertify failed',
+  );
 }
 
 export async function setTallies(
   electionId: string,
   entries: { candidateId: string; votes: number }[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'setTallies', electionId, entries }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save tallies failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/elections',
+    'POST',
+    { action: 'setTallies', electionId, entries },
+    'Save tallies failed',
+  );
 }
 
 export async function setBallots(
@@ -756,13 +743,12 @@ export async function setBallots(
     castByOwnerId?: string | null;
   }[],
 ): Promise<void> {
-  const res = await fetch('/api/admin/elections', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'setBallots', electionId, entries }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save ballots failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/elections',
+    'POST',
+    { action: 'setBallots', electionId, entries },
+    'Save ballots failed',
+  );
 }
 
 // ---------- Candidates ----------
@@ -774,52 +760,39 @@ export async function saveCandidate(
   data: CandidateInput,
   id?: string,
 ): Promise<void> {
-  const res = await fetch('/api/admin/candidates', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : { electionId, ...data }),
-  });
-  if (!res.ok)
-    throw new Error(
-      (await res.text()) || `Save candidate failed: ${res.status}`,
-    );
+  await adminRequest(
+    '/api/admin/candidates',
+    id ? 'PATCH' : 'POST',
+    id ? { id, ...data } : { electionId, ...data },
+    'Save candidate failed',
+  );
 }
 
 export async function deleteCandidate(id: string): Promise<void> {
-  const res = await fetch('/api/admin/candidates', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest(
+    '/api/admin/candidates',
+    'DELETE',
+    { id },
+    'Delete failed',
+  );
 }
 
 // ---------- Proxies ----------
 // GET returns every proxy with names resolved (see fetchAdminProxies) — like
 // resolutions and elections, the list read IS the detail read.
 export async function fetchProxies(): Promise<ProxyDetail[]> {
-  const res = await fetch('/api/admin/proxies');
-  if (!res.ok) throw new Error(`Load proxies failed: ${res.status}`);
-  return res.json();
+  return adminRequest(
+    '/api/admin/proxies',
+    'GET',
+    undefined,
+    'Load proxies failed',
+  );
 }
 
 export async function saveProxy(data: ProxyInput, id?: string): Promise<void> {
-  const res = await fetch('/api/admin/proxies', {
-    method: id ? 'PATCH' : 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(id ? { id, ...data } : data),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Save proxy failed: ${res.status}`);
+  await adminSave('/api/admin/proxies', data, id, 'Save proxy failed');
 }
 
 export async function deleteProxy(id: string): Promise<void> {
-  const res = await fetch('/api/admin/proxies', {
-    method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Delete failed: ${res.status}`);
+  await adminRequest('/api/admin/proxies', 'DELETE', { id }, 'Delete failed');
 }

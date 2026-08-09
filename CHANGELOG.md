@@ -7,6 +7,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.70] - 2026-08-09
+
+### Fixed
+
+- **A failed admin action now always shows the reason the server gave.** Twenty-two of the admin
+  write helpers discarded the response body and reported only a status code, so explanations the
+  routes go to real trouble over — "Proxy is in use (attendance) — remove those records first",
+  "Inactive lots cannot be recorded present" — were replaced with `Delete failed: 409`. Surfacing
+  the server's message is now a property of the shared request helper rather than something each
+  of sixty-odd call sites had to remember.
+
+### Changed
+
+- Server tests no longer keep private copies of the shared row builders; the last three suites now
+  use the common fixtures module. No behaviour changes.
+
 ## [0.3.69] - 2026-08-09
 
 ### Changed

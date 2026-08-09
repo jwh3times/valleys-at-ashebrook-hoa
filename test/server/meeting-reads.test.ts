@@ -2,6 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { eq } from 'drizzle-orm';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/server/db/client';
+import * as fx from './fixtures';
 import {
   meetings,
   motions,
@@ -24,16 +25,7 @@ beforeAll(async () => {
 
 const now = new Date();
 
-beforeEach(async () => {
-  const db = getDb(env);
-  await db.delete(boardVotes);
-  await db.delete(motionEligibility);
-  await db.delete(motions);
-  await db.delete(boardAttendance);
-  await db.delete(meetings);
-  await db.delete(boardPeople);
-  await db.delete(properties);
-});
+beforeEach(fx.truncateAll);
 
 async function seed(
   id: string,
@@ -41,20 +33,16 @@ async function seed(
   visibility: 'public' | 'homeowner' | 'board',
   date = '2026-09-14',
 ) {
-  await getDb(env)
-    .insert(meetings)
-    .values({
-      id,
-      body: 'board',
-      kind: 'regular',
-      date,
-      title: `T-${id}`,
-      status,
-      visibility,
-      createdBy: 'u1',
-      createdAt: now,
-      updatedAt: now,
-    });
+  // Board body is stated, not inherited: the column decides which voter
+  // model applies, and this suite is about the board record.
+  await fx.seedMeeting(id, {
+    body: 'board',
+    kind: 'regular',
+    date,
+    title: `T-${id}`,
+    status,
+    visibility,
+  });
 }
 
 describe('meeting read helpers', () => {

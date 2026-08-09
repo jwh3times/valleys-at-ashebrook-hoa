@@ -18,6 +18,7 @@ import {
   fetchAdminElections,
 } from '../../src/server/content/reads';
 import { getDb } from '../../src/server/db/client';
+import * as fx from './fixtures';
 import {
   proxies,
   properties,
@@ -49,118 +50,34 @@ function req(u: string, method: string, body?: unknown) {
   } as never;
 }
 
-beforeEach(async () => {
-  const db = getDb(env);
-  // Child-to-parent order: memberAttendance/memberVotes/ballots carry a
-  // proxy_id FK with NO ACTION (see schema.ts's proxyId comments), so they
-  // must be cleared before proxies, and motions before meetings.
-  await db.delete(ballots);
-  await db.delete(memberVotes);
-  await db.delete(memberAttendance);
-  await db.delete(motions);
-  await db.delete(proxies);
-  await db.delete(elections);
-  await db.delete(meetings);
-  await db.delete(owners);
-  await db.delete(properties);
-});
+beforeEach(fx.truncateAll);
 
 async function seedProperty(id: string) {
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id,
-      address: `${id} Main St`,
-      addressNormalized: `${id} main st`,
-      unit: null,
-      status: 'active',
-      voteWeight: 1,
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedProperty(id);
 }
 
 async function seedOwner(id: string, propertyId: string) {
-  await getDb(env)
-    .insert(owners)
-    .values({
-      id,
-      propertyId,
-      fullName: `Owner ${id}`,
-      phone: null,
-      email: null,
-      status: 'active',
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedOwner(id, propertyId);
 }
 
 async function seedMeeting(id: string) {
-  await getDb(env)
-    .insert(meetings)
-    .values({
-      id,
-      body: 'member',
-      kind: 'annual',
-      date: '2026-03-01',
-      title: `Meeting ${id}`,
-      status: 'draft',
-      visibility: 'board',
-      createdBy: 'b',
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedMeeting(id, { date: '2026-03-01', createdBy: 'b' });
 }
 
 async function seedElection(id: string, meetingId: string | null = null) {
-  await getDb(env)
-    .insert(elections)
-    .values({
-      id,
-      meetingId,
-      title: `Election ${id}`,
-      seats: 2,
-      electionDate: '2026-03-01',
-      source: 'recorded',
-      status: 'draft',
-      visibility: 'board',
-      createdBy: 'b',
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedElection(id, {
+    meetingId,
+    electionDate: '2026-03-01',
+    status: 'draft',
+    visibility: 'board',
+    createdBy: 'b',
+  });
 }
 
-function proxyRow(id: string, overrides: Record<string, unknown> = {}) {
-  return {
-    id,
-    propertyId: 'p1',
-    grantorOwnerId: 'o1',
-    holderName: 'Jane Q. Holder',
-    holderOwnerId: null,
-    meetingId: null,
-    electionId: null,
-    createdBy: 'b',
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  };
-}
+const proxyRow = fx.proxyRow;
 
 async function seedMotion(id: string, meetingId: string) {
-  await getDb(env)
-    .insert(motions)
-    .values({
-      id,
-      meetingId,
-      sequence: 1,
-      text: `Motion ${id}`,
-      outcome: 'passed',
-      createdBy: 'b',
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedMotion(id, meetingId, { createdBy: 'b' });
 }
 
 describe('setMemberAttendance with proxyId', () => {
