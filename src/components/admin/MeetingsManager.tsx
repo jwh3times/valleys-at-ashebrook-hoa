@@ -609,6 +609,9 @@ export default function MeetingsManager() {
     }, 'Voting closed.');
   }
 
+  // Edit is now disabled for an open motion, so this can only be reached by
+  // voting being opened while its edit form was already up. Kept as the guard
+  // for exactly that race: setMemberVotes returns 409 while voting is open.
   const editingOpenMotion =
     detail?.motions.find((motion) => motion.id === editingMotionId)
       ?.votingState === 'open';
@@ -1498,7 +1501,17 @@ export default function MeetingsManager() {
                             <button
                               className="row-link"
                               aria-label={`Edit motion ${mo.text}`}
-                              disabled={busy}
+                              // motions.ts rejects ANY patch while voting is
+                              // open, so offering Edit here only produced a
+                              // guaranteed 409 — and the bulk vote editor
+                              // twenty lines away already hid itself for the
+                              // same reason. Close voting to edit.
+                              disabled={busy || mo.votingState === 'open'}
+                              title={
+                                mo.votingState === 'open'
+                                  ? 'Close voting before editing this motion'
+                                  : undefined
+                              }
                               onClick={() => startEditMotion(mo)}
                             >
                               Edit

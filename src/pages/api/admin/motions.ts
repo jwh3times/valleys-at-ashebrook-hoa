@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -13,6 +13,7 @@ import {
   motions,
   motionEligibility,
   boardVotes,
+  properties,
   resolutions,
 } from '../../../server/db/schema';
 import {
@@ -27,6 +28,7 @@ import {
   ownerExistenceError,
 } from '../../../server/content/proxy-guards';
 import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
+import { chunkedIn, D1_MAX_BOUND_PARAMS } from '../../../server/db/chunked';
 
 export const prerender = false;
 
@@ -106,6 +108,48 @@ async function meetingBodyForMotion(
     votingState: existing[0].votingState,
     votingRevision: existing[0].votingRevision,
   };
+}
+
+/** Which of these lots are not active — the roster half of the ADR 0015 rule. */
+async function inactiveLots(db: Db, propertyIds: string[]): Promise<string[]> {
+  const ids = [...new Set(propertyIds)];
+  if (ids.length === 0) return [];
+  // Chunked: one bound parameter per lot, and a full-replace legitimately
+  // carries the whole electorate — which is exactly what exceeds D1's limit.
+  const rows = await chunkedIn(
+    ids,
+    (batch) =>
+      db
+        .select({ id: properties.id })
+        .from(properties)
+        .where(
+          and(inArray(properties.id, batch), ne(properties.status, 'active')),
+        ),
+    // One less than the limit: the status predicate binds a parameter too,
+    // which is the caveat chunkedIn documents.
+    D1_MAX_BOUND_PARAMS - 1,
+  );
+  return rows.map((r) => r.id);
+}
+
+/**
+ * A member motion's mover and second are OWNERS, not board people, so a
+ * board-roster reference on one is incoherent provenance. The Meetings panel
+ * already hides those pickers on a member meeting and re-nulls them before
+ * submitting; this is the server half of that rule, which previously did not
+ * exist — `moverPersonId` was written through regardless of the meeting body.
+ */
+function boardMoverError(
+  meetingBody: string,
+  moverPersonId?: string | null,
+  secondPersonId?: string | null,
+): Response | null {
+  if (meetingBody !== 'member') return null;
+  if (!moverPersonId && !secondPersonId) return null;
+  return new Response(
+    'A member motion cannot name a board member as mover or second',
+    { status: 409 },
+  );
 }
 
 async function setVotes(db: Db, body: unknown): Promise<Response> {
@@ -236,6 +280,21 @@ async function setMemberVotes(
     })
     .from(motionEligibility)
     .where(eq(motionEligibility.motionId, motionId));
+  if (eligibilityRows.length === 0) {
+    // ADR 0015 makes `status = 'inactive'` the sanctioned way to pull a lot
+    // out of member voting, and totalActiveWeight — the quorum denominator —
+    // sums active lots only, so recording an inactive lot's vote inflates the
+    // numerator against a denominator that already excludes it. Checked only
+    // BEFORE first open: once motion_eligibility exists that frozen snapshot
+    // IS the electorate, and a lot deactivated afterwards must stay
+    // correctable (ADR 0020).
+    const inactive = await inactiveLots(db, propertyIds);
+    if (inactive.length > 0)
+      return new Response(
+        `Inactive lots cannot be recorded as voting: ${inactive.join(', ')}`,
+        { status: 409 },
+      );
+  }
   const weightById =
     eligibilityRows.length > 0
       ? new Map(eligibilityRows.map((row) => [row.propertyId, row.weight]))
@@ -501,12 +560,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!result.ok) return new Response(result.error, { status: 400 });
   const input = result.value;
   const meeting = await db
-    .select({ id: meetings.id })
+    .select({ id: meetings.id, body: meetings.body })
     .from(meetings)
     .where(eq(meetings.id, input.meetingId!))
     .limit(1);
   if (meeting.length === 0)
     return new Response('Meeting not found', { status: 404 });
+  const moverError = boardMoverError(
+    meeting[0].body,
+    input.moverPersonId,
+    input.secondPersonId,
+  );
+  if (moverError) return moverError;
   const existing = await db
     .select({ sequence: motions.sequence })
     .from(motions)
@@ -559,6 +624,16 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response('Motion text is frozen after voting first opens', {
       status: 409,
     });
+  if (input.moverPersonId != null || input.secondPersonId != null) {
+    const lookup = await meetingBodyForMotion(db, id);
+    if (!lookup.found) return new Response('Motion not found', { status: 404 });
+    const moverError = boardMoverError(
+      lookup.body,
+      input.moverPersonId,
+      input.secondPersonId,
+    );
+    if (moverError) return moverError;
+  }
   // A motion is not moved between meetings via PATCH — only these fields.
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (input.text !== undefined) set.text = input.text;

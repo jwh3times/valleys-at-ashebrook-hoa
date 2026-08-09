@@ -864,10 +864,6 @@ describe('motions admin route — member votes', () => {
     await enableLiveVoting();
     await createProperty('1 Oak St', 2);
     const outsideSnapshot = await createProperty('2 Oak St', 7);
-    await getDb(env)
-      .update(properties)
-      .set({ status: 'inactive', updatedAt: new Date() })
-      .where(eq(properties.id, outsideSnapshot));
     const id = await createMotion(await createMeeting());
     const barrier = pauseNextBatch();
     try {
@@ -879,6 +875,15 @@ describe('motions admin route — member votes', () => {
         }),
       );
       await barrier.reached;
+      // Deactivated only once the correction is past validation and holding
+      // at the batch. The lot must be ACTIVE when the request is checked —
+      // an inactive lot is now refused outright — but absent from the
+      // snapshot openVoting is about to freeze, which is the race this test
+      // is actually about.
+      await getDb(env)
+        .update(properties)
+        .set({ status: 'inactive', updatedAt: new Date() })
+        .where(eq(properties.id, outsideSnapshot));
       expect((await transitionVoting('openVoting', id)).status).toBe(204);
       expect((await transitionVoting('closeVoting', id)).status).toBe(204);
       barrier.release();
