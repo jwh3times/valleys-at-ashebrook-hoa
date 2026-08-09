@@ -1,10 +1,96 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { proxies, memberAttendance, memberVotes, ballots } from '../db/schema';
+import {
+  proxies,
+  memberAttendance,
+  memberVotes,
+  ballots,
+  owners,
+} from '../db/schema';
 
 export interface ProxyUse {
   propertyId: string;
   proxyId: string;
+}
+
+/**
+ * Which column an entry names its acting owner in. `member_attendance` calls
+ * it `represented_by_owner_id`, `member_votes` and `ballots` call it
+ * `cast_by_owner_id`; the rule about it is identical in all three.
+ */
+export type ProvenanceOwnerKey = 'castByOwnerId' | 'representedByOwnerId';
+
+export interface Provenance {
+  proxyId: string | null;
+  ownerId: string | null;
+}
+
+/**
+ * Reads the "who acted for this lot" pair off one entry of a full-replace
+ * payload: an optional proxy reference and an optional owner reference, at
+ * most one of them.
+ *
+ * The mutual exclusion is the ADR 0018 invariant — who acted lives on the
+ * (board-only) proxy row, never beside it, because a row carrying both could
+ * name two different people and the public read would leak the holder. It was
+ * written out three times, once per route, and drifted only in the field name;
+ * `viaProxy` is derived from `proxy_id`, so this is the only place the pairing
+ * is decided.
+ */
+export function parseProvenance(
+  record: Record<string, unknown> | null,
+  ownerKey: ProvenanceOwnerKey,
+): { ok: true; value: Provenance } | { ok: false; error: string } {
+  const rawOwnerId = record?.[ownerKey];
+  if (
+    rawOwnerId !== undefined &&
+    rawOwnerId !== null &&
+    typeof rawOwnerId !== 'string'
+  ) {
+    return { ok: false, error: `${ownerKey} must be a string when present` };
+  }
+  const rawProxyId = record?.proxyId;
+  if (
+    rawProxyId !== undefined &&
+    rawProxyId !== null &&
+    typeof rawProxyId !== 'string'
+  ) {
+    return { ok: false, error: 'proxyId must be a string when present' };
+  }
+  const proxyId = typeof rawProxyId === 'string' ? rawProxyId : null;
+  const ownerId = typeof rawOwnerId === 'string' ? rawOwnerId : null;
+  if (proxyId !== null && ownerId !== null) {
+    return {
+      ok: false,
+      error: `An entry cannot carry both proxyId and ${ownerKey} — who acted lives on the proxy record`,
+    };
+  }
+  return { ok: true, value: { proxyId, ownerId } };
+}
+
+/**
+ * Rejects an entry set naming an owner that does not exist.
+ *
+ * `member_attendance.represented_by_owner_id`, `member_votes.cast_by_owner_id`
+ * and `ballots.cast_by_owner_id` are all real FKs to `owners`, and D1 enforces
+ * them — so without this an unknown id leaves the route as a raw FOREIGN KEY
+ * error from inside the batch, i.e. an unhandled 500, rather than a 400. Only
+ * `setBallots` pre-checked it; the two sibling routes writing the byte-identical
+ * field did not.
+ */
+export async function ownerExistenceError(
+  db: Db,
+  ownerIds: (string | null)[],
+  ownerKey: ProvenanceOwnerKey,
+): Promise<{ status: 400; message: string } | null> {
+  const ids = [...new Set(ownerIds.filter((id): id is string => id !== null))];
+  if (ids.length === 0) return null;
+  const rows = await db
+    .select({ id: owners.id })
+    .from(owners)
+    .where(inArray(owners.id, ids));
+  if (rows.length === ids.length) return null;
+  return { status: 400, message: `Unknown ${ownerKey} in entries` };
 }
 
 export interface ProxyUseFailure {
