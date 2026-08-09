@@ -21,6 +21,7 @@ import {
   userPropertyLinks,
 } from '../db/schema';
 import { proxyUseError } from './proxy-guards';
+import { resolveCastingAuthority } from './casting-authority';
 import { visibleTiers } from './visibility';
 import { LIVE_VOTING_ENABLED_SQL } from './voting-state';
 
@@ -163,17 +164,10 @@ async function ownCastingError(
     return failure(400, 'castByOwnerId must be an active owner of this lot');
   }
 
-  const linkRows = await db
-    .select({ id: userPropertyLinks.id })
-    .from(userPropertyLinks)
-    .where(
-      and(
-        eq(userPropertyLinks.userId, ctx.userId),
-        eq(userPropertyLinks.propertyId, propertyId),
-      ),
-    )
-    .limit(1);
-  return linkRows.length === 1
+  // Same definition the /vote read model uses, so the page and the cast
+  // path cannot disagree about which lots this caller controls.
+  const { ownLots } = await resolveCastingAuthority(db, ctx.userId);
+  return ownLots.has(propertyId)
     ? null
     : failure(403, 'Caller is not verified for this lot');
 }

@@ -20,7 +20,9 @@ import {
   owners,
   properties,
   proxies,
+  userPropertyLinks,
 } from '../../src/server/db/schema';
+import { users } from '../../src/server/db/auth-schema';
 import {
   fetchElectionsFor,
   fetchMeetingFor,
@@ -33,10 +35,16 @@ beforeAll(async () => {
 
 const now = new Date('2026-08-05T12:00:00Z');
 
+// propertyIds is deliberately left EMPTY. getAuthContext populates it by
+// inner-joining `properties` and filtering to status = 'active', so a lot
+// deactivated after an occasion opened would be missing from it in
+// production. fetchOpenVotingFor must resolve lots from user_property_links
+// instead (ADR 0020's frozen electorate), and seeding an empty set here is
+// what proves it no longer reads this field.
 const homeowner: AuthContext = {
   userId: 'homeowner-user',
   role: 'homeowner',
-  propertyIds: ['property-own'],
+  propertyIds: [],
 };
 
 beforeEach(async () => {
@@ -52,7 +60,19 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(owners);
+  await db.delete(userPropertyLinks);
   await db.delete(properties);
+  await db.delete(users);
+
+  await db.insert(users).values({
+    id: 'homeowner-user',
+    name: 'Home Owner',
+    email: 'homeowner@example.test',
+    emailVerified: true,
+    role: 'homeowner',
+    createdAt: now,
+    updatedAt: now,
+  });
 
   await db
     .insert(properties)
@@ -63,6 +83,13 @@ beforeEach(async () => {
       property('property-no-snapshot', '4 Ashebrook Lane', 50),
       property('property-unrepresented', '5 Ashebrook Lane', 90),
     ]);
+  await db.insert(userPropertyLinks).values({
+    id: 'link-own',
+    userId: 'homeowner-user',
+    propertyId: 'property-own',
+    verifiedAt: now,
+    method: 'otp_email',
+  });
   await db
     .insert(owners)
     .values([
@@ -367,6 +394,36 @@ describe('fetchOpenVotingFor', () => {
 
     expect(await fetchElectionsFor(env, 'board')).toEqual([]);
     expect(await fetchMeetingFor(env, 'board', 'meeting-visible')).toBeNull();
+  });
+
+  it('keeps a lot votable after it is deactivated mid-occasion, and keeps the proxies held for other lots', async () => {
+    // The shared beforeEach already deactivates property-own AFTER the
+    // occasion opened. ADR 0020 says the frozen snapshot decides eligibility,
+    // and the cast path has always honoured that — but the read model used
+    // AuthContext.propertyIds, which excludes inactive lots, so the page and
+    // POST /api/vote disagreed. Worse, losing the only own lot also emptied
+    // the caller's held-proxy list via the no-lots early return, so a lot
+    // going inactive silently removed authority over an unrelated lot.
+    const own = await getDb(env)
+      .select({ status: properties.status })
+      .from(properties)
+      .where(eq(properties.id, 'property-own'));
+    expect(own[0].status).toBe('inactive');
+
+    const items = await fetchOpenVotingFor(env, homeowner);
+    const election = items.find(
+      (item): item is OpenElectionVotingItem =>
+        item.kind === 'election' && item.id === 'election-visible',
+    );
+
+    // The deactivated own lot is still offered, at its FROZEN weight (7),
+    // not the 700 the roster now says.
+    const ownLot = election?.lots.find((l) => l.propertyId === 'property-own');
+    expect(ownLot?.weight).toBe(7);
+    // And the proxy held for a different lot survived with it.
+    expect(election?.lots.some((l) => l.propertyId === 'property-held')).toBe(
+      true,
+    );
   });
 
   it('returns no open voting items when the caller has no verified lots', async () => {
