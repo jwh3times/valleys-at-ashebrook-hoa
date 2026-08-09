@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.64] - 2026-08-09
+
+### Changed
+
+- Server tests now share one fixtures module (`test/server/fixtures.ts`) for the request helper,
+  the row builders, and the foreign-key-safe table reset that each suite previously re-derived by
+  hand. No application code or behaviour changes.
+
 ## [0.3.63] - 2026-08-09
 
 ### Fixed
