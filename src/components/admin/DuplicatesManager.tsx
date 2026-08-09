@@ -180,7 +180,13 @@ export default function DuplicatesManager() {
       {data.remaining > 0 && (
         <div className="form-message" role="status">
           Still scanning... {data.remaining} file(s) not yet hashed.{' '}
-          <button className="row-link" onClick={() => reload()}>
+          <button
+            className="row-link"
+            // reload() rethrows so `run()`-wrapped callers still see a failed
+            // refresh; here there is no wrapper, and the error is already in
+            // `msg`, so the catch just avoids an unhandled rejection.
+            onClick={() => void reload().catch(() => {})}
+          >
             Continue scanning
           </button>
         </div>

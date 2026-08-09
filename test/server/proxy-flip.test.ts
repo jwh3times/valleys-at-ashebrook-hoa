@@ -578,3 +578,135 @@ describe('DELETE /api/admin/meetings with proxies', () => {
     expect(res.status).toBe(204);
   });
 });
+
+describe('owner provenance across the three entry-set routes', () => {
+  // representedByOwnerId / cast_by_owner_id are real FKs to owners and D1
+  // enforces them, so before the shared guard an unknown id left the route as
+  // a raw FOREIGN KEY error from inside the batch — an unhandled 500. Only
+  // setBallots pre-checked it; these pin all three.
+  beforeEach(async () => {
+    await seedProperty('p1');
+    await seedOwner('o1', 'p1');
+    await seedMeeting('m1');
+  });
+
+  it('rejects an unknown representedByOwnerId on setMemberAttendance with 400', async () => {
+    const res = await meetingsPost(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: 'm1',
+        entries: [
+          { propertyId: 'p1', present: true, representedByOwnerId: 'ghost' },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('Unknown representedByOwnerId in entries');
+    expect(await getDb(env).select().from(memberAttendance)).toHaveLength(0);
+  });
+
+  it('rejects an unknown castByOwnerId on setMemberVotes with 400', async () => {
+    await seedMotion('mo1', 'm1');
+    const res = await motionsPost(
+      req(motionsUrl, 'POST', {
+        action: 'setMemberVotes',
+        motionId: 'mo1',
+        entries: [{ propertyId: 'p1', choice: 'yes', castByOwnerId: 'ghost' }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('Unknown castByOwnerId in entries');
+    expect(await getDb(env).select().from(memberVotes)).toHaveLength(0);
+  });
+
+  it('rejects an unknown castByOwnerId on setBallots with 400', async () => {
+    await seedElection('e1');
+    const res = await electionsPost(
+      req(electionsUrl, 'POST', {
+        action: 'setBallots',
+        electionId: 'e1',
+        entries: [{ propertyId: 'p1', castByOwnerId: 'ghost' }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('Unknown castByOwnerId in entries');
+    expect(await getDb(env).select().from(ballots)).toHaveLength(0);
+  });
+
+  it('accepts a known owner on each of the three routes', async () => {
+    // The positive control: proves the 400s above come from the id being
+    // unknown, not from the guard rejecting every owner reference.
+    await seedMotion('mo1', 'm1');
+    await seedElection('e1');
+
+    const attendance = await meetingsPost(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: 'm1',
+        entries: [
+          { propertyId: 'p1', present: true, representedByOwnerId: 'o1' },
+        ],
+      }),
+    );
+    expect(attendance.status).toBe(204);
+
+    const votes = await motionsPost(
+      req(motionsUrl, 'POST', {
+        action: 'setMemberVotes',
+        motionId: 'mo1',
+        entries: [{ propertyId: 'p1', choice: 'yes', castByOwnerId: 'o1' }],
+      }),
+    );
+    expect(votes.status).toBe(204);
+
+    const ballotsRes = await electionsPost(
+      req(electionsUrl, 'POST', {
+        action: 'setBallots',
+        electionId: 'e1',
+        entries: [{ propertyId: 'p1', castByOwnerId: 'o1' }],
+      }),
+    );
+    expect(ballotsRes.status).toBe(204);
+  });
+
+  it('rejects an entry naming both a proxy and an owner, on every route', async () => {
+    await seedMotion('mo1', 'm1');
+    await getDb(env)
+      .insert(proxies)
+      .values(proxyRow('px1', { meetingId: 'm1' }));
+
+    const attendance = await meetingsPost(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: 'm1',
+        entries: [
+          {
+            propertyId: 'p1',
+            present: true,
+            proxyId: 'px1',
+            representedByOwnerId: 'o1',
+          },
+        ],
+      }),
+    );
+    expect(attendance.status).toBe(400);
+    expect(await attendance.text()).toContain('cannot carry both');
+
+    const votes = await motionsPost(
+      req(motionsUrl, 'POST', {
+        action: 'setMemberVotes',
+        motionId: 'mo1',
+        entries: [
+          {
+            propertyId: 'p1',
+            choice: 'yes',
+            proxyId: 'px1',
+            castByOwnerId: 'o1',
+          },
+        ],
+      }),
+    );
+    expect(votes.status).toBe(400);
+    expect(await votes.text()).toContain('cannot carry both');
+  });
+});
