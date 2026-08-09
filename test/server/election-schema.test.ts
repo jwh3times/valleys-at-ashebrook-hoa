@@ -2,6 +2,8 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
+import * as fx from './fixtures';
+
 import {
   elections,
   candidates,
@@ -18,76 +20,32 @@ beforeAll(async () => {
 
 const now = new Date();
 
-beforeEach(async () => {
-  const db = getDb(env);
-  await db.update(boardTerms).set({ electionId: null });
-  await db.delete(ballots);
-  await db.delete(candidates);
-  await db.delete(elections);
-  await db.delete(boardTerms);
-  await db.delete(boardPeople);
-  await db.delete(meetings);
-  await db.delete(properties);
-});
+beforeEach(fx.truncateAll);
 
 async function seedElection(
   id: string,
   overrides: Record<string, unknown> = {},
 ) {
-  await getDb(env)
-    .insert(elections)
-    .values({
-      id,
-      meetingId: null,
-      title: `Election ${id}`,
-      seats: 2,
-      electionDate: '2026-09-15',
-      source: 'recorded',
-      status: 'draft',
-      visibility: 'board',
-      certifiedAt: null,
-      certifiedBy: null,
-      createdBy: 'u1',
-      createdAt: now,
-      updatedAt: now,
-      ...overrides,
-    });
+  await fx.seedElection(id, {
+    electionDate: '2026-09-15',
+    status: 'draft',
+    visibility: 'board',
+    ...overrides,
+  });
 }
 
 async function seedProperty(
   id: string,
   overrides: Record<string, unknown> = {},
 ) {
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id,
-      address: `${id} Main St`,
-      addressNormalized: `${id} main st`,
-      unit: null,
-      status: 'active',
-      voteWeight: 1,
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-      ...overrides,
-    });
+  await fx.seedProperty(id, overrides);
 }
 
 async function seedBoardPerson(
   id: string,
   overrides: Record<string, unknown> = {},
 ) {
-  await getDb(env)
-    .insert(boardPeople)
-    .values({
-      id,
-      fullName: `Person ${id}`,
-      userId: null,
-      createdAt: now,
-      updatedAt: now,
-      ...overrides,
-    });
+  await fx.seedBoardPerson(id, overrides);
 }
 
 describe('elections schema', () => {

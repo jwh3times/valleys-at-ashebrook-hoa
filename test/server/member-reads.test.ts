@@ -1,6 +1,7 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/server/db/client';
+import * as fx from './fixtures';
 import {
   properties,
   owners,
@@ -44,44 +45,18 @@ async function seedProperty(
   id: string,
   opts: { weight?: number; status?: 'active' | 'inactive' } = {},
 ) {
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id,
-      address: `${id} Oak St`,
-      addressNormalized: `${id} oak st`,
-      ...(opts.weight === undefined ? {} : { voteWeight: opts.weight }),
-      ...(opts.status === undefined ? {} : { status: opts.status }),
-      createdAt: now,
-      updatedAt: now,
-    });
-}
-
-async function seedOwner(id: string, propertyId: string, fullName: string) {
-  await getDb(env).insert(owners).values({
-    id,
-    propertyId,
-    fullName,
-    createdAt: now,
-    updatedAt: now,
+  await fx.seedProperty(id, {
+    ...(opts.weight === undefined ? {} : { voteWeight: opts.weight }),
+    ...(opts.status === undefined ? {} : { status: opts.status }),
   });
 }
 
+async function seedOwner(id: string, propertyId: string, fullName: string) {
+  await fx.seedOwner(id, propertyId, { fullName });
+}
+
 async function seedMeeting(id: string, body: 'board' | 'member' = 'member') {
-  await getDb(env)
-    .insert(meetings)
-    .values({
-      id,
-      body,
-      kind: 'annual',
-      date: '2026-09-14',
-      title: `Meeting ${id}`,
-      status: 'draft',
-      visibility: 'board',
-      createdBy: 'u1',
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedMeeting(id, { body });
 }
 
 async function seedProxy(
@@ -142,7 +117,7 @@ describe('member meeting assembly', () => {
     expect(detail.memberAttendance).toEqual([
       {
         propertyId: 'p1',
-        address: 'p1 Oak St',
+        address: 'p1 Ashebrook Lane',
         present: true,
         weight: 2,
         representedByName: null,
@@ -539,13 +514,13 @@ describe('fetchUpcomingOccasionsFor', () => {
 
 describe('fetchMemberLots', () => {
   it('returns the given active lots with their active owners only', async () => {
-    await seedOccasionProperty('p1', '1 Oak St');
-    await seedOccasionProperty('p2', '2 Oak St');
+    await seedOccasionProperty('p1', '1 Ashebrook Lane');
+    await seedOccasionProperty('p2', '2 Ashebrook Lane');
     await seedOccasionOwner('o1', 'p1', 'Jane Doe');
     await seedOccasionOwner('o2', 'p1', 'Old Owner', 'inactive');
     const out = await fetchMemberLots(env, ['p1']);
     expect(out).toHaveLength(1);
-    expect(out[0].address).toBe('1 Oak St');
+    expect(out[0].address).toBe('1 Ashebrook Lane');
     expect(out[0].owners).toEqual([{ id: 'o1', fullName: 'Jane Doe' }]);
   });
 
@@ -556,8 +531,8 @@ describe('fetchMemberLots', () => {
 
 describe('fetchMemberProxies', () => {
   it('splits granted (my lots) from held (naming me as holder), resolving occasion title and date', async () => {
-    await seedOccasionProperty('p1', '1 Oak St');
-    await seedOccasionProperty('p2', '2 Oak St');
+    await seedOccasionProperty('p1', '1 Ashebrook Lane');
+    await seedOccasionProperty('p2', '2 Ashebrook Lane');
     await seedOccasionOwner('o1', 'p1', 'Jane Doe');
     await seedOccasionOwner('o2', 'p2', 'John Roe');
     const m1 = await seedOccasionMeeting({ id: 'm1', title: 'Annual' });
@@ -584,13 +559,13 @@ describe('fetchMemberProxies', () => {
     expect(out.granted[0].occasionTitle).toBe('Annual');
     expect(out.granted[0].occasionDate).toBe('2026-09-01');
     expect(out.held.map((p) => p.id)).toEqual(['pxH']);
-    expect(out.held[0].address).toBe('2 Oak St');
+    expect(out.held[0].address).toBe('2 Ashebrook Lane');
     expect(out.held[0].grantorName).toBe('John Roe');
   });
 
   it("never returns other lots' proxies and returns empty lists for no lots", async () => {
-    await seedOccasionProperty('p1', '1 Oak St');
-    await seedOccasionProperty('p2', '2 Oak St');
+    await seedOccasionProperty('p1', '1 Ashebrook Lane');
+    await seedOccasionProperty('p2', '2 Ashebrook Lane');
     await seedOccasionOwner('o1', 'p1', 'Jane Doe');
     await seedOccasionOwner('o2', 'p2', 'John Roe');
     const m1 = await seedOccasionMeeting({ id: 'm1' });

@@ -6,54 +6,23 @@ import {
   properties,
   owners,
   meetings,
-  motions,
   memberAttendance,
   memberVotes,
+  motions,
 } from '../../src/server/db/schema';
+import {
+  now,
+  truncateAll,
+  seedProperty,
+  seedMeeting,
+  seedMotion,
+} from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
-const now = new Date();
-
-beforeEach(async () => {
-  const db = getDb(env);
-  await db.delete(memberVotes);
-  await db.delete(memberAttendance);
-  await db.delete(motions);
-  await db.delete(meetings);
-  await db.delete(owners);
-  await db.delete(properties);
-});
-
-async function seedProperty(id: string, weight?: number) {
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id,
-      address: `${id} Oak St`,
-      addressNormalized: `${id} oak st`,
-      ...(weight === undefined ? {} : { voteWeight: weight }),
-      createdAt: now,
-      updatedAt: now,
-    });
-}
-
-async function seedMeeting(id: string, body: 'board' | 'member' = 'member') {
-  await getDb(env).insert(meetings).values({
-    id,
-    body,
-    kind: 'annual',
-    date: '2026-09-14',
-    title: 'Annual meeting',
-    status: 'draft',
-    visibility: 'board',
-    createdBy: 'u1',
-    createdAt: now,
-    updatedAt: now,
-  });
-}
+beforeEach(truncateAll);
 
 describe('member meeting schema', () => {
   it('defaults an existing property to vote weight 1', async () => {
@@ -66,7 +35,7 @@ describe('member meeting schema', () => {
   });
 
   it('stores a property with a heavier vote weight', async () => {
-    await seedProperty('p2', 3);
+    await seedProperty('p2', { voteWeight: 3 });
     const rows = await getDb(env)
       .select()
       .from(properties)

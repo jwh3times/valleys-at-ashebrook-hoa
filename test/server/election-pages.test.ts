@@ -8,6 +8,8 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
 import { getDb } from '../../src/server/db/client';
+import * as fx from './fixtures';
+
 import {
   elections,
   candidates,
@@ -23,13 +25,7 @@ beforeAll(async () => {
 
 const now = new Date();
 
-beforeEach(async () => {
-  const db = getDb(env);
-  await db.delete(ballots);
-  await db.delete(candidates);
-  await db.delete(elections);
-  await db.delete(properties);
-});
+beforeEach(fx.truncateAll);
 
 async function makeContainer() {
   const container = await AstroContainer.create();
@@ -40,88 +36,13 @@ async function makeContainer() {
   return container;
 }
 
-async function seedElection(
-  id: string,
-  overrides: Record<string, unknown> = {},
-) {
-  await getDb(env)
-    .insert(elections)
-    .values({
-      id,
-      meetingId: null,
-      title: `Election ${id}`,
-      seats: 2,
-      electionDate: '2026-09-14',
-      source: 'recorded',
-      status: 'closed',
-      visibility: 'public',
-      certifiedAt: null,
-      certifiedBy: null,
-      createdBy: 'u1',
-      createdAt: now,
-      updatedAt: now,
-      ...overrides,
-    });
-}
+const seedElection = fx.seedElection;
 
-async function seedCandidate(
-  id: string,
-  electionId: string,
-  overrides: Record<string, unknown> = {},
-) {
-  await getDb(env)
-    .insert(candidates)
-    .values({
-      id,
-      electionId,
-      fullName: `Candidate ${id}`,
-      boardPersonId: null,
-      statementMd: null,
-      sequence: 0,
-      votes: null,
-      won: false,
-      withdrawn: false,
-      createdAt: now,
-      ...overrides,
-    });
-}
+const seedCandidate = fx.seedCandidate;
 
-async function seedProperty(
-  id: string,
-  overrides: Record<string, unknown> = {},
-) {
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id,
-      address: `${id} Ashebrook Lane`,
-      addressNormalized: `${id} ashebrook lane`,
-      status: 'active',
-      voteWeight: 1,
-      createdAt: now,
-      updatedAt: now,
-      ...overrides,
-    });
-}
+const seedProperty = fx.seedProperty;
 
-async function seedBallot(
-  id: string,
-  electionId: string,
-  propertyId: string,
-  overrides: Record<string, unknown> = {},
-) {
-  await getDb(env)
-    .insert(ballots)
-    .values({
-      id,
-      electionId,
-      propertyId,
-      weight: 1,
-      castByOwnerId: null,
-      recordedAt: now,
-      ...overrides,
-    });
-}
+const seedBallot = fx.seedBallot;
 
 function renderAs(
   container: Awaited<ReturnType<typeof makeContainer>>,
