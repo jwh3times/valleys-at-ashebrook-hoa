@@ -20,7 +20,11 @@ import {
   ballots,
 } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
-import { proxyUseError } from '../../../server/content/proxy-guards';
+import {
+  proxyUseError,
+  parseProvenance,
+  ownerExistenceError,
+} from '../../../server/content/proxy-guards';
 import {
   fetchAdminMeetings,
   fetchAdminMeeting,
@@ -115,7 +119,6 @@ function parseMemberAttendanceEntries(
     const record = item as Record<string, unknown> | null;
     const propertyId = record?.propertyId;
     const present = record?.present;
-    const representedByOwnerId = record?.representedByOwnerId;
     if (
       typeof propertyId !== 'string' ||
       propertyId.trim() === '' ||
@@ -126,41 +129,13 @@ function parseMemberAttendanceEntries(
         error: 'Each attendance entry needs a propertyId and a present boolean',
       };
     }
-    if (
-      representedByOwnerId !== undefined &&
-      representedByOwnerId !== null &&
-      typeof representedByOwnerId !== 'string'
-    ) {
-      return {
-        ok: false,
-        error: 'representedByOwnerId must be a string when present',
-      };
-    }
-    const proxyId = record?.proxyId;
-    if (
-      proxyId !== undefined &&
-      proxyId !== null &&
-      typeof proxyId !== 'string'
-    ) {
-      return { ok: false, error: 'proxyId must be a string when present' };
-    }
-    const parsedProxyId = typeof proxyId === 'string' ? proxyId : null;
-    // Mutual exclusion: who acted for the lot lives on the (board-only)
-    // proxy row, never beside it — a row carrying both could name two
-    // different people, and the public read would leak the holder.
-    if (parsedProxyId !== null && typeof representedByOwnerId === 'string') {
-      return {
-        ok: false,
-        error:
-          'An entry cannot carry both proxyId and representedByOwnerId — who acted lives on the proxy record',
-      };
-    }
+    const provenance = parseProvenance(record, 'representedByOwnerId');
+    if (!provenance.ok) return { ok: false, error: provenance.error };
     entries.push({
       propertyId,
       present,
-      representedByOwnerId:
-        typeof representedByOwnerId === 'string' ? representedByOwnerId : null,
-      proxyId: parsedProxyId,
+      representedByOwnerId: provenance.value.ownerId,
+      proxyId: provenance.value.proxyId,
     });
   }
   return { ok: true, value: entries };
@@ -194,6 +169,13 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     return new Response(proxyFailure.message, {
       status: proxyFailure.status,
     });
+  const ownerFailure = await ownerExistenceError(
+    db,
+    parsedEntries.value.map((e) => e.representedByOwnerId),
+    'representedByOwnerId',
+  );
+  if (ownerFailure)
+    return new Response(ownerFailure.message, { status: ownerFailure.status });
   const rows = parsedEntries.value.map((e) => ({
     id: crypto.randomUUID(),
     meetingId,
