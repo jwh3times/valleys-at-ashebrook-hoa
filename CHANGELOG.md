@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.62] - 2026-08-09
+
+### Fixed
+
+- **Large meeting archives and high-turnout elections no longer fail to load.** D1 accepts at most
+  100 bound parameters per query, and two reads bound one parameter per row of a prior result
+  without batching: the motion counts behind the public meeting list, and the per-lot address
+  lookup behind the board Elections panel. An association with more than 100 approved meetings, or
+  a single election in which more than 100 lots voted, hit `too many SQL variables` and the page
+  failed outright. Both now batch, and the limit itself moved out of a private constant in the
+  read model into `src/server/db/chunked.ts`, so future reads of the same shape inherit it.
+
 ## [0.3.61] - 2026-08-09
 
 ### Fixed
