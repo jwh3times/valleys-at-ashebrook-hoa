@@ -21,7 +21,11 @@ import {
   MEMBER_VOTE_CHOICES,
 } from '../../../lib/types';
 import type { VoteChoice, MemberVoteChoice } from '../../../lib/types';
-import { proxyUseError } from '../../../server/content/proxy-guards';
+import {
+  proxyUseError,
+  parseProvenance,
+  ownerExistenceError,
+} from '../../../server/content/proxy-guards';
 import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
 
 export const prerender = false;
@@ -153,7 +157,6 @@ function parseMemberVoteEntries(
     const record = item as Record<string, unknown> | null;
     const propertyId = record?.propertyId;
     const choice = record?.choice;
-    const castByOwnerId = record?.castByOwnerId;
     if (
       typeof propertyId !== 'string' ||
       propertyId.trim() === '' ||
@@ -167,40 +170,13 @@ function parseMemberVoteEntries(
         error: 'Each vote entry needs a propertyId and a valid choice',
       };
     }
-    if (
-      castByOwnerId !== undefined &&
-      castByOwnerId !== null &&
-      typeof castByOwnerId !== 'string'
-    ) {
-      return {
-        ok: false,
-        error: 'castByOwnerId must be a string when present',
-      };
-    }
-    const proxyId = record?.proxyId;
-    if (
-      proxyId !== undefined &&
-      proxyId !== null &&
-      typeof proxyId !== 'string'
-    ) {
-      return { ok: false, error: 'proxyId must be a string when present' };
-    }
-    const parsedProxyId = typeof proxyId === 'string' ? proxyId : null;
-    // Mutual exclusion: who acted for the lot lives on the (board-only)
-    // proxy row, never beside it — a row carrying both could name two
-    // different people, and the public read would leak the holder.
-    if (parsedProxyId !== null && typeof castByOwnerId === 'string') {
-      return {
-        ok: false,
-        error:
-          'An entry cannot carry both proxyId and castByOwnerId — who acted lives on the proxy record',
-      };
-    }
+    const provenance = parseProvenance(record, 'castByOwnerId');
+    if (!provenance.ok) return { ok: false, error: provenance.error };
     entries.push({
       propertyId,
       choice: choice as MemberVoteChoice,
-      castByOwnerId: typeof castByOwnerId === 'string' ? castByOwnerId : null,
-      proxyId: parsedProxyId,
+      castByOwnerId: provenance.value.ownerId,
+      proxyId: provenance.value.proxyId,
     });
   }
   return { ok: true, value: entries };
@@ -241,6 +217,13 @@ async function setMemberVotes(
     return new Response(proxyFailure.message, {
       status: proxyFailure.status,
     });
+  const ownerFailure = await ownerExistenceError(
+    db,
+    parsedEntries.value.map((e) => e.castByOwnerId),
+    'castByOwnerId',
+  );
+  if (ownerFailure)
+    return new Response(ownerFailure.message, { status: ownerFailure.status });
 
   // Once first-open eligibility exists, every correction uses that immutable
   // electorate and its frozen weights. Before first open, preserve the
