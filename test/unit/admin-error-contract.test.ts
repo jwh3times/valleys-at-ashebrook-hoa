@@ -42,7 +42,10 @@ const CALLS: Array<[string, () => Promise<unknown>]> = [
   ['resolveDuplicates', () => admin.resolveDuplicates(['k'], ['d'])],
   ['saveDues', () => admin.saveDues({} as never)],
   ['saveSite', () => admin.saveSite({} as never)],
-  ['memberAction', () => admin.memberAction({ action: 'approve', id: 'm1' })],
+  [
+    'memberAction',
+    () => admin.memberAction({ action: 'approve', queueId: 'q1' }),
+  ],
   ['deleteMeeting', () => admin.deleteMeeting('m1')],
   ['deleteMotion', () => admin.deleteMotion('mo1')],
   ['deleteResolution', () => admin.deleteResolution('r1')],
