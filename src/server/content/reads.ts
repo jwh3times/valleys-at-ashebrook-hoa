@@ -13,6 +13,7 @@ import {
 } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import type { Db } from '../db/client';
+import { chunkedIn } from '../db/chunked';
 import {
   announcements,
   documents,
@@ -166,16 +167,20 @@ async function withMotionCounts(
   // JS, so a meeting with many motions doesn't ship one row per motion over
   // the wire just to be counted client-side. Also the shape PR 3 needs when
   // this COUNT(*) becomes a SUM(weight) over property-weighted member votes.
-  const counts = await getDb(env)
-    .select({ meetingId: motions.meetingId, motionCount: count() })
-    .from(motions)
-    .where(
-      inArray(
-        motions.meetingId,
-        rows.map((r) => r.id),
-      ),
-    )
-    .groupBy(motions.meetingId);
+  //
+  // Chunked: this binds one parameter per approved in-tier meeting, so an
+  // archive past D1's limit would otherwise fail the public /meetings page
+  // outright. Batch order doesn't matter — the rows become a Map below.
+  const db = getDb(env);
+  const counts = await chunkedIn(
+    rows.map((r) => r.id),
+    (meetingIds) =>
+      db
+        .select({ meetingId: motions.meetingId, motionCount: count() })
+        .from(motions)
+        .where(inArray(motions.meetingId, meetingIds))
+        .groupBy(motions.meetingId),
+  );
   const byMeeting = new Map(counts.map((c) => [c.meetingId, c.motionCount]));
   return rows.map((r) => ({ ...r, motionCount: byMeeting.get(r.id) ?? 0 }));
 }
@@ -700,15 +705,15 @@ interface ElectionEligibilityResult {
   rows: ElectionEligibleProperty[];
 }
 
-const ELECTION_ELIGIBILITY_BATCH_SIZE = 100;
-
 /**
  * Loads selected election snapshots in bounded IN-query batches, then reads
  * the current active roster at most once when one or more elections need the
- * legacy/no-snapshot fallback. D1 permits at most 100 bound parameters per
- * query, so even an unusually deep archive must be chunked here. Keeping this
- * outside the per-election assembler prevents eligibility reads from growing
- * linearly with the list length.
+ * legacy/no-snapshot fallback. Keeping this outside the per-election assembler
+ * prevents eligibility reads from growing linearly with the list length.
+ *
+ * Batching is `chunkedIn`'s job (see `../db/chunked`). Ordering survives it:
+ * batches partition by election id, and the rows are grouped per election
+ * below, so within-batch ordering is all this needs.
  */
 async function electionEligibilityById(
   db: Db,
@@ -716,41 +721,22 @@ async function electionEligibilityById(
 ): Promise<Map<string, ElectionEligibilityResult>> {
   if (electionIds.length === 0) return new Map();
 
-  const snapshotRows: Array<{
-    electionId: string;
-    propertyId: string;
-    address: string;
-    weight: number;
-  }> = [];
-  for (
-    let start = 0;
-    start < electionIds.length;
-    start += ELECTION_ELIGIBILITY_BATCH_SIZE
-  ) {
-    const ids = electionIds.slice(
-      start,
-      start + ELECTION_ELIGIBILITY_BATCH_SIZE,
-    );
-    snapshotRows.push(
-      ...(await db
-        .select({
-          electionId: electionEligibility.electionId,
-          propertyId: electionEligibility.propertyId,
-          address: properties.address,
-          weight: electionEligibility.weight,
-        })
-        .from(electionEligibility)
-        .innerJoin(
-          properties,
-          eq(electionEligibility.propertyId, properties.id),
-        )
-        .where(inArray(electionEligibility.electionId, ids))
-        .orderBy(
-          asc(electionEligibility.electionId),
-          asc(electionEligibility.propertyId),
-        )),
-    );
-  }
+  const snapshotRows = await chunkedIn(electionIds, (ids) =>
+    db
+      .select({
+        electionId: electionEligibility.electionId,
+        propertyId: electionEligibility.propertyId,
+        address: properties.address,
+        weight: electionEligibility.weight,
+      })
+      .from(electionEligibility)
+      .innerJoin(properties, eq(electionEligibility.propertyId, properties.id))
+      .where(inArray(electionEligibility.electionId, ids))
+      .orderBy(
+        asc(electionEligibility.electionId),
+        asc(electionEligibility.propertyId),
+      ),
+  );
   const snapshots = new Map<string, ElectionEligibleProperty[]>();
   for (const { electionId, ...row } of snapshotRows) {
     const rows = snapshots.get(electionId) ?? [];
@@ -901,15 +887,17 @@ async function fetchBallotRowsFor(
     .where(eq(ballots.electionId, electionId))
     .orderBy(asc(ballots.propertyId));
   if (rows.length === 0) return [];
-  const propertyRows = await db
-    .select({ id: properties.id, address: properties.address })
-    .from(properties)
-    .where(
-      inArray(
-        properties.id,
-        rows.map((r) => r.propertyId),
-      ),
-    );
+  // Chunked: one bound parameter per lot that cast, so an election with more
+  // voting lots than D1's limit would otherwise fail the board Elections
+  // panel. Batch order doesn't matter — the rows become a Map below.
+  const propertyRows = await chunkedIn(
+    rows.map((r) => r.propertyId),
+    (propertyIds) =>
+      db
+        .select({ id: properties.id, address: properties.address })
+        .from(properties)
+        .where(inArray(properties.id, propertyIds)),
+  );
   const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
   return rows.map((r) => ({
     propertyId: r.propertyId,
