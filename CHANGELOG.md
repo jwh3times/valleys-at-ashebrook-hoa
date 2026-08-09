@@ -7,6 +7,27 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.67] - 2026-08-09
+
+### Fixed
+
+- **Two member-record rules are now enforced by the server, not only by the browser.** An inactive
+  lot can no longer be recorded present at a member meeting, nor have a vote recorded on a motion
+  that has not yet opened — ADR 0015 makes deactivation the sanctioned way to pull a lot out of
+  voting, and the quorum denominator already excludes it, so counting it inflated the numerator
+  against a denominator that never included it. A member motion can no longer name a board member
+  as mover or second, which is incoherent provenance for a motion moved by owners. Both rules
+  previously existed only in the admin panel, so a direct API call bypassed them.
+- **The motion editor is no longer offered while voting is open.** Any edit is refused in that
+  state, so the Edit button produced a guaranteed error while the vote editor beside it had
+  already hidden itself for the same reason.
+
+### Changed
+
+- An inactive lot may still be recorded **absent**, so a historical attendance roll stays
+  re-saveable after a lot leaves the roster. Votes recorded after a motion has opened continue to
+  use its frozen electorate, so a lot deactivated mid-vote remains correctable.
+
 ## [0.3.66] - 2026-08-09
 
 ### Fixed

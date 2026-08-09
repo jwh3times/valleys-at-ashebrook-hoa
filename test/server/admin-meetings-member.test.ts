@@ -19,6 +19,7 @@ import {
   properties,
   owners,
   settings,
+  boardPeople,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -31,6 +32,7 @@ beforeEach(async () => {
   await db.delete(memberAttendance);
   await db.delete(motionEligibility);
   await db.delete(motions);
+  await db.delete(boardPeople);
   await db.delete(meetings);
   await db.delete(owners);
   await db.delete(properties);
@@ -277,5 +279,136 @@ describe('meetings admin route — member attendance', () => {
         .from(meetings)
         .where(eq(meetings.id, meetingId)),
     ).toHaveLength(1);
+  });
+});
+
+describe('ADR 0015 server backstops for the member record', () => {
+  // These rules existed only in the Meetings panel until now: the browser
+  // excluded inactive lots from the voting editors and re-nulled a board
+  // mover/second on a member motion, while the routes wrote whatever arrived.
+  const motionsUrl = 'http://localhost/api/admin/motions';
+
+  async function deactivate(propertyId: string) {
+    await getDb(env)
+      .update(properties)
+      .set({ status: 'inactive' })
+      .where(eq(properties.id, propertyId));
+  }
+
+  it('refuses to record an inactive lot as present', async () => {
+    const meetingId = await createMeeting();
+    const p1 = await createProperty('1 Oak St');
+    await deactivate(p1);
+
+    const res = await postMeeting(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId,
+        entries: [{ propertyId: p1, present: true }],
+      }),
+    );
+
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain('cannot be recorded present');
+    expect(await getDb(env).select().from(memberAttendance)).toHaveLength(0);
+  });
+
+  it('still accepts an inactive lot recorded ABSENT', async () => {
+    // The panel renders only active lots but submits every property, so a lot
+    // deactivated since the meeting legitimately arrives as absent. Rejecting
+    // those would make a historical roll impossible to re-save.
+    const meetingId = await createMeeting();
+    const active = await createProperty('1 Oak St');
+    const gone = await createProperty('2 Oak St');
+    await deactivate(gone);
+
+    const res = await postMeeting(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId,
+        entries: [
+          { propertyId: active, present: true },
+          { propertyId: gone, present: false },
+        ],
+      }),
+    );
+
+    expect(res.status).toBe(204);
+    expect(await getDb(env).select().from(memberAttendance)).toHaveLength(2);
+  });
+
+  it('refuses to record a vote for an inactive lot before voting first opens', async () => {
+    const meetingId = await createMeeting();
+    const p1 = await createProperty('1 Oak St');
+    await deactivate(p1);
+    const created = await postMotion(
+      req(motionsUrl, 'POST', {
+        meetingId,
+        text: 'Approve the budget',
+        outcome: 'passed',
+      }),
+    );
+    const motionId = ((await created.json()) as { id: string }).id;
+
+    const res = await postMotion(
+      req(motionsUrl, 'POST', {
+        action: 'setMemberVotes',
+        motionId,
+        entries: [{ propertyId: p1, choice: 'yes' }],
+      }),
+    );
+
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain('Inactive lots cannot be recorded');
+  });
+
+  it('refuses a board mover or second on a member motion', async () => {
+    const meetingId = await createMeeting();
+    const personId = crypto.randomUUID();
+    await getDb(env).insert(boardPeople).values({
+      id: personId,
+      fullName: 'B. Ortiz',
+      userId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await postMotion(
+      req(motionsUrl, 'POST', {
+        meetingId,
+        text: 'Approve the budget',
+        outcome: 'passed',
+        moverPersonId: personId,
+      }),
+    );
+
+    expect(res.status).toBe(409);
+    expect(await res.text()).toContain('cannot name a board member');
+    expect(await getDb(env).select().from(motions)).toHaveLength(0);
+  });
+
+  it('still accepts a board mover on a BOARD meeting', async () => {
+    // The positive control: the rule is about the meeting's body, not about
+    // board people being unusable.
+    const meetingId = await createMeeting({ body: 'board' });
+    const personId = crypto.randomUUID();
+    await getDb(env).insert(boardPeople).values({
+      id: personId,
+      fullName: 'B. Ortiz',
+      userId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await postMotion(
+      req(motionsUrl, 'POST', {
+        meetingId,
+        text: 'Approve the budget',
+        outcome: 'passed',
+        moverPersonId: personId,
+      }),
+    );
+
+    expect(res.status).toBe(201);
   });
 });

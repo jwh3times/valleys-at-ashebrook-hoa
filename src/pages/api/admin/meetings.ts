@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -18,6 +18,7 @@ import {
   elections,
   proxies,
   ballots,
+  properties,
 } from '../../../server/db/schema';
 import { normalizeMeetingInput } from '../../../lib/types';
 import {
@@ -25,6 +26,7 @@ import {
   parseProvenance,
   ownerExistenceError,
 } from '../../../server/content/proxy-guards';
+import { chunkedIn, D1_MAX_BOUND_PARAMS } from '../../../server/db/chunked';
 import {
   fetchAdminMeetings,
   fetchAdminMeeting,
@@ -176,6 +178,43 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
   );
   if (ownerFailure)
     return new Response(ownerFailure.message, { status: ownerFailure.status });
+
+  // ADR 0015 makes `status = 'inactive'` the sanctioned way to pull a lot out
+  // of member voting, and totalActiveWeight — the quorum denominator — sums
+  // active lots only, so counting an inactive lot present inflates the
+  // numerator against a denominator that already excludes it.
+  //
+  // Scoped to lots marked PRESENT, not to every entry. This is a full replace:
+  // the Meetings panel renders only active lots but submits every property, so
+  // a lot that has since been deactivated legitimately arrives as absent, and
+  // rejecting those would make a historical roll impossible to re-save.
+  const presentIds = parsedEntries.value
+    .filter((e) => e.present)
+    .map((e) => e.propertyId);
+  if (presentIds.length > 0) {
+    // Chunked: one bound parameter per present lot, and a large member
+    // meeting legitimately exceeds D1's limit.
+    const inactive = await chunkedIn(
+      presentIds,
+      (batch) =>
+        db
+          .select({ id: properties.id })
+          .from(properties)
+          .where(
+            and(inArray(properties.id, batch), ne(properties.status, 'active')),
+          ),
+      // One less than the limit: the status predicate binds a parameter too,
+      // which is the caveat chunkedIn documents.
+      D1_MAX_BOUND_PARAMS - 1,
+    );
+    if (inactive.length > 0)
+      return new Response(
+        `Inactive lots cannot be recorded present: ${inactive
+          .map((r) => r.id)
+          .join(', ')}`,
+        { status: 409 },
+      );
+  }
   const rows = parsedEntries.value.map((e) => ({
     id: crypto.randomUUID(),
     meetingId,
