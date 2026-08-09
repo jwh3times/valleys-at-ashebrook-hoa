@@ -12,7 +12,6 @@ import {
   elections,
   candidates,
   properties,
-  owners,
   meetings,
   boardTerms,
 } from '../../../server/db/schema';
@@ -23,7 +22,11 @@ import {
   INPUT_LIMITS,
 } from '../../../lib/types';
 import { fetchAdminElections } from '../../../server/content/reads';
-import { proxyUseError } from '../../../server/content/proxy-guards';
+import {
+  proxyUseError,
+  parseProvenance,
+  ownerExistenceError,
+} from '../../../server/content/proxy-guards';
 import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
 
 export const prerender = false;
@@ -207,7 +210,6 @@ function parseBallotEntries(
     const record = item as Record<string, unknown> | null;
     const propertyId = record?.propertyId;
     const weight = record?.weight;
-    const castByOwnerId = record?.castByOwnerId;
     if (typeof propertyId !== 'string' || propertyId.trim() === '') {
       return { ok: false, error: 'Each ballot entry needs a propertyId' };
     }
@@ -217,40 +219,13 @@ function parseBallotEntries(
         return { ok: false, error: 'weight must be a positive integer' };
       parsedWeight = weight;
     }
-    if (
-      castByOwnerId !== undefined &&
-      castByOwnerId !== null &&
-      typeof castByOwnerId !== 'string'
-    ) {
-      return {
-        ok: false,
-        error: 'castByOwnerId must be a string when present',
-      };
-    }
-    const proxyId = record?.proxyId;
-    if (
-      proxyId !== undefined &&
-      proxyId !== null &&
-      typeof proxyId !== 'string'
-    ) {
-      return { ok: false, error: 'proxyId must be a string when present' };
-    }
-    const parsedProxyId = typeof proxyId === 'string' ? proxyId : null;
-    // Mutual exclusion: who acted for the lot lives on the (board-only)
-    // proxy row, never beside it — a row carrying both could name two
-    // different people, and the public read would leak the holder.
-    if (parsedProxyId !== null && typeof castByOwnerId === 'string') {
-      return {
-        ok: false,
-        error:
-          'An entry cannot carry both proxyId and castByOwnerId — who acted lives on the proxy record',
-      };
-    }
+    const provenance = parseProvenance(record, 'castByOwnerId');
+    if (!provenance.ok) return { ok: false, error: provenance.error };
     entries.push({
       propertyId,
       weight: parsedWeight,
-      proxyId: parsedProxyId,
-      castByOwnerId: typeof castByOwnerId === 'string' ? castByOwnerId : null,
+      proxyId: provenance.value.proxyId,
+      castByOwnerId: provenance.value.ownerId,
     });
   }
   return { ok: true, value: entries };
@@ -293,6 +268,17 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       status: proxyFailure.status,
     });
 
+  // castByOwnerId is a nullable FK to owners, so an unknown id would otherwise
+  // throw a raw D1 FOREIGN KEY error out of the insert below. Checked here for
+  // the whole entry set rather than per entry, matching the two sibling routes.
+  const ownerFailure = await ownerExistenceError(
+    db,
+    parsedEntries.value.map((e) => e.castByOwnerId),
+    'castByOwnerId',
+  );
+  if (ownerFailure)
+    return new Response(ownerFailure.message, { status: ownerFailure.status });
+
   // Pre-checked so a repeated propertyId is a readable 409 instead of hitting
   // ballots_election_property_unq mid-batch as a raw D1 error.
   const propertyIds = parsedEntries.value.map((e) => e.propertyId);
@@ -310,25 +296,6 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       : [];
   const weightById = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
 
-  // Pre-checked the same way propertyId is: castByOwnerId is a nullable FK
-  // to owners (ON DELETE SET NULL), so an unknown id would otherwise throw a
-  // raw D1 FOREIGN KEY constraint error out of the insert below.
-  const ownerIds = [
-    ...new Set(
-      parsedEntries.value
-        .map((e) => e.castByOwnerId)
-        .filter((id): id is string => id !== null),
-    ),
-  ];
-  const ownerRows =
-    ownerIds.length > 0
-      ? await db
-          .select({ id: owners.id })
-          .from(owners)
-          .where(inArray(owners.id, ownerIds))
-      : [];
-  const validOwnerIds = new Set(ownerRows.map((o) => o.id));
-
   const rows: {
     id: string;
     propertyId: string;
@@ -341,10 +308,6 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     const dbWeight = weightById.get(e.propertyId);
     if (dbWeight === undefined)
       return new Response('Unknown property in entries', { status: 400 });
-    if (e.castByOwnerId !== null && !validOwnerIds.has(e.castByOwnerId))
-      return new Response('Unknown castByOwnerId in entries', {
-        status: 400,
-      });
     // setMemberVotes stamps weight from the database and never trusts the
     // client, because it builds a COMPUTED tally — a client-supplied weight
     // there would let a caller silently rewrite the electorate. This action

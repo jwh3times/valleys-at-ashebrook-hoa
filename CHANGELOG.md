@@ -7,13 +7,53 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.3.61] - 2026-08-09
+## [0.3.64] - 2026-08-09
 
 ### Changed
 
 - Server tests now share one fixtures module (`test/server/fixtures.ts`) for the request helper,
   the row builders, and the foreign-key-safe table reset that each suite previously re-derived by
   hand. No application code or behaviour changes.
+
+## [0.3.63] - 2026-08-09
+
+### Fixed
+
+- **Recording attendance or a member vote for an owner who does not exist now returns a readable 400.** `represented_by_owner_id` and `cast_by_owner_id` are real foreign keys to the owner
+  roster, so an unknown id previously escaped `setMemberAttendance` and `setMemberVotes` as a raw
+  database constraint error — a 500 with no explanation. Only the ballot register pre-checked it.
+  All three entry-set routes now share one guard and answer the same way.
+
+### Changed
+
+- The rule that an entry names either a proxy or an acting owner but never both — the same
+  invariant in member attendance, member votes, and the ballot register — is now defined once in
+  the proxy guards rather than restated in each of the three routes.
+
+## [0.3.62] - 2026-08-09
+
+### Fixed
+
+- **Large meeting archives and high-turnout elections no longer fail to load.** D1 accepts at most
+  100 bound parameters per query, and two reads bound one parameter per row of a prior result
+  without batching: the motion counts behind the public meeting list, and the per-lot address
+  lookup behind the board Elections panel. An association with more than 100 approved meetings, or
+  a single election in which more than 100 lots voted, hit `too many SQL variables` and the page
+  failed outright. Both now batch, and the limit itself moved out of a private constant in the
+  read model into `src/server/db/chunked.ts`, so future reads of the same shape inherit it.
+
+## [0.3.61] - 2026-08-09
+
+### Fixed
+
+- **A failed admin panel load no longer hangs on "Loading…".** `useAdminResource` had error
+  handling for saves but none for the load it runs on mount, so a rejected fetch left every
+  affected admin panel stuck on its loading state, produced an unhandled rejection, and told the
+  board nothing. The load now records a `loadError` and writes the same `"Error: …"` text into the
+  message banner each panel already renders, so the failure is visible in all twelve panels
+  without per-panel handling. `reload()` still rethrows after recording, because the panels call
+  it from inside a save action — swallowing there would report success over a list that never
+  refreshed.
 
 ## [0.3.60] - 2026-08-07
 

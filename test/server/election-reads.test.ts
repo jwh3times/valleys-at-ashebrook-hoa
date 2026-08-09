@@ -363,6 +363,29 @@ describe('election read helpers', () => {
     }
   });
 
+  it('reads an election whose voting lots exceed the D1 bound-parameter limit', async () => {
+    // Sibling of the archive-size test above, on the other axis: that one has
+    // many elections, this one has many lots inside a single election. The
+    // per-lot ballot list resolves addresses with one bound parameter per
+    // voting lot, so before chunking this failed the board Elections panel.
+    await seedElection('e1', { status: 'closed', visibility: 'public' });
+    for (let index = 0; index < 101; index += 1) {
+      const propertyId = `lot-${index.toString().padStart(3, '0')}`;
+      await seedProperty(propertyId);
+      await seedBallot(`ballot-${index}`, 'e1', propertyId);
+    }
+
+    const rows = await fetchAdminElections(env);
+    const e1 = rows.find((r) => r.id === 'e1');
+
+    expect(e1?.ballots).toHaveLength(101);
+    // Every address resolved — a dropped batch would leave 'Unknown'.
+    expect(
+      e1?.ballots?.every((b) => b.address.endsWith('Ashebrook Lane')),
+    ).toBe(true);
+    expect(e1?.turnout.ballotsCast).toBe(101);
+  });
+
   it('never returns the per-lot ballot list on the public read', async () => {
     await seedElection('e1', { status: 'closed', visibility: 'public' });
     await seedProperty('p1');
