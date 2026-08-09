@@ -321,6 +321,37 @@ describe('ElectionsManager', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not offer an add-candidate form on a closed recorded election', async () => {
+    // The board used to get a working-looking form here; POST
+    // /api/admin/candidates refuses a non-draft election with 409.
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Closed recorded election',
+        source: 'recorded',
+        status: 'closed',
+        candidates: [candidate({ fullName: 'Alice' })],
+      }),
+    ]);
+    render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
+    const title = screen.getByText('Closed recorded election');
+    const card = title.closest('.panel-card') as HTMLElement;
+    await userEvent.click(
+      within(card).getByRole('button', { name: /details/i }),
+    );
+
+    expect(within(card).queryByText('Add candidate')).not.toBeInTheDocument();
+    // The rest of the record is still editable, so this is not the panel
+    // simply having gone read-only.
+    expect(
+      within(card).getByRole('button', {
+        name: /edit closed recorded election/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('shows closed conducted totals and the frozen eligible denominator read-only', async () => {
     mocked.fetchElections.mockResolvedValue([
       election({

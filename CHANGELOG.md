@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.65] - 2026-08-09
+
+### Fixed
+
+- **The Elections panel no longer offers an add-candidate form that the server refuses.** A closed
+  recorded election showed a working-looking form, but candidates can only be added while an
+  election is a draft, so submitting it always failed. A candidate may also now be withdrawn from
+  a conducted election while voting is open — the one change the record permits at that point,
+  which the panel previously hid.
+
+### Changed
+
+- What the board may do to an election — edit, add or remove a candidate, type tallies or a ballot
+  register, certify, uncertify, void, delete — is now decided in one place rather than by a single
+  catch-all condition inside the list rendering, so each control matches the rule the server
+  actually enforces.
+
 ## [0.3.64] - 2026-08-09
 
 ### Changed
