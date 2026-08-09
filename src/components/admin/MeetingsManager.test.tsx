@@ -1742,7 +1742,7 @@ describe('MeetingsManager', () => {
     );
   });
 
-  it('hides only the bulk member-vote editor while editing an open motion', async () => {
+  it('refuses to open the motion editor while voting is open', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
     mocked.fetchProperties.mockResolvedValue([
       {
@@ -1766,18 +1766,18 @@ describe('MeetingsManager', () => {
     await userEvent.click(
       screen.getByRole('button', { name: /attendance & motions/i }),
     );
-    await userEvent.click(
-      await screen.findByRole('button', {
-        name: /edit motion approve the annual budget/i,
-      }),
-    );
 
-    expect(screen.getByLabelText(/^motion$/i)).toHaveValue(
-      'Approve the annual budget',
-    );
-    expect(
-      screen.queryByLabelText('Vote — 12 Oak Lane'),
-    ).not.toBeInTheDocument();
+    // motions.ts rejects any PATCH while voting is open, so Edit used to be a
+    // guaranteed 409 — while the bulk vote editor already hid itself for the
+    // same reason. The two sibling controls now agree.
+    const edit = await screen.findByRole('button', {
+      name: /edit motion approve the annual budget/i,
+    });
+    expect(edit).toBeDisabled();
+    await userEvent.click(edit);
+    // The add-motion textarea is always present; what must NOT happen is it
+    // being seeded with this motion's text, which is how edit mode starts.
+    expect(screen.getByLabelText(/^motion$/i)).toHaveValue('');
   });
 
   it('shows the historical weighted tally with its frozen eligible weight after close', async () => {
