@@ -17,6 +17,10 @@ import {
   fetchProxies,
 } from '../../lib/admin';
 import { fetchSiteSettings } from '../../lib/content';
+import {
+  electionAffordances,
+  canWithdrawCandidate,
+} from '../../lib/affordances';
 import type {
   ElectionDetail,
   ElectionStatus,
@@ -634,9 +638,7 @@ export default function ElectionsManager() {
               <div key={status} style={{ marginBottom: '22px' }}>
                 <h2 style={{ marginBottom: '10px' }}>{label}</h2>
                 {group.map((e) => {
-                  const editable =
-                    e.status === 'draft' ||
-                    (e.source === 'recorded' && e.status === 'closed');
+                  const can = electionAffordances(e);
                   return (
                     <div
                       key={e.id}
@@ -680,7 +682,7 @@ export default function ElectionsManager() {
                           </div>
                         </div>
                         <div className="row-actions">
-                          {editable && (
+                          {can.canEditElection && (
                             <button
                               className="row-link"
                               aria-label={`Edit ${e.title}`}
@@ -737,7 +739,7 @@ export default function ElectionsManager() {
                               Close
                             </button>
                           )}
-                          {e.status === 'closed' && (
+                          {can.canVoid && (
                             <button
                               className="row-link row-link--danger"
                               aria-label={`Void ${e.title}`}
@@ -746,7 +748,7 @@ export default function ElectionsManager() {
                               Void
                             </button>
                           )}
-                          {e.status === 'certified' && (
+                          {can.canUncertify && (
                             <button
                               className="row-link"
                               aria-label={`Uncertify ${e.title}`}
@@ -803,22 +805,31 @@ export default function ElectionsManager() {
                                       </div>
                                     )}
                                   </div>
-                                  {editable && (
+                                  {(can.canEditCandidate ||
+                                    canWithdrawCandidate(e, c)) && (
                                     <div className="row-actions">
-                                      <button
-                                        className="row-link"
-                                        aria-label={`Edit candidate ${c.fullName}`}
-                                        onClick={() => startEditCandidate(c)}
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        className="row-link"
-                                        onClick={() => toggleWithdrawn(e.id, c)}
-                                      >
-                                        {c.withdrawn ? 'Reinstate' : 'Withdraw'}
-                                      </button>
-                                      {e.status === 'draft' && (
+                                      {can.canEditCandidate && (
+                                        <button
+                                          className="row-link"
+                                          aria-label={`Edit candidate ${c.fullName}`}
+                                          onClick={() => startEditCandidate(c)}
+                                        >
+                                          Edit
+                                        </button>
+                                      )}
+                                      {canWithdrawCandidate(e, c) && (
+                                        <button
+                                          className="row-link"
+                                          onClick={() =>
+                                            toggleWithdrawn(e.id, c)
+                                          }
+                                        >
+                                          {c.withdrawn
+                                            ? 'Reinstate'
+                                            : 'Withdraw'}
+                                        </button>
+                                      )}
+                                      {can.canRemoveCandidate && (
                                         <button
                                           className="row-link row-link--danger"
                                           aria-label={`Remove candidate ${c.fullName}`}
@@ -833,7 +844,9 @@ export default function ElectionsManager() {
                               ))
                             )}
 
-                            {editable && (
+                            {(editingCandidateId
+                              ? can.canEditCandidate
+                              : can.canAddCandidate) && (
                               <form
                                 onSubmit={(evt) => submitCandidate(evt, e.id)}
                                 style={{ marginTop: '14px' }}
@@ -1015,52 +1028,48 @@ export default function ElectionsManager() {
                             </>
                           )}
 
-                          {e.source === 'recorded' &&
-                            editable &&
-                            e.candidates.length > 0 && (
-                              <form
-                                className="panel-card"
-                                onSubmit={(evt) => submitTallies(evt, e)}
-                                style={{ marginBottom: '14px' }}
-                              >
-                                <div className="panel-editor__title">
-                                  Tallies
+                          {can.canEditTallies && e.candidates.length > 0 && (
+                            <form
+                              className="panel-card"
+                              onSubmit={(evt) => submitTallies(evt, e)}
+                              style={{ marginBottom: '14px' }}
+                            >
+                              <div className="panel-editor__title">Tallies</div>
+                              {e.candidates.map((c) => (
+                                <div
+                                  key={c.id}
+                                  className="field"
+                                  style={{ margin: '0 0 10px' }}
+                                >
+                                  <label htmlFor={`tally-${e.id}-${c.id}`}>
+                                    Tally — {c.fullName}
+                                  </label>
+                                  <input
+                                    id={`tally-${e.id}-${c.id}`}
+                                    type="number"
+                                    value={tallyForm[c.id] ?? ''}
+                                    onChange={(evt) =>
+                                      setTallyForm((prev) => ({
+                                        ...prev,
+                                        [c.id]: evt.target.value,
+                                      }))
+                                    }
+                                  />
                                 </div>
-                                {e.candidates.map((c) => (
-                                  <div
-                                    key={c.id}
-                                    className="field"
-                                    style={{ margin: '0 0 10px' }}
-                                  >
-                                    <label htmlFor={`tally-${e.id}-${c.id}`}>
-                                      Tally — {c.fullName}
-                                    </label>
-                                    <input
-                                      id={`tally-${e.id}-${c.id}`}
-                                      type="number"
-                                      value={tallyForm[c.id] ?? ''}
-                                      onChange={(evt) =>
-                                        setTallyForm((prev) => ({
-                                          ...prev,
-                                          [c.id]: evt.target.value,
-                                        }))
-                                      }
-                                    />
-                                  </div>
-                                ))}
-                                <div className="btn-row">
-                                  <button
-                                    className="btn btn--small"
-                                    type="submit"
-                                    disabled={busy}
-                                  >
-                                    {busy ? 'Saving…' : 'Save tallies'}
-                                  </button>
-                                </div>
-                              </form>
-                            )}
+                              ))}
+                              <div className="btn-row">
+                                <button
+                                  className="btn btn--small"
+                                  type="submit"
+                                  disabled={busy}
+                                >
+                                  {busy ? 'Saving…' : 'Save tallies'}
+                                </button>
+                              </div>
+                            </form>
+                          )}
 
-                          {e.source === 'recorded' && editable && (
+                          {can.canEditBallots && (
                             <form
                               className="panel-card"
                               onSubmit={(evt) => submitBallots(evt, e)}
@@ -1252,7 +1261,7 @@ export default function ElectionsManager() {
                             </form>
                           )}
 
-                          {e.status === 'closed' && (
+                          {can.canCertify && (
                             <form
                               className="panel-card"
                               onSubmit={(evt) => submitCertify(evt, e)}
