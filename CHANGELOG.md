@@ -7,6 +7,19 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.61] - 2026-08-09
+
+### Fixed
+
+- **A failed admin panel load no longer hangs on "Loading…".** `useAdminResource` had error
+  handling for saves but none for the load it runs on mount, so a rejected fetch left every
+  affected admin panel stuck on its loading state, produced an unhandled rejection, and told the
+  board nothing. The load now records a `loadError` and writes the same `"Error: …"` text into the
+  message banner each panel already renders, so the failure is visible in all twelve panels
+  without per-panel handling. `reload()` still rethrows after recording, because the panels call
+  it from inside a save action — swallowing there would report success over a list that never
+  refreshed.
+
 ## [0.3.60] - 2026-08-07
 
 ### Changed
