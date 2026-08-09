@@ -38,6 +38,49 @@ describe('useAdminResource', () => {
     expect(result.current.busy).toBe(false);
   });
 
+  it('clears loading and reports the error when the mount load fails', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() => useAdminResource(fetcher, [] as any[]));
+
+    // Without this the manager sits on "Loading…" forever.
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.loadError).toBe('network down');
+    // Surfaced through the banner every manager already renders.
+    expect(result.current.msg).toBe('Error: network down');
+    expect(result.current.data).toEqual([]);
+  });
+
+  it('clears a previous loadError once a later load succeeds', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() =>
+      useAdminResource(fetcher, '' as string),
+    );
+    await waitFor(() => expect(result.current.loadError).toBe('network down'));
+
+    fetcher.mockResolvedValue('recovered');
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.loadError).toBe('');
+    expect(result.current.data).toBe('recovered');
+  });
+
+  it('reload() rethrows so a run()-wrapped refresh is not reported as success', async () => {
+    const fetcher = vi.fn().mockResolvedValue('one');
+    const { result } = renderHook(() => useAdminResource(fetcher, ''));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    fetcher.mockRejectedValue(new Error('refresh failed'));
+    await act(async () => {
+      // The shape every manager uses: write, then refresh the list.
+      await result.current.run(async () => {
+        await result.current.reload();
+      }, 'Saved.');
+    });
+    expect(result.current.msg).toBe('Error: refresh failed');
+    expect(result.current.busy).toBe(false);
+  });
+
   it('reload() re-runs the fetcher', async () => {
     const fetcher = vi.fn().mockResolvedValue('one');
     const { result } = renderHook(() => useAdminResource(fetcher, ''));
