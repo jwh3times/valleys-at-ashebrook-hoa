@@ -7,7 +7,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.3.65] - 2026-08-09
+## [0.3.67] - 2026-08-09
 
 ### Fixed
 
@@ -27,6 +27,35 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - An inactive lot may still be recorded **absent**, so a historical attendance roll stays
   re-saveable after a lot leaves the roster. Votes recorded after a motion has opened continue to
   use its frozen electorate, so a lot deactivated mid-vote remains correctable.
+
+## [0.3.66] - 2026-08-09
+
+### Fixed
+
+- **The Elections panel no longer offers an add-candidate form that the server refuses.** A closed
+  recorded election showed a working-looking form, but candidates can only be added while an
+  election is a draft, so submitting it always failed. A candidate may also now be withdrawn from
+  a conducted election while voting is open — the one change the record permits at that point,
+  which the panel previously hid.
+
+### Changed
+
+- What the board may do to an election — edit, add or remove a candidate, type tallies or a ballot
+  register, certify, uncertify, void, delete — is now decided in one place rather than by a single
+  catch-all condition inside the list rendering, so each control matches the rule the server
+  actually enforces.
+
+## [0.3.65] - 2026-08-09
+
+### Fixed
+
+- **A lot deactivated while voting is open stays votable, and no longer takes the caller's other
+  proxies with it.** The `/vote` page resolved a caller's lots from the general homeowner access
+  set, which excludes inactive properties, while the cast endpoint correctly used the frozen
+  electorate recorded when the occasion opened. Deactivating a lot mid-election therefore removed
+  it from the page — along with any proxies that caller held for entirely unrelated lots — even
+  though a ballot for it would still have been accepted. Both paths now resolve lots the same way,
+  and eligibility remains the frozen snapshot's decision.
 
 ## [0.3.64] - 2026-08-09
 
