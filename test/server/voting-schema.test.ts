@@ -2,6 +2,8 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
+import * as fx from './fixtures';
+
 import {
   ballotChoices,
   candidates,
@@ -17,17 +19,7 @@ beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
-beforeEach(async () => {
-  const db = getDb(env);
-  await db.delete(ballotChoices);
-  await db.delete(electionEligibility);
-  await db.delete(motionEligibility);
-  await db.delete(candidates);
-  await db.delete(elections);
-  await db.delete(motions);
-  await db.delete(meetings);
-  await db.delete(properties);
-});
+beforeEach(fx.truncateAll);
 
 const now = new Date();
 
@@ -36,90 +28,24 @@ async function pragmaRows(statement: string) {
   return result.results as Record<string, unknown>[];
 }
 
-async function seedProperty(id: string) {
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id,
-      address: `${id} Main St`,
-      addressNormalized: `${id} main st`,
-      unit: null,
-      status: 'active',
-      voteWeight: 1,
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-}
+const seedProperty = fx.seedProperty;
 
 async function seedElection(id: string, candidateId?: string) {
-  await getDb(env)
-    .insert(elections)
-    .values({
-      id,
-      meetingId: null,
-      title: `Election ${id}`,
-      seats: 1,
-      electionDate: '2026-09-15',
-      source: 'conducted',
-      status: 'draft',
-      visibility: 'board',
-      certifiedAt: null,
-      certifiedBy: null,
-      createdBy: 'u1',
-      createdAt: now,
-      updatedAt: now,
-    });
-
+  await fx.seedElection(id, {
+    seats: 1,
+    electionDate: '2026-09-15',
+    source: 'conducted',
+    status: 'draft',
+    visibility: 'board',
+  });
   if (candidateId) {
-    await getDb(env)
-      .insert(candidates)
-      .values({
-        id: candidateId,
-        electionId: id,
-        fullName: `Candidate ${candidateId}`,
-        boardPersonId: null,
-        statementMd: null,
-        sequence: 1,
-        votes: null,
-        won: false,
-        withdrawn: false,
-        createdAt: now,
-      });
+    await fx.seedCandidate(candidateId, id, { sequence: 1 });
   }
 }
 
 async function seedMotion(meetingId: string, motionId: string) {
-  await getDb(env)
-    .insert(meetings)
-    .values({
-      id: meetingId,
-      body: 'member',
-      kind: 'annual',
-      date: '2026-09-15',
-      title: `Meeting ${meetingId}`,
-      status: 'draft',
-      visibility: 'board',
-      createdBy: 'u1',
-      createdAt: now,
-      updatedAt: now,
-    });
-  await getDb(env)
-    .insert(motions)
-    .values({
-      id: motionId,
-      meetingId,
-      sequence: 1,
-      text: `Motion ${motionId}`,
-      moverPersonId: null,
-      secondPersonId: null,
-      moverOwnerId: null,
-      secondOwnerId: null,
-      outcome: 'tabled',
-      createdBy: 'u1',
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedMeeting(meetingId, { date: '2026-09-15' });
+  await fx.seedMotion(motionId, meetingId, { outcome: 'tabled' });
 }
 
 describe('live voting schema', () => {

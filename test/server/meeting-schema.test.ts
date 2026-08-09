@@ -9,46 +9,26 @@ import {
   boardVotes,
   boardPeople,
 } from '../../src/server/db/schema';
+import {
+  now,
+  truncateAll,
+  seedBoardPerson as seedPerson,
+  seedMeeting as seedMeetingRow,
+} from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
-beforeEach(async () => {
-  const db = getDb(env);
-  await db.delete(boardVotes);
-  await db.delete(motions);
-  await db.delete(boardAttendance);
-  await db.delete(meetings);
-  await db.delete(boardPeople);
-});
+beforeEach(truncateAll);
 
-const now = new Date();
-
-async function seedPerson(id: string) {
-  await getDb(env)
-    .insert(boardPeople)
-    .values({
-      id,
-      fullName: `P${id}`,
-      userId: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-}
-
+// This suite is about the BOARD meeting record, so body is stated rather than
+// inherited, and `kind` stays 'regular' to match the rows these tests assert on.
 async function seedMeeting(id: string, body: 'board' | 'member' = 'board') {
-  await getDb(env).insert(meetings).values({
-    id,
+  await seedMeetingRow(id, {
     body,
     kind: 'regular',
-    date: '2026-09-14',
     title: 'September meeting',
-    status: 'draft',
-    visibility: 'board',
-    createdBy: 'u1',
-    createdAt: now,
-    updatedAt: now,
   });
 }
 

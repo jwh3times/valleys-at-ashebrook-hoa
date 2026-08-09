@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
 import { getDb } from '../../src/server/db/client';
+import * as fx from './fixtures';
 import {
   meetings,
   motions,
@@ -95,27 +96,14 @@ async function seedProperty(
   id: string,
   opts: { weight?: number; status?: 'active' | 'inactive' } = {},
 ) {
-  await getDb(env)
-    .insert(properties)
-    .values({
-      id,
-      address: `${id} Oak St`,
-      addressNormalized: `${id} oak st`,
-      ...(opts.weight === undefined ? {} : { voteWeight: opts.weight }),
-      ...(opts.status === undefined ? {} : { status: opts.status }),
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedProperty(id, {
+    ...(opts.weight === undefined ? {} : { voteWeight: opts.weight }),
+    ...(opts.status === undefined ? {} : { status: opts.status }),
+  });
 }
 
 async function seedOwner(id: string, propertyId: string, fullName: string) {
-  await getDb(env).insert(owners).values({
-    id,
-    propertyId,
-    fullName,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await fx.seedOwner(id, propertyId, { fullName });
 }
 
 describe('/meetings', () => {
@@ -581,8 +569,8 @@ describe('/meetings/[id]', () => {
     expect(html).toContain('2 yes');
     expect(html).toContain('1 no');
     // Per-property votes, not per-person roll call.
-    expect(html).toContain('p1 Oak St');
-    expect(html).toContain('p2 Oak St');
+    expect(html).toContain('p1 Ashebrook Lane');
+    expect(html).toContain('p2 Ashebrook Lane');
     // No resident names published — the whole privacy story this branch
     // rests on. castByName ('A. Reyes', cast on p1's vote) and
     // representedByName ('B. Ortiz', representing p2's attendance) are
