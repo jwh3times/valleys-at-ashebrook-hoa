@@ -439,6 +439,40 @@ describe('meeting read helpers', () => {
     expect(byId.get('m3')).toBe(0);
   });
 
+  it('reads a meeting archive larger than the D1 bound-parameter limit', async () => {
+    // The motion-count read binds one parameter per approved in-tier meeting.
+    // Past D1's limit this failed outright — and it backs the PUBLIC /meetings
+    // page, so the archive growing was enough to break it for everyone.
+    for (let index = 0; index < 101; index += 1) {
+      await seed(
+        `archive-${index.toString().padStart(3, '0')}`,
+        'approved',
+        'public',
+      );
+    }
+    // One meeting carries a motion, so a dropped batch shows up as a wrong
+    // count rather than only as an absent row.
+    await getDb(env).insert(motions).values({
+      id: 'mo1',
+      meetingId: 'archive-100',
+      sequence: 1,
+      text: 'X',
+      moverPersonId: null,
+      secondPersonId: null,
+      outcome: 'passed',
+      createdBy: 'u1',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const rows = await fetchMeetingsFor(env, 'visitor');
+
+    expect(rows).toHaveLength(101);
+    const byId = new Map(rows.map((r) => [r.id, r.motionCount]));
+    expect(byId.get('archive-100')).toBe(1);
+    expect(byId.get('archive-000')).toBe(0);
+  });
+
   it('shows drafts to the admin read', async () => {
     await seed('m1', 'draft', 'board');
     await seed('m2', 'approved', 'public');
