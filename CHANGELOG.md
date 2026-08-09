@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.69] - 2026-08-09
+
+### Changed
+
+- The protocol that keeps a multi-statement election change atomic — replacing typed tallies,
+  replacing the ballot register, and certifying — now lives in one module instead of being spelled
+  out separately in each of the three. The per-statement safety check was previously hand-copied
+  eight times and is now generated once, so it cannot be forgotten on a new statement. No change to
+  what any of the three actions does or to the errors they return.
+
 ## [0.3.68] - 2026-08-09
 
 ### Changed
