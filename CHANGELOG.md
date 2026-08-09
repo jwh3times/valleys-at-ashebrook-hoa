@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.68] - 2026-08-09
+
+### Changed
+
+- Added a structural test over the server read model, mirroring the one that already covers the
+  admin routes: every read must declare whether it is filtered by the caller's tier, board-only by
+  construction, or limited to lots the caller controls. A new read that declares none of the three
+  now fails the build instead of relying on a reviewer noticing. No behaviour changes.
+
 ## [0.3.67] - 2026-08-09
 
 ### Fixed
