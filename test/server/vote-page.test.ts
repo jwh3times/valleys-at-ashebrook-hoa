@@ -16,7 +16,9 @@ import {
   meetings,
   properties,
   settings,
+  userPropertyLinks,
 } from '../../src/server/db/schema';
+import { users } from '../../src/server/db/auth-schema';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -33,7 +35,9 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
+  await db.delete(userPropertyLinks);
   await db.delete(properties);
+  await db.delete(users);
   await db.delete(settings);
 });
 
@@ -128,6 +132,24 @@ async function insertOpenElection() {
     voteWeight: 1,
     createdAt: now,
     updatedAt: now,
+  });
+  // The page's read model resolves the caller's lots from user_property_links
+  // rather than from AuthContext.propertyIds, so the link has to be real.
+  await db.insert(users).values({
+    id: 'u1',
+    name: 'Home Owner',
+    email: 'u1@example.test',
+    emailVerified: true,
+    role: 'homeowner',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await db.insert(userPropertyLinks).values({
+    id: 'link-p1',
+    userId: 'u1',
+    propertyId: 'p1',
+    verifiedAt: now,
+    method: 'otp_email',
   });
   await db.insert(elections).values({
     id: 'e1',
