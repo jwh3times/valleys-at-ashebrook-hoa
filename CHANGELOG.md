@@ -7,6 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.63] - 2026-08-09
+
+### Fixed
+
+- **Recording attendance or a member vote for an owner who does not exist now returns a readable 400.** `represented_by_owner_id` and `cast_by_owner_id` are real foreign keys to the owner
+  roster, so an unknown id previously escaped `setMemberAttendance` and `setMemberVotes` as a raw
+  database constraint error — a 500 with no explanation. Only the ballot register pre-checked it.
+  All three entry-set routes now share one guard and answer the same way.
+
+### Changed
+
+- The rule that an entry names either a proxy or an acting owner but never both — the same
+  invariant in member attendance, member votes, and the ballot register — is now defined once in
+  the proxy guards rather than restated in each of the three routes.
+
 ## [0.3.62] - 2026-08-09
 
 ### Fixed
