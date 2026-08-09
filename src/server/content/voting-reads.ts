@@ -16,6 +16,7 @@ import {
   proxies,
 } from '../db/schema';
 import { visibleTiers } from './visibility';
+import { resolveCastingAuthority } from './casting-authority';
 
 interface HeldProxy {
   id: string;
@@ -40,12 +41,17 @@ export async function fetchOpenVotingFor(
   env: Env,
   ctx: AuthContext,
 ): Promise<OpenVotingItem[]> {
-  if (ctx.propertyIds.length === 0) return [];
-
   const tiers = visibleTiers(ctx.role);
   if (tiers.length === 0) return [];
 
   const db = getDb(env);
+  // NOT ctx.propertyIds: that set is filtered to active properties, which
+  // would drop a lot deactivated after the occasion opened — and, because of
+  // the empty-set early return below, would take the caller's proxies for
+  // OTHER lots with it. The frozen snapshot decides eligibility (ADR 0020).
+  const { ownLots } = await resolveCastingAuthority(db, ctx.userId);
+  if (ownLots.size === 0) return [];
+  const callerLotIds = [...ownLots];
   const [electionRows, motionRows] = await Promise.all([
     db
       .select({
@@ -87,7 +93,7 @@ export async function fetchOpenVotingFor(
 
   if (electionRows.length === 0 && motionRows.length === 0) return [];
 
-  const ownPropertyIds = new Set(ctx.propertyIds);
+  const ownPropertyIds = ownLots;
   const ownerRows = await db
     .select({
       id: owners.id,
@@ -97,7 +103,7 @@ export async function fetchOpenVotingFor(
     .from(owners)
     .where(
       and(
-        inArray(owners.propertyId, ctx.propertyIds),
+        inArray(owners.propertyId, callerLotIds),
         eq(owners.status, 'active'),
       ),
     )
@@ -140,7 +146,7 @@ export async function fetchOpenVotingFor(
   }
 
   const targetPropertyIds = [
-    ...new Set([...ctx.propertyIds, ...proxyRows.map((row) => row.propertyId)]),
+    ...new Set([...callerLotIds, ...proxyRows.map((row) => row.propertyId)]),
   ];
   const propertyRows = await db
     .select({ id: properties.id, address: properties.address })
