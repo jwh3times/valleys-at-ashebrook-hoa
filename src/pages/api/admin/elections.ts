@@ -28,6 +28,11 @@ import {
   ownerExistenceError,
 } from '../../../server/content/proxy-guards';
 import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
+import {
+  RESERVATION_SENTINELS,
+  reservationGuard,
+  runReservedBatch,
+} from '../../../server/content/election-reservation';
 
 export const prerender = false;
 
@@ -133,59 +138,52 @@ async function setTallies(db: Db, body: unknown): Promise<Response> {
   const votesByCandidate = new Map(
     parsedEntries.value.map((e) => [e.candidateId, e.votes]),
   );
-  // Reserve the parent inside the same D1 transaction as the replacement.
-  // The temporary status is never externally visible or committed: every
-  // child update requires it, and the last statement restores the original
-  // lifecycle state. A terminal transition that wins before this batch makes
-  // the reservation a no-op, so every child is also a no-op.
-  const reservationStatus = '__replacing_tallies__';
+  // Reserve the parent inside the same D1 transaction as the replacement —
+  // see `election-reservation.ts` for the protocol. The candidate-count term
+  // is specific to this action: the release restores the original status, so
+  // the reservation must also pin the candidate set the replacement was
+  // computed against.
+  const sentinel = RESERVATION_SENTINELS.tallies;
+  const guard = reservationGuard(electionId, sentinel);
   const updatedAt = Math.floor(Date.now() / 1000);
-  const statements: D1PreparedStatement[] = [
-    env.DATABASE.prepare(
-      `UPDATE elections
+  const reserve = env.DATABASE.prepare(
+    `UPDATE elections
        SET status = ?
        WHERE id = ? AND source = 'recorded' AND status = ?
          AND (SELECT COUNT(*) FROM candidates WHERE election_id = ?) = ?
        RETURNING id`,
-    ).bind(
-      reservationStatus,
-      electionId,
-      election.status,
-      electionId,
-      candidateRows.length,
-    ),
-  ];
-  for (const candidate of candidateRows) {
-    statements.push(
-      env.DATABASE.prepare(
-        `UPDATE candidates
-         SET votes = ?
-         WHERE id = ? AND election_id = ?
-           AND EXISTS (
-             SELECT 1 FROM elections
-             WHERE id = ? AND source = 'recorded' AND status = ?
-           )`,
-      ).bind(
-        votesByCandidate.get(candidate.id) ?? null,
-        candidate.id,
-        electionId,
-        electionId,
-        reservationStatus,
-      ),
-    );
-  }
-  statements.push(
-    env.DATABASE.prepare(
-      `UPDATE elections
-       SET status = ?, updated_at = ?
-       WHERE id = ? AND source = 'recorded' AND status = ?
-       RETURNING id`,
-    ).bind(election.status, updatedAt, electionId, reservationStatus),
+  ).bind(
+    sentinel,
+    electionId,
+    election.status,
+    electionId,
+    candidateRows.length,
   );
-  const results = await env.DATABASE.batch(statements);
-  const reservation = results[0];
-  const release = results[results.length - 1];
-  if (reservation.meta.changes !== 1 || release.meta.changes !== 1)
+  const children = candidateRows.map((candidate) =>
+    env.DATABASE.prepare(
+      `UPDATE candidates
+         SET votes = ?
+         WHERE id = ? AND election_id = ? AND ${guard.sql}`,
+    ).bind(
+      votesByCandidate.get(candidate.id) ?? null,
+      candidate.id,
+      electionId,
+      ...guard.binds,
+    ),
+  );
+  const release = env.DATABASE.prepare(
+    `UPDATE elections
+       SET status = ?, updated_at = ?
+       WHERE id = ? AND status = ?
+       RETURNING id`,
+  ).bind(election.status, updatedAt, electionId, sentinel);
+  const committed = await runReservedBatch(
+    env.DATABASE,
+    reserve,
+    children,
+    release,
+  );
+  if (!committed)
     return new Response(CERTIFIED_OR_VOID('tallies'), { status: 409 });
   return new Response(null, { status: 204 });
 }
@@ -328,39 +326,30 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
   }
 
   // Full replace, atomically: a lot omitted from `entries` returned no
-  // ballot this time and is removed, not left at its previous value. As with
-  // tally replacement, the uncommitted temporary status is the reservation
-  // every child statement must observe. If certify/void wins first, the
-  // reservation, delete, inserts, and release all change zero rows.
-  const reservationStatus = '__replacing_ballots__';
-  const statements: D1PreparedStatement[] = [
-    env.DATABASE.prepare(
-      `UPDATE elections
+  // ballot this time and is removed, not left at its previous value. Same
+  // reservation protocol as setTallies — see `election-reservation.ts`.
+  const sentinel = RESERVATION_SENTINELS.ballots;
+  const guard = reservationGuard(electionId, sentinel);
+  const reserve = env.DATABASE.prepare(
+    `UPDATE elections
        SET status = ?
        WHERE id = ? AND source = 'recorded' AND status = ?
        RETURNING id`,
-    ).bind(reservationStatus, electionId, election.status),
+  ).bind(sentinel, electionId, election.status);
+  const children: D1PreparedStatement[] = [
     env.DATABASE.prepare(
-      `DELETE FROM ballots
-       WHERE election_id = ?
-         AND EXISTS (
-           SELECT 1 FROM elections
-           WHERE id = ? AND source = 'recorded' AND status = ?
-         )`,
-    ).bind(electionId, electionId, reservationStatus),
+      `DELETE FROM ballots WHERE election_id = ? AND ${guard.sql}`,
+    ).bind(electionId, ...guard.binds),
   ];
   for (const row of rows) {
-    statements.push(
+    children.push(
       env.DATABASE.prepare(
         `INSERT INTO ballots (
            id, election_id, property_id, cast_by_owner_id, proxy_id,
            weight, recorded_at
          )
          SELECT ?, ?, ?, ?, ?, ?, ?
-         WHERE EXISTS (
-           SELECT 1 FROM elections
-           WHERE id = ? AND source = 'recorded' AND status = ?
-         )`,
+         WHERE ${guard.sql}`,
       ).bind(
         row.id,
         electionId,
@@ -369,23 +358,23 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
         row.proxyId,
         row.weight,
         now,
-        electionId,
-        reservationStatus,
+        ...guard.binds,
       ),
     );
   }
-  statements.push(
-    env.DATABASE.prepare(
-      `UPDATE elections
+  const release = env.DATABASE.prepare(
+    `UPDATE elections
        SET status = ?, updated_at = ?
-       WHERE id = ? AND source = 'recorded' AND status = ?
+       WHERE id = ? AND status = ?
        RETURNING id`,
-    ).bind(election.status, now, electionId, reservationStatus),
+  ).bind(election.status, now, electionId, sentinel);
+  const committed = await runReservedBatch(
+    env.DATABASE,
+    reserve,
+    children,
+    release,
   );
-  const results = await env.DATABASE.batch(statements);
-  const reservation = results[0];
-  const release = results[results.length - 1];
-  if (reservation.meta.changes !== 1 || release.meta.changes !== 1)
+  if (!committed)
     return new Response(CERTIFIED_OR_VOID('ballots'), { status: 409 });
   return new Response(null, { status: 204 });
 }
@@ -738,8 +727,11 @@ async function certifyElection(
   // the batch is built.
   const ctx = await resolveAuthContext(locals, request, env);
   const now = Math.floor(Date.now() / 1000);
-  const reservationStatus = '__certifying__';
+  const sentinel = RESERVATION_SENTINELS.certify;
+  const guard = reservationGuard(id, sentinel);
   const linkedPersonPlaceholders = linkedPersonIds.map(() => '?').join(', ');
+  // Re-checked at the mutation boundary, not just read earlier: two
+  // concurrent certifications must not both open a term for the same person.
   const openTermGuard =
     linkedPersonIds.length > 0
       ? `AND NOT EXISTS (
@@ -748,53 +740,45 @@ async function certifyElection(
              AND term_end IS NULL
          )`
       : '';
-  const statements: D1PreparedStatement[] = [
-    env.DATABASE.prepare(
-      `UPDATE elections
+  const reserve = env.DATABASE.prepare(
+    `UPDATE elections
        SET status = ?, updated_at = ?
        WHERE id = ? AND status = 'closed'
          ${openTermGuard}
        RETURNING id`,
-    ).bind(reservationStatus, now, id, ...linkedPersonIds),
-  ];
+  ).bind(sentinel, now, id, ...linkedPersonIds);
+  const children: D1PreparedStatement[] = [];
   for (const w of winners) {
     if (w.boardPersonId === null) {
       const personId = crypto.randomUUID();
-      statements.push(
+      children.push(
         env.DATABASE.prepare(
           `INSERT INTO board_people (id, full_name, created_at, updated_at)
            SELECT ?, ?, ?, ?
-           WHERE EXISTS (
-             SELECT 1 FROM elections WHERE id = ? AND status = ?
-           )`,
-        ).bind(personId, w.fullName, now, now, id, reservationStatus),
+           WHERE ${guard.sql}`,
+        ).bind(personId, w.fullName, now, now, ...guard.binds),
       );
       // Backfilled so a re-run cannot mint a second identity for the same
       // human — ADR 0012's whole point is one identity across terms.
-      statements.push(
+      children.push(
         env.DATABASE.prepare(
           `UPDATE candidates
            SET board_person_id = ?
-           WHERE id = ? AND election_id = ?
-             AND EXISTS (
-               SELECT 1 FROM elections WHERE id = ? AND status = ?
-             )`,
-        ).bind(personId, w.candidateId, id, id, reservationStatus),
+           WHERE id = ? AND election_id = ? AND ${guard.sql}`,
+        ).bind(personId, w.candidateId, id, ...guard.binds),
       );
       w.boardPersonId = personId;
     }
   }
   for (const w of winners) {
-    statements.push(
+    children.push(
       env.DATABASE.prepare(
         `INSERT INTO board_terms (
            id, person_id, title, term_start, term_end, election_id,
            created_at, updated_at
          )
          SELECT ?, ?, ?, ?, ?, ?, ?, ?
-         WHERE EXISTS (
-           SELECT 1 FROM elections WHERE id = ? AND status = ?
-         )
+         WHERE ${guard.sql}
            AND NOT EXISTS (
              SELECT 1 FROM board_terms
              WHERE person_id = ? AND term_end IS NULL
@@ -808,36 +792,34 @@ async function certifyElection(
         id,
         now,
         now,
-        id,
-        reservationStatus,
+        ...guard.binds,
         w.boardPersonId!,
       ),
     );
   }
   const winnerPlaceholders = winners.map(() => '?').join(', ');
-  statements.push(
+  children.push(
     env.DATABASE.prepare(
       `UPDATE candidates
        SET won = 1
        WHERE election_id = ? AND id IN (${winnerPlaceholders})
-         AND EXISTS (
-           SELECT 1 FROM elections WHERE id = ? AND status = ?
-         )`,
-    ).bind(id, ...winners.map((w) => w.candidateId), id, reservationStatus),
+         AND ${guard.sql}`,
+    ).bind(id, ...winners.map((w) => w.candidateId), ...guard.binds),
   );
-  statements.push(
-    env.DATABASE.prepare(
-      `UPDATE elections
+  const release = env.DATABASE.prepare(
+    `UPDATE elections
        SET status = 'certified', certified_at = ?, certified_by = ?,
            updated_at = ?
        WHERE id = ? AND status = ?
        RETURNING id`,
-    ).bind(now, ctx?.userId ?? 'unknown', now, id, reservationStatus),
+  ).bind(now, ctx?.userId ?? 'unknown', now, id, sentinel);
+  const committed = await runReservedBatch(
+    env.DATABASE,
+    reserve,
+    children,
+    release,
   );
-  const results = await env.DATABASE.batch(statements);
-  const reservation = results[0];
-  const transition = results[results.length - 1];
-  if (reservation.meta.changes !== 1 || transition.meta.changes !== 1) {
+  if (!committed) {
     if (linkedPersonIds.length > 0) {
       const openTerms = await db
         .select({ personId: boardTerms.personId })
