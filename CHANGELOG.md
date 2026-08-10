@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.71] - 2026-08-09
+
+### Changed
+
+- Recorded the repository's agent-skill configuration under `docs/agents/` — where issues live, the
+  triage label vocabulary, and how the engineering skills should read the domain docs — with a
+  pointer to each from `AGENTS.md`. Documentation only.
+
 ## [0.3.70] - 2026-08-09
 
 ### Fixed
