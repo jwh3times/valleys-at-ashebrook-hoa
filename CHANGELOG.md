@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-10
+
+### Changed
+
+- **Moved the project compiler to TypeScript 7.** TypeScript and JavaScript sources now pass the
+  native TypeScript 7 compiler before Astro diagnostics run. Until Astro supports TypeScript 7's
+  native compiler API, its unchanged checker runs in a locked, isolated TypeScript 6 environment
+  that is installed automatically with the project.
+
 ## [0.4.2] - 2026-08-10
 
 ### Added

@@ -41,7 +41,7 @@ Use the Node version pinned in `.nvmrc` (`nvm use`) before installing dependenci
 npm run dev               # dev server at http://localhost:4321
 npm start                 # same local Astro dev server
 npm run build             # SSR build to dist/
-npm run check             # Astro + TypeScript type check
+npm run check             # TypeScript 7 + Astro type checks
 npm test                  # jsdom component/unit tests (Vitest)
 npm run test:watch        # Vitest in watch mode
 npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)
@@ -63,6 +63,11 @@ npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; se
 npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins; see SETUP.md
 npm run deploy            # build and deploy with Wrangler
 ```
+
+`npm install` also runs the root `postinstall`, which installs the locked TypeScript 6 Astro
+checker under `vendor/astro-check-ts6/`. The root compiler remains TypeScript 7; `npm run check`
+generates Astro's project types, runs the root compiler, then uses that isolated checker only for
+`.astro` diagnostics until Astro supports the TypeScript 7 programmatic API.
 
 Run a single test file or test name with:
 
