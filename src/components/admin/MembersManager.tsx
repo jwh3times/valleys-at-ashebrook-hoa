@@ -43,7 +43,7 @@ export default function MembersManager() {
     setLoading(false);
   }
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   async function act(

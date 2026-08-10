@@ -87,6 +87,7 @@ npm run dev        # local dev server at http://localhost:4321
 npm run build      # build the SSR Worker to dist/
 npm test           # run the Vitest spec suite
 npm run check      # Astro + TypeScript type check
+npm run lint       # type-aware Oxlint correctness and React Hooks checks
 npm run format     # format all files with Prettier
 npm run docs:dedupe # dry-run document duplicate report
 npm run deploy     # build + deploy to Cloudflare Workers
@@ -98,9 +99,10 @@ npm run deploy     # build + deploy to Cloudflare Workers
   Component specs live next to each component (`*.test.tsx`); unit tests live under
   `test/unit/`; Worker/D1 integration tests live under `test/server/` and run via
   `npm run test:server`. Run `npm test` (or `npm run test:watch`).
-- **Formatting:** [Prettier](https://prettier.io) with `prettier-plugin-astro`.
-  Run `npm run format`; CI enforces `npm run format:check`.
-- **CI:** `.github/workflows/build.yml` runs format check, type check, tests,
+- **Formatting and linting:** [Prettier](https://prettier.io) with `prettier-plugin-astro`, plus
+  type-aware Oxlint using the TypeScript 7 `typescript-go` backend. Run `npm run format` and
+  `npm run lint`; CI enforces both.
+- **CI:** `.github/workflows/build.yml` runs format, lint, type checks, tests,
   and build on every push and pull request. CodeQL code scanning runs via GitHub's
   default setup (configured in repo Settings — there is intentionally no CodeQL
   workflow file in the repo). Deploys from `main` are handled by Cloudflare Workers

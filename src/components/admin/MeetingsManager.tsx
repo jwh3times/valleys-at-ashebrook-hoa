@@ -170,9 +170,7 @@ export default function MeetingsManager() {
           'could not load the board roster.';
         setMsg('Error: ' + message);
       });
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setMsg]);
 
   // The property roster backs member-meeting attendance and vote editors —
   // their per-property twins of `people` above — loaded once alongside it.
@@ -186,9 +184,7 @@ export default function MeetingsManager() {
           'could not load the property roster.';
         setMsg('Error: ' + message);
       });
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setMsg]);
 
   // Recorded proxies back the attendance/vote proxy pickers below — loaded
   // once alongside people/properties, independent of useAdminResource.
@@ -197,8 +193,6 @@ export default function MeetingsManager() {
     fetchProxies()
       .then(setProxyList)
       .catch(() => {});
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The member attendance and vote editors offer only active properties —
@@ -296,7 +290,7 @@ export default function MeetingsManager() {
     // over every recorded representative. Re-running once properties
     // arrives re-derives memberAttendanceForm correctly; refetching the
     // same meeting detail again is a harmless extra request.
-  }, [expandedId, properties]);
+  }, [expandedId, properties, setMsg]);
 
   async function reloadDetail(meetingId: string) {
     const d = await fetchMeeting(meetingId);

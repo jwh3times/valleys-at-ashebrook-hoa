@@ -107,9 +107,7 @@ export default function ResolutionsManager() {
           'could not load motions.';
         setMsg('Error: ' + message);
       });
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setMsg]);
 
   // Resolves a resolution's adoptedByMotionId to the same "date — motion
   // text" shape the picker uses, never the bare id — a board member reading

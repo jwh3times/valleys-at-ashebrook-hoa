@@ -62,16 +62,6 @@ async function adminRequest<T = void>(
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-/** The `{ action, … }` POST shape 22 of the admin endpoints use. */
-async function adminAction<T = void>(
-  url: string,
-  action: string,
-  payload: Record<string, unknown> = {},
-  fallback = 'Action failed',
-): Promise<T> {
-  return adminRequest<T>(url, 'POST', { action, ...payload }, fallback);
-}
-
 /**
  * Create-or-update: an id means PATCH with the id folded in, no id means
  * POST. Nine `save*` helpers were spelling this out identically.

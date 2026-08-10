@@ -47,6 +47,8 @@ npm run test:watch        # Vitest in watch mode
 npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)
 npm run format            # Prettier write
 npm run format:check      # Prettier check, enforced by CI
+npm run lint              # type-aware Oxlint correctness and React Hooks checks
+npm run lint:fix          # apply Oxlint's safe fixes
 npm run sync:agents       # regenerate the Claude skills and Codex agents
 npm run sync:agents -- --check # fail if generated agent trees drifted, enforced by CI
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
@@ -70,9 +72,9 @@ npx vitest run -t "shows an empty message"
 npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 ```
 
-CI (`.github/workflows/build.yml`) runs `format:check`, `sync:agents -- --check`, `lint:coercions`,
-`check`, `test`, `test:server`, then `build` on every PR and push to `main`; run the relevant checks
-locally before pushing. On every
+CI (`.github/workflows/build.yml`) runs `format:check`, `lint`, `sync:agents -- --check`,
+`lint:coercions`, `check`, `test`, `test:server`, then `build` on every PR and push to `main`; run
+the relevant checks locally before pushing. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
 creates a GitHub release using the `package.json` major/minor release line. The project uses the
 third semver segment as a build number (`<major>.<minor>.<build>`). The first tag for a new line
@@ -824,7 +826,7 @@ open PR: it classifies the complete branch diff as a major, minor, or build rele
 major/minor package-version change idempotently, invokes `docs-updater` scoped to that branch's
 diff, writes the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts (see the
 Changelog Version workflow above), runs the fast
-`sync:agents -- --check`/`format:check`/`lint:coercions`/`check` gates, then pushes and opens or
+`sync:agents -- --check`/`format:check`/`lint`/`lint:coercions`/`check` gates, then pushes and opens or
 updates the PR.
 Documentation is kept in sync at ship time through that `docs-updater` pass, so there is no
 per-turn docs hook.

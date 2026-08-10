@@ -310,7 +310,6 @@ describe('member meeting assembly', () => {
   });
 
   it('returns empty member arrays for a board meeting', async () => {
-    const db = getDb(env);
     await seedProperty('p1', { weight: 4, status: 'active' });
     await seedMeeting('m1', 'board');
     await seedMotion('mo1', 'm1');

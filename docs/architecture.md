@@ -175,6 +175,9 @@ header controlled by this repo.
 
 - `npm test` runs Vitest unit and component tests.
 - `npm run test:server` runs Worker/D1 integration tests through the Cloudflare Vitest pool.
+- `npm run lint` runs type-aware Oxlint correctness and React Hooks checks through the TypeScript 7
+  `typescript-go` backend. TypeScript path mappings stay explicitly relative because that backend
+  does not support the legacy `baseUrl` option.
 - `npm run check` runs Astro and TypeScript checks.
 - `npm run build` verifies the production SSR build.
 

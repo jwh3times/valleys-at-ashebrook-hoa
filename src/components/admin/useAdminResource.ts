@@ -48,7 +48,7 @@ export function useAdminResource<T>(fetcher: () => Promise<T>, initial: T) {
     // The rejection is already recorded in loadError/msg by reload(); catching
     // it here only keeps it from surfacing as an unhandled rejection.
     void reload().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, []);
 
   async function run(action: () => Promise<void>, successMsg: string) {

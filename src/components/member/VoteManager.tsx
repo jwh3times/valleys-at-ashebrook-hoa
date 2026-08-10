@@ -457,8 +457,9 @@ function FinalityDialog({
   const firstButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const returnFocusButton = returnFocusRef.current;
     firstButtonRef.current?.focus();
-    return () => returnFocusRef.current?.focus();
+    return () => returnFocusButton?.focus();
   }, [returnFocusRef]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
