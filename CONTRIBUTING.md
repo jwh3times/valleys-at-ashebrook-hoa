@@ -24,7 +24,7 @@ KV, R2, secrets) is only needed for deployment and is documented step-by-step in
    npm run lint           # type-aware Oxlint correctness and React Hooks checks
    npm run sync:agents -- --check # generated agent trees match authored inputs
    npm run lint:coercions # reject blank/zero numeric coercion bugs
-   npm run check          # Astro + TypeScript type check
+   npm run check          # TypeScript 7 + Astro type checks
    npm test               # jsdom unit/component tests
    npm run test:server    # Worker/D1 integration tests
    npm run build          # SSR build
