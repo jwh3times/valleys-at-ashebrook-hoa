@@ -66,8 +66,8 @@ npm run deploy            # build and deploy with Wrangler
 
 `npm install` also runs the root `postinstall`, which installs the locked TypeScript 6 Astro
 checker under `vendor/astro-check-ts6/`. The root compiler remains TypeScript 7; `npm run check`
-runs it first, then uses that isolated checker only for `.astro` diagnostics until Astro supports
-the TypeScript 7 programmatic API.
+generates Astro's project types, runs the root compiler, then uses that isolated checker only for
+`.astro` diagnostics until Astro supports the TypeScript 7 programmatic API.
 
 Run a single test file or test name with:
 

@@ -12,7 +12,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "check": "tsc --noEmit && node vendor/astro-check-ts6/node_modules/@astrojs/check/bin/astro-check.js --root .",
+    "check": "astro sync && tsc --noEmit && node vendor/astro-check-ts6/node_modules/@astrojs/check/bin/astro-check.js --root .",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
