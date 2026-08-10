@@ -103,8 +103,9 @@ npm run deploy     # build + deploy to Cloudflare Workers
   type-aware Oxlint using the TypeScript 7 `typescript-go` backend. Run `npm run format` and
   `npm run lint`; CI enforces both.
 - **Type checking:** The project compiler is TypeScript 7. Until Astro supports its native
-  compiler API, `npm run check` runs TypeScript 7 directly and scopes TypeScript 6 only to the
-  temporary `vendor/astro-check-ts6` adapter used for `.astro` diagnostics.
+  compiler API, `npm run check` generates Astro's project types, runs TypeScript 7 directly, and
+  scopes TypeScript 6 only to the temporary `vendor/astro-check-ts6` adapter used for `.astro`
+  diagnostics.
 - **CI:** `.github/workflows/build.yml` runs format, lint, type checks, tests,
   and build on every push and pull request. CodeQL code scanning runs via GitHub's
   default setup (configured in repo Settings — there is intentionally no CodeQL
