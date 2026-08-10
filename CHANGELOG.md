@@ -7,12 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-10
+
 ### Added
 
 - Added type-aware Oxlint as the repository's JavaScript and TypeScript correctness linter,
   including native React Hooks and Vitest checks, the TypeScript 7 `typescript-go` backend,
   safe-fix scripts, and a required CI gate. The TypeScript configuration no longer relies on the
   TypeScript 7-incompatible `baseUrl` option.
+
+## [0.4.1] - 2026-08-10
+
+### Changed
+
+- Updated Astro to 7.2.0, the Cloudflare adapter to 14.2.0, Better Auth to 1.6.26, and the
+  Cloudflare Workers Vitest pool to 0.20.2.
 
 ## [0.4.0] - 2026-08-09
 
