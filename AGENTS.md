@@ -826,7 +826,7 @@ open PR: it classifies the complete branch diff as a major, minor, or build rele
 major/minor package-version change idempotently, invokes `docs-updater` scoped to that branch's
 diff, writes the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts (see the
 Changelog Version workflow above), runs the fast
-`sync:agents -- --check`/`format:check`/`lint:coercions`/`check` gates, then pushes and opens or
+`sync:agents -- --check`/`format:check`/`lint`/`lint:coercions`/`check` gates, then pushes and opens or
 updates the PR.
 Documentation is kept in sync at ship time through that `docs-updater` pass, so there is no
 per-turn docs hook.
