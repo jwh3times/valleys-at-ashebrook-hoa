@@ -821,3 +821,20 @@ the fast `sync:agents -- --check`/`format:check`/`check` gates, then pushes and 
 the PR.
 Documentation is kept in sync at ship time through that `docs-updater` pass, so there is no
 per-turn docs hook.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues at `jwh3times/valleys-at-ashebrook-hoa`, managed with the `gh` CLI. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles, each label string equal to its role name. See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the repo root (not yet created) plus `docs/adr/`. See
+`docs/agents/domain.md`.
