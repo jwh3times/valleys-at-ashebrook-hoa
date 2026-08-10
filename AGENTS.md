@@ -41,7 +41,7 @@ Use the Node version pinned in `.nvmrc` (`nvm use`) before installing dependenci
 npm run dev               # dev server at http://localhost:4321
 npm start                 # same local Astro dev server
 npm run build             # SSR build to dist/
-npm run check             # Astro + TypeScript type check
+npm run check             # TypeScript 7 + Astro type checks
 npm test                  # jsdom component/unit tests (Vitest)
 npm run test:watch        # Vitest in watch mode
 npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)

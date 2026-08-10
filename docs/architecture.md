@@ -178,7 +178,10 @@ header controlled by this repo.
 - `npm run lint` runs type-aware Oxlint correctness and React Hooks checks through the TypeScript 7
   `typescript-go` backend. TypeScript path mappings stay explicitly relative because that backend
   does not support the legacy `baseUrl` option.
-- `npm run check` runs Astro and TypeScript checks.
+- `npm run check` runs the TypeScript 7 compiler directly, then runs `.astro` diagnostics through
+  `vendor/astro-check-ts6`. That temporary adapter scopes TypeScript 6 to Astro's checker because
+  Astro still requires the programmatic compiler API that TypeScript 7 does not expose; remove the
+  adapter once Astro supports the native compiler API.
 - `npm run build` verifies the production SSR build.
 
 ## Related Decisions
