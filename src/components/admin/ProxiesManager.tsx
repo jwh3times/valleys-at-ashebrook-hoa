@@ -49,8 +49,6 @@ export default function ProxiesManager() {
     fetchElections()
       .then(setElections)
       .catch(() => {});
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Grouped by occasion — "who is covered for the March meeting" at a

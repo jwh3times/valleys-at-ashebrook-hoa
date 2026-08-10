@@ -10,13 +10,7 @@ import {
   memberVotes,
   motions,
 } from '../../src/server/db/schema';
-import {
-  now,
-  truncateAll,
-  seedProperty,
-  seedMeeting,
-  seedMotion,
-} from './fixtures';
+import { now, truncateAll, seedProperty, seedMeeting } from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

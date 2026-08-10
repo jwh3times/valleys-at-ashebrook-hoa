@@ -27,6 +27,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run format:check
+      - run: npm run lint
       # Fails if the generated Claude and Codex agent trees drift from their
       # authored inputs. Fix with `npm run sync:agents`.
       - run: npm run sync:agents -- --check

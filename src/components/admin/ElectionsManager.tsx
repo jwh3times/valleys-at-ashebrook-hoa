@@ -123,9 +123,7 @@ export default function ElectionsManager() {
           'could not load the property roster.';
         setMsg('Error: ' + message);
       });
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setMsg]);
   const activeProperties = properties.filter((p) => p.status === 'active');
 
   // The board roster backs the candidate's optional "link to board member"
@@ -141,9 +139,7 @@ export default function ElectionsManager() {
           'could not load the board roster.';
         setMsg('Error: ' + message);
       });
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setMsg]);
 
   // Recorded proxies back the ballot picker below — loaded once alongside
   // properties/board people, independent of useAdminResource.
@@ -152,8 +148,6 @@ export default function ElectionsManager() {
     fetchProxies()
       .then(setProxyList)
       .catch(() => {});
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [electionForm, setElectionForm] = useState(emptyElection);
@@ -205,7 +199,7 @@ export default function ElectionsManager() {
     );
     setWinnerForm({});
     // Re-derive only when the expanded election changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [expandedId]);
 
   function resetElection() {

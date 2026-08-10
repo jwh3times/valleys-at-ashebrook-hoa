@@ -21,10 +21,7 @@ import { getDb } from '../../src/server/db/client';
 import * as fx from './fixtures';
 import {
   proxies,
-  properties,
-  owners,
   meetings,
-  motions,
   elections,
   memberAttendance,
   memberVotes,
@@ -35,7 +32,6 @@ beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
-const now = new Date();
 const url = 'http://localhost/api/admin/meetings';
 const motionsUrl = 'http://localhost/api/admin/motions';
 const electionsUrl = 'http://localhost/api/admin/elections';

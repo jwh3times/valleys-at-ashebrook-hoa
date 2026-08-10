@@ -180,7 +180,7 @@ describe('atomic election casting', () => {
 
   it('serializes two casts for the same property to one complete ballot', async () => {
     const responses = await Promise.all([castBallot(), castBallot()]);
-    expect(responses.sort()).toEqual([204, 409]);
+    expect(responses.sort((a, b) => a - b)).toEqual([204, 409]);
     expect(await ballotCount('election-open')).toBe(1);
     expect(await choiceCount('election-open')).toBe(2);
   });
@@ -233,7 +233,7 @@ describe('atomic election casting', () => {
 describe('atomic motion casting', () => {
   it('serializes two casts for the same property to one vote', async () => {
     const responses = await Promise.all([castMotion(), castMotion()]);
-    expect(responses.sort()).toEqual([204, 409]);
+    expect(responses.sort((a, b) => a - b)).toEqual([204, 409]);
     expect(await motionVoteCount('motion-open')).toBe(1);
   });
 
