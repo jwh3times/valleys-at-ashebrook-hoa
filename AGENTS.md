@@ -64,6 +64,11 @@ npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search tw
 npm run deploy            # build and deploy with Wrangler
 ```
 
+`npm install` also runs the root `postinstall`, which installs the locked TypeScript 6 Astro
+checker under `vendor/astro-check-ts6/`. The root compiler remains TypeScript 7; `npm run check`
+runs it first, then uses that isolated checker only for `.astro` diagnostics until Astro supports
+the TypeScript 7 programmatic API.
+
 Run a single test file or test name with:
 
 ```bash
