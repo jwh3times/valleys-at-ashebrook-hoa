@@ -9,6 +9,11 @@ The user has asked you to teach them something. This is a stateful request - the
 
 ## Teaching Workspace
 
+**In this repo the teaching workspace is `private/teach/`** — create it if absent and treat it
+as the "current directory" everywhere below. Never build the workspace at the repo root: AGENTS.md
+forbids committing scratchpads outside `private/`, and root-level files are swept by the
+project-wide `npm run format:check` CI gate.
+
 Treat the current directory as a teaching workspace. The state of their learning is captured in this directory in several files:
 
 - `MISSION.md`: A document capturing the _reason_ the user is interested in the topic. This should be used to ground all teaching. Use the format in [MISSION-FORMAT.md](./MISSION-FORMAT.md).

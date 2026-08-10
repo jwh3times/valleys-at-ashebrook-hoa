@@ -802,7 +802,9 @@ resident-data handling details.
 
 Project subagents live in `.claude/agents/`: `docs-updater` keeps `AGENTS.md`, `README.md`,
 `SETUP.md`, `SECURITY.md`, and `CHANGELOG.md` in sync with the code; `code-reviewer` reviews diffs
-against tier-enforcement, board-only, and fail-closed access rules before merging.
+against tier-enforcement, two-layer API gating (`/api/admin`, `/api/member`, `/api/vote`),
+transition-only fields, ballot secrecy, numeric-coercion, D1 write-integrity, and Drizzle FK-trap
+rules before merging.
 
 **One source of truth, two CLIs.** `.agents/skills` is the authored source for complete skill
 directories. Run `npm run format` before `npm run sync:agents`; the latter regenerates
@@ -817,8 +819,8 @@ TOML file, preserving its name, description, and developer instructions. The `Po
 The user-invokable `ship` skill (`.claude/skills/ship/`) takes a branch from code-complete to an
 open PR: it invokes `docs-updater` scoped to that branch's diff, writes the `CHANGELOG.md` section
 for the version `scripts/next-version.sh` predicts (see the Changelog Version workflow above), runs
-the fast `sync:agents -- --check`/`format:check`/`check` gates, then pushes and opens or updates
-the PR.
+the fast `sync:agents -- --check`/`format:check`/`lint:coercions`/`check` gates, then pushes and
+opens or updates the PR.
 Documentation is kept in sync at ship time through that `docs-updater` pass, so there is no
 per-turn docs hook.
 
