@@ -83,8 +83,11 @@ incremented to `x.y.1` unless an `x.y.0` tag already exists.
 The Changelog Version workflow (`.github/workflows/changelog.yml`) runs on every non-dependabot PR
 and fails it unless `CHANGELOG.md` documents the version that PR's merge will mint.
 `scripts/next-version.sh` predicts that version by mirroring the Version workflow's tag algorithm,
-and the `/ship` skill (`.claude/skills/ship/`) writes the matching changelog section. Dependabot
-PRs are exempt; their entries are backfilled by `/ship` on the next human PR.
+and the `/ship` skill (`.claude/skills/ship/`) classifies the branch's project-level release impact
+as major, minor, or build before writing the matching changelog section. For a major or minor
+classification it idempotently updates `package.json` and `package-lock.json` from the merge-base
+release line; a build classification leaves the package version unchanged. Dependabot PRs are
+exempt; their entries are backfilled by `/ship` on the next human PR.
 
 ## Coding Style & Naming Conventions
 
@@ -817,10 +820,12 @@ TOML file, preserving its name, description, and developer instructions. The `Po
 [ADR 0021](./docs/adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
 
 The user-invokable `ship` skill (`.claude/skills/ship/`) takes a branch from code-complete to an
-open PR: it invokes `docs-updater` scoped to that branch's diff, writes the `CHANGELOG.md` section
-for the version `scripts/next-version.sh` predicts (see the Changelog Version workflow above), runs
-the fast `sync:agents -- --check`/`format:check`/`lint:coercions`/`check` gates, then pushes and
-opens or updates the PR.
+open PR: it classifies the complete branch diff as a major, minor, or build release, applies any
+major/minor package-version change idempotently, invokes `docs-updater` scoped to that branch's
+diff, writes the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts (see the
+Changelog Version workflow above), runs the fast
+`sync:agents -- --check`/`format:check`/`lint:coercions`/`check` gates, then pushes and opens or
+updates the PR.
 Documentation is kept in sync at ship time through that `docs-updater` pass, so there is no
 per-turn docs hook.
 
