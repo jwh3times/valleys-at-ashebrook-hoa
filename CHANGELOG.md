@@ -7,6 +7,31 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.3.72] - 2026-08-09
+
+### Changed
+
+- **Brought the `code-reviewer` agent's rules up to the current codebase.** Its checklist was
+  frozen at the pre-voting era; it now also covers the two-layer gating of `/api/admin`,
+  `/api/member`, and `/api/vote`, unconditional draft filtering with 404-masking, transition-only
+  fields, `ballot_choices` secrecy, single-batch D1 write integrity, the
+  `Number(x) || <default>` coercion trap, and the Drizzle ALTER-added-FK trap.
+- The `/ship` skill's fast pre-push checks now include `npm run lint:coercions`, closing the gap
+  where a branch could pass `/ship` locally and still fail that CI gate, and the `/code-review`
+  skill's Standards axis now always reads `AGENTS.md` — previously it looked only for files this
+  repo doesn't have, so reviews ran blind to the documented house rules.
+- Localized four generic third-party skills to this repo so they stop pointing agents at wrong
+  or forbidden locations: `teach` works under `private/teach/` instead of the repo root,
+  `implement` runs both test suites and never commits on `main`, `research` saves findings under
+  the tracked `docs/` tree rather than the gitignored `docs/superpowers/`, and `wizard` keeps
+  ephemeral scripts in `private/` instead of the committed `scripts/` directory.
+
+### Removed
+
+- Deleted the 25 unused `agents/openai.yaml` files from the authored skill tree (and their 25
+  generated mirrors) — nothing in either CLI's toolchain read them. Agent tooling only; no
+  application code changed.
+
 ## [0.3.71] - 2026-08-09
 
 ### Changed

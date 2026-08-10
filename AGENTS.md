@@ -802,7 +802,9 @@ resident-data handling details.
 
 Project subagents live in `.claude/agents/`: `docs-updater` keeps `AGENTS.md`, `README.md`,
 `SETUP.md`, `SECURITY.md`, and `CHANGELOG.md` in sync with the code; `code-reviewer` reviews diffs
-against tier-enforcement, board-only, and fail-closed access rules before merging.
+against tier-enforcement, two-layer API gating (`/api/admin`, `/api/member`, `/api/vote`),
+transition-only fields, ballot secrecy, numeric-coercion, D1 write-integrity, and Drizzle FK-trap
+rules before merging.
 
 **One source of truth, two CLIs.** `.agents/skills` is the authored source for complete skill
 directories. Run `npm run format` before `npm run sync:agents`; the latter regenerates
