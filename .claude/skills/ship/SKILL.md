@@ -120,13 +120,14 @@ These are the cheap gates that catch most mistakes in seconds:
 ```bash
 npm run sync:agents -- --check # generated agent trees match their authored inputs (CI gate)
 npm run format:check   # Prettier over the WHOLE repo — .md, .astro, .ts, .tsx, .json, .css
+npm run lint:coercions # no `Number(x) || <default>` form coercions (CI gate)
 npm run check          # astro check (Astro + TypeScript type check)
 ```
 
 `npm run format:check` is a single project-wide command that covers the docs and
 changelog you just edited (there is no separate markdown run to forget). Run it
 **after** the step 4/5 edits. Fix formatting with `npm run format` (writes in place).
-If either check is red, stop and report — do not push.
+If any check is red, stop and report — do not push.
 
 ### 7. Commit the docs and changelog
 

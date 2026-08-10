@@ -29,12 +29,18 @@ Look for the originating spec, in this order:
 
 1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.) — fetch via the workflow in `docs/agents/issue-tracker.md`.
 2. A path the user passed as an argument.
-3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
+3. A spec file under `docs/specs/`, `docs/plans/`, or the gitignored `docs/superpowers/specs/`
+   (present in local checkouts only) matching the branch name or feature.
 4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
 
 ### 3. Identify the standards sources
 
-Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
+In this repo the coding standards live in **`AGENTS.md`** — always include it, especially its
+"Coding Style & Naming Conventions" section (including the `Number(x) || <default>` coercion
+rule), "Testing Guidelines", and "Security & Configuration Tips". Add `CONTRIBUTING.md` and any
+`docs/adr/` entries touching the changed area. Note: `npm run lint:coercions` catches only the
+literal `Number(x) ||` shape, so blank-vs-zero conflations in other forms are NOT "already
+enforced by tooling" — review them.
 
 On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 
