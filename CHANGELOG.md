@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-09
+
+### Added
+
+- **Shipping now evaluates release impact before choosing a version.** The `/ship` skill classifies
+  the complete branch diff as major, minor, or build using project-level compatibility rules,
+  explains the decision, and idempotently starts a new release line when a major or minor increase
+  is warranted. Dependency version labels no longer stand in for the project's own release impact.
+
 ## [0.3.72] - 2026-08-09
 
 ### Changed

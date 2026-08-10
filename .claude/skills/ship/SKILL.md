@@ -1,7 +1,7 @@
 ---
 # GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md
 name: ship
-description: Ship the current branch — refresh docs, write the CHANGELOG entry for the version this merge will mint, run fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
+description: Ship the current branch — classify its release impact, select the major, minor, or build version this merge will mint, refresh docs and CHANGELOG, run fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
 ---
 
 # Ship
@@ -17,7 +17,8 @@ Every merge to `main` is auto-tagged `v<major>.<minor>.<build>` by
 `.github/workflows/version.yml`, where `build` auto-increments per merge on the
 release line. So a branch's changelog entry must be written for **the version its
 merge will mint** — a bare `[Unreleased]` entry is always wrong the moment it lands.
-`/ship` computes that version and writes the entry, and the `Changelog Version` CI job
+`/ship` classifies the branch's release impact, computes that version, and writes the
+entry. The `Changelog Version` CI job
 (`.github/workflows/changelog.yml`) verifies the prediction still holds at merge time:
 it fails the PR unless `CHANGELOG.md` has a `## [<target>]` section for the version this
 merge will mint. That guard **exempts dependabot**, which is exactly why the backfill in
@@ -52,7 +53,37 @@ right position, newest-first. Keep it factual — name the packages and versions
 This is what makes the bot exemption safe. Skipping it lets the changelog silently lose
 versions.
 
-### 3. Compute the target version
+### 3. Classify the release impact
+
+Review the complete branch diff from `git merge-base main HEAD` through `HEAD`, including
+schema, API, configuration, deployment, and user-visible behavior. Ignore mechanical version and
+changelog edits as impact evidence. Classify the **project's** release impact — a dependency's own
+major/minor label does not decide this:
+
+- **Major:** an incompatible change to a supported application, data, API, configuration, or
+  deployment contract that requires consumers or operators to coordinate their upgrade.
+- **Minor:** a backward-compatible new capability or material expansion of existing behavior.
+- **Build:** fixes, security hardening, dependency updates, docs, tests, refactors, and other
+  compatible changes that add no material capability.
+
+Choose the highest impact present in the diff. State the classification and concrete evidence to
+the user before continuing. If the evidence is genuinely ambiguous, stop and ask the user to choose.
+
+Use the `package.json` version at the merge base as the release-line baseline. For a major change,
+set the next version to `<major + 1>.0.0`; for a minor change, set it to
+`<major>.<minor + 1>.0`; for a build change, leave the version unchanged. Apply a major/minor result
+idempotently with:
+
+```bash
+npm version <exact-version> --no-git-tag-version --allow-same-version
+```
+
+This updates both `package.json` and `package-lock.json`. Derive the exact version from the merge-base
+baseline, not the branch's possibly already-bumped version, so rerunning `/ship` never advances the
+release line twice. If the branch already contains a conflicting release-line change, stop and
+surface the mismatch instead of overwriting it.
+
+### 4. Compute the target version
 
 ```bash
 bash scripts/next-version.sh
@@ -63,11 +94,10 @@ tag-creation algorithm in `.github/workflows/version.yml` (the workflow that act
 mints the tag). Do not compute this yourself — run the script so `/ship` and the
 workflow agree.
 
-Note: to bump the **minor or major** line, edit `package.json`'s `version` to
-`x.y.0` first (e.g. `0.4.0`); then the script predicts `0.4.0` for the first merge on
-that line. Otherwise the build number just increments on the current line.
+The result must match step 3: a major/minor classification starts the selected line at build
+`0`; a build classification increments the current line's build number.
 
-### 4. Refresh the docs
+### 5. Refresh the docs
 
 Invoke the `docs-updater` subagent, scoped to **this branch's diff only** — not a
 full audit:
@@ -78,10 +108,10 @@ git diff $(git merge-base main HEAD)..HEAD --stat
 
 Tell it exactly what changed and let it update the docs it owns: `AGENTS.md`,
 `README.md`, `SETUP.md`, `SECURITY.md`. It owns `CHANGELOG.md` too, but **you** write
-the changelog section in step 5 — tell it to **leave `CHANGELOG.md` alone** so you
+the changelog section in step 6 — tell it to **leave `CHANGELOG.md` alone** so you
 don't fight over the file. (It does not maintain `design/` or `docs/superpowers/`.)
 
-### 5. Write the CHANGELOG entry
+### 6. Write the CHANGELOG entry
 
 Insert a section for the target version immediately below `## [Unreleased]`:
 
@@ -112,7 +142,7 @@ Rules:
   than adding a new one — the `Changelog Version` CI job fails a PR whose section no
   longer matches the version its merge will mint, so renumbering is what turns it green.
 
-### 6. Fast checks — refuse to push if any fail
+### 7. Fast checks — refuse to push if any fail
 
 The full `test`, `test:server`, and `build` suites are **not** run here; CI owns them.
 These are the cheap gates that catch most mistakes in seconds:
@@ -126,17 +156,17 @@ npm run check          # astro check (Astro + TypeScript type check)
 
 `npm run format:check` is a single project-wide command that covers the docs and
 changelog you just edited (there is no separate markdown run to forget). Run it
-**after** the step 4/5 edits. Fix formatting with `npm run format` (writes in place).
+**after** the step 5/6 edits. Fix formatting with `npm run format` (writes in place).
 If any check is red, stop and report — do not push.
 
-### 7. Commit the docs and changelog
+### 8. Commit the release-line, docs, and changelog changes
 
 ```bash
 git add -A
-git commit -m "docs: update docs and changelog for v<version>"
+git commit -m "docs: prepare release v<version>"
 ```
 
-### 8. Push and open or update the PR
+### 9. Push and open or update the PR
 
 ```bash
 git push -u origin "$(git branch --show-current)"
@@ -152,11 +182,11 @@ gh pr list --head "$(git branch --show-current)" --state open --json number -q '
   changelog section you just wrote.
 - **PR exists** → `gh pr edit <number>` to refresh the body. Do not open a second PR.
 
-### 9. Report
+### 10. Report
 
-Give the user: the PR URL, the version this merge will mint, and anything the fast
-checks or backfill surfaced. State plainly that `test`, `test:server`, and `build`
-run in CI, not locally — do not imply the branch is verified beyond the fast checks.
+Give the user: the PR URL, the release-impact classification, the version this merge will mint,
+and anything the fast checks or backfill surfaced. State plainly that `test`, `test:server`, and
+`build` run in CI, not locally — do not imply the branch is verified beyond the fast checks.
 
 ## Do not
 
