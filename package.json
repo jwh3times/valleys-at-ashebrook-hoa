@@ -12,7 +12,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "check": "astro check",
+    "check": "tsc --noEmit && node vendor/astro-check-ts6/node_modules/@astrojs/check/bin/astro-check.js --root .",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
@@ -27,6 +27,7 @@
     "test:server": "vitest run --config vitest.workers.config.ts",
     "sync:agents": "node --experimental-strip-types scripts/sync-agent-skills.ts",
     "lint:coercions": "node --experimental-strip-types scripts/check-coercions.ts",
+    "postinstall": "npm ci --prefix vendor/astro-check-ts6 --ignore-scripts --no-audit --no-fund",
     "roster:import": "node --experimental-strip-types scripts/import-roster.ts",
     "docs:import": "node --experimental-strip-types scripts/import-documents.ts",
     "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts",
@@ -45,7 +46,6 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.10",
     "@cloudflare/vitest-pool-workers": "^0.20.2",
     "@cloudflare/workers-types": "^5.20260804.1",
     "@napi-rs/canvas": "^1.0.3",
@@ -64,7 +64,7 @@
     "pdfjs-dist": "^6.2.108",
     "prettier": "^3.9.6",
     "prettier-plugin-astro": "^0.14.1",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.9",
     "wrangler": "^4.110.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
