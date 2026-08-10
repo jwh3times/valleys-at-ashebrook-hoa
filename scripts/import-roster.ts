@@ -32,7 +32,7 @@ export function firstEmail(raw: string | undefined | null): string | null {
  * requires E.164. */
 export function firstPhoneE164(raw: string | undefined | null): string | null {
   if (!raw) return null;
-  const m = String(raw).match(/\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/);
+  const m = String(raw).match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
   if (!m) return null;
   const d = m[0].replace(/\D/g, '');
   return d.length === 10 ? `+1${d}` : null;

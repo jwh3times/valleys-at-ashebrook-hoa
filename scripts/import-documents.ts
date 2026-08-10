@@ -50,7 +50,7 @@ export function contentTypeFor(filename: string): string {
  * filename like `Quote 620..pdf` must not become `Quote_620..pdf` in the key.
  */
 export function safeObjectName(filename: string): string {
-  return filename.replace(/[^\w.\-]/g, '_').replace(/\.{2,}/g, '.');
+  return filename.replace(/[^\w.-]/g, '_').replace(/\.{2,}/g, '.');
 }
 
 function sqlStr(v: string): string {

@@ -5,7 +5,7 @@ vi.mock('../../src/server/authz/context', () => ({
   getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
 }));
 
-import { POST, DELETE } from '../../src/pages/api/admin/documents';
+import { POST } from '../../src/pages/api/admin/documents';
 import { getDb } from '../../src/server/db/client';
 import { documents } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';

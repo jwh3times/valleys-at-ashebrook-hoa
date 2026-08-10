@@ -7,23 +7,14 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
-import { getDb } from '../../src/server/db/client';
 import * as fx from './fixtures';
 
-import {
-  elections,
-  candidates,
-  ballots,
-  properties,
-} from '../../src/server/db/schema';
 import { fetchAdminElections } from '../../src/server/content/reads';
 import ElectionsPage from '../../src/pages/elections.astro';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
-
-const now = new Date();
 
 beforeEach(fx.truncateAll);
 

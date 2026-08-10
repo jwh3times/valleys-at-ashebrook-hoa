@@ -446,7 +446,9 @@ describe('elections admin route — board', () => {
       POST(req(url, 'POST', { action: 'open', id })),
     ]);
 
-    expect(responses.map((res) => res.status).sort()).toEqual([204, 409]);
+    expect(responses.map((res) => res.status).sort((a, b) => a - b)).toEqual([
+      204, 409,
+    ]);
     expect((await getElection(id)).status).toBe('open');
     expect((await getCandidate(candidateId)).votes).toBeNull();
     expect(

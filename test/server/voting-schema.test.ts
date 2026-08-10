@@ -5,12 +5,8 @@ import { getDb } from '../../src/server/db/client';
 import * as fx from './fixtures';
 
 import {
-  ballotChoices,
   candidates,
-  electionEligibility,
   elections,
-  meetings,
-  motionEligibility,
   motions,
   properties,
 } from '../../src/server/db/schema';
@@ -20,8 +16,6 @@ beforeAll(async () => {
 });
 
 beforeEach(fx.truncateAll);
-
-const now = new Date();
 
 async function pragmaRows(statement: string) {
   const result = await env.DATABASE.prepare(statement).all();

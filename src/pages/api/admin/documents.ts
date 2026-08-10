@@ -21,6 +21,11 @@ const MAX_BYTES = 25 * 1024 * 1024;
 const VISIBILITIES = ['public', 'homeowner', 'board'] as const;
 const CATEGORIES: readonly string[] = DOCUMENT_CATEGORIES;
 
+function formText(form: FormData, key: string): string | null {
+  const value = form.get(key);
+  return typeof value === 'string' ? value : null;
+}
+
 // Server-side allowlist keyed by extension. Client MIME is unreliable for
 // .md/.csv, so derive the stored content type here. text/html and image/svg+xml
 // are deliberately excluded — they are the stored-XSS vectors when served inline.
@@ -46,9 +51,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (denied) return denied;
   const form = await request.formData();
   const file = form.get('file');
-  const title = String(form.get('title') ?? '').trim();
-  const category = String(form.get('category') ?? '').trim();
-  const visibility = String(form.get('visibility') ?? 'board');
+  const title = (formText(form, 'title') ?? '').trim();
+  const category = (formText(form, 'category') ?? '').trim();
+  const visibility = formText(form, 'visibility') ?? 'board';
   if (!(file instanceof File) || !title)
     return new Response('Bad Request', { status: 400 });
   if (title.length > INPUT_LIMITS.title)
@@ -83,8 +88,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     );
   }
 
-  const confirmDuplicate =
-    String(form.get('confirmDuplicate') ?? '') === 'true';
+  const confirmDuplicate = formText(form, 'confirmDuplicate') === 'true';
   if (!confirmDuplicate) {
     const existing = await db
       .select({
@@ -123,7 +127,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const id = crypto.randomUUID();
-  const r2Key = `documents/${id}/${file.name.replace(/[^\w.\-]/g, '_')}`;
+  const r2Key = `documents/${id}/${file.name.replace(/[^\w.-]/g, '_')}`;
   await env.DOCS.put(r2Key, bytes, {
     httpMetadata: { contentType },
   });

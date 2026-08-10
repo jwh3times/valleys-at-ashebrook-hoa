@@ -31,9 +31,10 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
   headers.set('x-content-type-options', 'nosniff');
   // Strip control chars and quotes/backslashes so the filename can't break the
   // header or inject a second directive.
-  const safeName = [...doc.filename]
-    .filter((ch) => ch.charCodeAt(0) >= 0x20 && ch !== '"' && ch !== '\\')
-    .join('');
+  let safeName = '';
+  for (const ch of doc.filename) {
+    if (ch.charCodeAt(0) >= 0x20 && ch !== '"' && ch !== '\\') safeName += ch;
+  }
   const disposition =
     doc.contentType === 'application/pdf' ? 'inline' : 'attachment';
   headers.set('content-disposition', `${disposition}; filename="${safeName}"`);

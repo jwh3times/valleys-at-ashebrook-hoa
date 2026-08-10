@@ -7,6 +7,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Added
+
+- Added type-aware Oxlint as the repository's JavaScript and TypeScript correctness linter,
+  including native React Hooks and Vitest checks, the TypeScript 7 `typescript-go` backend,
+  safe-fix scripts, and a required CI gate. The TypeScript configuration no longer relies on the
+  TypeScript 7-incompatible `baseUrl` option.
+
 ## [0.4.0] - 2026-08-09
 
 ### Added

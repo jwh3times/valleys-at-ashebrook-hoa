@@ -3,13 +3,7 @@ import { eq } from 'drizzle-orm';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import * as fx from './fixtures';
-import {
-  elections,
-  electionEligibility,
-  candidates,
-  ballots,
-  properties,
-} from '../../src/server/db/schema';
+import { electionEligibility, properties } from '../../src/server/db/schema';
 import {
   fetchElectionsFor,
   fetchAdminElections,
@@ -18,8 +12,6 @@ import {
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
-
-const now = new Date();
 
 beforeEach(fx.truncateAll);
 

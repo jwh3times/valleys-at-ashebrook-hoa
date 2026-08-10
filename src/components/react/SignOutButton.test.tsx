@@ -10,10 +10,11 @@ import { authClient } from '../../lib/auth-client';
 
 describe('SignOutButton', () => {
   const realLocation = window.location;
+  const assign = vi.fn();
   beforeEach(() => {
     Object.defineProperty(window, 'location', {
       configurable: true,
-      value: { ...realLocation, assign: vi.fn() },
+      value: { assign },
     });
   });
   afterEach(() => {
@@ -28,6 +29,6 @@ describe('SignOutButton', () => {
     render(<SignOutButton />);
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }));
     await waitFor(() => expect(authClient.signOut).toHaveBeenCalled());
-    expect(window.location.assign).toHaveBeenCalledWith('/');
+    expect(assign).toHaveBeenCalledWith('/');
   });
 });

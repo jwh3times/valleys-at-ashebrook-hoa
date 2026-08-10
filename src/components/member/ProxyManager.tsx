@@ -65,9 +65,7 @@ export default function ProxyManager({ lots, occasions }: Props) {
     }
   }
   useEffect(() => {
-    reload();
-    // Load once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void reload();
   }, []);
 
   const grantorOptions =
