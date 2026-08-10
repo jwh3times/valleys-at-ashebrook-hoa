@@ -11,7 +11,6 @@ import {
   meetings,
   properties,
   boardPeople,
-  boardTerms,
 } from '../../src/server/db/schema';
 
 beforeAll(async () => {

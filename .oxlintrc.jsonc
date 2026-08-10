@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // `eslint` is Oxlint's native core-rule namespace; no ESLint runtime or plugin is loaded.
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "vitest"],
+  "categories": {
+    "correctness": "error",
+  },
+  "options": {
+    "reportUnusedDisableDirectives": "error",
+    "typeAware": true,
+  },
+  "overrides": [
+    {
+      // Astro generates this reference and requires it for project types.
+      "files": ["src/env.d.ts"],
+      "rules": {
+        "typescript/triple-slash-reference": "off",
+      },
+    },
+    {
+      // The GET branch calls fetch without an init; the rule cannot narrow the method union.
+      "files": ["src/lib/admin.ts"],
+      "rules": {
+        "unicorn/no-invalid-fetch-options": "off",
+      },
+    },
+    {
+      // Keep the remaining native Vitest correctness rules enabled while legacy tests are improved.
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "vitest/expect-expect": "off",
+        "vitest/no-conditional-expect": "off",
+        "vitest/require-mock-type-parameters": "off",
+        "vitest/require-to-throw-message": "off",
+      },
+    },
+  ],
+}
