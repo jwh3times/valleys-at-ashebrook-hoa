@@ -35,7 +35,7 @@
     "ocr:scanned": "node --experimental-strip-types scripts/ocr-scanned.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@anthropic-ai/sdk": "^0.116.0",
     "@astrojs/cloudflare": "^14.2.0",
     "@astrojs/react": "^6.0.2",
     "astro": "^7.2.0",
@@ -46,13 +46,13 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.20.2",
-    "@cloudflare/workers-types": "^5.20260804.1",
+    "@cloudflare/vitest-pool-workers": "^0.20.3",
+    "@cloudflare/workers-types": "^5.20260808.1",
     "@napi-rs/canvas": "^1.0.3",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
