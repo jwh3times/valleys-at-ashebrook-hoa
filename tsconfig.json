@@ -1,7 +1,18 @@
 {
   "extends": "astro/tsconfigs/strict",
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist"],
+  // The Node-side files are checked by tsconfig.node.json instead, so that the
+  // Workers ambient globals referenced from src/env.d.ts cannot shadow Node's
+  // own globals there. `npm run check` runs both programs.
+  "exclude": [
+    "dist",
+    "scripts",
+    "test/unit",
+    "drizzle.config.ts",
+    "vitest.config.ts",
+    "vitest.shared.ts",
+    "vitest.workers.config.ts"
+  ],
   "compilerOptions": {
     "jsx": "react-jsx",
     "jsxImportSource": "react",

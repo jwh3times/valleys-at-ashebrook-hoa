@@ -1,0 +1,29 @@
+{
+  // Node-side program: operator scripts, the jsdom/node unit tests, and the
+  // build/test config files. None of these run on Workers, so they must NOT see
+  // the Workers ambient globals that src/env.d.ts pulls in for the app.
+  //
+  // Keeping them in one program with the app is what broke CI when
+  // @cloudflare/workers-types began declaring `Buffer`, `process`, and `global`
+  // as `any`: those shadowed the @types/node versions, and Node-only code lost
+  // `Buffer.equals` and `Buffer.toString(encoding)`. See tsconfig.json, which
+  // excludes exactly the paths this program includes.
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/ambient.d.ts",
+    "scripts/**/*",
+    "test/unit/**/*",
+    "drizzle.config.ts",
+    "vitest.config.ts",
+    "vitest.shared.ts",
+    "vitest.workers.config.ts"
+  ],
+  "exclude": ["dist"],
+  "compilerOptions": {
+    // Workers types are deliberately absent. src/env.d.ts is not part of this
+    // program, so its triple-slash reference does not apply here. App modules
+    // these files import reach Cloudflare types through explicit
+    // `import('@cloudflare/workers-types')` type positions instead.
+    "types": ["node", "@testing-library/jest-dom"]
+  }
+}
