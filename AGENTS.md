@@ -789,7 +789,10 @@ also be rendered directly through the Astro Container API inside the real Worker
 `vitest.shared.ts` identifies that plugin for both `vitest.config.ts` (which strips it, since it's
 incompatible with the jsdom/node test environments) and `vitest.workers.config.ts` (which strips
 Astro's copy in favor of `cloudflareTest`'s own), so the two configs can't drift on what counts as
-"a Cloudflare plugin."
+"a Cloudflare plugin." This `test/unit` vs. `test/server` split matches the type-checking split
+described under Commands above: `test/unit/**` is checked by the Node-side `tsconfig.node.json`,
+while `test/server/**` — which imports `cloudflare:test` — stays in the Workers-side
+`tsconfig.json`.
 
 ## Deploy
 
