@@ -7,6 +7,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-08-10
+
+### Security
+
+- **Updated `nanoid` to the patched 3.3.18 release.** The lockfile now resolves the identifier
+  generator that PostCSS pulls in through Vite outside the range affected by an infinite loop in
+  `customAlphabet`/`customRandom` when called with a size of zero (GHSA-2v37-7h3g-55p8,
+  CVE-2026-67213). Nothing in the deployed Worker reached the affected code — PostCSS calls only
+  the fixed-size `nanoid(6)` during the build — so this closes the advisory rather than a live
+  exposure. Dependabot reported the fix as impossible because every top-level package reaches the
+  vulnerable version through one pinned PostCSS release; the caret range it already declares
+  admits the patched version, so re-resolving the lockfile was sufficient and no dependency
+  override was needed.
+
 ## [0.4.3] - 2026-08-10
 
 ### Changed
