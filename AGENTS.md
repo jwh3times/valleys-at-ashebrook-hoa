@@ -66,8 +66,21 @@ npm run deploy            # build and deploy with Wrangler
 
 `npm install` also runs the root `postinstall`, which installs the locked TypeScript 6 Astro
 checker under `vendor/astro-check-ts6/`. The root compiler remains TypeScript 7; `npm run check`
-generates Astro's project types, runs the root compiler, then uses that isolated checker only for
-`.astro` diagnostics until Astro supports the TypeScript 7 programmatic API.
+generates Astro's project types, runs the root compiler over **both** TypeScript programs, then
+uses that isolated checker only for `.astro` diagnostics until Astro supports the TypeScript 7
+programmatic API.
+
+There are two programs on purpose. `tsconfig.json` covers the Astro/Workers app — `src/` and the
+Workers-pool tests in `test/server/` — and `src/env.d.ts` pulls the Cloudflare ambient globals into
+it. `tsconfig.node.json` covers the code that never runs on Workers (`scripts/`, the jsdom/node
+tests in `test/unit/`, and the root config files) and deliberately omits
+`@cloudflare/workers-types`, so those Workers globals cannot shadow Node's own. Each config
+excludes what the other includes; adding a new Node-side path means adding it to both. This split
+exists because `@cloudflare/workers-types` declares `Buffer`, `process`, and `global` as `any` for
+`nodejs_compat`, which silently stripped `Buffer.equals` and `Buffer.toString(encoding)` from
+Node-only code when everything shared one program. Declarations both programs need live in
+`src/ambient.d.ts`, which reaches Cloudflare types through `import('@cloudflare/workers-types')`
+type positions rather than globals; `src/env.d.ts` keeps only the Workers/Astro-specific ones.
 
 Run a single test file or test name with:
 
@@ -776,7 +789,10 @@ also be rendered directly through the Astro Container API inside the real Worker
 `vitest.shared.ts` identifies that plugin for both `vitest.config.ts` (which strips it, since it's
 incompatible with the jsdom/node test environments) and `vitest.workers.config.ts` (which strips
 Astro's copy in favor of `cloudflareTest`'s own), so the two configs can't drift on what counts as
-"a Cloudflare plugin."
+"a Cloudflare plugin." This `test/unit` vs. `test/server` split matches the type-checking split
+described under Commands above: `test/unit/**` is checked by the Node-side `tsconfig.node.json`,
+while `test/server/**` — which imports `cloudflare:test` — stays in the Workers-side
+`tsconfig.json`.
 
 ## Deploy
 

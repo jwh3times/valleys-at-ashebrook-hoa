@@ -7,6 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-08-11
+
+### Fixed
+
+- **Type checking no longer applies Cloudflare Workers globals to code that runs on Node.** The
+  repository previously checked every file in one TypeScript program, so the Workers ambient
+  declarations that the application needs also reached the operator scripts and the jsdom unit
+  tests, which never run on Workers. When `@cloudflare/workers-types` began declaring `Buffer`,
+  `process`, and `global` as untyped values for Node compatibility, those declarations shadowed
+  Node's own and silently removed `Buffer.equals` and `Buffer.toString(encoding)` from Node-only
+  code, failing the type check on an otherwise routine dependency update. Node-side files are now
+  checked as their own program that omits the Workers types, and `npm run check` runs both
+  programs. Declarations that both programs need moved to a shared ambient file that names
+  Cloudflare types explicitly instead of relying on globals.
+
 ## [0.4.4] - 2026-08-10
 
 ### Security
