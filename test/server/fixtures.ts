@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:test';
+import { vi } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import {
   properties,
@@ -54,6 +55,43 @@ export function req(url: string, method: string, body?: unknown) {
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   } as never;
+}
+
+/**
+ * Pause the next D1 batch before it executes so another request can win a
+ * deliberately interleaved route-level race.
+ *
+ * Keep these tests at mutation boundaries where the route itself must wire in
+ * a reservation, lifecycle revision, or cross-record invariant. Direct seam
+ * tests cover the reservation protocol's mechanics, but cannot catch a route
+ * that forgets to use that protocol or returns the wrong conflict response.
+ */
+export function pauseNextBatch() {
+  const originalBatch = env.DATABASE.batch.bind(env.DATABASE);
+  let release!: () => void;
+  let reached!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const batchReached = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let paused = false;
+  const spy = vi
+    .spyOn(env.DATABASE, 'batch')
+    .mockImplementation(async (statements) => {
+      if (!paused) {
+        paused = true;
+        reached();
+        await released;
+      }
+      return originalBatch(statements);
+    });
+  return {
+    reached: batchReached,
+    release,
+    restore: () => spy.mockRestore(),
+  };
 }
 
 /**
