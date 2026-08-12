@@ -3,5 +3,6 @@ node_modules/
 .astro/
 coverage/
 package-lock.json
+worker-configuration.d.ts
 .claude/skills/
 .codex/agents/

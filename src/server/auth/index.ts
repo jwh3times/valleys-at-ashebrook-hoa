@@ -1,8 +1,10 @@
-import type { IncomingRequestCfProperties } from '@cloudflare/workers-types';
 import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins';
 import { withCloudflare } from 'better-auth-cloudflare';
-import type { CloudflareGeolocation } from 'better-auth-cloudflare';
+import type {
+  CloudflareGeolocation,
+  WithCloudflareOptions,
+} from 'better-auth-cloudflare';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { drizzle } from 'drizzle-orm/d1';
 import * as schema from '../db/schema';
@@ -44,7 +46,11 @@ function createAuthUncached(
         d1: env
           ? { db: drizzle(env.DATABASE), options: { usePlural: true, schema } }
           : undefined,
-        kv: env?.KV,
+        // better-auth-cloudflare still publishes its KV boundary against
+        // @cloudflare/workers-types. The generated Wrangler type is the runtime
+        // source of truth for this app; bridge the package's legacy declaration
+        // at the integration boundary until that dependency migrates too.
+        kv: env?.KV as unknown as WithCloudflareOptions['kv'],
       },
       {
         emailAndPassword: {
