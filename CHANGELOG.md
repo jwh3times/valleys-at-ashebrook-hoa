@@ -7,6 +7,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.12] - 2026-08-12
+
+### Changed
+
+- Updated `@testing-library/jest-dom` to 7.0.1. The other routine dependency updates tracked
+  alongside it had already landed through earlier Cloudflare and dependency maintenance work.
+
 ## [0.4.11] - 2026-08-12
 
 ### Changed
