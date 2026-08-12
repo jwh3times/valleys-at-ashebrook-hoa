@@ -28,7 +28,13 @@ jobs:
       - run: npm ci
       # Fails when wrangler.toml or the committed environment template changes
       # without regenerating compatibility-scoped runtime and binding types.
-      - run: npm run types:worker:check
+      - name: Check generated Worker types
+        run: |
+          if ! npm run types:worker:check; then
+            npm run types:worker
+            git diff -- worker-configuration.d.ts
+            exit 1
+          fi
       - run: npm run format:check
       - run: npm run lint
       # Fails if the generated Claude and Codex agent trees drift from their
