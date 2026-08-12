@@ -258,6 +258,15 @@ async function approveMeeting(
     return new Response('Meeting not found', { status: 404 });
   if (existing[0].status === 'approved')
     return new Response('Meeting is already approved', { status: 409 });
+  if (approvedByMotionId) {
+    const approvingMotion = await db
+      .select({ id: motions.id })
+      .from(motions)
+      .where(eq(motions.id, approvedByMotionId))
+      .limit(1);
+    if (approvingMotion.length === 0)
+      return new Response('Motion not found', { status: 400 });
+  }
   const ctx = await resolveAuthContext(locals, request, env);
   const now = Math.floor(Date.now() / 1000);
   const approved = await env.DATABASE.prepare(
