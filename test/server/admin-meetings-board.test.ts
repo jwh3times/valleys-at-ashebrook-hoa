@@ -108,6 +108,22 @@ async function createElectionFor(meetingId: string | null): Promise<string> {
   return id;
 }
 
+async function createMotion(meetingId: string): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date();
+  await getDb(env).insert(motions).values({
+    id,
+    meetingId,
+    sequence: 1,
+    text: 'Move to approve the prior meeting minutes',
+    outcome: 'passed',
+    createdBy: 'b',
+    createdAt: now,
+    updatedAt: now,
+  });
+  return id;
+}
+
 describe('meetings admin route — board', () => {
   it('creates a board meeting and returns its id', async () => {
     const id = await createMeeting();
@@ -157,6 +173,52 @@ describe('meetings admin route — board', () => {
     expect(rows[0].status).toBe('approved');
     expect(rows[0].approvedAt).not.toBeNull();
     expect(rows[0].approvedBy).toBe('b');
+  });
+
+  it('approve rejects an unknown approving motion with 400', async () => {
+    const id = await createMeeting();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'approve',
+        meetingId: id,
+        approvedByMotionId: 'missing-motion',
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/motion not found/i);
+    const rows = await getDb(env)
+      .select()
+      .from(meetings)
+      .where(eq(meetings.id, id));
+    expect(rows[0].status).toBe('draft');
+    expect(rows[0].approvedByMotionId).toBeNull();
+  });
+
+  it('approve records a motion from a following meeting', async () => {
+    const minutesMeetingId = await createMeeting({
+      date: '2026-01-01',
+      title: 'January meeting',
+    });
+    const approvingMeetingId = await createMeeting({
+      date: '2026-02-01',
+      title: 'February meeting',
+    });
+    const approvingMotionId = await createMotion(approvingMeetingId);
+
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'approve',
+        meetingId: minutesMeetingId,
+        approvedByMotionId: approvingMotionId,
+      }),
+    );
+
+    expect(res.status).toBe(204);
+    const rows = await getDb(env)
+      .select()
+      .from(meetings)
+      .where(eq(meetings.id, minutesMeetingId));
+    expect(rows[0].approvedByMotionId).toBe(approvingMotionId);
   });
 
   it('unapprove clears approvedAt and approvedBy, not just status', async () => {
