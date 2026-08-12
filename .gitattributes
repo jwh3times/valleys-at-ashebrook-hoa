@@ -2,3 +2,7 @@
 # Ends the CRLF/LF divergence between Windows working trees and the Linux CI,
 # so `prettier --check` behaves identically everywhere.
 * text=auto eol=lf
+
+# Wrangler owns this generated declaration byte-for-byte; its current emitter
+# includes a handful of trailing spaces that must remain intact for --check.
+worker-configuration.d.ts whitespace=-trailing-space

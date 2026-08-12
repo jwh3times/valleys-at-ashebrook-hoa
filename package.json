@@ -12,6 +12,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
+    "types:worker": "wrangler types --env-file .env.example",
+    "types:worker:check": "wrangler types --env-file .env.example --check",
     "check": "astro sync && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && node vendor/astro-check-ts6/node_modules/@astrojs/check/bin/astro-check.js --root .",
     "test": "vitest run",
     "test:watch": "vitest",

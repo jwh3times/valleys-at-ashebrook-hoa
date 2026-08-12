@@ -42,6 +42,8 @@ npm run dev               # dev server at http://localhost:4321
 npm start                 # same local Astro dev server
 npm run build             # SSR build to dist/
 npm run check             # TypeScript 7 + Astro type checks
+npm run types:worker      # regenerate Cloudflare runtime/binding types
+npm run types:worker:check # fail if generated Worker types drifted, enforced by CI
 npm test                  # jsdom component/unit tests (Vitest)
 npm run test:watch        # Vitest in watch mode
 npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)
@@ -71,16 +73,14 @@ uses that isolated checker only for `.astro` diagnostics until Astro supports th
 programmatic API.
 
 There are two programs on purpose. `tsconfig.json` covers the Astro/Workers app — `src/` and the
-Workers-pool tests in `test/server/` — and `src/env.d.ts` pulls the Cloudflare ambient globals into
-it. `tsconfig.node.json` covers the code that never runs on Workers (`scripts/`, the jsdom/node
-tests in `test/unit/`, and the root config files) and deliberately omits
-`@cloudflare/workers-types`, so those Workers globals cannot shadow Node's own. Each config
-excludes what the other includes; adding a new Node-side path means adding it to both. This split
-exists because `@cloudflare/workers-types` declares `Buffer`, `process`, and `global` as `any` for
-`nodejs_compat`, which silently stripped `Buffer.equals` and `Buffer.toString(encoding)` from
-Node-only code when everything shared one program. Declarations both programs need live in
-`src/ambient.d.ts`, which reaches Cloudflare types through `import('@cloudflare/workers-types')`
-type positions rather than globals; `src/env.d.ts` keeps only the Workers/Astro-specific ones.
+Workers-pool tests in `test/server/` — while `tsconfig.node.json` covers the code that never runs on
+Workers (`scripts/`, the jsdom/node tests in `test/unit/`, and the root config files). Each config
+excludes what the other includes; adding a new Node-side path means adding it to both.
+`worker-configuration.d.ts` supplies both programs with compatibility-date-aligned Cloudflare
+runtime and binding types generated from `wrangler.toml` and `.env.example`; `src/ambient.d.ts`
+augments the generated `Env` with secrets and test-only bindings. Run `npm run types:worker` after
+changing either configuration source. CI runs `npm run types:worker:check` so generated-type drift
+cannot merge.
 
 Run a single test file or test name with:
 
@@ -90,9 +90,9 @@ npx vitest run -t "shows an empty message"
 npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 ```
 
-CI (`.github/workflows/build.yml`) runs `format:check`, `lint`, `sync:agents -- --check`,
-`lint:coercions`, `check`, `test`, `test:server`, then `build` on every PR and push to `main`; run
-the relevant checks locally before pushing. On every
+CI (`.github/workflows/build.yml`) runs `types:worker:check`, `format:check`, `lint`,
+`sync:agents -- --check`, `lint:coercions`, `check`, `test`, `test:server`, then `build` on every PR
+and push to `main`; run the relevant checks locally before pushing. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
 creates a GitHub release using the `package.json` major/minor release line. The project uses the
 third semver segment as a build number (`<major>.<minor>.<build>`). The first tag for a new line

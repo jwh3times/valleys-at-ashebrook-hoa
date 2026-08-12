@@ -83,6 +83,7 @@ Quick commands:
 
 ```bash
 npm install        # install dependencies
+npm run types:worker # regenerate Cloudflare runtime and binding declarations
 npm run dev        # local dev server at http://localhost:4321
 npm run build      # build the SSR Worker to dist/
 npm test           # run the Vitest spec suite
@@ -102,13 +103,14 @@ npm run deploy     # build + deploy to Cloudflare Workers
 - **Formatting and linting:** [Prettier](https://prettier.io) with `prettier-plugin-astro`, plus
   type-aware Oxlint using the TypeScript 7 `typescript-go` backend. Run `npm run format` and
   `npm run lint`; CI enforces both.
-- **Type checking:** The project compiler is TypeScript 7. Until Astro supports its native
-  compiler API, `npm run check` generates Astro's project types, runs TypeScript 7 over two
-  programs — `tsconfig.json` for the Astro/Workers app and `tsconfig.node.json` for Node-only
-  scripts and unit tests, so Cloudflare Workers' ambient types never leak into plain Node code —
-  and scopes TypeScript 6 only to the temporary `vendor/astro-check-ts6` adapter used for `.astro`
-  diagnostics. See [AGENTS.md](./AGENTS.md) for why the split exists.
-- **CI:** `.github/workflows/build.yml` runs format, lint, type checks, tests,
+- **Type checking:** `npm run types:worker` generates compatibility-date-aligned Cloudflare runtime
+  and binding declarations from `wrangler.toml` and `.env.example`. The project compiler is
+  TypeScript 7. Until Astro supports its native compiler API, `npm run check` generates Astro's
+  project types, runs TypeScript 7 over two programs — `tsconfig.json` for the Astro/Workers app and
+  `tsconfig.node.json` for Node-only scripts and unit tests — and scopes TypeScript 6 only to the
+  temporary `vendor/astro-check-ts6` adapter used for `.astro` diagnostics. See
+  [AGENTS.md](./AGENTS.md) for why the split exists.
+- **CI:** `.github/workflows/build.yml` checks generated Worker-type drift, format, lint, type checks, tests,
   and build on every push and pull request. CodeQL code scanning runs via GitHub's
   default setup (configured in repo Settings — there is intentionally no CodeQL
   workflow file in the repo). Deploys from `main` are handled by Cloudflare Workers
