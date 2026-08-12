@@ -70,7 +70,7 @@ async function adopt(db: Db, body: unknown): Promise<Response> {
       return new Response('Motion not found', { status: 404 });
   }
 
-  await db
+  const adopted = await db
     .update(resolutions)
     .set({
       status: 'in_force',
@@ -78,7 +78,10 @@ async function adopt(db: Db, body: unknown): Promise<Response> {
       adoptedByMotionId: motionId,
       updatedAt: new Date(),
     })
-    .where(eq(resolutions.id, id));
+    .where(and(eq(resolutions.id, id), eq(resolutions.status, 'draft')))
+    .returning({ id: resolutions.id });
+  if (adopted.length !== 1)
+    return new Response('Resolution is not a draft', { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -151,25 +154,61 @@ async function supersede(db: Db, body: unknown): Promise<Response> {
       return new Response('Motion not found', { status: 404 });
   }
 
-  // Both writes must land together: a new resolution taking effect with no
-  // predecessor marked superseded (or vice versa) would leave the chain
-  // inconsistent, so this is the one action that needs db.batch().
-  await db.batch([
-    db
-      .update(resolutions)
-      .set({
-        status: 'in_force',
+  // Both writes must land together: the first statement repeats every
+  // precondition at the mutation boundary, and the second is gated on the
+  // exact successor link the first statement creates. D1 executes a batch as
+  // one transaction but does not roll it back merely because a statement
+  // changes zero rows, so the second guard is what makes a lost race a full
+  // no-op rather than a half-transition.
+  const updatedAt = Math.floor(Date.now() / 1000);
+  const [successorTransition, predecessorTransition] = await db.$client.batch([
+    db.$client
+      .prepare(
+        `UPDATE resolutions
+           SET status = 'in_force', supersedes_id = ?, effective_date = ?,
+               adopted_by_motion_id = ?, updated_at = ?
+           WHERE id = ? AND status = 'draft'
+             AND EXISTS (
+               SELECT 1 FROM resolutions AS predecessor
+               WHERE predecessor.id = ? AND predecessor.status = 'in_force'
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM resolutions AS successor
+               WHERE successor.supersedes_id = ?
+             )
+           RETURNING id`,
+      )
+      .bind(
         supersedesId,
         effectiveDate,
-        adoptedByMotionId: motionId,
-        updatedAt: new Date(),
-      })
-      .where(eq(resolutions.id, id)),
-    db
-      .update(resolutions)
-      .set({ status: 'superseded', updatedAt: new Date() })
-      .where(eq(resolutions.id, supersedesId)),
-  ] as never);
+        motionId,
+        updatedAt,
+        id,
+        supersedesId,
+        supersedesId,
+      ),
+    db.$client
+      .prepare(
+        `UPDATE resolutions
+           SET status = 'superseded', updated_at = ?
+           WHERE id = ? AND status = 'in_force'
+             AND EXISTS (
+               SELECT 1 FROM resolutions AS successor
+               WHERE successor.id = ?
+                 AND successor.status = 'in_force'
+                 AND successor.supersedes_id = resolutions.id
+             )
+           RETURNING id`,
+      )
+      .bind(updatedAt, supersedesId, id),
+  ]);
+  if (
+    successorTransition.results.length !== 1 ||
+    predecessorTransition.results.length !== 1
+  )
+    return new Response('Resolution state changed before supersession', {
+      status: 409,
+    });
   return new Response(null, { status: 204 });
 }
 
