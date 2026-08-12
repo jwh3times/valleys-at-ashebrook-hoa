@@ -12,9 +12,10 @@ import { truncateAll, seedElection, seedCandidate } from './fixtures';
 
 /**
  * The reservation protocol, tested directly rather than only through the
- * three routes that use it. Before the seam existed this was reachable only
- * by monkey-patching `env.DATABASE.batch` from inside a route test — which is
- * why `pauseNextBatch` was copied into three files.
+ * the routes that use it. Before the seam existed this was reachable only by
+ * monkey-patching `env.DATABASE.batch` from inside route tests. Those tests
+ * still prove each route wires in the protocol; the shared harness now lives
+ * in `fixtures.ts`.
  */
 
 beforeAll(async () => {
