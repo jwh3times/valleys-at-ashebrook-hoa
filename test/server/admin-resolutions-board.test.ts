@@ -30,6 +30,8 @@ beforeEach(async () => {
 });
 
 const url = 'http://localhost/api/admin/resolutions';
+const originalD1Batch = env.DATABASE.batch.bind(env.DATABASE);
+const originalD1Prepare = env.DATABASE.prepare.bind(env.DATABASE);
 
 function req(u: string, method: string, body?: unknown) {
   return {
@@ -98,6 +100,85 @@ async function getResolution(id: string) {
     .from(resolutions)
     .where(eq(resolutions.id, id));
   return rows[0];
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function pauseNextStatement(pattern: RegExp) {
+  const released = deferred();
+  const statementReached = deferred();
+  let matched = false;
+  const spy = vi
+    .spyOn(env.DATABASE, 'prepare')
+    .mockImplementation((query: string) => {
+      const statement = originalD1Prepare(query);
+      if (matched || !pattern.test(query)) return statement;
+      matched = true;
+      let executionPaused = false;
+      const pause = async () => {
+        if (executionPaused) return;
+        executionPaused = true;
+        statementReached.resolve();
+        await released.promise;
+      };
+      const wrap = (target: D1PreparedStatement): D1PreparedStatement =>
+        new Proxy(target, {
+          get(inner, property) {
+            if (property === 'bind')
+              return (...values: unknown[]) => wrap(inner.bind(...values));
+            if (property === 'run')
+              return async () => {
+                await pause();
+                return inner.run();
+              };
+            if (property === 'all')
+              return async () => {
+                await pause();
+                return inner.all();
+              };
+            if (property === 'first') return inner.first.bind(inner);
+            if (property === 'raw')
+              return async () => {
+                await pause();
+                return inner.raw();
+              };
+            return Reflect.get(inner, property, inner);
+          },
+        });
+      return wrap(statement);
+    });
+  return {
+    reached: statementReached.promise,
+    release: released.resolve,
+    restore: () => spy.mockRestore(),
+  };
+}
+
+function pauseNextBatch() {
+  const released = deferred();
+  const batchReached = deferred();
+  let paused = false;
+  const spy = vi
+    .spyOn(env.DATABASE, 'batch')
+    .mockImplementation(async (statements) => {
+      if (!paused) {
+        paused = true;
+        batchReached.resolve();
+        await released.promise;
+      }
+      return originalD1Batch(statements);
+    });
+  return {
+    reached: batchReached.promise,
+    release: released.resolve,
+    restore: () => spy.mockRestore(),
+  };
 }
 
 describe('resolutions admin route — board', () => {
@@ -211,6 +292,39 @@ describe('resolutions admin route — board', () => {
     expect(row.effectiveDate).toBe('2026-01-01');
   });
 
+  it('does not let a stale adopt overwrite a concurrent adopt', async () => {
+    const id = await createResolution();
+    const barrier = pauseNextStatement(/^\s*update\s+["`]?resolutions["`]?/i);
+    try {
+      const staleAdopt = POST(
+        req(url, 'POST', {
+          action: 'adopt',
+          id,
+          effectiveDate: '2026-02-01',
+        }),
+      );
+      await barrier.reached;
+      const winner = await POST(
+        req(url, 'POST', {
+          action: 'adopt',
+          id,
+          effectiveDate: '2026-03-01',
+        }),
+      );
+      expect(winner.status).toBe(204);
+      barrier.release();
+      const stale = await staleAdopt;
+      expect(stale.status).toBe(409);
+      expect(await stale.text()).toMatch(/not a draft/i);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+    const row = await getResolution(id);
+    expect(row.status).toBe('in_force');
+    expect(row.effectiveDate).toBe('2026-03-01');
+  });
+
   it('adopt with a malformed effectiveDate returns 400', async () => {
     const id = await createResolution();
     const res = await POST(
@@ -283,6 +397,52 @@ describe('resolutions admin route — board', () => {
     expect(newRow.supersedesId).toBe(oldId);
     expect(newRow.effectiveDate).toBe('2026-03-01');
     expect(oldRow.status).toBe('superseded');
+  });
+
+  it('returns 409 without changing its draft after a concurrent supersede wins', async () => {
+    const oldId = await createResolution({
+      number: 'R-2026-01',
+      status: 'in_force',
+      effectiveDate: '2026-01-01',
+    });
+    const staleNewId = await createResolution({ number: 'R-2026-02' });
+    const winningNewId = await createResolution({ number: 'R-2026-03' });
+    const barrier = pauseNextBatch();
+    try {
+      const staleSupersede = POST(
+        req(url, 'POST', {
+          action: 'supersede',
+          id: staleNewId,
+          supersedesId: oldId,
+          effectiveDate: '2026-03-01',
+        }),
+      );
+      await barrier.reached;
+      const winner = await POST(
+        req(url, 'POST', {
+          action: 'supersede',
+          id: winningNewId,
+          supersedesId: oldId,
+          effectiveDate: '2026-04-01',
+        }),
+      );
+      expect(winner.status).toBe(204);
+      barrier.release();
+      const stale = await staleSupersede;
+      expect(stale.status).toBe(409);
+      expect(await stale.text()).toMatch(/changed before supersession/i);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+    const oldRow = await getResolution(oldId);
+    const staleNewRow = await getResolution(staleNewId);
+    const winningNewRow = await getResolution(winningNewId);
+    expect(oldRow.status).toBe('superseded');
+    expect(staleNewRow.status).toBe('draft');
+    expect(staleNewRow.supersedesId).toBeNull();
+    expect(winningNewRow.status).toBe('in_force');
+    expect(winningNewRow.supersedesId).toBe(oldId);
   });
 
   it('supersede without effectiveDate returns 400', async () => {
