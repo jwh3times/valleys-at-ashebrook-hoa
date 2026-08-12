@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.13] - 2026-08-12
+
+### Changed
+
+- **Route-level D1 race tests now share one batch-interleaving harness.** The retained election,
+  motion-voting, certification, and resolution tests continue to verify their distinct endpoint
+  conflict behavior and atomicity without maintaining four copies of the same test utility.
+
 ## [0.4.12] - 2026-08-12
 
 ### Changed
