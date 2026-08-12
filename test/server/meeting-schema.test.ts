@@ -49,7 +49,78 @@ describe('meeting schema', () => {
     await seedMeeting('m1', 'board');
     await seedMeeting('m2', 'member');
     const rows = await getDb(env).select().from(meetings);
-    expect(rows.map((r) => r.body).sort()).toEqual(['board', 'member']);
+    expect(rows.map((r) => r.body).sort((a, b) => a.localeCompare(b))).toEqual([
+      'board',
+      'member',
+    ]);
+  });
+
+  it('rejects approval provenance that does not name a motion', async () => {
+    const db = getDb(env);
+    await seedMeeting('m1');
+
+    await expect(
+      db
+        .update(meetings)
+        .set({ approvedByMotionId: 'missing-motion' })
+        .where(eq(meetings.id, 'm1')),
+    ).rejects.toThrow();
+  });
+
+  it('clears approval provenance when its motion is deleted', async () => {
+    const db = getDb(env);
+    await seedMeeting('minutes-meeting');
+    await seedMeeting('approving-meeting');
+    await db.insert(motions).values({
+      id: 'approval-motion',
+      meetingId: 'approving-meeting',
+      sequence: 1,
+      text: 'Approve the prior meeting minutes',
+      outcome: 'passed',
+      createdBy: 'u1',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db
+      .update(meetings)
+      .set({ approvedByMotionId: 'approval-motion' })
+      .where(eq(meetings.id, 'minutes-meeting'));
+
+    await db.delete(motions).where(eq(motions.id, 'approval-motion'));
+
+    const rows = await db
+      .select({ approvedByMotionId: meetings.approvedByMotionId })
+      .from(meetings)
+      .where(eq(meetings.id, 'minutes-meeting'));
+    expect(rows[0].approvedByMotionId).toBeNull();
+  });
+
+  it('the 0018 migration preserves ON DELETE SET NULL without rebuilding meetings', () => {
+    const migration = env.MIGRATIONS!.find((entry) =>
+      entry.name.startsWith('0018'),
+    );
+    expect(migration).toBeDefined();
+    const addColumnIndex = migration!.queries.findIndex(
+      (query) =>
+        query.includes('ADD COLUMN') && query.includes('approved_by_motion_id'),
+    );
+    const copyIndex = migration!.queries.findIndex(
+      (query) =>
+        query.includes('UPDATE `meetings`') &&
+        query.includes('approved_by_motion_id_legacy'),
+    );
+    const dropLegacyIndex = migration!.queries.findIndex(
+      (query) =>
+        query.includes('DROP COLUMN') &&
+        query.includes('approved_by_motion_id_legacy'),
+    );
+    expect(addColumnIndex).toBeGreaterThanOrEqual(0);
+    expect(migration!.queries[addColumnIndex]).toMatch(
+      /REFERENCES `motions`\(`id`\).*ON DELETE set null/i,
+    );
+    expect(copyIndex).toBeGreaterThan(addColumnIndex);
+    expect(dropLegacyIndex).toBeGreaterThan(copyIndex);
+    expect(migration!.queries.join('\n')).not.toMatch(/DROP TABLE `meetings`/i);
   });
 
   it('cascades attendance, motions, and votes when a meeting is deleted', async () => {

@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-08-12
+
+### Fixed
+
+- **Meeting approval provenance now names a real motion.** The board API rejects unknown approving
+  motion IDs, while the database enforces the relationship and clears it if the motion is deleted.
+  The upgrade preserves valid existing approval links and safely clears legacy dangling values
+  without deleting meeting motions or votes.
+
 ## [0.4.7] - 2026-08-12
 
 ### Fixed
