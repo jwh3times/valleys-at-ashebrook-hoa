@@ -22,6 +22,7 @@ import {
   settings,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
+import { pauseNextBatch } from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -40,7 +41,6 @@ beforeEach(async () => {
 
 const url = 'http://localhost/api/admin/motions';
 const now = new Date();
-const originalD1Batch = env.DATABASE.batch.bind(env.DATABASE);
 const originalD1Prepare = env.DATABASE.prepare.bind(env.DATABASE);
 
 function req(u: string, method: string, body?: unknown) {
@@ -173,33 +173,6 @@ async function getEligibility(id: string) {
     .select()
     .from(motionEligibility)
     .where(eq(motionEligibility.motionId, id));
-}
-
-function pauseNextBatch() {
-  let release!: () => void;
-  let reached!: () => void;
-  const released = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const batchReached = new Promise<void>((resolve) => {
-    reached = resolve;
-  });
-  let paused = false;
-  const spy = vi
-    .spyOn(env.DATABASE, 'batch')
-    .mockImplementation(async (statements) => {
-      if (!paused) {
-        paused = true;
-        reached();
-        await released;
-      }
-      return originalD1Batch(statements);
-    });
-  return {
-    reached: batchReached,
-    release,
-    restore: () => spy.mockRestore(),
-  };
 }
 
 function pauseNextStatement(pattern: RegExp) {
