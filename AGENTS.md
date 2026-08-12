@@ -789,11 +789,13 @@ snapshots unless the UI is intentionally static.
 `npm test` uses `vitest.config.ts` and covers files under `test/unit/**` plus component
 `*.test.tsx` files. `npm run test:server` uses `@cloudflare/vitest-pool-workers` with
 `vitest.workers.config.ts` for files under `test/server/**`; these tests import `{ env,
-applyD1Migrations }` from `cloudflare:test` and mostly invoke handlers directly. That config also
-merges Astro's own Vite plugins (minus its Cloudflare adapter plugin, which collides with
-`cloudflareTest`'s own Cloudflare Vite plugin) into the Workers test pool, so `.astro` pages can
-also be rendered directly through the Astro Container API inside the real Workers runtime — see
-`test/server/meeting-pages.test.ts`. A shared `isCloudflarePlugin` predicate in the new
+applyD1Migrations }` from `cloudflare:test` and mostly invoke handlers directly. Pool 0.21 takes
+Miniflare's config-based `WorkerOptions` through `cloudflareTest({ miniflare: ... })`; supported
+overrides there merge over `wrangler.test.toml`. Keep the config's `es-module-lexer` alias and its
+Astro Vite plugin graph: it merges Astro's plugins (minus its Cloudflare adapter plugin, which
+collides with `cloudflareTest`'s own Cloudflare Vite plugin) into the Workers test pool, so `.astro`
+pages can also be rendered directly through the Astro Container API inside the real Workers
+runtime — see `test/server/meeting-pages.test.ts`. A shared `isCloudflarePlugin` predicate in the new
 `vitest.shared.ts` identifies that plugin for both `vitest.config.ts` (which strips it, since it's
 incompatible with the jsdom/node test environments) and `vitest.workers.config.ts` (which strips
 Astro's copy in favor of `cloudflareTest`'s own), so the two configs can't drift on what counts as
