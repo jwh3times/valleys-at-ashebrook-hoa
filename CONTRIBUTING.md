@@ -12,6 +12,10 @@ Follow the [Getting started](./README.md#getting-started) section of the README 
 KV, R2, secrets) is only needed for deployment and is documented step-by-step in
 [SETUP.md](./SETUP.md).
 
+Cloudflare runtime and binding declarations are committed in `worker-configuration.d.ts`. Run
+`npm run types:worker` after changing `wrangler.toml` or `.env.example`, and commit the regenerated
+file with the configuration change.
+
 ## Workflow
 
 1. **Open an issue first** for non-trivial changes so we can agree on the approach.
@@ -20,6 +24,7 @@ KV, R2, secrets) is only needed for deployment and is documented step-by-step in
    `.github/workflows/build.yml`:
 
    ```bash
+   npm run types:worker:check # generated Worker types match Cloudflare configuration
    npm run format:check   # Prettier (fix with: npm run format)
    npm run lint           # type-aware Oxlint correctness and React Hooks checks
    npm run sync:agents -- --check # generated agent trees match authored inputs

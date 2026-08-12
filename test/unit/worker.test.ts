@@ -1,8 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type {
-  ExecutionContext,
-  ScheduledController,
-} from '@cloudflare/workers-types';
 
 const handle = vi.hoisted(() => vi.fn());
 const cleanupVerificationState = vi.hoisted(() => vi.fn());

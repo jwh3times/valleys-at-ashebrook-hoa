@@ -1,6 +1,7 @@
-// Minimal typings for the Cloudflare AI Search (autorag) binding — declared here
-// rather than relying on @cloudflare/workers-types (pinned at v4; autorag typing
-// is not guaranteed). Only the `search()` surface we use is modeled.
+// The Cloudflare AI binding itself is typed by worker-configuration.d.ts,
+// generated from wrangler.toml. This module keeps only the stable internal
+// search shape consumed by the assistant and the compatibility normalizer for
+// raw results returned across the AutoRAG -> AI Search transition.
 //
 // `AiSearchChunk` is our STABLE internal shape that the rest of the assistant
 // (`toSources`, `answer`) consumes. The raw binding response is NOT this shape —
@@ -40,35 +41,6 @@ interface RawSearchResult {
   data?: RawSearchItem[];
   chunks?: RawSearchItem[];
   has_more?: boolean;
-}
-
-export interface AutoRag {
-  search(opts: {
-    query: string;
-    max_num_results?: number;
-    ranking_options?: { score_threshold?: number };
-    rewrite_query?: boolean;
-  }): Promise<RawSearchResult>;
-}
-
-export interface MarkdownDocument {
-  name: string;
-  blob: Blob;
-}
-export interface ToMarkdownResult {
-  name: string;
-  format: string; // 'markdown' | 'error'
-  mimetype?: string;
-  tokens?: number;
-  data?: string;
-}
-
-export interface AiBinding {
-  autorag(instance: string): AutoRag;
-  toMarkdown(
-    files: MarkdownDocument[],
-    options?: Record<string, unknown>,
-  ): Promise<ToMarkdownResult[]>;
 }
 
 export class AiSearchUnavailableError extends Error {
@@ -162,12 +134,12 @@ export async function retrieve(
   limit = 8,
 ): Promise<AiSearchChunk[]> {
   try {
-    const res = await env.AI.autorag(env.AI_SEARCH_INSTANCE).search({
+    const res = (await env.AI.autorag(env.AI_SEARCH_INSTANCE).search({
       query,
       max_num_results: limit,
       ranking_options: { score_threshold: 0.3 },
       rewrite_query: true,
-    });
+    })) as unknown as RawSearchResult;
     const raw = res.data ?? res.chunks ?? [];
     return raw.map(normalizeChunk);
   } catch (err) {

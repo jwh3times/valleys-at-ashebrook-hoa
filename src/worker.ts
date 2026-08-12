@@ -1,8 +1,4 @@
 import { handle } from '@astrojs/cloudflare/handler';
-import type {
-  ExecutionContext,
-  ScheduledController,
-} from '@cloudflare/workers-types';
 import { cleanupVerificationState } from './server/cleanup/verification';
 
 export default {
