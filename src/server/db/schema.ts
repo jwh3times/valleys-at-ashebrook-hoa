@@ -6,6 +6,7 @@ import {
   uniqueIndex,
   foreignKey,
   check,
+  type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { users } from './auth-schema';
@@ -215,7 +216,10 @@ export const meetings = sqliteTable(
     // Minutes are approved by a motion at the FOLLOWING meeting. Circular
     // reference with `motions` is fine — SQLite resolves FK targets at DML time,
     // not at CREATE TABLE time, and both tables land in this migration.
-    approvedByMotionId: text('approved_by_motion_id'),
+    approvedByMotionId: text('approved_by_motion_id').references(
+      (): AnySQLiteColumn => motions.id,
+      { onDelete: 'set null' },
+    ),
     createdBy: text('created_by').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
@@ -254,7 +258,7 @@ export const motions = sqliteTable(
     id: text('id').primaryKey(),
     meetingId: text('meeting_id')
       .notNull()
-      .references(() => meetings.id, { onDelete: 'cascade' }),
+      .references((): AnySQLiteColumn => meetings.id, { onDelete: 'cascade' }),
     sequence: integer('sequence').notNull(),
     text: text('text').notNull(),
     // A board meeting's mover is a board person. PR 3 adds nullable owner
