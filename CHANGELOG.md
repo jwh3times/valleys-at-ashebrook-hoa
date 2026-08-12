@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-08-12
+
+### Fixed
+
+- **Resolution lifecycle transitions now fail cleanly when board actions race.** Adoption and
+  supersession recheck their lifecycle preconditions at the mutation boundary, so a stale caller
+  receives a readable conflict instead of overwriting the winning adoption or surfacing a raw D1
+  uniqueness error. Supersession still moves the new and predecessor resolutions together, and a
+  losing request leaves its draft unchanged.
+
+## [0.4.6] - 2026-08-11
+
+### Changed
+
+- Updated `@anthropic-ai/sdk` to 0.116.0, `@cloudflare/vitest-pool-workers` to 0.20.3,
+  `@cloudflare/workers-types` to 5.20260808.1, and `@types/node` to 26.2.0.
+
 ## [0.4.5] - 2026-08-11
 
 ### Fixed
