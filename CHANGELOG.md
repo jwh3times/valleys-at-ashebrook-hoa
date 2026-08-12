@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.11] - 2026-08-12
+
+### Changed
+
+- **Worker integration tests now run on Cloudflare's config-based Vitest pool.** Updated
+  `@cloudflare/vitest-pool-workers` to 0.21.2 with its matching Wrangler 4.122.0 and workerd
+  runtime, while preserving the existing Astro plugin graph and explicit Miniflare binding
+  overrides. The committed Worker declarations now match the upgraded runtime.
+
 ## [0.4.10] - 2026-08-12
 
 ### Changed

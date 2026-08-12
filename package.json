@@ -48,8 +48,8 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.20.3",
-    "@cloudflare/workers-types": "^5.20260809.1",
+    "@cloudflare/vitest-pool-workers": "^0.21.2",
+    "@cloudflare/workers-types": "^5.20260812.1",
     "@napi-rs/canvas": "^1.0.5",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
@@ -68,7 +68,7 @@
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9",
-    "wrangler": "^4.110.0",
+    "wrangler": "^4.122.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "overrides": {
