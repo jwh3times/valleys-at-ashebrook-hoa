@@ -243,9 +243,12 @@ Markdown twins described below and never the human-readable originals.
   [ADR 0016](./docs/adr/0016-resolutions-supersession-chain.md)): `/api/admin/resolutions` supports
   `GET`/`POST`/`PATCH`/`DELETE`, all `requireBoard`-gated. `GET` lists every resolution including
   drafts, with no tier filter. `POST` creates a `draft` (`201 { id }`); with
-  `{ action: 'adopt', id, effectiveDate, motionId? }` moves a `draft` to `in_force`; with
+  `{ action: 'adopt', id, effectiveDate, motionId? }` moves a `draft` to `in_force` with a
+  mutation-boundary status compare-and-swap; with
   `{ action: 'supersede', id, supersedesId, effectiveDate, motionId? }` puts the (draft) resolution
-  `id` in force and marks `supersedesId` `superseded`, both writes in one `db.batch()`; with
+  `id` in force and marks `supersedesId` `superseded` in one D1 batch that atomically re-checks the
+  successor is still a draft, the predecessor is still in force, and no other successor exists.
+  Concurrent losers return `409` without a partial transition; with
   `{ action: 'repeal', id }` moves an `in_force` resolution to `repealed`, leaving every
   `supersedes_id` link intact. `effectiveDate` is required by `adopt` and `supersede` and validated
   as a real calendar date (`400` on malformed). `PATCH` edits only `number`/`title`/`body_md`/
