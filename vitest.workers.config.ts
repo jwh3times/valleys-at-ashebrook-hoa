@@ -1,7 +1,7 @@
 // Vitest configuration for Cloudflare Workers tests.
-// Uses @cloudflare/vitest-pool-workers v4 API: cloudflareTest plugin + vitest defineConfig.
-// (The v3 defineWorkersConfig / @cloudflare/vitest-pool-workers/config API is not available
-// in the installed v0.17.x — that subpath was removed in v4.)
+// Uses @cloudflare/vitest-pool-workers' current API: cloudflareTest plugin + Vitest defineConfig.
+// (The older defineWorkersConfig / @cloudflare/vitest-pool-workers/config API is not available
+// in the installed v0.21.x line.)
 //
 // Astro's own Vite plugins (minus its Cloudflare adapter plugin, which
 // collides with cloudflareTest's own Cloudflare Vite plugin — see the
@@ -55,6 +55,9 @@ export default defineConfig(async (ctx) => {
     plugins: [
       ...astroPlugins,
       cloudflareTest({
+        // Pool 0.21 builds the test Worker from Miniflare's config-based
+        // WorkerOptions. These supported overrides merge over wrangler.test.toml;
+        // the Astro plugin graph and es-module-lexer alias above remain unchanged.
         miniflare: {
           compatibilityFlags: ['nodejs_compat'],
           compatibilityDate: '2026-06-01',
