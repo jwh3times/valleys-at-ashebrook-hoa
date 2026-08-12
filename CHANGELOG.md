@@ -7,6 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-08-12
+
+### Changed
+
+- **Cloudflare runtime and binding types now come from the deployed Worker configuration.**
+  Wrangler generates the committed declarations from the compatibility date, flags, bindings,
+  and public environment template; CI rejects drift when that configuration changes. Application
+  code no longer maintains parallel Worker binding interfaces or imports runtime globals directly.
+
+## [0.4.9] - 2026-08-12
+
+### Changed
+
+- Updated `@cloudflare/workers-types` to 5.20260809.1 and `@napi-rs/canvas` to 1.0.5.
+
 ## [0.4.8] - 2026-08-12
 
 ### Fixed
