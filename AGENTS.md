@@ -199,8 +199,10 @@ Markdown twins described below and never the human-readable originals.
   creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
   per-person attendance roll, or with `{ action: 'setMemberAttendance' }` fully replaces a member
   meeting's per-property attendance roll, or with `{ action: 'approve' }`/`{ action: 'unapprove' }`
-  flips `status` (`approve` returns `409` if already approved or if a child motion vote is open,
-  with the open-vote check in the conditional status update so approval cannot win that race;
+  flips `status` (`approve` returns `400` if `approvedByMotionId` names no motion — a motion from a
+  different, normally following meeting is valid — and `409` if already approved or if a child
+  motion vote is open, with the open-vote check in the conditional status update so approval
+  cannot win that race;
   `unapprove` clears `approved_at`/`approved_by`/`approved_by_motion_id`); `PATCH` updates a meeting's fields but
   cannot write `status`; `DELETE` returns `409` on an approved meeting (unapprove first), `409` if
   any motion belonging to it is cited as a resolution's adopting motion (see the resolutions
@@ -554,8 +556,9 @@ with the default-off live-voting lifecycle foundation described in ADR 0020 — 
 column that decides which voter model applies), `kind` (`regular`/`special`/`annual`), `date`,
 `start_time`, `location`, `title`, `summary_md`, `document_id` referencing `documents` on
 delete-set-null, `quorum_required`, `status` (`draft`/`approved`, default `draft`), `visibility`
-(default `board`), approval provenance `approved_at`/`approved_by`/`approved_by_motion_id`, and
-`created_by`; `board_attendance` is one present/absent row per meeting per `board_people` row,
+(default `board`), approval provenance `approved_at`/`approved_by`/`approved_by_motion_id` (the
+last references `motions` on delete-set-null), and `created_by`; `board_attendance` is one
+present/absent row per meeting per `board_people` row,
 unique per pair; `motions` records one motion per meeting with a server-assigned `sequence` unique
 per meeting, board mover/second referencing `board_people` on delete-restrict, plus nullable
 `mover_owner_id`/`second_owner_id` referencing `owners` — pre-placed for a later phase; nothing
@@ -705,7 +708,9 @@ constraint. Migration `0015` drops `via_proxy` from `member_attendance`, `member
 verified as applied to production on 2026-08-05. Migration `0016` adds `ballot_choices`,
 `election_eligibility`, `motion_eligibility`, and `motions.voting_state`. Migration `0017` adds
 `motions.voting_revision`, an integer `NOT NULL DEFAULT 0` used as the live-motion
-compare-and-swap token. Migrations after `0015` are not yet recorded here as applied to production.
+compare-and-swap token. Migration `0018` adds the `meetings.approved_by_motion_id` foreign key to
+`motions.id` with delete-set-null, retaining valid legacy links and clearing dangling values.
+Migrations after `0015` are not yet recorded here as applied to production.
 Migrations are applied with
 `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
