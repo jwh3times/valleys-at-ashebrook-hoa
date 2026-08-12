@@ -36,8 +36,14 @@ public repo.
 
 ```bash
 npm install
+npm run types:worker
 npx wrangler login
 ```
+
+`worker-configuration.d.ts` is generated from `wrangler.toml` plus the public variable names in
+`.env.example` and is committed to the repository. Regenerate it after changing either file;
+`npm run types:worker:check` verifies that the committed declarations are current without writing
+them.
 
 ## 2. Create Cloudflare Resources
 
@@ -243,6 +249,7 @@ verification gate for formatting, type checks, tests, and build.
 Manual deploys use:
 
 ```bash
+npm run types:worker:check
 npm run build
 npx wrangler deploy -c dist/server/wrangler.json
 ```

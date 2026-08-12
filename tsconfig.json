@@ -1,9 +1,9 @@
 {
   "extends": "astro/tsconfigs/strict",
   "include": [".astro/types.d.ts", "**/*"],
-  // The Node-side files are checked by tsconfig.node.json instead, so that the
-  // Workers ambient globals referenced from src/env.d.ts cannot shadow Node's
-  // own globals there. `npm run check` runs both programs.
+  // The Node-side files are checked by tsconfig.node.json instead. Keeping the
+  // runtime programs separate lets each one select its own libraries and test
+  // globals; `npm run check` runs both programs.
   "exclude": [
     "dist",
     "scripts",
@@ -16,6 +16,10 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "jsxImportSource": "react",
+    "types": [
+      "./worker-configuration.d.ts",
+      "@cloudflare/vitest-pool-workers/types"
+    ],
     "paths": {
       "@/*": ["./src/*"]
     }
