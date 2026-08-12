@@ -90,9 +90,9 @@ npx vitest run -t "shows an empty message"
 npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 ```
 
-CI (`.github/workflows/build.yml`) runs `format:check`, `lint`, `sync:agents -- --check`,
-`lint:coercions`, `check`, `test`, `test:server`, then `build` on every PR and push to `main`; run
-the relevant checks locally before pushing. On every
+CI (`.github/workflows/build.yml`) runs `types:worker:check`, `format:check`, `lint`,
+`sync:agents -- --check`, `lint:coercions`, `check`, `test`, `test:server`, then `build` on every PR
+and push to `main`; run the relevant checks locally before pushing. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
 creates a GitHub release using the `package.json` major/minor release line. The project uses the
 third semver segment as a build number (`<major>.<minor>.<build>`). The first tag for a new line
