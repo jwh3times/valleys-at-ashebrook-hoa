@@ -48,6 +48,10 @@ _Avoid_: Owner Link, Lot link, Account ownership
 Proof that an Account represents a specific Person, established through either Automatic Person Verification or Manual Person Verification.
 _Avoid_: Ownership proof, Lot verification
 
+**Identity Event**:
+An immutable account of an accepted Person Verification or the creation or ending of a Person Link, including the acting Account or automatic cause and when it was recorded. Operational verification attempts, codes, and routine failed matches are not Identity Events.
+_Avoid_: Roster Change, Access Event, verification attempt
+
 **Automatic Person Verification**:
 A process in which an applicant supplies a Lot Address and Person name without being shown the Lot's Owners, then proves control of a Contact Method uniquely attributable to the one matching individual Current Owner. Success creates a Person Link; organizational ownership, ambiguity, unavailable or shared contacts, and already-linked identities require manual review.
 _Avoid_: Owner Verification, Lot verification, property verification
@@ -92,13 +96,21 @@ _Avoid_: Recorded date, creation date
 The precise instant when the system learned or recorded a fact, distinct from its Effective Day. A backdated change affects current access when recorded, while preserving its real-world Effective Day and flagging intervening activity for review rather than silently erasing it.
 _Avoid_: Effective date, Association Day
 
+**Review Flag**:
+A durable indication that a roster, identity, Board-service, or access change may require a human to inspect an affected fact or intervening action. It does not itself invalidate or rewrite that fact or action, and its opening and resolution are preserved through Review Events.
+_Avoid_: Automatic reversal, deletion marker
+
+**Review Event**:
+An immutable account of opening or resolving a Review Flag, linked to the change that caused the review and recording who or what acted and when.
+_Avoid_: Review note, mutable status
+
 **Roster Change**:
 An immutable account of a creation, correction, consolidation, retirement, or ending involving a Lot, Person, Organization, Ownership, Representation, or Contact Method. Only a System Administrator or current Board Member with Board Access may accept such a fact, recording its Effective Day, reason, supporting reference, actor, and Recorded At; member-submitted information remains a request until accepted.
 _Avoid_: Ownership change, mutable audit row
 
 **Roster Redaction**:
-An exceptional, System-Administrator-only removal of personal values required by law or binding policy. It preserves an immutable account of what category was redacted, who authorized and performed it, when, and why, without retaining the erased value.
-_Avoid_: Roster correction, record deletion
+An exceptional, System-Administrator-only removal of a specific Person-name or Contact Method value from authoritative and directly derived roster storage when required by law or binding policy. It preserves an immutable account of what category was redacted, who authorized and performed it, when, and why, without retaining the erased value. Independently authored governance records, correspondence, external systems, and backups follow their own legally governed removal or retention processes.
+_Avoid_: Roster correction, record deletion, global string erasure
 
 ## Board service and access
 
