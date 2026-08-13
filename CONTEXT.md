@@ -115,8 +115,16 @@ _Avoid_: Roster correction, record deletion, global string erasure
 ## Board service and access
 
 **Board Term**:
-A period during which an eligible Person serves on the Board and is qualified by one named Lot. Its first day is inclusive, its scheduled ending day is exclusive, and a separate actual ending day preserves an early end; a Person may have only one current Board Term, and one Lot may qualify only one current Board Member.
+A period during which an eligible Person serves on the Board and is qualified by one named Lot. Its first day is inclusive, its scheduled ending day is exclusive, and a separate actual ending day preserves an early end. Two Board Terms may never overlap for the same Person or the same Board-Qualifying Lot, so a Person has at most one current Board Term and a Lot qualifies at most one current Board Member; adjacent Terms are valid, which is how a renewal or a successor is recorded.
 _Avoid_: Board role, access role
+
+**Cancelled Board Term**:
+A Board Term withdrawn before its first day, so no service ever occurred. It is distinct from an early ending, which records service that really happened, and from a Voided Board Term, which records an entry that was never a fact.
+_Avoid_: Actual Term End, voided Term
+
+**Voided Board Term**:
+A Board Term recorded in error and therefore never true. It is preserved and auditable but is excluded from Board composition, from overlap rules, and from every derivation of authority, and any action recorded during its apparent period is flagged for review rather than erased.
+_Avoid_: Deleted Term, Cancelled Board Term
 
 **Scheduled Term End**:
 The exclusive Association Day on which a Board Term was expected to end when authorized. It remains preserved if service ends early.
@@ -127,19 +135,19 @@ The exclusive Association Day on which Board service ended earlier than schedule
 _Avoid_: Scheduled Term End, correction date
 
 **Board Office Assignment**:
-A time-bounded assignment of one Board Office to a Board Member within a Board Term. A Board Member may hold at most one office at a time, each office may have at most one current holder, and office changes preserve continuous Board service.
+A time-bounded assignment of one Board Office to a Board Member within a single Board Term. A Board Member may hold at most one office at a time, each office may have at most one current holder, and office changes within a Term preserve continuous Board service. It never carries across into a later Board Term: because the Board appoints its own officers, a renewed Term requires a fresh appointment.
 _Avoid_: Board Term, access role, mutable title
 
 **Board Office**:
-One of the Board's three named offices: President, Secretary, or Treasurer. Fourth and fifth Board Members serve without a Board Office.
-_Avoid_: Access role, Board membership
+One of the Board's three named offices: President, Vice President, or Secretary/Treasurer. Secretary and Treasurer are one combined office, as the bylaws provide. Fourth and fifth Board Members serve without a Board Office.
+_Avoid_: Access role, Board membership, separate Secretary and Treasurer
 
 **Board Composition Rule**:
-The requirement that the Board consist of three to five current Board Members, with its three Board Offices filled by different Board Members. A noncompliant period remains recordable and auditable but is prominently flagged until corrected.
+The requirement that the Board consist of three to five current Board Members, with its three Board Offices filled by different Board Members. Only current Board Members count toward it; a scheduled Board Term does not. A noncompliant period remains recordable and auditable but is prominently flagged until corrected.
 _Avoid_: Access limit, Account count
 
 **Board-Qualifying Lot**:
-The one Lot named by a Board Term as the source of the Person's eligibility. For a Representative it must fall within the Representation's scope; a Lot may qualify only one current Board Member, and an eligible substitute may be named only through an audited Board Service Change, never automatically.
+The one Lot named by a Board Term as the source of the Person's eligibility. For a Representative it must fall within the Representation's scope; a Lot may qualify only one current Board Member, and an eligible substitute may be named only through an audited Board Service Change, never automatically. Requiring one is a deliberate Association practice rather than a bylaws requirement: the bylaws set no eligibility qualification for Board service at all.
 _Avoid_: Owned Lot, represented Lot, Board seat
 
 **Board Member**:

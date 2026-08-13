@@ -53,6 +53,18 @@ role, and model Board and System Administration Access independently. Existing p
 not prove which co-owner controlled an Account and therefore must not be silently converted into
 Person Links; migration requires new automatic verification or an audited manual decision.
 
+## Correction (2026-08-13)
+
+The Decision above names the Board's offices as President, Secretary, and Treasurer. That is wrong
+against the Association's own bylaws, which provide for a president, a vice-president, and a
+combined secretary/treasurer, appointed by the Board from among its members. The office names are
+corrected in `CONTEXT.md`; the rest of the Decision stands unchanged, including that offices are
+separate, time-bounded Board Office Assignments held by different members.
+
+The bylaws also set no eligibility qualification for Board service. Requiring a Board-Qualifying Lot
+is therefore an Association practice this project chooses to enforce, not a bylaws requirement, and
+should not be cited as one.
+
 This ADR supersedes the identity and authorization shapes in ADRs 0001, 0003, 0006, 0012, and 0019.
 Their remaining decisions still stand: possession-based codes remain an acceptable automatic
 verification mechanism, Better Auth remains the Account provider, board records remain structured,
