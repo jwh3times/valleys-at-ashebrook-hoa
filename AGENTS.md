@@ -876,5 +876,5 @@ The five canonical triage roles, each label string equal to its role name. See
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` at the repo root (not yet created) plus `docs/adr/`. See
+Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`. See
 `docs/agents/domain.md`.
