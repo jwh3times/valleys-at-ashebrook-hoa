@@ -7,6 +7,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.16] - 2026-08-13
+
+### Fixed
+
+- **The association glossary now names the board's actual offices.** The bylaws provide for a
+  president, a vice-president, and a combined secretary/treasurer, not the three separate
+  President, Secretary, and Treasurer offices the glossary and ADR 0022 previously described. The
+  board composition rule now counts only current terms toward its three-to-five range, and an
+  office assignment is documented as belonging to a single term rather than carrying across a
+  later one.
+- **Requiring a board-qualifying Lot is recorded as an association practice, not a bylaws rule.**
+  The bylaws set no eligibility qualification for board service at all, so the planned model's
+  mandatory qualifying Lot is a deliberate choice this project enforces and should not be cited as
+  a governing-document requirement. ADR 0022 carries a dated correction for both points rather than
+  a rewritten decision, so the original text and the correction both remain readable.
+
+### Changed
+
+- **A board term is now described by when it overlaps rather than by how many are current.** Two
+  terms may never overlap for the same person or the same qualifying Lot, which permits a scheduled
+  successor term alongside a current one, and the glossary distinguishes a cancelled term that
+  never began from a voided term that was never a fact. Planned documentation only; no behavior
+  changes.
+
 ## [0.4.15] - 2026-08-13
 
 ### Changed
