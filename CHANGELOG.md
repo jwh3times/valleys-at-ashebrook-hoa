@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.14] - 2026-08-12
+
+### Added
+
+- **Association identity, ownership, board service, and access now have a shared domain model.** A
+  new glossary and ADR define durable Lots, Persons, and Organizations; time-bounded Ownerships,
+  Representations, Board Terms, and identity links; derived member authority; separate Board and
+  System Administration Access; and immutable audit history. Existing ADRs now identify the older
+  identity assumptions this model supersedes, while implementation remains separate future work.
+
 ## [0.4.13] - 2026-08-12
 
 ### Changed
