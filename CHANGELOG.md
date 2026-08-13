@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.4.15] - 2026-08-13
+
+### Changed
+
+- **The association glossary now distinguishes identity and review history.** Identity Events,
+  Review Flags, and Review Events describe durable verification and follow-up records separately
+  from roster and access changes, while Roster Redaction now states its enforceable boundary over
+  authoritative and directly derived roster data without claiming erasure from independent records
+  or backups.
+
 ## [0.4.14] - 2026-08-12
 
 ### Added
