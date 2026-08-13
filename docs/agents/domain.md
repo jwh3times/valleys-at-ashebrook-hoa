@@ -21,7 +21,7 @@ creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-do
 
 ## File structure
 
-This repo is **single-context** — one `CONTEXT.md` at the root (not yet created) plus `docs/adr/`:
+This repo is **single-context** — one `CONTEXT.md` at the root plus `docs/adr/`:
 
 ```
 /
