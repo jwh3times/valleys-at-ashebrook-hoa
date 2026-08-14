@@ -134,6 +134,34 @@
       "when": 1786508344539,
       "tag": "0018_rich_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1786668486078,
+      "tag": "0019_adr0022_roster_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1786668486079,
+      "tag": "0020_adr0022_audit_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1786668486080,
+      "tag": "0021_adr0022_cutover_operational",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1786668486081,
+      "tag": "0022_adr0022_lot_retirement_columns",
+      "breakpoints": true
     }
   ]
 }
