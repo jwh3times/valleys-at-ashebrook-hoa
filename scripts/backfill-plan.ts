@@ -73,6 +73,14 @@ export interface PlanCounts {
   ownerships: number;
   lotsRetired: number;
   boardTerms: number;
+  baselineEvents: number;
+}
+
+export interface PlanOptions {
+  /** The human who authorized the run. `actor_kind = 'migration'` is legal
+   * only for this backfill and still names an account, the same shape that
+   * makes bootstrap safe. Without one, no baseline is emitted. */
+  operatorAccountId?: string | null;
 }
 
 export interface BackfillPlan {
@@ -138,8 +146,94 @@ export function mapOffice(title: string | null | undefined): string | null {
   return null;
 }
 
-export function buildPlan(data: LegacyData, now: number): BackfillPlan {
+/**
+ * Emits one correlation: an initiating event plus its caused consequences.
+ *
+ * Per the ledger's rules, the initiating event takes correlation sequence 0,
+ * carries a globally unique operation key, and has no cause; every consequence
+ * takes an increasing positive sequence, names its cause, and carries no key.
+ *
+ * Correlations are per migrated ROOT ENTITY rather than one for the whole run.
+ * Per-entity correlations stay resumable and diffable; a single correlation for
+ * thousands of rows would be one opaque tree nobody can read.
+ */
+class Correlation {
+  private seq = 0;
+  private rootId: string | null = null;
+  readonly statements: string[] = [];
+  // Explicit fields, not constructor parameter properties: scripts run under
+  // `node --experimental-strip-types`, which is strip-only and rejects them.
+  // Vitest transpiles instead, so a parameter property here passes every test
+  // and then fails the moment an operator actually runs the script.
+  private readonly key: string;
+  private readonly operator: string;
+  private readonly now: number;
+
+  constructor(key: string, operator: string, now: number) {
+    this.key = key;
+    this.operator = operator;
+    this.now = now;
+  }
+
+  /** @returns the new event's id, so a later consequence can name its cause. */
+  event(
+    family: 'roster_change' | 'board_service_change',
+    kind: string,
+    subjects: { table: string; column: string; id: string; role: string }[],
+    reasonCode: string,
+  ): string {
+    const seq = this.seq;
+    this.seq += 1;
+    const id = derivedId('event', `${this.key}:${seq}`);
+    const isRoot = seq === 0;
+    if (isRoot) this.rootId = id;
+
+    this.statements.push(
+      `INSERT INTO audit_events (id, family, event_kind, correlation_id, correlation_sequence, causing_event_id, actor_kind, actor_account_id, operation_key, recorded_at) ` +
+        `VALUES (${quote(id)}, '${family}', ${quote(kind)}, ${quote(derivedId('correlation', this.key))}, ${seq}, ` +
+        `${isRoot ? 'NULL' : quote(this.rootId)}, 'migration', ${quote(this.operator)}, ` +
+        `${isRoot ? quote(`adr0022-baseline:${this.key}`) : 'NULL'}, ${this.now})`,
+    );
+
+    // Legacy facts carry no establishable day, which is exactly what the
+    // `unknown` basis exists for — it is restricted to accepted legacy facts.
+    // Evidence is `operator_observation`: there is no external record, and
+    // naming that honestly beats dressing it up as something firmer.
+    const detailTable =
+      family === 'roster_change' ? 'roster_changes' : 'board_service_changes';
+    this.statements.push(
+      `INSERT INTO ${detailTable} (event_id, effective_day, effective_day_basis, reason_code, evidence_kind) ` +
+        `VALUES (${quote(id)}, NULL, 'unknown', ${quote(reasonCode)}, 'operator_observation')`,
+    );
+
+    const subjectTable =
+      family === 'roster_change'
+        ? 'roster_change_subjects'
+        : 'board_service_change_subjects';
+    subjects.forEach((s, i) => {
+      this.statements.push(
+        `INSERT INTO ${subjectTable} (id, event_id, role, ${s.column}) ` +
+          `VALUES (${quote(derivedId('subject', `${this.key}:${seq}:${i}`))}, ${quote(id)}, '${s.role}', ${quote(s.id)})`,
+      );
+    });
+    return id;
+  }
+
+  get eventCount(): number {
+    return this.seq;
+  }
+}
+
+export function buildPlan(
+  data: LegacyData,
+  now: number,
+  options: PlanOptions = {},
+): BackfillPlan {
   const statements: string[] = [];
+  // Baseline events reference domain rows with RESTRICT foreign keys, so they
+  // are collected separately and appended after every domain row exists.
+  const baseline: string[] = [];
+  const operator = options.operatorAccountId ?? null;
   const exceptions: PlanException[] = [];
   const add = (queue: ExceptionQueue, kind: string, detail: string) =>
     exceptions.push({ queue, kind, detail });
@@ -150,6 +244,16 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
     ownerships: 0,
     lotsRetired: 0,
     boardTerms: 0,
+    baselineEvents: 0,
+  };
+
+  const correlate = (key: string): Correlation | null =>
+    operator === null ? null : new Correlation(key, operator, now);
+
+  const collect = (c: Correlation | null) => {
+    if (!c) return;
+    baseline.push(...c.statements);
+    counts.baselineEvents += c.eventCount;
   };
 
   // -- Lots -----------------------------------------------------------------
@@ -158,12 +262,27 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
   // unknown day — `status = 'inactive'` carries no date, and stamping today
   // would assert a retirement that did not happen today.
   for (const p of data.properties) {
+    const lotCorrelation = correlate(`lot:${p.id}`);
+    lotCorrelation?.event(
+      'roster_change',
+      'lot_baseline_recorded',
+      [{ table: 'properties', column: 'lot_id', id: p.id, role: 'primary' }],
+      'legacy_migration_baseline',
+    );
     if (p.status === 'inactive') {
       statements.push(
         `UPDATE properties SET retired_at = ${now}, retired_day = NULL WHERE id = ${quote(p.id)}`,
       );
       counts.lotsRetired += 1;
+      // A caused consequence of the same command, not a separate decision.
+      lotCorrelation?.event(
+        'roster_change',
+        'lot_retired',
+        [{ table: 'properties', column: 'lot_id', id: p.id, role: 'primary' }],
+        'legacy_status_inactive',
+      );
     }
+    collect(lotCorrelation);
     if (p.notes && p.notes.trim() !== '') {
       add(
         'advisory',
@@ -185,6 +304,15 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
   for (const o of data.owners) {
     const partyId = derivedId('party', o.id);
     const nameNorm = normalizeName(o.full_name);
+    const c = correlate(`party:${o.id}`);
+    // The Party is the root of this correlation; its contacts and ownership
+    // are caused consequences of the same accepted command.
+    c?.event(
+      'roster_change',
+      'party_baseline_recorded',
+      [{ table: 'parties', column: 'party_id', id: partyId, role: 'primary' }],
+      'legacy_migration_baseline',
+    );
     statements.push(
       `INSERT INTO parties (id, kind, created_at, updated_at) VALUES (${quote(partyId)}, 'person', ${now}, ${now})`,
       `INSERT INTO people (party_id, party_kind, full_name, name_normalized, updated_at) VALUES (${quote(partyId)}, 'person', ${quote(o.full_name)}, ${quote(nameNorm)}, ${now})`,
@@ -220,11 +348,25 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
     ] as const) {
       const normalized = normalize(raw);
       if (!normalized) continue;
+      const contactId = derivedId(`contact:${channel}`, o.id);
       statements.push(
         `INSERT INTO contact_methods (id, party_id, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at) ` +
-          `VALUES (${quote(derivedId(`contact:${channel}`, o.id))}, ${quote(partyId)}, '${channel}', ${quote(String(raw))}, ${quote(normalized)}, 1, NULL, ${now}, ${now})`,
+          `VALUES (${quote(contactId)}, ${quote(partyId)}, '${channel}', ${quote(String(raw))}, ${quote(normalized)}, 1, NULL, ${now}, ${now})`,
       );
       counts.contactMethods += 1;
+      c?.event(
+        'roster_change',
+        'contact_method_recorded',
+        [
+          {
+            table: 'contact_methods',
+            column: 'contact_method_id',
+            id: contactId,
+            role: 'created',
+          },
+        ],
+        'legacy_migration_baseline',
+      );
       const key = `${channel}:${normalized}`;
       const holders = contactIndex.get(key) ?? new Set<string>();
       holders.add(partyId);
@@ -237,12 +379,56 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
     // would fabricate a fact. The former relationship is recorded in the audit
     // baseline instead. Legacy carries no dates, so no real history is lost.
     if (o.status === 'active') {
+      const ownershipId = derivedId('ownership', o.id);
       statements.push(
         `INSERT INTO ownerships (id, owner_party_id, lot_id, start_day, created_at, updated_at) ` +
-          `VALUES (${quote(derivedId('ownership', o.id))}, ${quote(partyId)}, ${quote(o.property_id)}, NULL, ${now}, ${now})`,
+          `VALUES (${quote(ownershipId)}, ${quote(partyId)}, ${quote(o.property_id)}, NULL, ${now}, ${now})`,
       );
       counts.ownerships += 1;
+      c?.event(
+        'roster_change',
+        'ownership_recorded',
+        [
+          {
+            table: 'ownerships',
+            column: 'ownership_id',
+            id: ownershipId,
+            role: 'created',
+          },
+          {
+            table: 'properties',
+            column: 'lot_id',
+            id: o.property_id,
+            role: 'related',
+          },
+        ],
+        'legacy_migration_baseline',
+      );
+    } else {
+      // The ONLY record that this Party once owned this Lot. No Ownership row
+      // exists, because "ended, day unknown" is unrepresentable — so without
+      // this event the relationship would vanish entirely.
+      c?.event(
+        'roster_change',
+        'legacy_prior_ownership_recorded',
+        [
+          {
+            table: 'parties',
+            column: 'party_id',
+            id: partyId,
+            role: 'primary',
+          },
+          {
+            table: 'properties',
+            column: 'lot_id',
+            id: o.property_id,
+            role: 'related',
+          },
+        ],
+        'legacy_status_inactive',
+      );
     }
+    collect(c);
   }
 
   for (const [key, holders] of contactIndex) {
@@ -285,6 +471,14 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
   // there is.
   for (const bp of data.boardPeople) {
     const partyId = derivedId('party', `board:${bp.id}`);
+    const c = correlate(`board-party:${bp.id}`);
+    c?.event(
+      'roster_change',
+      'party_baseline_recorded',
+      [{ table: 'parties', column: 'party_id', id: partyId, role: 'primary' }],
+      'legacy_migration_baseline',
+    );
+    collect(c);
     statements.push(
       `INSERT INTO parties (id, kind, created_at, updated_at) VALUES (${quote(partyId)}, 'person', ${now}, ${now})`,
       `INSERT INTO people (party_id, party_kind, full_name, name_normalized, updated_at) VALUES (${quote(partyId)}, 'person', ${quote(bp.full_name)}, ${quote(normalizeName(bp.full_name))}, ${now})`,
@@ -326,11 +520,27 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
     }
     // An ended legacy term migrates with a NULL qualifying Lot — permitted only
     // for accepted legacy rows, mirroring the legacy start-day allowance.
+    const termId = derivedId('board_term', t.id);
     statements.push(
       `INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, created_at, updated_at) ` +
-        `VALUES (${quote(derivedId('board_term', t.id))}, ${quote(personId)}, NULL, ${quote(t.term_start)}, ${quote(t.term_end)}, ${now}, ${now})`,
+        `VALUES (${quote(termId)}, ${quote(personId)}, NULL, ${quote(t.term_start)}, ${quote(t.term_end)}, ${now}, ${now})`,
     );
     counts.boardTerms += 1;
+    const tc = correlate(`board-term:${t.id}`);
+    tc?.event(
+      'board_service_change',
+      'board_term_baseline_recorded',
+      [
+        {
+          table: 'board_service_terms',
+          column: 'board_term_id',
+          id: termId,
+          role: 'primary',
+        },
+      ],
+      'legacy_migration_baseline',
+    );
+    collect(tc);
     if (t.title && !mapOffice(t.title)) {
       add(
         'advisory',
@@ -353,20 +563,32 @@ export function buildPlan(data: LegacyData, now: number): BackfillPlan {
     );
   }
 
-  return { statements, exceptions, counts };
+  // Baseline last: every event names a domain row through a RESTRICT foreign
+  // key, so the rows must already exist.
+  return { statements: [...statements, ...baseline], exceptions, counts };
 }
 
 /** Children first. Rehearsal only — phase 3 is insert-once keyed by
  * `operation_key`, because once the authoritative run writes ledger rows a
  * clean replace would be deleting immutable history. */
-export const CLEAN_REPLACE_TABLES = [
-  'board_office_assignments',
-  'board_service_terms',
-  'representation_lots',
-  'representations',
-  'ownerships',
-  'contact_methods',
-  'organizations',
-  'people',
-  'parties',
+export const CLEAN_REPLACE_STATEMENTS = [
+  // Ledger first: its rows reference domain rows through RESTRICT keys.
+  'DELETE FROM roster_change_subjects',
+  'DELETE FROM board_service_change_subjects',
+  'DELETE FROM roster_changes',
+  'DELETE FROM board_service_changes',
+  // `causing_event_id` is a RESTRICT self-reference and SQLite enforces foreign
+  // keys per row, so a bare `DELETE FROM audit_events` fails the moment it
+  // reaches a cause something still points at. Consequences go first.
+  'DELETE FROM audit_events WHERE causing_event_id IS NOT NULL',
+  'DELETE FROM audit_events',
+  'DELETE FROM board_office_assignments',
+  'DELETE FROM board_service_terms',
+  'DELETE FROM representation_lots',
+  'DELETE FROM representations',
+  'DELETE FROM ownerships',
+  'DELETE FROM contact_methods',
+  'DELETE FROM organizations',
+  'DELETE FROM people',
+  'DELETE FROM parties',
 ];

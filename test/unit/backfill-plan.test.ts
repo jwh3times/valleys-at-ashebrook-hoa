@@ -344,3 +344,105 @@ describe('abandoned legacy data', () => {
     );
   });
 });
+
+describe('audit baseline', () => {
+  const withOperator = (data: LegacyData) =>
+    buildPlan(data, NOW, { operatorAccountId: 'op-1' });
+
+  const sample = () =>
+    legacy({
+      properties: [{ id: 'lot-1', status: 'active' }],
+      owners: [owner('o1', 'lot-1', { email: 'a@example.com' })],
+    });
+
+  it('emits nothing without a named operator', () => {
+    // actor_kind = 'migration' still names a human, so an unattributed
+    // baseline is not a thing this can produce.
+    const plan = buildPlan(sample(), NOW);
+    expect(plan.counts.baselineEvents).toBe(0);
+    expect(plan.statements.join('\n')).not.toContain('audit_events');
+  });
+
+  it('gives the initiating event sequence 0, an operation key, and no cause', () => {
+    const plan = withOperator(sample());
+    const root = plan.statements.find(
+      (s) =>
+        s.includes('audit_events') && s.includes("'party_baseline_recorded'"),
+    )!;
+    expect(root).toContain('adr0022-baseline:party:o1');
+    expect(root).toContain("'migration'");
+    expect(root).toContain("'op-1'");
+    // ..., correlationId, 0, NULL (no cause), ...
+    expect(root).toMatch(/, 0, NULL, 'migration'/);
+  });
+
+  it('gives a consequence a cause and no operation key', () => {
+    const plan = withOperator(sample());
+    const consequence = plan.statements.find(
+      (s) =>
+        s.includes('audit_events') && s.includes("'contact_method_recorded'"),
+    )!;
+    // Positive sequence, a non-null cause, and a null operation key.
+    expect(consequence).toMatch(/, [1-9]\d*, '[^']+', 'migration'/);
+    expect(consequence).toMatch(/'op-1', NULL, /);
+  });
+
+  it('orders baseline events after the domain rows they reference', () => {
+    // Every event names a domain row through a RESTRICT foreign key.
+    const plan = withOperator(sample());
+    const firstEvent = plan.statements.findIndex((s) =>
+      s.includes('INSERT INTO audit_events'),
+    );
+    const lastDomain = plan.statements.reduce(
+      (acc, s, i) => (s.includes('INSERT INTO ownerships') ? i : acc),
+      -1,
+    );
+    expect(lastDomain).toBeGreaterThanOrEqual(0);
+    expect(firstEvent).toBeGreaterThan(lastDomain);
+  });
+
+  it('records a prior ownership that has no ownership row', () => {
+    // The only trace that an inactive owner ever held the Lot. Without it the
+    // relationship would vanish entirely.
+    const plan = withOperator(
+      legacy({
+        properties: [{ id: 'lot-1', status: 'active' }],
+        owners: [owner('o1', 'lot-1', { status: 'inactive' })],
+      }),
+    );
+    expect(plan.counts.ownerships).toBe(0);
+    expect(
+      plan.statements.some((s) =>
+        s.includes("'legacy_prior_ownership_recorded'"),
+      ),
+    ).toBe(true);
+  });
+
+  it('marks every legacy fact as an unknown effective day', () => {
+    // `unknown` is restricted to accepted legacy facts whose day cannot be
+    // established, which is exactly what these are.
+    const plan = withOperator(sample());
+    const details = plan.statements.filter((s) =>
+      s.includes('INSERT INTO roster_changes'),
+    );
+    expect(details.length).toBeGreaterThan(0);
+    for (const d of details) {
+      expect(d).toContain("'unknown'");
+      expect(d).toContain("'operator_observation'");
+    }
+  });
+
+  it('gives every event exactly one typed detail', () => {
+    const plan = withOperator(sample());
+    const events = plan.statements.filter((s) =>
+      s.includes('INSERT INTO audit_events'),
+    ).length;
+    const details = plan.statements.filter(
+      (s) =>
+        s.includes('INSERT INTO roster_changes') ||
+        s.includes('INSERT INTO board_service_changes'),
+    ).length;
+    expect(details).toBe(events);
+    expect(events).toBe(plan.counts.baselineEvents);
+  });
+});
