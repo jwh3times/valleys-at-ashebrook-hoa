@@ -1,5 +1,14 @@
 import type { AuthContext } from './guards';
 import { deriveAccess } from './derive';
+import {
+  compareContexts,
+  type ShadowComparison,
+  type ShadowSource,
+} from './shadow-compare';
+
+// Re-exported so callers have one import site for the shadow layer.
+export { compareContexts };
+export type { ShadowComparison, ShadowSource };
 
 // ADR 0022 shadow comparison (issue #210, phase 2).
 //
@@ -26,43 +35,7 @@ import { deriveAccess } from './derive';
 // over every account is what makes the gate meaningful; this proves the
 // derivation works under real middleware, which the sweep cannot.
 
-export type ShadowSource = 'request' | 'sweep';
-
-export interface ShadowComparison {
-  matched: boolean;
-  legacyRole: string;
-  derivedContentTier: string;
-  legacyLotCount: number;
-  derivedLotCount: number;
-}
-
-/**
- * Pure comparison, so the decision of what counts as a mismatch is testable
- * without a database.
- *
- * Compares the content tier and the lot SET — sorted and de-duplicated, because
- * ordering is an artifact of the query plan and would otherwise report a
- * mismatch that does not exist.
- */
-export function compareContexts(
-  legacy: Pick<AuthContext, 'role' | 'propertyIds'>,
-  derived: { contentTier: string; lotIds: string[] },
-): ShadowComparison {
-  const legacyLots = [...new Set(legacy.propertyIds)].sort();
-  const derivedLots = [...new Set(derived.lotIds)].sort();
-  return {
-    matched:
-      legacy.role === derived.contentTier &&
-      legacyLots.length === derivedLots.length &&
-      legacyLots.every((id, i) => id === derivedLots[i]),
-    legacyRole: legacy.role,
-    derivedContentTier: derived.contentTier,
-    legacyLotCount: legacyLots.length,
-    derivedLotCount: derivedLots.length,
-  };
-}
-
-const RECORD_SQL = `
+export const RECORD_SQL = `
   INSERT INTO cutover_shadow_mismatches
     (id, account_id, source, legacy_role, derived_content_tier,
      legacy_lot_count, derived_lot_count, first_seen_at, last_seen_at, seen_count)

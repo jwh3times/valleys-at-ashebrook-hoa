@@ -63,7 +63,7 @@ export interface DerivedAccess {
  * `has_current_board_term` deliberately ignores grants: it is a fact about
  * service, not about access.
  */
-const CAPABILITY_SQL = `
+export const CAPABILITY_SQL = `
   SELECT
     pl.person_id AS person_id,
     EXISTS (
@@ -109,7 +109,7 @@ const CAPABILITY_SQL = `
  * Retired Lots are excluded. `properties.status` is deliberately not consulted:
  * it remains the legacy field, and `retired_at` is the new model's answer.
  */
-const LOT_SQL = `
+export const LOT_SQL = `
   WITH me AS (
     SELECT COALESCE(pa.consolidated_into_party_id, pa.id) AS party_id
     FROM person_links pl
@@ -150,7 +150,7 @@ const LOT_SQL = `
   WHERE p.retired_at IS NULL
 `;
 
-interface CapabilityRow {
+export interface CapabilityRow {
   person_id: string;
   has_system_admin: number;
   has_board: number;
@@ -183,8 +183,27 @@ export async function deriveAccess(
     env.DATABASE.prepare(LOT_SQL).bind(accountId, associationDay),
   ]);
 
-  const row = (capabilityResult.results as CapabilityRow[])[0];
+  return toDerivedAccess(
+    accountId,
+    (capabilityResult.results as CapabilityRow[])[0],
+    (lotResult.results as { lot_id: string }[]).map((r) => r.lot_id),
+  );
+}
 
+/**
+ * Turns the two query results into a context.
+ *
+ * Exported and pure so the OFFLINE SWEEP produces the same answer as a live
+ * request. The sweep runs outside the Worker and cannot call `deriveAccess`, so
+ * it reuses `CAPABILITY_SQL`, `LOT_SQL`, and this mapper instead of
+ * reimplementing them — a sweep with its own copy would be testing the copy,
+ * and would miss exactly the derivation bug it exists to catch.
+ */
+export function toDerivedAccess(
+  accountId: string,
+  row: CapabilityRow | undefined,
+  lotIds: string[],
+): DerivedAccess {
   // No current Person Link means visitor. Not "member with no lots" — visitor.
   if (!row) {
     return {
@@ -196,10 +215,6 @@ export async function deriveAccess(
       hasCurrentBoardTerm: false,
     };
   }
-
-  const lotIds = (lotResult.results as { lot_id: string }[]).map(
-    (r) => r.lot_id,
-  );
 
   const capabilities = new Set<Capability>();
   // Member Access is derived and has no stored row: it exists exactly when the
