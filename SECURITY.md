@@ -169,15 +169,21 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   or contact data.
 - **An operator-only write freeze can halt mutations site-wide without a deploy.** The
   `cutover_settings.write_freeze` singleton (built for the ADR 0022 phase-3 flip and retained
-  afterward as a general maintenance switch) is checked, uncached, by `requireBoard` (mutating verbs
-  only — admin reads stay live), `requireMemberApi` (every verb), and `requireVotingApi` (every
-  verb), plus the same routes' middleware backstop; a frozen request answers `503`, never `404`, so
-  a frozen site does not appear to mask a surface's existence. Reading the setting fails closed: an
-  error is treated as frozen, and an absent row is the normal un-frozen state. It is written only by
-  direct D1 access (`wrangler d1 execute`); it is not exposed in the admin Site panel, because
-  pausing the site is an operator action rather than a board decision. Public pages,
-  `/api/content/*`, `/api/files/*`,
-  `/api/auth/*`, and `/api/bootstrap/board` are deliberately never frozen.
+  afterward as a general maintenance switch) is read uncached on every covered request, in two
+  layers — the per-route guards and a middleware backstop. Coverage is **deny-by-default**: a single
+  `freezePolicyFor(path)` freezes every mutation unless the path is one of two declared exemptions,
+  so admin writes, the whole homeowner-write surface (`/api/member/*`, `POST /api/vote`, frozen on
+  reads too), homeowner verification, and any route added later are all covered without being
+  enumerated. `test/unit/freeze-coverage.test.ts` fails the build if a mutating route escapes.
+  Reads stay live throughout — public pages, `/api/content/*`, `/api/files/*`, and admin `GET`s —
+  so a frozen site remains fully readable. The two exemptions are `/api/auth/*` and
+  `/api/bootstrap/board`, each because freezing it would break the freeze's own purpose: an operator
+  locked out of sign-in cannot run the flip, and the flip creates its first System Administrator
+  while the freeze is on. A frozen request answers `503`, never `404`, so a frozen site does not
+  appear to mask a surface's existence. Reading the setting fails closed: an error is treated as
+  frozen, and an absent row is the normal un-frozen state. It is written only by direct D1 access
+  (`wrangler d1 execute`); it is not exposed in the admin Site panel, because pausing the site is an
+  operator action rather than a board decision.
 - **Every response carries baseline security headers.** Middleware sets `X-Content-Type-Options:
 nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy that allowlists only the third-party resources the site uses (Google

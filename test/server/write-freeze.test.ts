@@ -145,11 +145,7 @@ describe('which verbs count as mutating', () => {
 describe('writeFreezeError', () => {
   it('answers 503, never 404 — this is maintenance, not masked existence', async () => {
     await setFreeze('on');
-    const res = await writeFreezeError(
-      env,
-      req('/api/admin/site', 'POST'),
-      'mutations',
-    );
+    const res = await writeFreezeError(env, req('/api/admin/site', 'POST'));
     expect(res?.status).toBe(503);
   });
 
@@ -165,12 +161,62 @@ describe('writeFreezeError', () => {
       },
     } as unknown as Env;
     expect(
-      await writeFreezeError(
-        brokenEnv,
-        req('/api/admin/site', 'GET'),
-        'mutations',
-      ),
+      await writeFreezeError(brokenEnv, req('/api/admin/site', 'GET')),
     ).toBeNull();
+  });
+
+  it('skips the setting read entirely for an exempt path', async () => {
+    // Same proof for the other short-circuit: sign-in must not even touch the
+    // freeze setting, so a database failure can never take authentication down
+    // through this path.
+    const brokenEnv = {
+      ...env,
+      DATABASE: {
+        prepare() {
+          throw new Error('D1 unavailable');
+        },
+      },
+    } as unknown as Env;
+    expect(
+      await writeFreezeError(brokenEnv, req('/api/auth/sign-in', 'POST')),
+    ).toBeNull();
+    expect(
+      await writeFreezeError(brokenEnv, req('/api/bootstrap/board', 'POST')),
+    ).toBeNull();
+  });
+
+  it('derives coverage from the path, so no call site can hold a stale scope', async () => {
+    await setFreeze('on');
+    // One call shape, three different answers — all from the request itself.
+    expect(
+      (await writeFreezeError(env, req('/api/admin/site', 'GET')))?.status,
+    ).toBeUndefined();
+    expect(
+      (await writeFreezeError(env, req('/api/member/proxies', 'GET')))?.status,
+    ).toBe(503);
+    expect(
+      (await writeFreezeError(env, req('/api/auth/sign-in', 'POST')))?.status,
+    ).toBeUndefined();
+  });
+});
+
+describe('homeowner verification under a freeze', () => {
+  // The surface the ticket did not name. /api/verify/confirm writes
+  // user_property_links and property_verifications — the legacy tables the
+  // authoritative backfill reads — so a verification landing mid-run is
+  // precisely the drift the freeze exists to prevent.
+  it('refuses a verification request and a confirmation with 503', async () => {
+    await setFreeze('on');
+    for (const route of ['/api/verify/request', '/api/verify/confirm']) {
+      const res = await writeFreezeError(env, req(route, 'POST'));
+      expect(res?.status, `${route} must be frozen`).toBe(503);
+    }
+  });
+
+  it('leaves both live when not frozen', async () => {
+    for (const route of ['/api/verify/request', '/api/verify/confirm']) {
+      expect(await writeFreezeError(env, req(route, 'POST'))).toBeNull();
+    }
   });
 });
 

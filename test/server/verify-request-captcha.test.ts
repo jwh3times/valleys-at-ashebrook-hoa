@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { env, applyD1Migrations } from 'cloudflare:test';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 
 const turnstileState = vi.hoisted(() => ({
   valid: false,
@@ -24,6 +25,14 @@ vi.mock('../../src/server/auth/senders', () => ({
 }));
 
 import { POST } from '../../src/pages/api/verify/request';
+
+// This route reads the write-freeze setting before anything else, and that read
+// fails closed — so it needs a migrated database even though every other
+// dependency here is mocked. Without the migrations the missing
+// `cutover_settings` table reads as "frozen" and every case below answers 503.
+beforeAll(async () => {
+  await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+});
 
 function req(body: Record<string, unknown>) {
   return POST({

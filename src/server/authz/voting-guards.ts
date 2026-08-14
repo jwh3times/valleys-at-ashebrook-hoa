@@ -43,7 +43,7 @@ export async function requireVotingApi(
   if (!site.officialMode || !site.liveVotingEnabled)
     return { ok: false, res: new Response('Not found', { status: 404 }) };
 
-  const frozen = await writeFreezeError(env, request, 'everything');
+  const frozen = await writeFreezeError(env, request);
   if (frozen) return { ok: false, res: frozen };
 
   const originError = sameOriginError(request);

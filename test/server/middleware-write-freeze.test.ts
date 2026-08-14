@@ -153,6 +153,27 @@ describe('the freeze halts mutations at the middleware', () => {
     expect(res.status).toBe(404);
   });
 
+  it('refuses homeowner verification, which no middleware branch claims', async () => {
+    // Reaches /api/verify/* through the deny-by-default fallthrough rather
+    // than a named branch — the property that makes coverage survive a route
+    // nobody thought about.
+    role = 'homeowner';
+    for (const route of ['/api/verify/request', '/api/verify/confirm']) {
+      const { res, reached } = await run(route, 'POST');
+      expect(res.status, `${route} should be frozen`).toBe(503);
+      expect(reached).toBe(false);
+    }
+  });
+
+  it('refuses a mutating path that does not exist yet, anywhere in the app', async () => {
+    role = 'board';
+    for (const route of ['/api/not-built-yet', '/some/future/form']) {
+      const { res, reached } = await run(route, 'POST');
+      expect(res.status, `${route} should be frozen`).toBe(503);
+      expect(reached).toBe(false);
+    }
+  });
+
   it('still applies security headers to a frozen response', async () => {
     role = 'board';
     const { res } = await run('/api/admin/announcements', 'POST');
@@ -183,6 +204,16 @@ describe('the freeze leaves the site readable and signable-in', () => {
     const { res, reached } = await run('/api/files/some-document-id');
     expect(res.status).toBe(200);
     expect(reached).toBe(true);
+  });
+
+  it('leaves reads live on surfaces whose writes are frozen', async () => {
+    // Deny-by-default covers mutations, not reads. Residents keep reading the
+    // record while the board cannot change it.
+    for (const route of ['/api/content/documents', '/api/verify/request']) {
+      const { res, reached } = await run(route, 'GET');
+      expect(res.status, `${route} GET should be live`).toBe(200);
+      expect(reached).toBe(true);
+    }
   });
 
   it('leaves sign-in live', async () => {

@@ -38,7 +38,7 @@ export async function requireBoard(
   request: Request,
   env: Env,
 ): Promise<Response | null> {
-  const frozen = await writeFreezeError(env, request, 'mutations');
+  const frozen = await writeFreezeError(env, request);
   if (frozen) return frozen;
   const ctx = await resolveAuthContext(locals, request, env);
   if (!ctx) return new Response('Unauthorized', { status: 401 });
