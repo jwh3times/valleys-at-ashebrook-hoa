@@ -167,7 +167,8 @@ Markdown twins described below and never the human-readable originals.
 - Default-off live homeowner voting: `POST /api/vote` accepts `castBallot` and `castMotionVote`
   only; there is no GET voting endpoint. Middleware is the namespace backstop and the handler calls
   `requireVotingApi` independently. Its fixed guard order is: literal-boolean `officialMode` plus
-  `liveVotingEnabled` (`404`), exact equality of the required `Origin` header with
+  `liveVotingEnabled` (`404`), the operator-only write freeze (`503`, see
+  `src/server/authz/write-freeze.ts` below), exact equality of the required `Origin` header with
   `new URL(request.url).origin` (`403`), `application/json` media type (`415`), authenticated
   session (`401`), then `homeowner`-or-higher role (`403`). Only then are the action and resource
   resolved. Out-of-tier or unknown occasions are masked as `404`; own-lot or occasion-scoped
@@ -463,9 +464,27 @@ boolean`.
 - `auth/`: Better Auth config, Resend and Twilio senders.
 - `authz/`: `getAuthContext`, `resolveAuthContext` (middleware-first caller resolution with a
   fail-closed fallback), `requireRole`, `requireBoard`, `requireMemberApi` (official-mode-first
-  homeowner-write gate), `requireVotingApi` (feature flags, exact Origin, JSON media type, session,
-  then homeowner role, in that order), per-property access checks, and Turnstile checks. It also
-  holds the ADR 0022 phase-2 shadow layer, which computes but never decides: `derive.ts`
+  homeowner-write gate), `requireVotingApi` (feature flags, write freeze, exact Origin, JSON media
+  type, session, then homeowner role, in that order), per-property access checks, and Turnstile
+  checks. `write-freeze.ts` (`isWriteFrozen`, `writeFreezeError`, `freezePolicyFor`,
+  `isMutatingMethod`) is the operator-only maintenance switch built for the ADR 0022 phase-3 flip
+  and retained after phase 4: it reads the uncached `cutover_settings.write_freeze` singleton
+  (fail-closed — a read error or an active freeze answers `503`; an absent row is the normal
+  un-frozen state, not an error). Coverage is **deny-by-default and path-derived**:
+  `freezePolicyFor(path)` is the single authority both enforcement layers consult, returning
+  `everything` for `/api/member/*` and `/api/vote` (no read-only half worth keeping live),
+  `exempt` for exactly two paths, and `mutations` for **everything else** — including paths nobody
+  has written yet. `writeFreezeError(env, request)` therefore takes no scope argument: it derives
+  coverage from the request's own path, so no call site can hold a stale opinion about what its
+  surface freezes, and middleware and the per-route guards cannot drift. The two exemptions are
+  `/api/auth/*` (sign-in writes a session row; an operator locked out of `/admin` cannot run the
+  flip) and `/api/bootstrap/board` (flip step 4 creates the first System Administrator while the
+  freeze is on). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`, both
+  `/api/verify/*` routes, and `src/middleware.ts` — whose final `else` branch is what catches any
+  surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
+  and fails if a mutating route ends up live without being declared in both that test and
+  `ALWAYS_LIVE`. It also holds the ADR 0022 phase-2 shadow layer,
+  which computes but never decides: `derive.ts`
   (`deriveAccess`/`toDerivedAccess`, a capability SET — `member`/`board`/`systemAdmin`, not a
   ladder — plus `lotIds`, `contentTier`, and `hasCurrentBoardTerm`, recomputed from current D1 facts
   on every call with nothing cached), `shadow-compare.ts` (`compareContexts`, the pure legacy-vs-
@@ -630,12 +649,24 @@ under the real name would silently no-op.
 **Phase 1 ("expand") is complete and behaviorally inert.** **Phase 2 ("backfill and shadow") is
 now built, and legacy remains fully authoritative throughout it**: every guard still reads
 `users.role` and `user_property_links`, and the only new user-visible surface is a board-only,
-read-only preview panel (see `GET /api/admin/roster-preview` above). Phase 2 adds:
+read-only preview panel (see `GET /api/admin/roster-preview` above). The operator-only write freeze
+(below) is not a counterexample to that reversibility claim: it decides only whether the site
+accepts mutations at all, identically for every caller, and never who a caller is, what tier they
+read, or which Lots are theirs — with no row written it is bit-for-bit what the site was before the
+freeze existed. Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
   compliance, plus two integrity views described below. They are query shapes, not authorization
   boundaries, and live authorization never joins them.
+- `src/server/authz/write-freeze.ts` — the operator-only write freeze, now enforced. It reads only
+  the `cutover_settings.write_freeze` singleton (`test/unit/adr0022-phase2-boundary.test.ts` pins
+  that it references no other new ADR 0022 table). Coverage is deny-by-default: every mutation
+  answers `503` while it is on unless its path is one of the two declared exemptions, so
+  `/api/admin/*` writes, all of `/api/member/*` and `POST /api/vote`, and `/api/verify/*` are all
+  frozen, while reads — public pages, `/api/content/*`, `/api/files/*`, admin `GET`s — stay live
+  throughout, as do `/api/auth/*` and `/api/bootstrap/board` on every verb. `cutover_mode` is
+  still read by nothing; phase 3 is what makes it decide anything.
 - `src/server/authz/derive.ts`, `shadow-compare.ts`, and `shadow.ts` — the derived-authorization
   shadow layer described under **Server code** below. It computes a capability SET
   (`member`/`board`/`systemAdmin`, not a ladder) and re-validates every stored grant against
@@ -800,8 +831,9 @@ has no `ADD COLUMN IF NOT EXISTS`. Migration `0023` adds the eight ADR 0022 phas
 `audit_operation_timeline_v`, `audit_review_queue_v`, `audit_redaction_compliance_v`,
 `audit_integrity_violations_v`, and `board_eligibility_violations_v` — every statement
 `CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run. See the ADR 0022 paragraph above for
-what these tables and views are and what now reads them (the phase-2 shadow layer and the
-board-only roster-preview panel — legacy authorization still reads none of it). Migrations `0016`
+what these tables and views are and what now reads them (the phase-2 shadow layer, the board-only
+roster-preview panel, and the operator write freeze — legacy authorization itself still reads none
+of it). Migrations `0016`
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
 ledger rather than assumed.
 
@@ -846,15 +878,26 @@ resolve to visitor, unknown states resolve to the most restrictive behavior. A u
 column on the user record.
 
 The board-only API is gated in **two** places, deliberately. `src/middleware.ts` rejects
-`/api/admin/*` before the route runs (401 anonymous, 403 authenticated non-board), and every handler
-under `src/pages/api/admin/` additionally opens with `requireBoard`. The per-route call is the
+`/api/admin/*` before the route runs (503 while the operator write freeze is on for a mutating
+verb, 401 anonymous, 403 authenticated non-board), and every handler under `src/pages/api/admin/`
+additionally opens with `requireBoard`, which checks the freeze first. Admin reads stay live during
+a freeze; only POST/PUT/PATCH/DELETE are refused. The per-route call is the
 **enforced and tested** layer — the Workers test pool invokes handlers directly and never runs
 middleware — while the middleware gate is the production backstop for a route shipped without its
 guard. `test/server/admin-routes-all-gated.test.ts` enumerates every admin route module and asserts
 each exported verb rejects an anonymous caller, so a new endpoint cannot ship ungated. Do not remove
 the per-route guards in favor of the middleware: that would leave the behavior untested. See
 [ADR 0013](./docs/adr/0013-admin-api-gated-in-middleware.md). `/api/bootstrap/board` sits outside the
-gated prefix on purpose — it is the fail-closed first-board bootstrap and must stay reachable. Site sign-in access for board admins is managed in the admin app's
+gated prefix on purpose — it is the fail-closed first-board bootstrap and must stay reachable, and
+for the same reason it is one of the write freeze's two exemptions.
+
+**The write freeze inverts that enumeration, deliberately.** The auth gates above name the surfaces
+they protect, which is why `admin-routes-all-gated.test.ts` has to exist — coverage is a function of
+what somebody remembered to list. `freezePolicyFor` runs the other way: every mutation is frozen
+unless its path is named live, so a route added tomorrow is covered before anyone thinks about it,
+and `test/unit/freeze-coverage.test.ts` fails if a mutating route escapes without being declared in
+two files. When adding a route, you must remember its auth guard; you do not have to remember the
+freeze. Site sign-in access for board admins is managed in the admin app's
 **Board access** panel: a board admin can promote another account to `board` and demote a board
 admin, except the last remaining board admin cannot be demoted. A board admin cannot escalate their
 own access beyond `board`. This is distinct from the admin app's **The Board** panel, which records
@@ -871,16 +914,22 @@ plugin's impersonation, ban, and set-role endpoints are not granted to board ses
 
 The official-mode homeowner-write API repeats that two-layer pattern. Middleware gates
 `/api/member/*`, and every handler independently opens with `requireMemberApi`; mode off is checked
-first and returns `404`, then anonymous is `401` and an authenticated visitor is `403`.
-`test/server/member-routes-all-gated.test.ts` enumerates the member route modules. Successful calls
+first and returns `404`, then the operator write freeze returns `503` for every verb on this
+surface (it has no read-only half worth keeping live), then anonymous is `401` and an authenticated
+visitor is `403`. `test/server/member-routes-all-gated.test.ts` enumerates the member route
+modules. Successful calls
 are scoped again through `AuthContext.propertyIds` (and active roster rows where identity matters),
 so homeowner role alone never grants access to an arbitrary lot. See
 [ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md).
 
 The live-voting API has the same middleware-plus-handler structure but a stricter fixed route-gate
-order: both feature flags (`404`), exact required-Origin equality (`403`), JSON media type (`415`),
-session (`401`), then homeowner rank (`403`). `test/server/member-routes-all-gated.test.ts` includes
-`/api/vote`, while `voting-guards.test.ts` pins that order and Origin behavior. A successful
+order: both feature flags (`404`), the operator write freeze (`503`), exact required-Origin
+equality (`403`), JSON media type (`415`), session (`401`), then homeowner rank (`403`). The freeze
+sits immediately after the feature flags and before the header/session checks — it is a statement
+about the server, not the request, so no cast can land during the flip's authoritative backfill.
+`test/server/member-routes-all-gated.test.ts` includes
+`/api/vote`, `voting-guards.test.ts` pins the flags/Origin/media-type/session/role order, and
+`write-freeze.test.ts` pins the freeze's position ahead of the Origin and media-type checks. A successful
 preflight still grants no general lot authority: `voting.ts` repeats the caller's active own-lot or
 occasion-scoped held-proxy predicate inside the insert, together with visibility, frozen
 eligibility, open state, both feature flags, and duplicate exclusion. `voting-reads.ts` applies the

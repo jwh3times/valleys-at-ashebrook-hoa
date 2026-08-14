@@ -17,6 +17,15 @@ import { join, relative } from 'node:path';
 //     reads legacy. This is the property that makes phase 2 reversible by
 //     flipping a flag rather than by reverting code.
 //
+//     The write freeze is not a counterexample, and the distinction is worth
+//     stating because it is the one that keeps this guard meaningful. The
+//     freeze decides WHETHER THE SITE ACCEPTS MUTATIONS AT ALL, identically
+//     for every caller. It never decides who a caller is, what tier they read,
+//     or which Lots are theirs — the questions this boundary exists to keep on
+//     legacy. With no row written, behavior is bit-for-bit what it was before
+//     the freeze existed, so reversibility is untouched. The test below pins
+//     that exemption to `cutover_settings` alone.
+//
 //  2. NO MEMBER OR PUBLIC CONTENT READ touches the new tables. Tier-filtered
 //     reads stay on the legacy roster until the flip.
 //
@@ -37,6 +46,9 @@ const ALLOWED = new Set([
   // The comparison, and the operator-only mismatch table it writes.
   'server/authz/shadow.ts',
   'server/authz/shadow-compare.ts',
+  // The operator write freeze. Scoped to cutover_settings by its own test
+  // below; see invariant 1 in the header for why it is not an exception to it.
+  'server/authz/write-freeze.ts',
   // The read-only admin preview and its route.
   'pages/api/admin/roster-preview.ts',
   'components/admin/RosterPreview.tsx',
@@ -93,6 +105,24 @@ describe('the ADR 0022 phase 2 boundary', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('lets the write freeze read its own setting and nothing else', () => {
+    // The narrow form of its exemption. A blanket entry in ALLOWED would make
+    // this file a wedge: any future guard could read access_grants or
+    // board_service_terms under cover of being "operational". It gets
+    // cutover_settings, which is a maintenance switch that outlives the
+    // migration entirely, and nothing else.
+    const text = readFileSync(
+      join(SRC, 'server', 'authz', 'write-freeze.ts'),
+      'utf8',
+    );
+    const forbidden = [
+      ...NEW_TABLES.filter((t) => t !== 'cutover_settings'),
+      'roster-schema',
+      'audit-schema',
+    ];
+    expect(forbidden.filter((name) => text.includes(name))).toEqual([]);
   });
 
   it('keeps content reads on the legacy roster', () => {

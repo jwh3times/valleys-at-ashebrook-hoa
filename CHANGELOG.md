@@ -7,6 +7,46 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-14
+
+### Added
+
+- **The site can now be put into a read-only maintenance state.** An operator
+  can halt every change to the association's records — board edits, homeowner
+  proxy grants, sign-up verifications, and ballots alike — while leaving the
+  public site, document downloads, and sign-in working normally. Residents keep
+  reading announcements, documents, and the meeting record throughout, and the
+  board can still open the admin panel and read everything in it; only the act
+  of changing something is refused, with a message saying the site is
+  temporarily read-only rather than a page-not-found. It is off unless an
+  operator turns it on, takes effect within seconds without a deploy, and
+  reverses just as quickly.
+- **The pause covers everything by default, rather than a list of things
+  somebody remembered.** Any part of the site that changes a record is paused
+  unless it is one of two named exceptions — signing in, and creating the very
+  first administrator — both of which exist because pausing them would make it
+  impossible to finish the maintenance the pause is for. A feature added later
+  is covered from the day it is written, and a test fails the build if some
+  future change to the records slips outside the pause without being declared.
+- The switch exists for the roster migration, where a single change landing
+  mid-run would corrupt the record being rebuilt, but it is deliberately built
+  to outlive it. A way to pause changes while keeping the site readable is
+  useful for any future schema change, a suspected compromise, or a database
+  incident, so it stays after the migration finishes rather than being deleted
+  with the project that motivated it.
+- The control is not exposed anywhere in the admin panel, and no board member
+  can reach it. It is written directly against the database by whoever is
+  running the migration, because pausing the site is an operator action rather
+  than a board decision.
+
+### Changed
+
+- The live-voting request checks now consider the maintenance state immediately
+  after the two feature flags, so a paused site answers the same way whether or
+  not the caller's request was well-formed. If the setting cannot be read at
+  all, the site treats itself as paused rather than guessing — the same
+  fail-closed rule the rest of the access checks follow.
+
 ## [0.6.0] - 2026-08-14
 
 ### Added
@@ -42,6 +82,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   through a set of server-side views covering events, their subjects, an
   entity's history, an operation's causal chain, the review queue, and redaction
   compliance. These are reporting shapes only and grant no access on their own.
+
+## [0.5.1] - 2026-08-14
 
 ### Changed
 
@@ -87,6 +129,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - Every value the new tables accept is now enforced by the database itself rather
   than only by the type system, so an out-of-range status, channel, or office can
   no longer be written by any route, script, or manual query.
+
+## [0.4.16] - 2026-08-13
 
 ### Changed
 

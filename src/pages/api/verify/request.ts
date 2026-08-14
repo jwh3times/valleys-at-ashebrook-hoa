@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { env } from 'cloudflare:workers';
 import { resolveAuthContext } from '../../../server/authz/api-guards';
+import { writeFreezeError } from '../../../server/authz/write-freeze';
 import { requestPropertyVerification } from '../../../server/verification/property';
 import { verifyTurnstile } from '../../../server/authz/turnstile';
 import {
@@ -11,6 +12,10 @@ import {
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, locals }) => {
+  // Frozen ahead of the rate-limit check so a paused site does not spend a
+  // caller's daily verification budget on a request it will refuse anyway.
+  const frozen = await writeFreezeError(env, request);
+  if (frozen) return frozen;
   const ctx = await resolveAuthContext(locals, request, env);
   if (!ctx) return new Response('Unauthorized', { status: 401 });
 
