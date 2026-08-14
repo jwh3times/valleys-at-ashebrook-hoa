@@ -11,7 +11,10 @@ import { users } from './auth-schema';
 // Operational tables for the ADR 0022 cutover. Both drop in phase 4, except
 // the write-freeze setting, which is deliberately retained — see below.
 //
-// PHASE 1 ("expand"). Nothing reads these yet — see issue #195.
+// Added inert in PHASE 1 ("expand") — see issue #195. Two things read them now:
+// the phase-2 shadow layer writes cutover_shadow_mismatches, and the write
+// freeze is enforced from src/server/authz/write-freeze.ts. `cutover_mode` is
+// still read by nothing; phase 3 is what makes it decide anything.
 
 const instant = (name: string) => integer(name, { mode: 'timestamp_ms' });
 
@@ -22,10 +25,12 @@ const instant = (name: string) => integer(name, { mode: 'timestamp_ms' });
 //  `cutover_mode`  — 'legacy' | 'derived'. Defaults to legacy and flips in
 //                    seconds with no build, which is what makes rollback
 //                    credible at the moment it matters. Dropped in phase 4.
-//  `write_freeze`  — 'off' | 'on'. Enforced in middleware and again per route,
-//                    mirroring the deliberate two-layer convention of ADR 0013.
-//                    Frozen requests return 503 (a maintenance state), never
-//                    404 (a masked-existence case).
+//  `write_freeze`  — 'off' | 'on'. Enforced in middleware and again per route
+//                    (src/server/authz/write-freeze.ts), mirroring the
+//                    deliberate two-layer convention of ADR 0013. Frozen
+//                    requests return 503 (a maintenance state), never 404 (a
+//                    masked-existence case). An ABSENT row means off, so a
+//                    database that has never been frozen needs no seed.
 //
 // The freeze is KEPT after phase 4. It was built for the flip, but a
 // maintenance switch that halts mutations while leaving public reads and

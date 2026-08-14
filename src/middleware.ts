@@ -10,6 +10,7 @@ import {
   jsonContentError,
   sameOriginError,
 } from './server/authz/voting-guards';
+import { writeFreezeError } from './server/authz/write-freeze';
 import { getSiteSettings } from './server/content/settings';
 import { DEFAULT_SITE_SETTINGS } from './lib/types';
 
@@ -78,9 +79,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   if (isVotingApi(path)) {
     // Voting's request-order contract runs before session resolution: feature
-    // flags, exact Origin, JSON media type, authentication, then role. The
-    // route repeats the same checks through requireVotingApi because direct
-    // handler tests and other callers do not pass through middleware.
+    // flags, the write freeze, exact Origin, JSON media type, authentication,
+    // then role. The route repeats the same checks through requireVotingApi
+    // because direct handler tests and other callers do not pass through
+    // middleware.
     context.locals.site = await getSiteSettings(env);
     let response: Response;
     if (
@@ -90,7 +92,9 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       response = new Response('Not found', { status: 404 });
     } else {
       const requestError =
-        sameOriginError(context.request) ?? jsonContentError(context.request);
+        (await writeFreezeError(env, context.request, 'everything')) ??
+        sameOriginError(context.request) ??
+        jsonContentError(context.request);
       if (requestError) {
         response = requestError;
       } else {
@@ -138,9 +142,13 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     // under src/pages/api/admin/ also calls requireBoard itself, and that stays
     // the tested layer — the Workers pool invokes handlers directly and never
     // runs middleware. This exists so a route shipped without its guard is not
-    // exposed in the meantime. Mirrors requireBoard's codes exactly: anonymous
-    // is 401, an authenticated non-board caller is 403.
-    if (!ctx) {
+    // exposed in the meantime. Mirrors requireBoard's codes exactly: the write
+    // freeze is 503 on mutating verbs only (reads stay live), anonymous is 401,
+    // an authenticated non-board caller is 403.
+    const frozen = await writeFreezeError(env, context.request, 'mutations');
+    if (frozen) {
+      response = frozen;
+    } else if (!ctx) {
       response = new Response('Unauthorized', { status: 401 });
     } else if (ctx.role !== 'board') {
       response = new Response('Forbidden', { status: 403 });
@@ -150,18 +158,27 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   } else if (isMemberApi(path)) {
     // Production backstop for the homeowner-write surface, mirroring the
     // admin-API backstop above and the per-route guard codes: disabled
-    // surfaces are 404 (never advertise them), anonymous is 401, and a
-    // visitor-role caller is 403. Every handler under src/pages/api/member/
-    // also calls requireMemberApi; this exists so a route shipped without its
-    // guard is not exposed in the meantime.
+    // surfaces are 404 (never advertise them), a frozen site is 503 on every
+    // verb here, anonymous is 401, and a visitor-role caller is 403. Every
+    // handler under src/pages/api/member/ also calls requireMemberApi; this
+    // exists so a route shipped without its guard is not exposed in the
+    // meantime.
     if (!context.locals.site.officialMode) {
       response = new Response('Not found', { status: 404 });
-    } else if (!ctx) {
-      response = new Response('Unauthorized', { status: 401 });
-    } else if (ctx.role === 'visitor') {
-      response = new Response('Forbidden', { status: 403 });
     } else {
-      response = await next();
+      // Nested rather than another `else if` so the freeze read happens only
+      // once the surface is known to exist — a mode-off site must not pay a D1
+      // read to answer 404.
+      const frozen = await writeFreezeError(env, context.request, 'everything');
+      if (frozen) {
+        response = frozen;
+      } else if (!ctx) {
+        response = new Response('Unauthorized', { status: 401 });
+      } else if (ctx.role === 'visitor') {
+        response = new Response('Forbidden', { status: 403 });
+      } else {
+        response = await next();
+      }
     }
   } else if (path.startsWith('/admin') && ctx?.role !== 'board') {
     response = context.redirect('/login', 302);
