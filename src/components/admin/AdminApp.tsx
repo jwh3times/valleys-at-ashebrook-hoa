@@ -8,6 +8,7 @@ import DuplicatesManager from './DuplicatesManager';
 import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
 import RosterManager from './RosterManager';
+import RosterPreview from './RosterPreview';
 import MembersManager from './MembersManager';
 import BoardAccessManager from './BoardAccessManager';
 import BoardPanel from './BoardPanel';
@@ -33,6 +34,14 @@ const SECTIONS = [
     render: () => <DuplicatesManager />,
   },
   { key: 'roster', label: 'Roster', render: () => <RosterManager /> },
+  // ADR 0022 phase 2: read-only preview of the new roster tables. Sits next to
+  // the legacy Roster panel deliberately — the two are meant to be compared
+  // during the migration, and the legacy one stays authoritative until the flip.
+  {
+    key: 'roster-preview',
+    label: 'New roster (preview)',
+    render: () => <RosterPreview />,
+  },
   { key: 'members', label: 'Members', render: () => <MembersManager /> },
   { key: 'board-roster', label: 'The Board', render: () => <BoardPanel /> },
   {
