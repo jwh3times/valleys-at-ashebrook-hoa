@@ -63,6 +63,7 @@ npm run docs:import       # generate documents-manifest.json; see SETUP.md
 npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
 npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; see SETUP.md §7
 npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins; see SETUP.md
+npm run verify:invariants # ADR 0022 migration invariant gate; pass --local or --remote
 npm run deploy            # build and deploy with Wrangler
 ```
 
@@ -591,9 +592,31 @@ vote's `weight` (defaulting to 1, so board votes — which carry none — tally 
 no separate weighted/unweighted mode); `motions.outcome` itself is board-entered and never
 computed, because passage thresholds vary and quorum is not modelled), roster/verification tables
 (`properties` — including `vote_weight`, an integer `NOT NULL DEFAULT 1` that weights a lot's
-member-meeting vote and is rejected at zero, see ADR 0015 — `owners`, `user_property_links`,
-`property_verifications`, `manual_approval_queue`), and Better Auth tables (`user`, `session`,
-`account`, `verification`).
+member-meeting vote and is rejected at zero, see ADR 0015, and nullable `retired_day`/`retired_at`
+added by ADR 0022 migration `0022`, unread by the application until ADR 0022 phase 2 — `owners`,
+`user_property_links`, `property_verifications`, `manual_approval_queue`), and Better Auth tables
+(`user`, `session`, `account`, `verification`).
+
+ADR 0022 (`docs/adr/0022-party-roster-derived-access.md`) adds a durable party roster,
+immutable audit ledger, and cutover-operational tables in `src/server/db/roster-schema.ts`,
+`src/server/db/audit-schema.ts`, and `src/server/db/cutover-schema.ts`, merged into the app schema
+by `getDb` in `src/server/db/client.ts` and registered in `drizzle.config.ts`'s schema array.
+Migrations `0019`-`0022` (below) create all 29 tables plus the two `properties` columns above.
+**Phase 1 ("expand") is complete and behaviorally inert**: nothing under `src/pages` or `src/server`
+besides that schema/client wiring reads or writes any of these tables or columns — no new
+endpoints, no auth changes, no user-visible behavior. Two naming rules hold until ADR 0022 phase 4
+and are worth knowing before touching either module: there is no `lots` table — the Lot remains
+`properties`, and every `lot_id` column here references `properties.id` — and board service lives
+in `board_service_terms`, not `board_terms`, because the legacy `board_terms` table still exists
+with a different shape and every phase-1 `CREATE TABLE` is `IF NOT EXISTS`, so creating under the
+real name would silently no-op. The operator-run `npm run verify:invariants`
+(`scripts/verify-invariants.ts`) runs 15 invariant queries — interval non-overlap on
+Ownerships/Representations/Board Terms/Office Assignments, party-subtype completeness, audit-event
+detail cardinality and causal order, redaction/review-flag completeness, and a check that no
+`review_flags` column references ballot choices or candidates — against local or remote D1 via
+Wrangler, printing any violating rows and exiting non-zero; two view-backed checks
+(`audit_integrity_violations_v`, `board_eligibility_violations_v`) are stubbed pending the views
+ADR 0022 phase 2 creates.
 
 `resolutions` (the resolutions book — standing rules the board adopts, per
 [ADR 0016](./docs/adr/0016-resolutions-supersession-chain.md)) is a durable record: amending one
@@ -710,7 +733,22 @@ verified as applied to production on 2026-08-05. Migration `0016` adds `ballot_c
 `motions.voting_revision`, an integer `NOT NULL DEFAULT 0` used as the live-motion
 compare-and-swap token. Migration `0018` adds the `meetings.approved_by_motion_id` foreign key to
 `motions.id` with delete-set-null, retaining valid legacy links and clearing dangling values.
-Migrations after `0015` are not yet recorded here as applied to production.
+Migration `0019` is ADR 0022 phase 1's party-roster core: `parties`, `people`, `organizations`,
+`contact_methods`, `ownerships`, `representations`, `representation_lots`,
+`person_verifications`, `person_links`, `board_service_terms`, `board_office_assignments`,
+`access_grants`, and the `system_admin_bootstrap` singleton, every `CREATE TABLE IF NOT EXISTS`.
+Migration `0020` adds the immutable audit ledger: `audit_events`, its seven typed detail tables
+(`roster_changes`, `board_service_changes`, `identity_events`, `access_events`,
+`roster_redactions`, `review_events`, `audit_record_corrections`), subject/delta tables
+(`roster_change_subjects`, `board_service_change_subjects`, `audit_scalar_changes`,
+`audit_sensitive_field_changes`), `review_flags`, and `redaction_tasks`. Migration `0021` adds the
+two cutover-operational tables, `cutover_settings` (the operator-only `cutover_mode`/
+`write_freeze` singletons) and `cutover_shadow_mismatches`. Migration `0022` adds
+`properties.retired_day`/`properties.retired_at` via two plain `ALTER TABLE ADD COLUMN`
+statements — the one non-idempotent file in the set, isolated to its own migration because SQLite
+has no `ADD COLUMN IF NOT EXISTS`. See the ADR 0022 paragraph above for what these tables are and
+why nothing reads them yet. Migrations after `0015` are not yet recorded here as applied to
+production.
 Migrations are applied with
 `npm run db:migrate:{local,remote}` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and

@@ -7,7 +7,38 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.4.16] - 2026-08-13
+## [0.5.0] - 2026-08-14
+
+### Added
+
+- **The party-roster, audit, and cutover tables from ADR 0022 now exist, and
+  nothing reads them.** Twenty-nine tables land across four migrations covering
+  durable parties and their Lot ownerships, organizational representation,
+  identity verification and account links, board service and access grants, an
+  immutable audit ledger, and the operational settings the eventual cutover
+  needs. This is the first of four migration phases and is deliberately inert:
+  no page, route, guard, or component reads any of it, the existing roster stays
+  fully authoritative, and site behavior is unchanged. Applying the migrations is
+  the only operator action required.
+- **A new `npm run verify:invariants` gate checks the association's data for
+  contradictions.** Fifteen checks cover foreign-key integrity, overlapping
+  ownership, representation, board-term and office periods, parties missing their
+  person or organization record, audit-ledger completeness and causal ordering,
+  and the standing prohibition on any record linking a ballot to a voter. It
+  reports identifiers and codes only, never personal information, and exits with
+  a failure so a bad state blocks the next migration step rather than being
+  noticed later. Pass `--local` or `--remote`.
+
+### Changed
+
+- **Lots can now record when they were retired.** Properties gain a retirement
+  day and timestamp, both empty for every existing property and read by nothing
+  yet. The day may be absent while the timestamp is set, because the current
+  inactive flag carries no date and inventing one would assert a retirement that
+  did not happen.
+- Every value the new tables accept is now enforced by the database itself rather
+  than only by the type system, so an out-of-range status, channel, or office can
+  no longer be written by any route, script, or manual query.
 
 ### Changed
 
