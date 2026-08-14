@@ -31,7 +31,7 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
   buildPlan,
-  CLEAN_REPLACE_TABLES,
+  CLEAN_REPLACE_STATEMENTS,
   type LegacyBoardAccount,
   type LegacyBoardPerson,
   type LegacyBoardTerm,
@@ -130,7 +130,7 @@ function main(): void {
     ),
   };
 
-  const plan = buildPlan(data, Date.now());
+  const plan = buildPlan(data, Date.now(), { operatorAccountId: operator });
   const blocking = plan.exceptions.filter((e) => e.queue === 'blocking');
   const advisory = plan.exceptions.filter((e) => e.queue === 'advisory');
 
@@ -146,6 +146,12 @@ function main(): void {
   console.log(`  ownerships        ${plan.counts.ownerships}`);
   console.log(`  lots retired      ${plan.counts.lotsRetired}`);
   console.log(`  board terms       ${plan.counts.boardTerms}`);
+  console.log(
+    `  baseline events   ${plan.counts.baselineEvents}` +
+      (operator === null
+        ? '  (pass --operator to plan the audit baseline)'
+        : ''),
+  );
 
   report('FLIP-BLOCKING', blocking);
   report('advisory', advisory);
@@ -164,7 +170,7 @@ function main(): void {
     return;
   }
 
-  const wipe = CLEAN_REPLACE_TABLES.map((t) => `DELETE FROM ${t}`);
+  const wipe = CLEAN_REPLACE_STATEMENTS;
   const sqlPath = join(tmpdir(), `adr0022-backfill-${randomUUID()}.sql`);
   writeFileSync(
     sqlPath,
@@ -184,12 +190,15 @@ function main(): void {
     unlinkSync(sqlPath);
   }
 
-  console.log(`\nApplied ${plan.statements.length} statements.`);
   console.log(
-    'NOT YET IMPLEMENTED: the audit baseline writer. This run recorded domain\n' +
-      'rows only, so the structural baseline immutable history requires — one\n' +
-      'correlation per migrated root entity, actor_kind = migration — is still\n' +
-      'missing. It must exist before the phase-3 authoritative run.',
+    `\nApplied ${plan.statements.length} statements, including ${plan.counts.baselineEvents} baseline events.`,
+  );
+  console.log(
+    'STILL TO DO before the phase-3 authoritative run: insert-once mode. This\n' +
+      'is a clean-replace rehearsal, and a clean replace once the ledger is real\n' +
+      'would be deleting immutable history. Ids are already deterministic, so\n' +
+      'both modes can share one code path rather than the authoritative run\n' +
+      'being an untested variant.',
   );
 }
 
