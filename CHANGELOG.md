@@ -7,7 +7,41 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.5.1] - 2026-08-14
+## [0.6.0] - 2026-08-14
+
+### Added
+
+- **The association's records can now be rehearsed in the new roster shape
+  without anything depending on it.** An operator can run the roster backfill,
+  which reads the existing roster and writes the new durable one, and reports
+  what it could not decide on its own — an owner name that looks like a company,
+  a board term with no scheduled end, a shared phone number that two households
+  hold. It changes nothing until run with an explicit write flag, and reports
+  before it writes every time. Nothing on the site reads the result: the
+  existing roster stays in charge of every page, every login, and every vote.
+- **A new board-only panel shows what that rehearsal produced.** "New roster
+  (preview)" lists structural counts across five sections — roster, board,
+  access, review, and compliance — and is deliberately read-only, because the
+  rehearsal replaces those records wholesale each time it runs and any edit
+  would be lost.
+- **An integrity report now covers the whole association record.** Seventeen
+  checks look for contradictions — a person owning the same Lot twice over
+  overlapping periods, a board term whose qualifying home is no longer theirs, a
+  history entry missing its explanation — and report identifiers only, never
+  personal information. It fails loudly rather than warning, so a problem stops
+  the next migration step instead of being noticed later.
+- **A comparison mode can now check the new access rules against the current
+  ones**, either as people use the site or as a sweep across every account at
+  once. It records only the disagreements, and only as counts and identifiers.
+  It is off unless an operator turns it on, and it can never change what a
+  visitor is allowed to see or do.
+
+### Changed
+
+- The migration's own history records now have somewhere to be read from,
+  through a set of server-side views covering events, their subjects, an
+  entity's history, an operation's causal chain, the review queue, and redaction
+  compliance. These are reporting shapes only and grant no access on their own.
 
 ### Changed
 

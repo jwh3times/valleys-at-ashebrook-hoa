@@ -162,6 +162,13 @@
       "when": 1786668486081,
       "tag": "0022_adr0022_lot_retirement_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1786668486082,
+      "tag": "0023_adr0022_audit_views",
+      "breakpoints": true
     }
   ]
 }

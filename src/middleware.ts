@@ -4,6 +4,8 @@
 import type { MiddlewareHandler } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getAuthContext } from './server/authz/context';
+import { compareInShadow } from './server/authz/shadow';
+import { associationDateIso } from './lib/format';
 import {
   jsonContentError,
   sameOriginError,
@@ -109,6 +111,14 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   const ctx = await getAuthContext(context.request, env);
   context.locals.authContext = ctx;
+
+  // ADR 0022 phase 2: compute the derived context alongside this one and record
+  // only the disagreements. Structurally incapable of changing the answer —
+  // `ctx` is already resolved and assigned above, this returns void, and it
+  // swallows its own errors. Off by default; removed at the phase-3 flip.
+  if (ctx && env.CUTOVER_SHADOW === 'on') {
+    await compareInShadow(env, ctx, associationDateIso());
+  }
 
   // Surface site settings (incl. officialMode) to page renders. Skip the DB read
   // for most API/file routes, which do not render chrome — they get inert
