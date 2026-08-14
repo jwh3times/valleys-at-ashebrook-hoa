@@ -124,17 +124,19 @@ describe('ADR 0022 phase 1 migrations', () => {
     }
   });
 
-  it('ships four migration files', () => {
-    expect(
-      phase1Migrations()
-        .map((m) => m.name)
-        .sort(),
-    ).toEqual([
+  it('ships its four migration files', () => {
+    // Named explicitly rather than counted: later ADR 0022 phases add their own
+    // migrations, and a count would fail on every one of them while proving
+    // nothing about phase 1.
+    const names = new Set(phase1Migrations().map((m) => m.name));
+    for (const file of [
       '0019_adr0022_roster_core.sql',
       '0020_adr0022_audit_ledger.sql',
       '0021_adr0022_cutover_operational.sql',
       '0022_adr0022_lot_retirement_columns.sql',
-    ]);
+    ]) {
+      expect(names.has(file), `missing migration: ${file}`).toBe(true);
+    }
   });
 
   it('makes every CREATE re-runnable with IF NOT EXISTS', () => {
