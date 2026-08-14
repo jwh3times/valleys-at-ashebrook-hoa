@@ -182,20 +182,21 @@ const CHECKS: Check[] = [
           WHERE name LIKE '%choice%' OR name LIKE '%candidate%'`,
   },
 
-  // View-backed checks. Phase 1 creates no views; phase 2 lands them with the
-  // code that reads them, and these un-stub then.
+  // View-backed checks, live since phase 2 created the views. These overlap
+  // some of the direct queries above on purpose: the direct ones prove the
+  // condition, the views prove the SHAPE the application will read is the same
+  // shape the gate checks. A view that drifts from its check is exactly how a
+  // green dashboard ends up disagreeing with a red gate.
   {
     name: 'audit_integrity_violations',
     meaning: 'the audit integrity view reported a violation',
     sql: 'SELECT * FROM audit_integrity_violations_v',
-    pendingPhase: 2,
   },
   {
     name: 'board_eligibility_violations',
     meaning:
       'a Board Term outlived the Ownership or Representation qualifying it',
     sql: 'SELECT * FROM board_eligibility_violations_v',
-    pendingPhase: 2,
   },
 ];
 
