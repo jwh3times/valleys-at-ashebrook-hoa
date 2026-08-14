@@ -26,7 +26,14 @@ const SRC = join(process.cwd(), 'src');
 // The guard that remains is the one still worth having: no page, route,
 // component, or content read may touch these tables. That boundary holds until
 // the phase-3 flip, and this test is deleted with it.
-const ALLOWED = new Set(['server/db/client.ts', 'server/authz/derive.ts']);
+//   shadow.ts   — phase 2's comparison. It reads the derived model and writes
+//                 the operator-only mismatch table, and is structurally
+//                 incapable of changing a response.
+const ALLOWED = new Set([
+  'server/db/client.ts',
+  'server/authz/derive.ts',
+  'server/authz/shadow.ts',
+]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
 
