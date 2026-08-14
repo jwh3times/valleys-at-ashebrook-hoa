@@ -446,3 +446,69 @@ describe('audit baseline', () => {
     expect(events).toBe(plan.counts.baselineEvents);
   });
 });
+
+describe('insert-once mode', () => {
+  const sample = () =>
+    legacy({
+      properties: [
+        { id: 'lot-1', status: 'active' },
+        { id: 'lot-2', status: 'inactive' },
+      ],
+      owners: [owner('o1', 'lot-1', { email: 'a@example.com' })],
+    });
+
+  const authoritative = () =>
+    buildPlan(sample(), NOW, {
+      operatorAccountId: 'op-1',
+      mode: 'authoritative',
+    });
+
+  it('makes every insert conflict-tolerant', () => {
+    const plan = authoritative();
+    const inserts = plan.statements.filter((s) => s.startsWith('INSERT INTO'));
+    expect(inserts.length).toBeGreaterThan(0);
+    for (const s of inserts) {
+      expect(s.endsWith('ON CONFLICT DO NOTHING')).toBe(true);
+    }
+  });
+
+  it('does not use INSERT OR IGNORE, which would swallow CHECK failures', () => {
+    // The two look interchangeable. OR IGNORE also silently drops rows that
+    // violate CHECK or NOT NULL, so a malformed row would vanish instead of
+    // failing the run.
+    const sql = authoritative().statements.join('\n');
+    expect(sql).not.toContain('INSERT OR IGNORE');
+    expect(sql).not.toContain('INSERT OR REPLACE');
+  });
+
+  it('guards the retirement update instead of overwriting a human record', () => {
+    const update = authoritative().statements.find((s) =>
+      s.startsWith('UPDATE properties'),
+    )!;
+    expect(update).toContain('AND retired_at IS NULL');
+  });
+
+  it('leaves the rehearsal plan untouched', () => {
+    // The rehearsal is a clean replace; conflict tolerance there would hide a
+    // failed wipe rather than surface it.
+    const plan = buildPlan(sample(), NOW, { operatorAccountId: 'op-1' });
+    const sql = plan.statements.join('\n');
+    expect(sql).not.toContain('ON CONFLICT DO NOTHING');
+    expect(sql).not.toContain('AND retired_at IS NULL');
+  });
+
+  it('plans exactly the same rows in both modes', () => {
+    // The two modes must differ only in conflict handling. If they ever plan
+    // different rows, the authoritative run is an untested variant.
+    const rehearsal = buildPlan(sample(), NOW, { operatorAccountId: 'op-1' });
+    const once = authoritative();
+    expect(once.counts).toEqual(rehearsal.counts);
+    expect(once.statements).toHaveLength(rehearsal.statements.length);
+    const stripped = once.statements.map((s) =>
+      s
+        .replace(/ ON CONFLICT DO NOTHING$/, '')
+        .replace(/ AND retired_at IS NULL$/, ''),
+    );
+    expect(stripped).toEqual(rehearsal.statements);
+  });
+});
