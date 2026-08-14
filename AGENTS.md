@@ -64,6 +64,8 @@ npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
 npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; see SETUP.md §7
 npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins; see SETUP.md
 npm run verify:invariants # ADR 0022 migration invariant gate; pass --local or --remote
+npm run roster:backfill   # ADR 0022 roster backfill; dry-run by default, --write --operator=<id>
+npm run shadow:sweep      # ADR 0022 offline shadow sweep over every account; --local/--remote, --write
 npm run deploy            # build and deploy with Wrangler
 ```
 
@@ -357,6 +359,12 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
 - Board handoff: `GET /api/admin/roles` lists current board; `POST /api/admin/roles` accepts
   `{ action: 'promote', email }` or `{ action: 'demote', userId }` and returns 409 when attempting
   to demote the last board member.
+- ADR 0022 phase 2 roster preview, `requireBoard`-gated and **read-only** — no `POST`/`PATCH`/
+  `DELETE` exists or should until phase 3, because the backfill clean-replaces these tables and
+  would silently erase a board edit: `GET /api/admin/roster-preview` returns structural counts (IDs
+  and non-personal fields only, not a roster browser) across five sections — Roster, Board, Access,
+  Review, Compliance — including the two ADR 0022 phase-2 integrity views and shadow-mismatch
+  counts. It is not a public or homeowner surface and does not affect authorization.
 - Board-only document assistant: `POST /api/admin/assistant` (SSE) takes `{ question, history? }`
   and streams a Claude-generated, cited answer over the document library, retrieved via Cloudflare
   AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
@@ -456,7 +464,16 @@ boolean`.
 - `authz/`: `getAuthContext`, `resolveAuthContext` (middleware-first caller resolution with a
   fail-closed fallback), `requireRole`, `requireBoard`, `requireMemberApi` (official-mode-first
   homeowner-write gate), `requireVotingApi` (feature flags, exact Origin, JSON media type, session,
-  then homeowner role, in that order), per-property access checks, and Turnstile checks.
+  then homeowner role, in that order), per-property access checks, and Turnstile checks. It also
+  holds the ADR 0022 phase-2 shadow layer, which computes but never decides: `derive.ts`
+  (`deriveAccess`/`toDerivedAccess`, a capability SET — `member`/`board`/`systemAdmin`, not a
+  ladder — plus `lotIds`, `contentTier`, and `hasCurrentBoardTerm`, recomputed from current D1 facts
+  on every call with nothing cached), `shadow-compare.ts` (`compareContexts`, the pure legacy-vs-
+  derived diff shared by the request path and the offline sweep so neither can drift from the
+  other), and `shadow.ts` (`compareInShadow`, wired into `src/middleware.ts` behind
+  `env.CUTOVER_SHADOW === 'on'`; it runs after the legacy `AuthContext` is already resolved, returns
+  `void`, and swallows its own errors, so it is structurally incapable of changing a response).
+  Legacy `getAuthContext`/`resolveAuthContext` remain the only source of truth for every request.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
@@ -593,7 +610,8 @@ no separate weighted/unweighted mode); `motions.outcome` itself is board-entered
 computed, because passage thresholds vary and quorum is not modelled), roster/verification tables
 (`properties` — including `vote_weight`, an integer `NOT NULL DEFAULT 1` that weights a lot's
 member-meeting vote and is rejected at zero, see ADR 0015, and nullable `retired_day`/`retired_at`
-added by ADR 0022 migration `0022`, unread by the application until ADR 0022 phase 2 — `owners`,
+added by ADR 0022 migration `0022`, read only by the ADR 0022 phase-2 shadow derivation
+(`src/server/authz/derive.ts`), never by legacy authorization — `owners`,
 `user_property_links`, `property_verifications`, `manual_approval_queue`), and Better Auth tables
 (`user`, `session`, `account`, `verification`).
 
@@ -601,22 +619,53 @@ ADR 0022 (`docs/adr/0022-party-roster-derived-access.md`) adds a durable party r
 immutable audit ledger, and cutover-operational tables in `src/server/db/roster-schema.ts`,
 `src/server/db/audit-schema.ts`, and `src/server/db/cutover-schema.ts`, merged into the app schema
 by `getDb` in `src/server/db/client.ts` and registered in `drizzle.config.ts`'s schema array.
-Migrations `0019`-`0022` (below) create all 29 tables plus the two `properties` columns above.
-**Phase 1 ("expand") is complete and behaviorally inert**: nothing under `src/pages` or `src/server`
-besides that schema/client wiring reads or writes any of these tables or columns — no new
-endpoints, no auth changes, no user-visible behavior. Two naming rules hold until ADR 0022 phase 4
-and are worth knowing before touching either module: there is no `lots` table — the Lot remains
-`properties`, and every `lot_id` column here references `properties.id` — and board service lives
-in `board_service_terms`, not `board_terms`, because the legacy `board_terms` table still exists
-with a different shape and every phase-1 `CREATE TABLE` is `IF NOT EXISTS`, so creating under the
-real name would silently no-op. The operator-run `npm run verify:invariants`
-(`scripts/verify-invariants.ts`) runs 15 invariant queries — interval non-overlap on
-Ownerships/Representations/Board Terms/Office Assignments, party-subtype completeness, audit-event
-detail cardinality and causal order, redaction/review-flag completeness, and a check that no
-`review_flags` column references ballot choices or candidates — against local or remote D1 via
-Wrangler, printing any violating rows and exiting non-zero; two view-backed checks
-(`audit_integrity_violations_v`, `board_eligibility_violations_v`) are stubbed pending the views
-ADR 0022 phase 2 creates.
+Migrations `0019`-`0022` (below) create all 29 tables plus the two `properties` columns above;
+migration `0023` (below) adds eight server-side views over them. Two naming rules hold until ADR
+0022 phase 4 and are worth knowing before touching any of this: there is no `lots` table — the Lot
+remains `properties`, and every `lot_id` column here references `properties.id` — and board service
+lives in `board_service_terms`, not `board_terms`, because the legacy `board_terms` table still
+exists with a different shape and every phase-1 `CREATE TABLE` is `IF NOT EXISTS`, so creating
+under the real name would silently no-op.
+
+**Phase 1 ("expand") is complete and behaviorally inert.** **Phase 2 ("backfill and shadow") is
+now built, and legacy remains fully authoritative throughout it**: every guard still reads
+`users.role` and `user_property_links`, and the only new user-visible surface is a board-only,
+read-only preview panel (see `GET /api/admin/roster-preview` above). Phase 2 adds:
+
+- Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
+  subjects, one entity's/one operation's event stream, the open review queue, and redaction
+  compliance, plus two integrity views described below. They are query shapes, not authorization
+  boundaries, and live authorization never joins them.
+- `src/server/authz/derive.ts`, `shadow-compare.ts`, and `shadow.ts` — the derived-authorization
+  shadow layer described under **Server code** below. It computes a capability SET
+  (`member`/`board`/`systemAdmin`, not a ladder) and re-validates every stored grant against
+  current facts on every call; nothing is cached. Wired into `src/middleware.ts` behind
+  `env.CUTOVER_SHADOW === 'on'` (an `src/ambient.d.ts` var, deliberately not in `wrangler.toml` —
+  see that file's comment), it runs after the legacy context is resolved, cannot change a response,
+  and swallows its own errors. Off by default.
+- `scripts/migrate-roster.ts` (`npm run roster:backfill`) and `scripts/backfill-plan.ts`: the
+  clean-replace roster backfill. Dry-run by default; `--write --operator=<accountId>` applies it,
+  writing exception queues for ambiguous cases and an audit baseline (one correlation per migrated
+  root entity, `actor_kind = 'migration'`); `--authoritative` is the phase-3 insert-once mode
+  (`ON CONFLICT DO NOTHING`, deletes nothing, refuses to run while a flip-blocking exception is
+  outstanding).
+- `scripts/shadow-sweep.ts` (`npm run shadow:sweep`): an offline sweep that derives both
+  authorization contexts for every account (not just accounts that sign in during the phase-2
+  window) and records mismatches with `source='sweep'`, sharing `derive.ts`'s SQL and
+  `shadow-compare.ts`'s comparison with the request-path shadow rather than reimplementing them.
+- `src/server/roster/normalize.ts` gains `normalizeEmail`, `normalizePhone`, and `normalizeName`,
+  used by the backfill to detect cross-Party contact ambiguity that legacy data never normalized
+  consistently enough to catch on its own.
+
+The operator-run `npm run verify:invariants` (`scripts/verify-invariants.ts`) runs 17 invariant
+queries with none pending — interval non-overlap on Ownerships/Representations/Board Terms/Office
+Assignments, party-subtype completeness, audit-event detail cardinality and causal order,
+redaction/review-flag completeness, a check that no `review_flags` column references ballot choices
+or candidates, and the two view-backed checks migration `0023` un-stubs
+(`audit_integrity_violations_v`, `board_eligibility_violations_v`) — against local or remote D1 via
+Wrangler, printing any violating rows and exiting non-zero. `audit_integrity_violations_v` sits
+exactly at D1's five-term compound-`SELECT` ceiling; a sixth check there needs a second view rather
+than a sixth branch.
 
 `resolutions` (the resolutions book — standing rules the board adopts, per
 [ADR 0016](./docs/adr/0016-resolutions-supersession-chain.md)) is a durable record: amending one
@@ -746,9 +795,15 @@ two cutover-operational tables, `cutover_settings` (the operator-only `cutover_m
 `write_freeze` singletons) and `cutover_shadow_mismatches`. Migration `0022` adds
 `properties.retired_day`/`properties.retired_at` via two plain `ALTER TABLE ADD COLUMN`
 statements — the one non-idempotent file in the set, isolated to its own migration because SQLite
-has no `ADD COLUMN IF NOT EXISTS`. See the ADR 0022 paragraph above for what these tables are and
-why nothing reads them yet. Migrations `0016` through `0022` were verified as applied to production
-on 2026-08-14, against the `d1_migrations` ledger rather than assumed.
+has no `ADD COLUMN IF NOT EXISTS`. Migration `0023` adds the eight ADR 0022 phase-2 views —
+`audit_event_effective_v`, `audit_event_subjects_v`, `audit_entity_history_v`,
+`audit_operation_timeline_v`, `audit_review_queue_v`, `audit_redaction_compliance_v`,
+`audit_integrity_violations_v`, and `board_eligibility_violations_v` — every statement
+`CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run. See the ADR 0022 paragraph above for
+what these tables and views are and what now reads them (the phase-2 shadow layer and the
+board-only roster-preview panel — legacy authorization still reads none of it). Migrations `0016`
+through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
+ledger rather than assumed.
 
 **Committed migrations reach production automatically.** `wrangler.toml` sets `migrations_dir` on
 the `DATABASE` binding, so the Cloudflare Workers Builds deploy that follows every merge to `main`

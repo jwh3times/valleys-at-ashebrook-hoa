@@ -150,6 +150,22 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   constant time, so a leaked database backup can't be reversed with a precomputed table.
   Verification requests are rate-limited in KV — a short per-user cooldown plus daily caps per user
   and per property — to curb abuse of the SMS/email fan-out.
+- **The ADR 0022 migration shadow layer cannot change an authorization decision and records only
+  non-personal comparison data.** `src/server/authz/derive.ts` computes a second, independent
+  authorization context from the new party-roster tables; legacy `users.role`/
+  `user_property_links` remain the sole source of truth for every request. Comparison
+  (`src/server/authz/shadow.ts`, wired into `src/middleware.ts` behind the off-by-default
+  `env.CUTOVER_SHADOW === 'on'`) runs only after the legacy context already decided the request,
+  returns no value, and swallows its own errors rather than propagating them — it is structurally
+  incapable of denying or granting anything. A disagreement is recorded to
+  `cutover_shadow_mismatches` as account id, role/tier codes, and lot **counts** only, never a lot
+  id, name, address, or other roster detail, and repeats collapse onto one row per account rather
+  than accumulating a per-request log. The companion offline sweep (`npm run shadow:sweep`) writes
+  the same shape from an operator machine, not the Worker. The new board-only
+  `GET /api/admin/roster-preview` panel is read-only by design — the phase-2 backfill clean-replaces
+  the underlying tables, so a write here would be silently erased — and exposes only structural
+  counts (including the count of unexplained shadow mismatches), never resident names, addresses,
+  or contact data.
 - **Every response carries baseline security headers.** Middleware sets `X-Content-Type-Options:
 nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy that allowlists only the third-party resources the site uses (Google
