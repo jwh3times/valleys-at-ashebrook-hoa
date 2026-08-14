@@ -56,7 +56,7 @@ npm run sync:agents -- --check # fail if generated agent trees drifted, enforced
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run db:generate       # generate Drizzle migration files
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
-npm run db:migrate:remote # apply migrations to the live D1 database
+npm run db:migrate:remote # manual catch-up only; merges to main apply migrations automatically
 npm run auth:generate     # regenerate Better Auth schema from config
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
@@ -747,10 +747,24 @@ two cutover-operational tables, `cutover_settings` (the operator-only `cutover_m
 `properties.retired_day`/`properties.retired_at` via two plain `ALTER TABLE ADD COLUMN`
 statements — the one non-idempotent file in the set, isolated to its own migration because SQLite
 has no `ADD COLUMN IF NOT EXISTS`. See the ADR 0022 paragraph above for what these tables are and
-why nothing reads them yet. Migrations after `0015` are not yet recorded here as applied to
-production.
-Migrations are applied with
-`npm run db:migrate:{local,remote}` via
+why nothing reads them yet. Migrations `0016` through `0022` were verified as applied to production
+on 2026-08-14, against the `d1_migrations` ledger rather than assumed.
+
+**Committed migrations reach production automatically.** `wrangler.toml` sets `migrations_dir` on
+the `DATABASE` binding, so the Cloudflare Workers Builds deploy that follows every merge to `main`
+applies any unapplied files as part of that deploy — no GitHub workflow and no operator step is
+involved. That is how `0016`-`0022` all landed at one timestamp minutes after their merge, having
+sat unapplied for days. The build command itself lives in the Cloudflare dashboard rather than in
+this repo, so the trigger is inferred from that evidence rather than read from a file here.
+
+Two consequences worth internalising. A migration is **live the moment its PR merges**, so a
+schema change and the code that depends on it must be safe in either order — which is the whole
+reason ADR 0022 phase 1 is behaviorally inert. And `npm run db:migrate:remote` is a
+**manual catch-up for an unusual situation**, not the normal path; running it is harmless
+(Wrangler skips applied files) but expecting to need it is a misreading of how this project
+deploys.
+
+Migrations are applied locally with `npm run db:migrate:local` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
 `0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
 so `npm run db:generate` should diff cleanly for future changes.
