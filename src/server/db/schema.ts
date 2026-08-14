@@ -32,6 +32,14 @@ export const properties = sqliteTable(
     // accumulate error; fractional shares are expressed by scaling the whole
     // scheme up.
     voteWeight: integer('vote_weight').notNull().default(1),
+    // ADR 0022 Lot retirement (phase 1, unread until phase 2). A retired Lot
+    // leaves live denominators prospectively and never changes frozen
+    // eligibility snapshots. `retired_day` may be NULL while `retired_at` is
+    // set, for accepted legacy rows only: `status = 'inactive'` carries no
+    // date, and stamping the migration day would assert a retirement that did
+    // not happen that day. `status` remains authoritative until phase 3.
+    retiredDay: text('retired_day'),
+    retiredAt: integer('retired_at', { mode: 'timestamp_ms' }),
     notes: text('notes'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
