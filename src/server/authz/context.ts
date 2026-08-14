@@ -128,6 +128,9 @@ export async function getAuthContext(
 
   const mode = await getCutoverMode(env);
   if (mode === 'derived') {
+    // `access.invalidBoardGrantId` names a live Board grant this refused. Its
+    // recording as an Access Event (#200) is BLOCKED on a decision, not
+    // forgotten — see the note on that field in derive.ts.
     return derivedContext(
       await deriveAccess(env, result.user.id, associationDay),
     );

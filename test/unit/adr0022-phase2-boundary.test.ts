@@ -31,6 +31,7 @@ import { join, relative } from 'node:path';
 //     flag. `write-freeze.ts` in particular decides only WHETHER THE SITE
 //     ACCEPTS MUTATIONS AT ALL, identically for every caller; it never decides
 //     who a caller is, what tier they read, or which Lots are theirs.
+
 //
 //  2. NO MEMBER OR PUBLIC CONTENT READ touches the new tables. Tier-filtered
 //     reads stay on the legacy roster until the flip.
