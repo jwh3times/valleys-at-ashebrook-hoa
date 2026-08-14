@@ -87,6 +87,7 @@ function main(): void {
   const argv = process.argv.slice(2);
   const remote = argv.includes('--remote');
   const write = argv.includes('--write');
+  const authoritative = argv.includes('--authoritative');
   const operator =
     argv.find((a) => a.startsWith('--operator='))?.split('=')[1] ?? null;
 
@@ -104,7 +105,8 @@ function main(): void {
   }
 
   console.log(
-    `migrate-roster: ${remote ? 'REMOTE' : 'local'} ${write ? 'WRITE' : 'dry run'}\n`,
+    `migrate-roster: ${remote ? 'REMOTE' : 'local'} ${write ? 'WRITE' : 'dry run'} ` +
+      `${authoritative ? 'AUTHORITATIVE (insert-once)' : 'rehearsal (clean-replace)'}\n`,
   );
 
   const data = {
@@ -130,7 +132,10 @@ function main(): void {
     ),
   };
 
-  const plan = buildPlan(data, Date.now(), { operatorAccountId: operator });
+  const plan = buildPlan(data, Date.now(), {
+    operatorAccountId: operator,
+    mode: authoritative ? 'authoritative' : 'rehearsal',
+  });
   const blocking = plan.exceptions.filter((e) => e.queue === 'blocking');
   const advisory = plan.exceptions.filter((e) => e.queue === 'advisory');
 
@@ -170,7 +175,21 @@ function main(): void {
     return;
   }
 
-  const wipe = CLEAN_REPLACE_STATEMENTS;
+  // Phase 3 requires every flip-blocking queue at zero. Enforced here rather
+  // than left to a runbook step, because this is the run that makes the new
+  // roster authoritative and there is no threshold to argue about at 11pm.
+  if (authoritative && blocking.length > 0) {
+    console.error(
+      `\nREFUSING TO RUN: ${blocking.length} flip-blocking exception(s) outstanding.\n` +
+        'The authoritative backfill records the roster the association will run on.\n' +
+        'Resolve every blocking item, or re-run without --authoritative to rehearse.',
+    );
+    process.exit(1);
+  }
+
+  // Insert-once deletes nothing: a clean replace once the ledger is real would
+  // be deleting immutable history.
+  const wipe = authoritative ? [] : CLEAN_REPLACE_STATEMENTS;
   const sqlPath = join(tmpdir(), `adr0022-backfill-${randomUUID()}.sql`);
   writeFileSync(
     sqlPath,
@@ -193,13 +212,18 @@ function main(): void {
   console.log(
     `\nApplied ${plan.statements.length} statements, including ${plan.counts.baselineEvents} baseline events.`,
   );
-  console.log(
-    'STILL TO DO before the phase-3 authoritative run: insert-once mode. This\n' +
-      'is a clean-replace rehearsal, and a clean replace once the ledger is real\n' +
-      'would be deleting immutable history. Ids are already deterministic, so\n' +
-      'both modes can share one code path rather than the authoritative run\n' +
-      'being an untested variant.',
-  );
+  if (authoritative) {
+    console.log(
+      'Insert-once: nothing was deleted, and re-running inserts only what is\n' +
+        'missing. Run verify:invariants next — a green gate is the evidence that\n' +
+        'this roster is coherent, not the absence of an error here.',
+    );
+  } else {
+    console.log(
+      'Rehearsal: this clean-replaced the new tables. The authoritative run\n' +
+        '(--authoritative, inside the write-freeze) deletes nothing.',
+    );
+  }
 }
 
 main();

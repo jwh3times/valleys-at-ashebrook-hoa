@@ -81,6 +81,17 @@ export interface PlanOptions {
    * only for this backfill and still names an account, the same shape that
    * makes bootstrap safe. Without one, no baseline is emitted. */
   operatorAccountId?: string | null;
+  /**
+   * `rehearsal` (phase 2) is a clean-replace whose only output is counts and
+   * queues — nothing it writes records anything.
+   *
+   * `authoritative` (phase 3, inside the write-freeze) is INSERT-ONCE: it
+   * deletes nothing, and idempotency comes from the deterministic ids instead.
+   * A clean replace once the ledger is real would be deleting immutable
+   * history, so the two modes are genuinely different acts rather than a flag
+   * on one act.
+   */
+  mode?: 'rehearsal' | 'authoritative';
 }
 
 export interface BackfillPlan {
@@ -565,7 +576,39 @@ export function buildPlan(
 
   // Baseline last: every event names a domain row through a RESTRICT foreign
   // key, so the rows must already exist.
-  return { statements: [...statements, ...baseline], exceptions, counts };
+  const ordered = [...statements, ...baseline];
+  return {
+    statements:
+      (options.mode ?? 'rehearsal') === 'authoritative'
+        ? ordered.map(insertOnce)
+        : ordered,
+    exceptions,
+    counts,
+  };
+}
+
+/**
+ * Rewrites one statement for insert-once (phase 3) semantics.
+ *
+ * `ON CONFLICT DO NOTHING` with no conflict target, deliberately NOT
+ * `INSERT OR IGNORE`. The two look interchangeable and are not: `OR IGNORE`
+ * also swallows CHECK and NOT NULL violations, so a malformed row would vanish
+ * silently instead of failing the run. `ON CONFLICT DO NOTHING` applies only to
+ * uniqueness conflicts — exactly the "this row is already here" case — and
+ * leaves every other constraint loud. Foreign-key violations raise under both,
+ * which is what we want.
+ *
+ * The retirement UPDATE is guarded rather than skipped: re-running must not
+ * overwrite a retirement a human recorded properly in the meantime.
+ */
+function insertOnce(statement: string): string {
+  if (statement.startsWith('INSERT INTO')) {
+    return `${statement} ON CONFLICT DO NOTHING`;
+  }
+  if (statement.startsWith('UPDATE properties SET retired_at')) {
+    return `${statement} AND retired_at IS NULL`;
+  }
+  return statement;
 }
 
 /** Children first. Rehearsal only — phase 3 is insert-once keyed by
