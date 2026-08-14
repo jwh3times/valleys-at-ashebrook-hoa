@@ -7,6 +7,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-14
+
+### Changed
+
+- **The contributor guide now records that merging to `main` applies database
+  migrations automatically.** The deploy that follows every merge applies any
+  unapplied migration files as part of that deploy, with no separate operator
+  step — which the guide had never stated, and which its note about migrations
+  "not yet recorded as applied" actively implied the opposite of. The
+  consequence worth knowing is that a schema change goes live the moment its
+  pull request merges, so it and the code depending on it have to be safe in
+  either order. The manual apply command remains available as a catch-up and is
+  documented as such.
+
 ## [0.5.0] - 2026-08-14
 
 ### Added
