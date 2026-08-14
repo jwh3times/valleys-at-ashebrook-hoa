@@ -15,17 +15,27 @@ const { retrieveMock, genState, authState, anthropicState } = vi.hoisted(
     // this mock — `null ?? x` evaluates `x` — see src/server/authz/api-guards.ts).
     // Defaults to a board caller so existing tests need no changes; flipped
     // to `null` by the 401 fail-closed test below.
+    // Built inline rather than via legacyAuthContext: vi.hoisted runs before
+    // module imports initialize, so calling it here throws on the uninitialized
+    // binding. Kept in sync by the type annotation — a field added to
+    // AuthContext fails this file at compile time.
     authState: {
-      ctx: { userId: 'board-1', role: 'board', propertyIds: [] } as {
-        userId: string;
-        role: string;
-        propertyIds: string[];
-      } | null,
+      ctx: {
+        userId: 'board-1',
+        personId: null,
+        capabilities: new Set(['board', 'member'] as const),
+        lotIds: [],
+        contentTier: 'board',
+        hasCurrentBoardTerm: false,
+        role: 'board',
+        propertyIds: [],
+      } as import('../../src/server/authz/guards').AuthContext | null,
     },
     anthropicState: { throwNotConfigured: false },
   }),
 );
-vi.mock('../../src/server/authz/context', () => ({
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () => authState.ctx,
 }));
 vi.mock('../../src/server/ai/search', async (orig) => ({
@@ -88,6 +98,7 @@ import {
   reports,
 } from '../../src/server/db/schema';
 import { AiSearchUnavailableError } from '../../src/server/ai/search';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -145,7 +156,7 @@ function post(body: unknown, locals?: unknown) {
 }
 
 const homeownerLocals = {
-  authContext: { userId: 'h1', role: 'homeowner', propertyIds: [] },
+  authContext: legacyAuthContext('h1', 'homeowner', []),
 };
 
 // Reassemble the `event: token` frames' text payloads. The de-anonymization
@@ -175,7 +186,7 @@ describe('POST /api/admin/reports', () => {
       const res = await post({ template: 'rentals' }, {});
       expect(res.status).toBe(401);
     } finally {
-      authState.ctx = { userId: 'board-1', role: 'board', propertyIds: [] };
+      authState.ctx = legacyAuthContext('board-1', 'board', []);
     }
   });
 

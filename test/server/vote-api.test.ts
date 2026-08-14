@@ -21,6 +21,7 @@ import {
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -28,11 +29,10 @@ beforeAll(async () => {
 
 const now = new Date('2026-08-05T12:00:00Z');
 const voteUrl = 'http://localhost/api/vote';
-const homeowner: AuthContext = {
-  userId: 'caller-user',
-  role: 'homeowner',
-  propertyIds: ['property-own', 'property-no-snapshot'],
-};
+const homeowner: AuthContext = legacyAuthContext('caller-user', 'homeowner', [
+  'property-own',
+  'property-no-snapshot',
+]);
 
 beforeEach(async () => {
   const db = getDb(env);

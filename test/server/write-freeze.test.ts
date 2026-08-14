@@ -13,6 +13,7 @@ import { requireBoard } from '../../src/server/authz/api-guards';
 import { requireMemberApi } from '../../src/server/authz/member-guards';
 import { requireVotingApi } from '../../src/server/authz/voting-guards';
 import type { AuthContext } from '../../src/server/authz/guards';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 /**
  * The operator write freeze — the ADR 0022 phase-3 mechanism that halts
@@ -57,16 +58,10 @@ async function setSiteSettings(official: boolean, live: boolean) {
   });
 }
 
-const board: AuthContext = {
-  userId: 'board-1',
-  role: 'board',
-  propertyIds: [],
-};
-const homeowner: AuthContext = {
-  userId: 'homeowner-1',
-  role: 'homeowner',
-  propertyIds: ['property-1'],
-};
+const board: AuthContext = legacyAuthContext('board-1', 'board', []);
+const homeowner: AuthContext = legacyAuthContext('homeowner-1', 'homeowner', [
+  'property-1',
+]);
 
 function localsFor(ctx: AuthContext | null) {
   return { authContext: ctx } as unknown as App.Locals;
@@ -262,7 +257,7 @@ describe('the admin API under a freeze', () => {
     );
     expect(anonymous?.status).toBe(401);
     const visitor = await requireBoard(
-      localsFor({ userId: 'v', role: 'visitor', propertyIds: [] }),
+      localsFor(legacyAuthContext('v', 'visitor', [])),
       req('/api/admin/announcements', 'POST'),
       env,
     );

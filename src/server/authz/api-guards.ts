@@ -1,7 +1,8 @@
 import { getAuthContext } from './context';
-import { requireRole, Forbidden } from './guards';
+import { requireCapability, Forbidden } from './guards';
 import type { AuthContext } from './guards';
 import { writeFreezeError } from './write-freeze';
+import { associationDateIso } from '../../lib/format';
 
 /**
  * Resolve the caller exactly once. Prefer the context the middleware already put
@@ -16,7 +17,10 @@ export async function resolveAuthContext(
   request: Request,
   env: Env,
 ): Promise<AuthContext | null> {
-  return locals?.authContext ?? (await getAuthContext(request, env));
+  return (
+    locals?.authContext ??
+    (await getAuthContext(request, env, associationDateIso()))
+  );
 }
 
 /**
@@ -43,7 +47,7 @@ export async function requireBoard(
   const ctx = await resolveAuthContext(locals, request, env);
   if (!ctx) return new Response('Unauthorized', { status: 401 });
   try {
-    requireRole(ctx, 'board');
+    requireCapability(ctx, 'board');
   } catch (e) {
     if (e instanceof Forbidden)
       return new Response('Forbidden', { status: 403 });

@@ -5,11 +5,18 @@ import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 
 let role: 'visitor' | 'homeowner' | 'board' | null = null;
-vi.mock('../../src/server/authz/context', () => ({
+// Only getAuthContext is stubbed. legacyAuthContext stays real, so these
+// fixtures are built by the same synthesis production uses rather than by a
+// hand-written shape that could drift from it.
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: vi.fn(),
 }));
 
-import { getAuthContext } from '../../src/server/authz/context';
+import {
+  getAuthContext,
+  legacyAuthContext,
+} from '../../src/server/authz/context';
 import { onRequest } from '../../src/middleware';
 
 beforeAll(async () => {
@@ -20,7 +27,7 @@ beforeEach(async () => {
   role = null;
   vi.mocked(getAuthContext).mockReset();
   vi.mocked(getAuthContext).mockImplementation(async () =>
-    role === null ? null : { userId: 'u1', role, propertyIds: [] },
+    role === null ? null : legacyAuthContext('u1', role, []),
   );
   await getDb(env).delete(settings).where(eq(settings.key, 'site'));
 });

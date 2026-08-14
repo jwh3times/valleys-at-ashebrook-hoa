@@ -9,6 +9,7 @@ import {
   recordMismatch,
 } from '../../src/server/authz/shadow';
 import type { AuthContext } from '../../src/server/authz/guards';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 // ADR 0022 shadow comparison (issue #210, phase 2).
 
@@ -51,9 +52,7 @@ async function account(id: string) {
 }
 
 const legacy = (overrides: Partial<AuthContext> = {}): AuthContext => ({
-  userId: 'a1',
-  role: 'visitor',
-  propertyIds: [],
+  ...legacyAuthContext('a1', 'visitor', []),
   ...overrides,
 });
 
@@ -190,7 +189,7 @@ describe('the shadow path cannot affect a request', () => {
     await account('a3');
     await compareInShadow(
       env,
-      legacy({ userId: 'a3', role: 'homeowner', propertyIds: ['lot-1'] }),
+      legacy(legacyAuthContext('a3', 'homeowner', ['lot-1'])),
       DAY,
     );
     const rows = await db().all<{ account_id: string; legacy_role: string }>(
@@ -239,7 +238,7 @@ describe('the shadow path cannot affect a request', () => {
     await expect(
       compareInShadow(
         readOnly,
-        legacy({ userId: 'a5', role: 'board', propertyIds: [] }),
+        legacy(legacyAuthContext('a5', 'board', [])),
         DAY,
       ),
     ).resolves.toBeUndefined();

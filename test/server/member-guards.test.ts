@@ -5,6 +5,7 @@ import { requireMemberApi } from '../../src/server/authz/member-guards';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import type { AuthContext } from '../../src/server/authz/guards';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -30,11 +31,7 @@ function localsFor(ctx: AuthContext | null) {
 }
 
 const req = new Request('http://localhost/api/member/proxies');
-const homeowner: AuthContext = {
-  userId: 'u1',
-  role: 'homeowner',
-  propertyIds: ['p1'],
-};
+const homeowner: AuthContext = legacyAuthContext('u1', 'homeowner', ['p1']);
 
 describe('requireMemberApi', () => {
   it('returns 404 when officialMode is off, even for a signed-in homeowner', async () => {
@@ -60,7 +57,7 @@ describe('requireMemberApi', () => {
   it('returns 403 for a visitor-role caller with officialMode on', async () => {
     await setOfficialMode(true);
     const gate = await requireMemberApi(
-      localsFor({ userId: 'u2', role: 'visitor', propertyIds: [] }),
+      localsFor(legacyAuthContext('u2', 'visitor', [])),
       req,
       env,
     );
@@ -74,7 +71,7 @@ describe('requireMemberApi', () => {
     expect(h.ok).toBe(true);
     if (h.ok) expect(h.ctx.userId).toBe('u1');
     const b = await requireMemberApi(
-      localsFor({ userId: 'b1', role: 'board', propertyIds: [] }),
+      localsFor(legacyAuthContext('b1', 'board', [])),
       req,
       env,
     );
