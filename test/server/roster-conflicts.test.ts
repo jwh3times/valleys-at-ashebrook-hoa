@@ -2,8 +2,9 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 
-vi.mock('../../src/server/authz/context', () => ({
-  getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
+  getAuthContext: async () => legacyAuthContext('b', 'board', []),
 }));
 
 import {
@@ -19,6 +20,7 @@ import {
   users,
 } from '../../src/server/db/schema';
 import { hashCode } from '../../src/server/verification/codes';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

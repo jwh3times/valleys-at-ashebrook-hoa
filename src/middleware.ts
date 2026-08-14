@@ -98,11 +98,15 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       if (requestError) {
         response = requestError;
       } else {
-        const ctx = await getAuthContext(context.request, env);
+        const ctx = await getAuthContext(
+          context.request,
+          env,
+          associationDateIso(),
+        );
         context.locals.authContext = ctx;
         if (!ctx) {
           response = new Response('Unauthorized', { status: 401 });
-        } else if (ctx.role === 'visitor') {
+        } else if (!ctx.capabilities.has('member')) {
           response = new Response('Forbidden', { status: 403 });
         } else {
           response = await next();
@@ -113,7 +117,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     return response;
   }
 
-  const ctx = await getAuthContext(context.request, env);
+  const ctx = await getAuthContext(context.request, env, associationDateIso());
   context.locals.authContext = ctx;
 
   // ADR 0022 phase 2: compute the derived context alongside this one and record
@@ -150,7 +154,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       response = frozen;
     } else if (!ctx) {
       response = new Response('Unauthorized', { status: 401 });
-    } else if (ctx.role !== 'board') {
+    } else if (!ctx.capabilities.has('board')) {
       response = new Response('Forbidden', { status: 403 });
     } else {
       response = await next();
@@ -174,17 +178,17 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
         response = frozen;
       } else if (!ctx) {
         response = new Response('Unauthorized', { status: 401 });
-      } else if (ctx.role === 'visitor') {
+      } else if (!ctx.capabilities.has('member')) {
         response = new Response('Forbidden', { status: 403 });
       } else {
         response = await next();
       }
     }
-  } else if (path.startsWith('/admin') && ctx?.role !== 'board') {
+  } else if (path.startsWith('/admin') && !ctx?.capabilities.has('board')) {
     response = context.redirect('/login', 302);
   } else if (
     path.startsWith('/homeowner') &&
-    (!ctx || ctx.role === 'visitor')
+    (!ctx || !ctx.capabilities.has('member'))
   ) {
     response = context.redirect('/login', 302);
   } else {
