@@ -92,8 +92,13 @@ Set `BETTER_AUTH_URL` to the exact production origin visitors use.
 
 ## 4. Apply Migrations
 
-Worker builds and deploys do not apply D1 migrations automatically. Apply the committed migration
-ledger separately for each target database:
+**Merging to `main` applies migrations to production automatically.** `wrangler.toml` sets
+`migrations_dir` on the `DATABASE` binding, so the deploy that follows every merge applies any
+unapplied files as part of that deploy. A schema change is therefore live the moment its pull
+request merges, and it must be safe alongside code that has not shipped yet.
+
+Apply the ledger by hand for a **local** database, or against production only as a catch-up in an
+unusual situation — running it is harmless, since Wrangler skips files already applied:
 
 ```bash
 npm run db:migrate:local
