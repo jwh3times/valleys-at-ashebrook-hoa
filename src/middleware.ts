@@ -92,7 +92,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       response = new Response('Not found', { status: 404 });
     } else {
       const requestError =
-        (await writeFreezeError(env, context.request, 'everything')) ??
+        (await writeFreezeError(env, context.request)) ??
         sameOriginError(context.request) ??
         jsonContentError(context.request);
       if (requestError) {
@@ -145,7 +145,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     // exposed in the meantime. Mirrors requireBoard's codes exactly: the write
     // freeze is 503 on mutating verbs only (reads stay live), anonymous is 401,
     // an authenticated non-board caller is 403.
-    const frozen = await writeFreezeError(env, context.request, 'mutations');
+    const frozen = await writeFreezeError(env, context.request);
     if (frozen) {
       response = frozen;
     } else if (!ctx) {
@@ -169,7 +169,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       // Nested rather than another `else if` so the freeze read happens only
       // once the surface is known to exist — a mode-off site must not pay a D1
       // read to answer 404.
-      const frozen = await writeFreezeError(env, context.request, 'everything');
+      const frozen = await writeFreezeError(env, context.request);
       if (frozen) {
         response = frozen;
       } else if (!ctx) {
@@ -188,7 +188,12 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   ) {
     response = context.redirect('/login', 302);
   } else {
-    response = await next();
+    // Everything the branches above did not claim: public pages, /api/content/*,
+    // /api/files/*, /api/verify/*, /api/auth/*, /api/bootstrap/board. The freeze
+    // is deny-by-default, so this branch is what catches a mutating surface
+    // nobody thought to name — /api/verify/* today, whatever ships next
+    // otherwise. freezePolicyFor decides; the two genuine exemptions live there.
+    response = (await writeFreezeError(env, context.request)) ?? (await next());
   }
   applySecurityHeaders(response.headers);
   return response;

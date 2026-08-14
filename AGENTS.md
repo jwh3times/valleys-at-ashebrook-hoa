@@ -466,13 +466,24 @@ boolean`.
   fail-closed fallback), `requireRole`, `requireBoard`, `requireMemberApi` (official-mode-first
   homeowner-write gate), `requireVotingApi` (feature flags, write freeze, exact Origin, JSON media
   type, session, then homeowner role, in that order), per-property access checks, and Turnstile
-  checks. `write-freeze.ts` (`isWriteFrozen`, `writeFreezeError`, `isMutatingMethod`) is the
-  operator-only maintenance switch built for the ADR 0022 phase-3 flip and retained after phase 4:
-  it reads the uncached `cutover_settings.write_freeze` singleton (fail-closed — a read error or an
-  active freeze answers `503`; an absent row is the normal un-frozen state, not an error) and is
-  called from `requireBoard` (mutating verbs only, admin reads stay live), `requireMemberApi` (every
-  verb), and `requireVotingApi` (every verb), plus `src/middleware.ts` as the same two-layer
-  backstop the admin/member gates already use. It also holds the ADR 0022 phase-2 shadow layer,
+  checks. `write-freeze.ts` (`isWriteFrozen`, `writeFreezeError`, `freezePolicyFor`,
+  `isMutatingMethod`) is the operator-only maintenance switch built for the ADR 0022 phase-3 flip
+  and retained after phase 4: it reads the uncached `cutover_settings.write_freeze` singleton
+  (fail-closed — a read error or an active freeze answers `503`; an absent row is the normal
+  un-frozen state, not an error). Coverage is **deny-by-default and path-derived**:
+  `freezePolicyFor(path)` is the single authority both enforcement layers consult, returning
+  `everything` for `/api/member/*` and `/api/vote` (no read-only half worth keeping live),
+  `exempt` for exactly two paths, and `mutations` for **everything else** — including paths nobody
+  has written yet. `writeFreezeError(env, request)` therefore takes no scope argument: it derives
+  coverage from the request's own path, so no call site can hold a stale opinion about what its
+  surface freezes, and middleware and the per-route guards cannot drift. The two exemptions are
+  `/api/auth/*` (sign-in writes a session row; an operator locked out of `/admin` cannot run the
+  flip) and `/api/bootstrap/board` (flip step 4 creates the first System Administrator while the
+  freeze is on). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`, both
+  `/api/verify/*` routes, and `src/middleware.ts` — whose final `else` branch is what catches any
+  surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
+  and fails if a mutating route ends up live without being declared in both that test and
+  `ALWAYS_LIVE`. It also holds the ADR 0022 phase-2 shadow layer,
   which computes but never decides: `derive.ts`
   (`deriveAccess`/`toDerivedAccess`, a capability SET — `member`/`board`/`systemAdmin`, not a
   ladder — plus `lotIds`, `contentTier`, and `hasCurrentBoardTerm`, recomputed from current D1 facts
@@ -648,12 +659,13 @@ freeze existed. Phase 2 adds:
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
   compliance, plus two integrity views described below. They are query shapes, not authorization
   boundaries, and live authorization never joins them.
-- `src/server/authz/write-freeze.ts` (`isWriteFrozen`, `writeFreezeError`, `isMutatingMethod`) — the
-  operator-only write freeze, now enforced. It reads only the `cutover_settings.write_freeze`
-  singleton (`test/unit/adr0022-phase2-boundary.test.ts` pins that it references no other new ADR
-  0022 table); mutating verbs under `/api/admin/*`, every verb under `/api/member/*`, and
-  `POST /api/vote` answer `503` while it is on, while public pages, `/api/content/*`,
-  `/api/files/*`, `/api/auth/*`, and `/api/bootstrap/board` stay live throughout. `cutover_mode` is
+- `src/server/authz/write-freeze.ts` — the operator-only write freeze, now enforced. It reads only
+  the `cutover_settings.write_freeze` singleton (`test/unit/adr0022-phase2-boundary.test.ts` pins
+  that it references no other new ADR 0022 table). Coverage is deny-by-default: every mutation
+  answers `503` while it is on unless its path is one of the two declared exemptions, so
+  `/api/admin/*` writes, all of `/api/member/*` and `POST /api/vote`, and `/api/verify/*` are all
+  frozen, while reads — public pages, `/api/content/*`, `/api/files/*`, admin `GET`s — stay live
+  throughout, as do `/api/auth/*` and `/api/bootstrap/board` on every verb. `cutover_mode` is
   still read by nothing; phase 3 is what makes it decide anything.
 - `src/server/authz/derive.ts`, `shadow-compare.ts`, and `shadow.ts` — the derived-authorization
   shadow layer described under **Server code** below. It computes a capability SET
@@ -876,7 +888,16 @@ guard. `test/server/admin-routes-all-gated.test.ts` enumerates every admin route
 each exported verb rejects an anonymous caller, so a new endpoint cannot ship ungated. Do not remove
 the per-route guards in favor of the middleware: that would leave the behavior untested. See
 [ADR 0013](./docs/adr/0013-admin-api-gated-in-middleware.md). `/api/bootstrap/board` sits outside the
-gated prefix on purpose — it is the fail-closed first-board bootstrap and must stay reachable. Site sign-in access for board admins is managed in the admin app's
+gated prefix on purpose — it is the fail-closed first-board bootstrap and must stay reachable, and
+for the same reason it is one of the write freeze's two exemptions.
+
+**The write freeze inverts that enumeration, deliberately.** The auth gates above name the surfaces
+they protect, which is why `admin-routes-all-gated.test.ts` has to exist — coverage is a function of
+what somebody remembered to list. `freezePolicyFor` runs the other way: every mutation is frozen
+unless its path is named live, so a route added tomorrow is covered before anyone thinks about it,
+and `test/unit/freeze-coverage.test.ts` fails if a mutating route escapes without being declared in
+two files. When adding a route, you must remember its auth guard; you do not have to remember the
+freeze. Site sign-in access for board admins is managed in the admin app's
 **Board access** panel: a board admin can promote another account to `board` and demote a board
 admin, except the last remaining board admin cannot be demoted. A board admin cannot escalate their
 own access beyond `board`. This is distinct from the admin app's **The Board** panel, which records

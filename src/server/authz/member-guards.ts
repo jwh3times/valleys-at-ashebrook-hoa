@@ -29,7 +29,7 @@ export async function requireMemberApi(
   const site = await getSiteSettings(env);
   if (!site.officialMode)
     return { ok: false, res: new Response('Not found', { status: 404 }) };
-  const frozen = await writeFreezeError(env, request, 'everything');
+  const frozen = await writeFreezeError(env, request);
   if (frozen) return { ok: false, res: frozen };
   const ctx = await resolveAuthContext(locals, request, env);
   if (!ctx)
