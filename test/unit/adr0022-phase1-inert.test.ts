@@ -15,9 +15,18 @@ import { join, relative } from 'node:path';
 
 const SRC = join(process.cwd(), 'src');
 
-// The one legitimate importer: the D1 client registers every schema module so
-// migrations and types stay coherent. Registration is not reading.
-const ALLOWED = new Set(['server/db/client.ts']);
+// Legitimate readers, and only these:
+//
+//   client.ts   — registers every schema module so migrations and types stay
+//                 coherent. Registration is not reading.
+//   derive.ts   — phase 2's derived-authorization module. It reads the new
+//                 tables by design, but in phase 2 its result is compared and
+//                 discarded; legacy still decides every request.
+//
+// The guard that remains is the one still worth having: no page, route,
+// component, or content read may touch these tables. That boundary holds until
+// the phase-3 flip, and this test is deleted with it.
+const ALLOWED = new Set(['server/db/client.ts', 'server/authz/derive.ts']);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
 
@@ -73,6 +82,10 @@ describe('ADR 0022 phase 1 is behaviorally inert', () => {
     for (const file of sourceFiles(SRC)) {
       const rel = relative(SRC, file).split('\\').join('/');
       if (rel.startsWith('server/db/')) continue;
+      // derive.ts names these tables in raw SQL by design — that IS the
+      // derivation. Everything else naming one is reading the new model from
+      // somewhere it must not be read yet.
+      if (ALLOWED.has(rel)) continue;
       const text = readFileSync(file, 'utf8');
       for (const table of tables) {
         if (text.includes(table)) offenders.push(`${rel} mentions ${table}`);
