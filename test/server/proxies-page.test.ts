@@ -12,6 +12,7 @@ import {
 import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
 import ProxiesPage from '../../src/pages/proxies.astro';
 import NotFoundPage from '../../src/pages/404.astro';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -49,11 +50,7 @@ describe('/proxies', () => {
     const container = await makeContainer();
     const res = await container.renderToResponse(ProxiesPage, {
       request: new Request('http://localhost/proxies'),
-      locals: localsWith(false, {
-        userId: 'u1',
-        role: 'homeowner',
-        propertyIds: ['p1'],
-      }),
+      locals: localsWith(false, legacyAuthContext('u1', 'homeowner', ['p1'])),
     });
     const html = await res.text();
     expect(html).toContain('Page not found');
@@ -101,11 +98,7 @@ describe('/proxies', () => {
     const container = await makeContainer();
     const html = await container.renderToString(ProxiesPage, {
       request: new Request('http://localhost/proxies'),
-      locals: localsWith(true, {
-        userId: 'u1',
-        role: 'homeowner',
-        propertyIds: ['p1'],
-      }),
+      locals: localsWith(true, legacyAuthContext('u1', 'homeowner', ['p1'])),
     });
     expect(html).toContain('Grant a proxy');
     expect(html).toContain('1 Oak St');

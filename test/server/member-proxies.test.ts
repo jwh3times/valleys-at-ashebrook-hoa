@@ -13,6 +13,7 @@ import {
   memberAttendance,
 } from '../../src/server/db/schema';
 import type { AuthContext } from '../../src/server/authz/guards';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -55,17 +56,9 @@ function call(
   } as never);
 }
 
-const jane: AuthContext = {
-  userId: 'u1',
-  role: 'homeowner',
-  propertyIds: ['p1'],
-};
+const jane: AuthContext = legacyAuthContext('u1', 'homeowner', ['p1']);
 
-const board: AuthContext = {
-  userId: 'b1',
-  role: 'board',
-  propertyIds: ['p1'],
-};
+const board: AuthContext = legacyAuthContext('b1', 'board', ['p1']);
 
 async function seedRoster() {
   const db = getDb(env);

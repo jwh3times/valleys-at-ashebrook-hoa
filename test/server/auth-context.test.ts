@@ -6,6 +6,7 @@ import {
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
+import { cutoverSettings } from '../../src/server/db/cutover-schema';
 
 const getSession = vi.hoisted(() => vi.fn());
 
@@ -16,6 +17,9 @@ vi.mock('../../src/server/auth', () => ({
 }));
 
 import { getAuthContext } from '../../src/server/authz/context';
+import { legacyAuthContext } from '../../src/server/authz/context';
+
+const DAY = '2026-06-15';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -83,13 +87,9 @@ describe('getAuthContext', () => {
       user: { id: 'u1', role: 'board' },
     });
 
-    const ctx = await getAuthContext(new Request('http://localhost'), env);
+    const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);
 
-    expect(ctx).toEqual({
-      userId: 'u1',
-      role: 'board',
-      propertyIds: ['active-home'],
-    });
+    expect(ctx).toEqual(legacyAuthContext('u1', 'board', ['active-home']));
   });
 
   it('fails closed to visitor for an invalid session role', async () => {
@@ -98,8 +98,90 @@ describe('getAuthContext', () => {
       user: { id: 'u1', role: 'super-admin' },
     });
 
-    const ctx = await getAuthContext(new Request('http://localhost'), env);
+    const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);
 
     expect(ctx?.role).toBe('visitor');
+  });
+});
+
+describe('the cutover seam', () => {
+  // The property phase 3a exists to establish: which MODEL answers is decided
+  // by the flag and by nothing else. Same session, same request, same code
+  // path — one row changes the answer.
+
+  async function setMode(value: 'legacy' | 'derived') {
+    const db = getDb(env);
+    await db.delete(cutoverSettings);
+    await db
+      .insert(cutoverSettings)
+      .values({ key: 'cutover_mode', value, updatedAt: new Date() });
+  }
+
+  beforeEach(async () => {
+    await getDb(env).delete(cutoverSettings);
+  });
+
+  it('answers from the legacy roster while the flag is legacy', async () => {
+    await seedUserWithProperties('board');
+    getSession.mockResolvedValue({ user: { id: 'u1', role: 'board' } });
+
+    const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);
+
+    expect(ctx).toEqual(legacyAuthContext('u1', 'board', ['active-home']));
+    expect(ctx?.personId).toBeNull();
+  });
+
+  it('answers from the party roster once the flag is derived', async () => {
+    // No Person Link exists for this account, so the derived answer is visitor
+    // with no capabilities — while legacy would have said board. The two
+    // disagreeing here is the point: it proves the flag, not the session,
+    // selected the model.
+    await seedUserWithProperties('board');
+    getSession.mockResolvedValue({ user: { id: 'u1', role: 'board' } });
+    await setMode('derived');
+
+    const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);
+
+    expect(ctx?.contentTier).toBe('visitor');
+    expect([...(ctx?.capabilities ?? [])]).toEqual([]);
+    expect(ctx?.lotIds).toEqual([]);
+  });
+
+  it('reverses when the flag goes back to legacy', async () => {
+    // The abort path. Nothing is cached, so rolling the flag back restores the
+    // previous answer on the very next request with no deploy.
+    await seedUserWithProperties('board');
+    getSession.mockResolvedValue({ user: { id: 'u1', role: 'board' } });
+
+    await setMode('derived');
+    const derived = await getAuthContext(
+      new Request('http://localhost'),
+      env,
+      DAY,
+    );
+    expect(derived?.contentTier).toBe('visitor');
+
+    await setMode('legacy');
+    const back = await getAuthContext(
+      new Request('http://localhost'),
+      env,
+      DAY,
+    );
+    expect(back?.contentTier).toBe('board');
+    expect(back?.lotIds).toEqual(['active-home']);
+  });
+
+  it('returns a context rather than null for an authenticated unlinked account', async () => {
+    // 403, not 401. An authenticated caller with no Person Link is "signed in
+    // and this is not yours", which the gates can only express if the seam
+    // hands them a context instead of null.
+    await seedUserWithProperties('board');
+    getSession.mockResolvedValue({ user: { id: 'u1', role: 'board' } });
+    await setMode('derived');
+
+    const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);
+
+    expect(ctx).not.toBeNull();
+    expect(ctx?.userId).toBe('u1');
   });
 });

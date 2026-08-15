@@ -1,10 +1,22 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { deriveAccess } from '../../src/server/authz/derive';
 import { compareContexts } from '../../src/server/authz/shadow-compare';
 import { legacyContext, resetRoster, seedRoster } from './dual-fixtures';
+import { cutoverSettings } from '../../src/server/db/cutover-schema';
+
+// Session plumbing is not what parity is testing, but the flag-driven half
+// below has to go through `getAuthContext` — that is the seam whose behavior is
+// in question — and `getAuthContext` starts by resolving a session.
+const getSession = vi.hoisted(() => vi.fn());
+vi.mock('../../src/server/auth', () => ({
+  createAuth: vi.fn(() => ({ api: { getSession } })),
+}));
+
+import { getAuthContext } from '../../src/server/authz/context';
+import type { Capability } from '../../src/server/authz/guards';
 
 // The ADR 0022 parity suite (issue #210, phase 2).
 //
@@ -26,6 +38,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   await resetRoster();
   await getDb(env).run(sql.raw('DELETE FROM users'));
+  await getDb(env).delete(cutoverSettings);
+  getSession.mockReset();
 });
 
 describe('the two models agree', () => {
@@ -248,5 +262,248 @@ describe('the fixture describes one world, not two', () => {
       sql`SELECT owner_party_id FROM ownerships WHERE lot_id = 'lot-6'`,
     );
     expect(ownerships).toEqual([{ owner_party_id: 'own-6' }]);
+  });
+});
+
+/**
+ * The same claim, driven by the flag rather than by calling each derivation
+ * directly — the literal form of #206's "one parameterized parity suite run
+ * against both derivations, for every caller class".
+ *
+ * The blocks above prove the two MODELS agree. This proves the SEAM delivers
+ * the right one, which is a different failure: a correct derivation wired up
+ * behind a flag that ignores it would pass every assertion above and still take
+ * the site down at the flip.
+ *
+ * Every case resolves through `getAuthContext` with `cutover_mode` set, so what
+ * is under test is exactly what a request gets.
+ */
+describe('the flag selects the model, for every caller class', () => {
+  async function setMode(value: 'legacy' | 'derived') {
+    const db = getDb(env);
+    await db.delete(cutoverSettings);
+    await db
+      .insert(cutoverSettings)
+      .values({ key: 'cutover_mode', value, updatedAt: new Date() });
+  }
+
+  /** Resolve one account the way a request would, under the given flag. */
+  async function resolve(mode: 'legacy' | 'derived', accountId: string) {
+    await setMode(mode);
+    // The real Better Auth session carries the stored role, so read it from D1
+    // rather than inventing one — otherwise the legacy half tests a fiction.
+    const [row] = await getDb(env).all<{ role: string | null }>(
+      sql`SELECT role FROM users WHERE id = ${accountId}`,
+    );
+    getSession.mockResolvedValue({
+      user: { id: accountId, role: row?.role ?? null },
+    });
+    return getAuthContext(new Request('http://localhost'), env, DAY);
+  }
+
+  /** One world containing every caller class the flip has to survive. */
+  async function seedEveryCallerClass() {
+    await seedRoster({
+      lots: [
+        { id: 'lot-p1', owners: [{ id: 'own-p1', name: 'Mia Member' }] },
+        { id: 'lot-p2', owners: [{ id: 'own-p2', name: 'Bo Board' }] },
+        { id: 'lot-p3', owners: [{ id: 'own-p3', name: 'Sam Sysadmin' }] },
+        { id: 'lot-p4', owners: [{ id: 'own-p4', name: 'Uma Unlinked' }] },
+        { id: 'lot-p5', owners: [{ id: 'own-p5', name: 'Nan Nolots' }] },
+      ],
+      accounts: [
+        {
+          id: 'acct-member',
+          role: 'homeowner',
+          legacyLots: ['lot-p1'],
+          linkedTo: 'own-p1',
+        },
+        {
+          id: 'acct-board-owner',
+          role: 'board',
+          legacyLots: ['lot-p2'],
+          linkedTo: 'own-p2',
+          grants: ['board'],
+          boardTerm: {
+            startDay: '2026-01-01',
+            scheduledEndDay: '2027-01-01',
+            lotId: 'lot-p2',
+          },
+        },
+        {
+          // Role `board` so both models agree on the tier: by the time a System
+          // Administrator exists, flip step 6 has already granted them Board
+          // Access, so a legacy `homeowner` here would test a state that never
+          // occurs.
+          id: 'acct-sysadmin',
+          role: 'board',
+          legacyLots: ['lot-p3'],
+          linkedTo: 'own-p3',
+          grants: ['system_admin'],
+        },
+        {
+          // Verified under legacy, never linked in the new model. The accepted
+          // Member Access loss, and the first of the two allow-list entries.
+          id: 'acct-unlinked',
+          role: 'homeowner',
+          legacyLots: ['lot-p4'],
+        },
+        {
+          // Board access with no Lot: linked and granted, but the Ownership is
+          // ended below. The second allow-list entry, exercised through the
+          // seam rather than only at derivation level.
+          id: 'acct-board-nolots',
+          role: 'board',
+          legacyLots: [],
+          linkedTo: 'own-p5',
+          grants: ['board'],
+          boardTerm: {
+            startDay: '2026-01-01',
+            scheduledEndDay: '2027-01-01',
+            lotId: 'lot-p5',
+          },
+        },
+      ],
+    });
+    // The builder writes a current Ownership for every active owner; this
+    // caller class is defined by not having one.
+    await getDb(env).run(
+      sql`UPDATE ownerships SET end_day = '2026-02-01' WHERE owner_party_id = 'own-p5'`,
+    );
+  }
+
+  /**
+   * `null` means "the models disagree here, deliberately" — the expectation is
+   * asserted per mode instead.
+   */
+  const AGREEING: {
+    account: string;
+    tier: string;
+    lots: string[];
+    capabilities: Capability[];
+  }[] = [
+    {
+      account: 'acct-member',
+      tier: 'homeowner',
+      lots: ['lot-p1'],
+      capabilities: ['member'],
+    },
+    {
+      account: 'acct-board-owner',
+      tier: 'board',
+      lots: ['lot-p2'],
+      capabilities: ['board', 'member'],
+    },
+    {
+      account: 'acct-sysadmin',
+      tier: 'board',
+      lots: ['lot-p3'],
+      capabilities: ['board', 'member'],
+    },
+  ];
+
+  beforeEach(seedEveryCallerClass);
+
+  for (const mode of ['legacy', 'derived'] as const) {
+    for (const { account, tier, lots, capabilities } of AGREEING) {
+      it(`${account} resolves identically under ${mode}`, async () => {
+        const ctx = await resolve(mode, account);
+        expect(ctx?.contentTier).toBe(tier);
+        expect([...(ctx?.lotIds ?? [])].sort()).toEqual([...lots].sort());
+        for (const capability of capabilities) {
+          expect(
+            ctx?.capabilities.has(capability),
+            `${account} should hold ${capability} under ${mode}`,
+          ).toBe(true);
+        }
+        // The compatibility aliases must track, or every untouched call site
+        // silently reads a different answer than the guards do.
+        expect(ctx?.role).toBe(ctx?.contentTier);
+        expect(ctx?.propertyIds).toEqual(ctx?.lotIds);
+      });
+    }
+
+    it(`an anonymous caller is null under ${mode}`, async () => {
+      await setMode(mode);
+      getSession.mockResolvedValue(null);
+      expect(
+        await getAuthContext(new Request('http://localhost'), env, DAY),
+      ).toBeNull();
+    });
+  }
+
+  it('carries systemAdmin only under derived, which has the concept', async () => {
+    expect(
+      (await resolve('legacy', 'acct-sysadmin'))?.capabilities.has(
+        'systemAdmin',
+      ),
+    ).toBe(false);
+    expect(
+      (await resolve('derived', 'acct-sysadmin'))?.capabilities.has(
+        'systemAdmin',
+      ),
+    ).toBe(true);
+  });
+
+  it('loses the unlinked account its Lots exactly at the flip', async () => {
+    // Allow-list entry one, asserted through the seam. Legacy honours the
+    // verification link; derived has no Person Link to honour.
+    const legacy = await resolve('legacy', 'acct-unlinked');
+    expect(legacy?.contentTier).toBe('homeowner');
+    expect(legacy?.lotIds).toEqual(['lot-p4']);
+
+    const derived = await resolve('derived', 'acct-unlinked');
+    expect(derived?.contentTier).toBe('visitor');
+    expect(derived?.lotIds).toEqual([]);
+    // Authenticated, so still a context — the gates answer 403, not 401.
+    expect(derived).not.toBeNull();
+  });
+
+  it('keeps the board-without-Lots divergence exactly at the flip', async () => {
+    // Allow-list entry two, through the seam. Legacy's rank ladder hands this
+    // caller `member` for free; derivation grants member only from Lot
+    // authority. Tier and lot set agree in both modes — the divergence is
+    // purely the capability, which is why the member-route gates and not the
+    // shadow comparison are what surface it.
+    const legacy = await resolve('legacy', 'acct-board-nolots');
+    expect(legacy?.contentTier).toBe('board');
+    expect(legacy?.lotIds).toEqual([]);
+    expect(legacy?.capabilities.has('member')).toBe(true);
+
+    const derived = await resolve('derived', 'acct-board-nolots');
+    expect(derived?.contentTier).toBe('board');
+    expect(derived?.lotIds).toEqual([]);
+    expect(derived?.capabilities.has('board')).toBe(true);
+    expect(derived?.capabilities.has('member')).toBe(false);
+  });
+
+  it('revoking a grant takes effect on the very next request', async () => {
+    // The uncached-capabilities criterion (#217), proven through the seam
+    // rather than by calling deriveAccess directly: nothing between the grant
+    // table and the request can be holding a stale answer.
+    expect(
+      (await resolve('derived', 'acct-board-owner'))?.capabilities.has('board'),
+    ).toBe(true);
+
+    await getDb(env).run(
+      sql`UPDATE access_grants SET ended_at = 2 WHERE account_id = 'acct-board-owner'`,
+    );
+
+    const after = await resolve('derived', 'acct-board-owner');
+    expect(after?.capabilities.has('board')).toBe(false);
+    // Still an Owner, so member survives; only the granted capability fell.
+    expect(after?.capabilities.has('member')).toBe(true);
+    expect(after?.contentTier).toBe('homeowner');
+  });
+
+  it('reverses on the way back, so the abort path is real', async () => {
+    // Rolling `cutover_mode` back must restore the previous answer on the next
+    // request. Nothing is cached, which is what makes that true.
+    expect((await resolve('derived', 'acct-unlinked'))?.contentTier).toBe(
+      'visitor',
+    );
+    expect((await resolve('legacy', 'acct-unlinked'))?.contentTier).toBe(
+      'homeowner',
+    );
   });
 });

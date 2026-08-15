@@ -7,6 +7,54 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-14
+
+### Added
+
+- **The switch that will one day change how the site decides who someone is now
+  actually works.** The association is partway through rebuilding its records
+  around durable people and their homes rather than login accounts. An operator
+  can now point the site's access decisions at either the current records or
+  the new ones by changing a single database row — it takes effect within
+  seconds, needs no deploy, and reverses just as fast, which is what makes the
+  eventual switchover safe to attempt: if anything looks wrong, turning it back
+  is one command, not a rebuild. The site ships still pointed at the current
+  records, and with no row set it behaves exactly as it always has.
+- **Access is now understood as a set of abilities rather than a ranking.**
+  Internally, what a signed-in person may do is expressed as specific abilities
+  — act for their own home, manage association records, administer the system —
+  instead of a single level where each rank includes the ones below. Under the
+  current records nothing changes; under the new records, being on the board no
+  longer quietly includes the right to act as a homeowner for a home one does
+  not own. Every page and check that decides what content is visible is
+  untouched.
+- **A board member's access is re-checked against its justification on every
+  request.** Under the new records, board access exists because of a current
+  term of service, and the site now verifies that connection each time rather
+  than trusting that it was true when granted. Access that has lost its
+  justification — a term that ended, was cancelled, or was voided without the
+  access being cleaned up — stops working on the very next request, and so does
+  any revocation.
+- **A standing test suite now proves what every kind of caller can and cannot
+  do.** Every administrative and homeowner endpoint is checked against every
+  kind of caller — visitor, homeowner, board member, board member who owns no
+  home, administrator — and the suite is a permanent fixture rather than
+  migration scaffolding, because the answers it locks down are the point of the
+  whole effort.
+
+### Fixed
+
+- **The comparison that watches the two record systems for disagreement could
+  silently go blind after the switchover.** It compared "what the site decided"
+  against "what the new records say" — which, once the site is pointed at the
+  new records, is the same thing twice, so it could never again report a
+  disagreement. It now always computes the other system's answer fresh,
+  whichever one is in charge.
+- A handful of checks asked "what rank is this person" where the real question
+  was "what may this person do" — including the proxy and voting pages and the
+  owner-address lookup. All of them now ask the right question; behavior today
+  is unchanged.
+
 ## [0.7.0] - 2026-08-14
 
 ### Added

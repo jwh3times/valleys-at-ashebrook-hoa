@@ -26,22 +26,17 @@ import {
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
 const now = new Date('2026-08-05T12:00:00Z');
-const homeowner: AuthContext = {
-  userId: 'caller-user',
-  role: 'homeowner',
-  propertyIds: ['property-own'],
-};
-const board: AuthContext = {
-  userId: 'board-user',
-  role: 'board',
-  propertyIds: [],
-};
+const homeowner: AuthContext = legacyAuthContext('caller-user', 'homeowner', [
+  'property-own',
+]);
+const board: AuthContext = legacyAuthContext('board-user', 'board', []);
 
 beforeEach(async () => {
   const db = getDb(env);

@@ -8,11 +8,13 @@ import { cutoverSettings } from '../../src/server/db/cutover-schema';
 // Same module-mock pattern as middleware-admin-api.test.ts: one role variable
 // swapped per test rather than three separate mocks.
 let role: 'visitor' | 'homeowner' | 'board' | null = null;
-vi.mock('../../src/server/authz/context', () => ({
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    role === null ? null : { userId: 'u1', role, propertyIds: [] },
+    role === null ? null : legacyAuthContext('u1', role, []),
 }));
 
+import { legacyAuthContext } from '../../src/server/authz/context';
 import { onRequest } from '../../src/middleware';
 
 /**

@@ -12,19 +12,26 @@ import { join, relative } from 'node:path';
 //
 // What must remain true until the phase-3 flip:
 //
-//  1. NO AUTHORIZATION DECISION depends on the new model. Derivation computes
-//     an answer, but only the shadow comparison consumes it; every guard still
-//     reads legacy. This is the property that makes phase 2 reversible by
-//     flipping a flag rather than by reverting code.
+//  1. AUTHORIZATION REACHES THE NEW MODEL ONLY THROUGH THE FLAG. Phase 3a
+//     (#217) changed this invariant rather than retiring it, and the change is
+//     that ticket's entire point: `cutover_mode` now selects which model
+//     answers, so "no authorization decision depends on the new model" stopped
+//     being true by design.
 //
-//     The write freeze is not a counterexample, and the distinction is worth
-//     stating because it is the one that keeps this guard meaningful. The
-//     freeze decides WHETHER THE SITE ACCEPTS MUTATIONS AT ALL, identically
-//     for every caller. It never decides who a caller is, what tier they read,
-//     or which Lots are theirs — the questions this boundary exists to keep on
-//     legacy. With no row written, behavior is bit-for-bit what it was before
-//     the freeze existed, so reversibility is untouched. The test below pins
-//     that exemption to `cutover_settings` alone.
+//     What replaces it is narrower and still load-bearing. The ONLY route from
+//     a request to the new model runs through `context.ts` and the flag, whose
+//     default and failure mode are both `legacy`. There is no second code path,
+//     no dual-write, and no guard, page, or content read that reaches past that
+//     seam into the roster tables itself.
+//
+//     The two operational modules under `authz/` that touch `cutover_settings`
+//     — `write-freeze.ts` and `cutover-mode.ts` — are pinned by the test below
+//     to that one table. Neither reads a roster or audit table, so neither can
+//     become the wedge by which a guard starts deriving identity outside the
+//     flag. `write-freeze.ts` in particular decides only WHETHER THE SITE
+//     ACCEPTS MUTATIONS AT ALL, identically for every caller; it never decides
+//     who a caller is, what tier they read, or which Lots are theirs.
+
 //
 //  2. NO MEMBER OR PUBLIC CONTENT READ touches the new tables. Tier-filtered
 //     reads stay on the legacy roster until the flip.
@@ -46,9 +53,10 @@ const ALLOWED = new Set([
   // The comparison, and the operator-only mismatch table it writes.
   'server/authz/shadow.ts',
   'server/authz/shadow-compare.ts',
-  // The operator write freeze. Scoped to cutover_settings by its own test
-  // below; see invariant 1 in the header for why it is not an exception to it.
+  // The two operational flag readers. Both scoped to cutover_settings by their
+  // own test below; see invariant 1 for why neither breaks it.
   'server/authz/write-freeze.ts',
+  'server/authz/cutover-mode.ts',
   // The read-only admin preview and its route.
   'pages/api/admin/roster-preview.ts',
   'components/admin/RosterPreview.tsx',
@@ -107,22 +115,25 @@ describe('the ADR 0022 phase 2 boundary', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('lets the write freeze read its own setting and nothing else', () => {
-    // The narrow form of its exemption. A blanket entry in ALLOWED would make
+  it('lets the two flag readers read cutover_settings and nothing else', () => {
+    // The narrow form of their exemption. A blanket entry in ALLOWED would make
     // this file a wedge: any future guard could read access_grants or
-    // board_service_terms under cover of being "operational". It gets
-    // cutover_settings, which is a maintenance switch that outlives the
-    // migration entirely, and nothing else.
-    const text = readFileSync(
-      join(SRC, 'server', 'authz', 'write-freeze.ts'),
-      'utf8',
-    );
+    // board_service_terms under cover of being "operational". They get
+    // cutover_settings — one a maintenance switch that outlives the migration,
+    // the other the flag that governs the flip — and nothing else.
     const forbidden = [
       ...NEW_TABLES.filter((t) => t !== 'cutover_settings'),
       'roster-schema',
       'audit-schema',
     ];
-    expect(forbidden.filter((name) => text.includes(name))).toEqual([]);
+    const offenders: string[] = [];
+    for (const file of ['write-freeze.ts', 'cutover-mode.ts']) {
+      const text = readFileSync(join(SRC, 'server', 'authz', file), 'utf8');
+      for (const name of forbidden) {
+        if (text.includes(name)) offenders.push(`${file} references ${name}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('keeps content reads on the legacy roster', () => {

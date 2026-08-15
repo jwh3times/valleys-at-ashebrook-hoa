@@ -7,8 +7,9 @@ vi.mock('../../src/server/ai/twin', () => ({ generateTwin: twinMock }));
 import { POST } from '../../src/pages/api/admin/documents';
 import { getDb } from '../../src/server/db/client';
 import { documents } from '../../src/server/db/schema';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
-const board = { authContext: { userId: 'b', role: 'board', propertyIds: [] } };
+const board = { authContext: legacyAuthContext('b', 'board', []) };
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

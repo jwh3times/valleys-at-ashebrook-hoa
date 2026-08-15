@@ -19,6 +19,7 @@ import {
   userPropertyLinks,
 } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -95,11 +96,11 @@ describe('/vote', () => {
     const container = await makeContainer();
     const html = await container.renderToString(VotePage, {
       request: new Request('http://localhost/vote'),
-      locals: localsWith(true, true, {
-        userId: 'u1',
-        role: 'homeowner',
-        propertyIds: ['p1'],
-      }),
+      locals: localsWith(
+        true,
+        true,
+        legacyAuthContext('u1', 'homeowner', ['p1']),
+      ),
     });
     expect(html).toContain('Board election');
     expect(html).toContain('Candidate One');
@@ -110,11 +111,11 @@ describe('/vote', () => {
     const container = await makeContainer();
     const html = await container.renderToString(VotePage, {
       request: new Request('http://localhost/vote'),
-      locals: localsWith(true, true, {
-        userId: 'u1',
-        role: 'homeowner',
-        propertyIds: ['p1'],
-      }),
+      locals: localsWith(
+        true,
+        true,
+        legacyAuthContext('u1', 'homeowner', ['p1']),
+      ),
     });
     expect(html).toContain(
       'There are no open ballots for your verified properties.',
