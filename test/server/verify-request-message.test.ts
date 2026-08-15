@@ -2,12 +2,9 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 // Signed-in requester + captcha pass; senders are spies so no real network.
-vi.mock('../../src/server/authz/context', () => ({
-  getAuthContext: async () => ({
-    userId: 'msguser',
-    role: 'homeowner',
-    propertyIds: [],
-  }),
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
+  getAuthContext: async () => legacyAuthContext('msguser', 'homeowner', []),
 }));
 vi.mock('../../src/server/authz/turnstile', () => ({
   verifyTurnstile: async () => true,
@@ -21,6 +18,7 @@ import { POST } from '../../src/pages/api/verify/request';
 import { sendEmail } from '../../src/server/auth/senders';
 import { getDb } from '../../src/server/db/client';
 import { properties, owners, users } from '../../src/server/db/schema';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

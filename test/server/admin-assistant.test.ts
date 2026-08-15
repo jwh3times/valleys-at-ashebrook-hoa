@@ -1,8 +1,9 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
-vi.mock('../../src/server/authz/context', () => ({
-  getAuthContext: async () => ({ userId: 'b', role: 'board', propertyIds: [] }),
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
+  getAuthContext: async () => legacyAuthContext('b', 'board', []),
 }));
 
 // Retrieval is mocked (no AI binding in the test pool); Anthropic is mocked to
@@ -52,6 +53,7 @@ import { buildPseudonymizer } from '../../src/server/ai/pii';
 import { getDb } from '../../src/server/db/client';
 import { owners, properties, documents } from '../../src/server/db/schema';
 import { POST } from '../../src/pages/api/admin/assistant';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 // Derive the surrogate the mock will echo, from the same roster the test seeds.
 let SURROGATE_NAME = '';
@@ -373,7 +375,7 @@ describe('POST /api/admin/assistant', () => {
     // relying on module-cache resets.
     const res = await POST({
       locals: {
-        authContext: { userId: 'h', role: 'homeowner', propertyIds: [] },
+        authContext: legacyAuthContext('h', 'homeowner', []),
       },
       request: new Request('http://localhost/api/admin/assistant', {
         method: 'POST',

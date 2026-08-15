@@ -5,6 +5,7 @@ import { POST } from '../../src/pages/api/member/owner-lookup';
 import { getDb } from '../../src/server/db/client';
 import { settings, properties, owners } from '../../src/server/db/schema';
 import type { AuthContext } from '../../src/server/authz/guards';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -51,23 +52,11 @@ beforeEach(async () => {
   ]);
 });
 
-const jane: AuthContext = {
-  userId: 'u1',
-  role: 'homeowner',
-  propertyIds: ['p1'],
-};
+const jane: AuthContext = legacyAuthContext('u1', 'homeowner', ['p1']);
 
-const staleJane: AuthContext = {
-  userId: 'u1',
-  role: 'homeowner',
-  propertyIds: [],
-};
+const staleJane: AuthContext = legacyAuthContext('u1', 'homeowner', []);
 
-const board: AuthContext = {
-  userId: 'b1',
-  role: 'board',
-  propertyIds: [],
-};
+const board: AuthContext = legacyAuthContext('b1', 'board', []);
 
 function call(ctx: AuthContext | null, body?: unknown) {
   return POST({

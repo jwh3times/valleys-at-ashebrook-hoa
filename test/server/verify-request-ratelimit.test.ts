@@ -3,12 +3,9 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 // Signed-in user + captcha pass; senders are inert so no real network.
 // (vi.mock calls are hoisted above the imports below by Vitest.)
-vi.mock('../../src/server/authz/context', () => ({
-  getAuthContext: async () => ({
-    userId: 'rluser',
-    role: 'homeowner',
-    propertyIds: [],
-  }),
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
+  getAuthContext: async () => legacyAuthContext('rluser', 'homeowner', []),
 }));
 vi.mock('../../src/server/authz/turnstile', () => ({
   verifyTurnstile: async () => true,
@@ -21,6 +18,7 @@ vi.mock('../../src/server/auth/senders', () => ({
 import { POST } from '../../src/pages/api/verify/request';
 import { getDb } from '../../src/server/db/client';
 import { properties, owners, users } from '../../src/server/db/schema';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

@@ -1,6 +1,6 @@
 import { getSiteSettings } from '../content/settings';
 import { resolveAuthContext } from './api-guards';
-import { requireRole, Forbidden } from './guards';
+import { requireCapability, Forbidden } from './guards';
 import type { AuthContext } from './guards';
 import { writeFreezeError } from './write-freeze';
 
@@ -56,7 +56,7 @@ export async function requireVotingApi(
   if (!ctx)
     return { ok: false, res: new Response('Unauthorized', { status: 401 }) };
   try {
-    requireRole(ctx, 'homeowner');
+    requireCapability(ctx, 'member');
   } catch (error) {
     if (error instanceof Forbidden)
       return { ok: false, res: new Response('Forbidden', { status: 403 }) };

@@ -29,6 +29,7 @@ import {
 import MeetingsPage from '../../src/pages/meetings.astro';
 import MeetingDetailPage from '../../src/pages/meetings/[id].astro';
 import NotFoundPage from '../../src/pages/404.astro';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -148,7 +149,7 @@ describe('/meetings/[id]', () => {
     const res = await container.renderToResponse(MeetingDetailPage, {
       params: { id: 'draft1' },
       locals: {
-        authContext: { userId: 'b', role: 'board', propertyIds: [] },
+        authContext: legacyAuthContext('b', 'board', []),
       } as unknown as App.Locals,
       request: new Request('http://localhost/meetings/draft1'),
     });
@@ -170,7 +171,7 @@ describe('/meetings/[id]', () => {
     const res = await container.renderToResponse(MeetingDetailPage, {
       params: { id: 'boardonly1' },
       locals: {
-        authContext: { userId: 'h', role: 'homeowner', propertyIds: ['p1'] },
+        authContext: legacyAuthContext('h', 'homeowner', ['p1']),
       } as unknown as App.Locals,
       request: new Request('http://localhost/meetings/boardonly1'),
     });

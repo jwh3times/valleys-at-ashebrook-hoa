@@ -22,7 +22,12 @@ export const prerender = false;
 export const POST: APIRoute = async ({ request, locals }) => {
   const gate = await requireMemberApi(locals, request, env);
   if (!gate.ok) return gate.res;
-  if (gate.ctx.role !== 'board' && gate.ctx.propertyIds.length === 0)
+  // Capability question, asked on the capability axis: board may look up any
+  // lot's owners; anyone else needs at least one lot of their own. Identical
+  // under legacy synthesis (board carries `board`, a linked homeowner's
+  // lotIds are their propertyIds); under derived, a board member who owns no
+  // Lot still passes on the `board` capability, which is the intent.
+  if (!gate.ctx.capabilities.has('board') && gate.ctx.lotIds.length === 0)
     return new Response('Forbidden', { status: 403 });
   const parsed = await readJson(request);
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });

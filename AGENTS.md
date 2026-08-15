@@ -462,11 +462,45 @@ boolean`.
 **Server code.** `src/server/` contains:
 
 - `auth/`: Better Auth config, Resend and Twilio senders.
-- `authz/`: `getAuthContext`, `resolveAuthContext` (middleware-first caller resolution with a
-  fail-closed fallback), `requireRole`, `requireBoard`, `requireMemberApi` (official-mode-first
-  homeowner-write gate), `requireVotingApi` (feature flags, write freeze, exact Origin, JSON media
-  type, session, then homeowner role, in that order), per-property access checks, and Turnstile
-  checks. `write-freeze.ts` (`isWriteFrozen`, `writeFreezeError`, `freezePolicyFor`,
+- `authz/`: `context.ts` is the single seam every guard, page, and route resolves its caller
+  through. `getAuthContext(request, env, associationDay)` resolves the session, then reads
+  `cutover-mode.ts`'s `getCutoverMode` (the uncached `cutover_settings.cutover_mode` singleton,
+  `test/server/cutover-mode.test.ts`) to decide which model answers: `legacy` calls
+  `legacyAuthContext`, which synthesizes an `AuthContext` from the stored `users.role`/
+  `user_property_links`, deliberately reproducing the old rank ladder (a board caller gets `member`
+  too) so `cutover_mode = legacy` is bit-for-bit what the site was; `derived` calls
+  `derivedContext(deriveAccess(...))` (below). `getCutoverMode` fails closed to **`legacy`** — the
+  opposite polarity from the write freeze below, deliberately: the freeze falls back to frozen
+  because refusing is the restrictive answer, while the safe answer here is whichever model is
+  already serving production; an absent row is the normal pre-flip state. `associationDay` is a
+  required third parameter, computed once per request by `src/middleware.ts` and by
+  `resolveAuthContext` (middleware-first caller resolution with a fail-closed fallback) via
+  `associationDateIso()`, never read from `locals` or recomputed downstream.
+  `readLegacyRosterContext` reads the legacy answer for one account entirely from D1 with no
+  session, for the shadow layer's mode-aware comparison (below). `users.role` is read ONLY inside
+  `context.ts` — `test/unit/authz-legacy-role.test.ts` pins that by import-scanning the rest of
+  `authz/`, and separately scans all of `src/` for a `ctx.role` comparison outside the guards (a
+  read like `visibleTiers(ctx.role)` passes the alias onward rather than comparing it, so it is not
+  matched). `guards.ts` defines the `AuthContext` shape — `userId`, `personId` (null under
+  `legacy`, which has no Person concept), a `capabilities` **set** of `member`/`board`/
+  `systemAdmin` (deliberately not a ladder: `systemAdmin` implies `board`, but neither implies
+  `member`, which comes only from Lot authority), `lotIds`, `contentTier`, `hasCurrentBoardTerm`,
+  plus compatibility aliases `role` (= `contentTier`) and `propertyIds` (= `lotIds`) that feed
+  nothing but content reads — `tierAllows`/`visibleTiers` and their call sites are unchanged —
+  retained through phase 3 and deleted in phase 4 (#212) — and its two check primitives:
+  `requireCapability(ctx, capability)` (set membership, the primitive every route gate is now built
+  on) and `requireRole` (survives only for content-tier questions, since `contentTier` is
+  genuinely ordered, unlike capability). `requireBoard`, `requireMemberApi` (official-mode-first
+  homeowner-write gate), and `requireVotingApi` (feature flags, write freeze, exact Origin, JSON
+  media type, session, then `member` capability, in that order) keep their signatures but now gate
+  on `ctx.capabilities` — `board` for the admin gate, `member` for the member and voting gates — as
+  does middleware's backstop for each surface. Four call sites that used to compare `ctx.role`
+  directly now ask `ctx.capabilities.has(...)`/`ctx.lotIds` instead: `/api/member/owner-lookup`,
+  both cast preflights in `content/voting.ts`, and the `verified` checks on `/proxies` and `/vote`
+  — identical behavior under `legacy`; under `derived`, a board member who owns no Lot is refused
+  these member surfaces while still admitted to board ones. `requirePropertyAccess` remains the
+  per-property access check (no route calls it yet), and Turnstile checks are unchanged.
+  `write-freeze.ts` (`isWriteFrozen`, `writeFreezeError`, `freezePolicyFor`,
   `isMutatingMethod`) is the operator-only maintenance switch built for the ADR 0022 phase-3 flip
   and retained after phase 4: it reads the uncached `cutover_settings.write_freeze` singleton
   (fail-closed — a read error or an active freeze answers `503`; an absent row is the normal
@@ -483,16 +517,24 @@ boolean`.
   `/api/verify/*` routes, and `src/middleware.ts` — whose final `else` branch is what catches any
   surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
   and fails if a mutating route ends up live without being declared in both that test and
-  `ALWAYS_LIVE`. It also holds the ADR 0022 phase-2 shadow layer,
-  which computes but never decides: `derive.ts`
-  (`deriveAccess`/`toDerivedAccess`, a capability SET — `member`/`board`/`systemAdmin`, not a
-  ladder — plus `lotIds`, `contentTier`, and `hasCurrentBoardTerm`, recomputed from current D1 facts
-  on every call with nothing cached), `shadow-compare.ts` (`compareContexts`, the pure legacy-vs-
-  derived diff shared by the request path and the offline sweep so neither can drift from the
-  other), and `shadow.ts` (`compareInShadow`, wired into `src/middleware.ts` behind
-  `env.CUTOVER_SHADOW === 'on'`; it runs after the legacy `AuthContext` is already resolved, returns
-  `void`, and swallows its own errors, so it is structurally incapable of changing a response).
-  Legacy `getAuthContext`/`resolveAuthContext` remain the only source of truth for every request.
+  `ALWAYS_LIVE`. `authz/` also holds the ADR 0022 shadow layer, which computes but never decides:
+  `derive.ts` (`deriveAccess`/`toDerivedAccess`, a capability SET — `member`/`board`/`systemAdmin`,
+  not a ladder — plus `lotIds`, `contentTier`, and `hasCurrentBoardTerm`, recomputed from current
+  D1 facts on every call with nothing cached) now also returns `invalidBoardGrantId` — a live Board
+  grant whose qualifying term has lapsed, been cancelled, or been voided
+  (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on the
+  strength of it, independent of whether the write path already ended the grant, and recording it
+  as an Access Event awaits an attribution decision on #217. `shadow-compare.ts`
+  (`compareContexts`, the pure legacy-vs-derived diff shared by the request path and the offline
+  sweep so neither can drift from the other) and `shadow.ts` (`compareInShadow`, wired into
+  `src/middleware.ts` behind `env.CUTOVER_SHADOW === 'on'`) are mode-aware: they compute the OTHER
+  model from whichever context served the request — under `legacy` it derives, as phase 2 always
+  did; under `derived` it reads the legacy roster fresh via `readLegacyRosterContext` — so the two
+  sides can never become a comparison of the served context with itself. It still returns `void`
+  and swallows its own errors, so it remains structurally incapable of changing a response, and
+  stays in place through phase 3, deleted only in phase 4 (#212). Legacy
+  `getAuthContext`/`resolveAuthContext` remain the entry point for every request regardless of
+  which model answers it.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
@@ -647,13 +689,25 @@ exists with a different shape and every phase-1 `CREATE TABLE` is `IF NOT EXISTS
 under the real name would silently no-op.
 
 **Phase 1 ("expand") is complete and behaviorally inert.** **Phase 2 ("backfill and shadow") is
-now built, and legacy remains fully authoritative throughout it**: every guard still reads
-`users.role` and `user_property_links`, and the only new user-visible surface is a board-only,
-read-only preview panel (see `GET /api/admin/roster-preview` above). The operator-only write freeze
-(below) is not a counterexample to that reversibility claim: it decides only whether the site
-accepts mutations at all, identically for every caller, and never who a caller is, what tier they
-read, or which Lots are theirs — with no row written it is bit-for-bit what the site was before the
-freeze existed. Phase 2 adds:
+built, and legacy remains fully authoritative throughout it**: every guard resolves through the
+legacy roster (`users.role`/`user_property_links`, read only inside `context.ts`'s `legacy` branch
+as of phase 3a below), and the only new user-visible surface is a board-only, read-only preview
+panel (see `GET /api/admin/roster-preview` above). The operator-only write freeze (below) is not a
+counterexample to that reversibility claim: it decides only whether the site accepts mutations at
+all, identically for every caller, and never who a caller is, what tier they read, or which Lots
+are theirs — with no row written it is bit-for-bit what the site was before the freeze existed.
+**Phase 3 ("cutover"), part a (#217), is also now built: `cutover_mode` decides which of the two
+models answers, via `cutover-mode.ts` inside the `context.ts` seam** (see the `authz/` entry under
+**Server code** above for the full mechanism). This is a seam existing, not a cutover happening:
+production is unaffected because the flag defaults to, and today remains at, `legacy`, so every
+request still resolves through `legacyAuthContext`, which deliberately reproduces the old rank
+ladder — the removals derived authorization makes (a board member who owns no Lot losing the free
+pass into member surfaces) appear only once the flag flips, where the #206 allow-list expects
+them. `test/server/adr0022-parity.test.ts` now runs every caller class through `getAuthContext`
+with `cutover_mode` in both positions, including a board caller who owns no Lot and a revocation
+that must take effect on the very next request, to hold that claim to account. Phase 3 parts b
+(roster admin routes) and c (the verification rewrite) are not part of this slice — the five
+roster admin surfaces above stay read-only. Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
@@ -665,15 +719,19 @@ freeze existed. Phase 2 adds:
   answers `503` while it is on unless its path is one of the two declared exemptions, so
   `/api/admin/*` writes, all of `/api/member/*` and `POST /api/vote`, and `/api/verify/*` are all
   frozen, while reads — public pages, `/api/content/*`, `/api/files/*`, admin `GET`s — stay live
-  throughout, as do `/api/auth/*` and `/api/bootstrap/board` on every verb. `cutover_mode` is
-  still read by nothing; phase 3 is what makes it decide anything.
+  throughout, as do `/api/auth/*` and `/api/bootstrap/board` on every verb. `cutover_mode` is a
+  separate singleton in the same table; see the phase-3 paragraph above and `cutover-mode.ts` under
+  **Server code** for what reads it.
 - `src/server/authz/derive.ts`, `shadow-compare.ts`, and `shadow.ts` — the derived-authorization
-  shadow layer described under **Server code** below. It computes a capability SET
+  shadow layer described under **Server code** above. It computes a capability SET
   (`member`/`board`/`systemAdmin`, not a ladder) and re-validates every stored grant against
   current facts on every call; nothing is cached. Wired into `src/middleware.ts` behind
   `env.CUTOVER_SHADOW === 'on'` (an `src/ambient.d.ts` var, deliberately not in `wrangler.toml` —
-  see that file's comment), it runs after the legacy context is resolved, cannot change a response,
-  and swallows its own errors. Off by default.
+  see that file's comment), it is mode-aware since phase 3a: it compares whichever context served
+  the request against the other model computed fresh, rather than assuming the served context is
+  always the legacy side, which self-compared and could never mismatch once `cutover_mode` could
+  answer `derived`. It cannot change a response and swallows its own errors. Off by default; still
+  deleted only in phase 4 (#212), not at the flip.
 - `scripts/migrate-roster.ts` (`npm run roster:backfill`) and `scripts/backfill-plan.ts`: the
   clean-replace roster backfill. Dry-run by default; `--write --operator=<accountId>` applies it,
   writing exception queues for ambiguous cases and an audit baseline (one correlation per migrated
@@ -832,8 +890,9 @@ has no `ADD COLUMN IF NOT EXISTS`. Migration `0023` adds the eight ADR 0022 phas
 `audit_integrity_violations_v`, and `board_eligibility_violations_v` — every statement
 `CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run. See the ADR 0022 paragraph above for
 what these tables and views are and what now reads them (the phase-2 shadow layer, the board-only
-roster-preview panel, and the operator write freeze — legacy authorization itself still reads none
-of it). Migrations `0016`
+roster-preview panel, the operator write freeze, and — as of phase 3a — `cutover-mode.ts`, which
+decides which model answers a request; legacy authorization itself still reads none of the roster
+tables). Migrations `0016`
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
 ledger rather than assumed.
 
@@ -885,7 +944,12 @@ a freeze; only POST/PUT/PATCH/DELETE are refused. The per-route call is the
 **enforced and tested** layer — the Workers test pool invokes handlers directly and never runs
 middleware — while the middleware gate is the production backstop for a route shipped without its
 guard. `test/server/admin-routes-all-gated.test.ts` enumerates every admin route module and asserts
-each exported verb rejects an anonymous caller, so a new endpoint cannot ship ungated. Do not remove
+each exported verb rejects an anonymous caller, so a new endpoint cannot ship ungated.
+`test/server/permission-matrix.test.ts` goes further, asserting every `/api/admin/*`,
+`/api/member/*`, and `/api/vote` route's DECLARED capability against every caller class —
+including a board caller who owns no Lot and an authenticated caller linked to nothing — rather
+than only that anonymous is refused; per #206 it outlives the migration rather than being retired
+at the flip. Do not remove
 the per-route guards in favor of the middleware: that would leave the behavior untested. See
 [ADR 0013](./docs/adr/0013-admin-api-gated-in-middleware.md). `/api/bootstrap/board` sits outside the
 gated prefix on purpose — it is the fail-closed first-board bootstrap and must stay reachable, and

@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the context module so we can prove the locals fast-path skips the second
 // session/DB lookup entirely, and that the fallback still runs when locals is absent.
-vi.mock('../../src/server/authz/context', () => ({
+vi.mock('../../src/server/authz/context', async (importActual) => ({
+  ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: vi.fn(),
 }));
 import { getAuthContext } from '../../src/server/authz/context';
@@ -11,13 +12,10 @@ import {
   resolveAuthContext,
   requireBoard,
 } from '../../src/server/authz/api-guards';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
-const boardCtx = { userId: 'u1', role: 'board' as const, propertyIds: [] };
-const homeownerCtx = {
-  userId: 'u2',
-  role: 'homeowner' as const,
-  propertyIds: ['p1'],
-};
+const boardCtx = legacyAuthContext('u1', 'board', []);
+const homeownerCtx = legacyAuthContext('u2', 'homeowner', ['p1']);
 const req = new Request('http://localhost/api/admin/site');
 
 beforeEach(() => vi.mocked(getAuthContext).mockReset());

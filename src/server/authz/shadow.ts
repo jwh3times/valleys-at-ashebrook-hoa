@@ -1,5 +1,7 @@
 import type { AuthContext } from './guards';
 import { deriveAccess } from './derive';
+import { getCutoverMode } from './cutover-mode';
+import { readLegacyRosterContext } from './context';
 import {
   compareContexts,
   type ShadowComparison,
@@ -82,27 +84,46 @@ export async function recordMismatch(
 /**
  * The request-path entry point. Returns nothing and throws nothing.
  *
- * Awaited rather than fired into `waitUntil`: it costs one D1 batch, this is a
+ * `ctx` is whichever context SERVED the request, and the comparison is
+ * mode-aware on purpose. Phase 2 built this with legacy always authoritative,
+ * so it treated `ctx` as the legacy side unconditionally — which turned into a
+ * self-comparison the moment `cutover_mode = derived` existed: the served
+ * context was already the derived answer, so the "two models" agreed by
+ * identity and the mismatch table went silently green exactly when the flip's
+ * quiet period needs it watching. Now the OTHER model is computed fresh: under
+ * `legacy` the shadow derives, under `derived` it reads the legacy roster.
+ *
+ * The mode read is one PK lookup, paid only when `CUTOVER_SHADOW` is on —
+ * opt-in diagnostics, not the request path's standing cost.
+ *
+ * Awaited rather than fired into `waitUntil`: it costs little, this is a
  * low-traffic site, and a cancelled background write would lose exactly the
- * evidence the flip gate depends on. Both the cost and the call disappear at
- * the phase-3 flip.
+ * evidence the flip gate depends on. Deleted in phase 4 (#212), not at the
+ * flip — the quiet period between flag and freeze-lift is where this signal
+ * matters most.
  */
 export async function compareInShadow(
   env: Env,
-  legacy: AuthContext,
+  ctx: AuthContext,
   associationDay: string,
   now: number = Date.now(),
 ): Promise<void> {
   try {
-    const derived = await deriveAccess(env, legacy.userId, associationDay);
+    const mode = await getCutoverMode(env);
+    const legacy =
+      mode === 'derived' ? await readLegacyRosterContext(env, ctx.userId) : ctx;
+    const derived =
+      mode === 'derived'
+        ? ctx
+        : await deriveAccess(env, ctx.userId, associationDay);
     const comparison = compareContexts(legacy, derived);
     if (comparison.matched) return;
-    await recordMismatch(env, legacy.userId, 'request', comparison, now);
+    await recordMismatch(env, ctx.userId, 'request', comparison, now);
   } catch (error) {
     // Deliberately swallowed. The shadow model failing must never deny a
-    // request that legacy already allowed.
+    // request the authoritative model already allowed.
     console.error('shadow comparison failed', {
-      accountId: legacy.userId,
+      accountId: ctx.userId,
       error: error instanceof Error ? error.message : String(error),
     });
   }

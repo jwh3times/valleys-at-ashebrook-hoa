@@ -50,6 +50,30 @@ export interface DerivedAccess {
    * admin surfaces but may not approve identity or representation facts, which
    * `CONTEXT.md` restricts to a *current* Board Member with Board Access. */
   hasCurrentBoardTerm: boolean;
+  /**
+   * A live Board grant whose qualifying term no longer supports it, or null.
+   *
+   * Evaluation already refused it — that is rule 3 above, and the refusal is
+   * complete without this field. It carries the id out because the survival of
+   * the grant is an integrity signal about the WRITE path (the mutation
+   * boundary should have ended it), not an ordinary denial about the caller.
+   *
+   * RECORDING IT AWAITS AN ATTRIBUTION DECISION on #217 — a decision, not a
+   * schema impossibility. The `automatic` shape is genuinely unavailable (an
+   * automatic event must name a `causing_event_id` and a correlation root must
+   * not have one, so an automatic root cannot exist), but an
+   * `actor_kind = 'account'` root attributed to the denied caller is
+   * schema-legal, and it is the same shape #197 already uses for the
+   * last-System-Administrator denial. The open question is purely whether that
+   * attribution is right for an evaluation-time finding the caller never
+   * initiated — or whether it belongs in #205's bounded security telemetry
+   * instead. Until that is decided, the detection ships and nothing records.
+   *
+   * Named independently of `capabilities` on purpose. A caller holding two
+   * Board grants, one valid and one stale, is not denied — but the stale one is
+   * still worth recording, and folding this into "has_board = 0" would lose it.
+   */
+  invalidBoardGrantId: string | null;
 }
 
 /**
@@ -89,7 +113,21 @@ export const CAPABILITY_SQL = `
         AND t.cancelled_at IS NULL
         AND t.start_day <= ?2
         AND ?2 < COALESCE(t.actual_end_day, t.scheduled_end_day)
-    ) AS has_current_board_term
+    ) AS has_current_board_term,
+    (
+      SELECT g.id FROM access_grants g
+      LEFT JOIN board_service_terms t ON t.id = g.qualifying_board_term_id
+      WHERE g.account_id = ?1
+        AND g.grant_type = 'board'
+        AND g.ended_at IS NULL
+        AND NOT (
+          t.id IS NOT NULL
+          AND t.voided_at IS NULL
+          AND t.cancelled_at IS NULL
+          AND ?2 < COALESCE(t.actual_end_day, t.scheduled_end_day)
+        )
+      LIMIT 1
+    ) AS invalid_board_grant_id
   FROM person_links pl
   WHERE pl.account_id = ?1 AND pl.ended_at IS NULL
 `;
@@ -155,6 +193,7 @@ export interface CapabilityRow {
   has_system_admin: number;
   has_board: number;
   has_current_board_term: number;
+  invalid_board_grant_id: string | null;
 }
 
 /**
@@ -213,6 +252,7 @@ export function toDerivedAccess(
       lotIds: [],
       contentTier: 'visitor',
       hasCurrentBoardTerm: false,
+      invalidBoardGrantId: null,
     };
   }
 
@@ -243,5 +283,6 @@ export function toDerivedAccess(
     lotIds,
     contentTier,
     hasCurrentBoardTerm: row.has_current_board_term === 1,
+    invalidBoardGrantId: row.invalid_board_grant_id ?? null,
   };
 }

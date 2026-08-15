@@ -28,6 +28,7 @@ import {
   fetchMeetingFor,
 } from '../../src/server/content/reads';
 import { fetchOpenVotingFor } from '../../src/server/content/voting-reads';
+import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -41,11 +42,11 @@ const now = new Date('2026-08-05T12:00:00Z');
 // production. fetchOpenVotingFor must resolve lots from user_property_links
 // instead (ADR 0020's frozen electorate), and seeding an empty set here is
 // what proves it no longer reads this field.
-const homeowner: AuthContext = {
-  userId: 'homeowner-user',
-  role: 'homeowner',
-  propertyIds: [],
-};
+const homeowner: AuthContext = legacyAuthContext(
+  'homeowner-user',
+  'homeowner',
+  [],
+);
 
 beforeEach(async () => {
   const db = getDb(env);
@@ -428,11 +429,10 @@ describe('fetchOpenVotingFor', () => {
 
   it('returns no open voting items when the caller has no verified lots', async () => {
     expect(
-      await fetchOpenVotingFor(env, {
-        userId: 'unverified-user',
-        role: 'homeowner',
-        propertyIds: [],
-      }),
+      await fetchOpenVotingFor(
+        env,
+        legacyAuthContext('unverified-user', 'homeowner', []),
+      ),
     ).toEqual([]);
   });
 });
