@@ -12,8 +12,22 @@ export type Role = 'visitor' | 'homeowner' | 'board';
  * gate for free, and it is why a System Administrator (who need not be an Owner
  * at all) could not be added to it without handing them Lot Authority with no
  * association basis.
+ *
+ * The last four are the System-Administrator-only technical capabilities
+ * (#205, #217): the ONLY boundary finer than `board`, because the bylaws grant
+ * the Board its powers collectively and a per-officer matrix would encode an
+ * authority gradient the association does not have. Derivation grants all four
+ * with `systemAdmin` and nothing else ever grants them; they exist as names so
+ * the routes that consume them (#218) declare which boundary they sit behind.
  */
-export type Capability = 'member' | 'board' | 'systemAdmin';
+export type Capability =
+  | 'member'
+  | 'board'
+  | 'systemAdmin'
+  | 'redactionAuthorize'
+  | 'redactionCleanup'
+  | 'accessDenialDetail'
+  | 'auditIntegrityViews';
 
 export interface AuthContext {
   userId: string;
