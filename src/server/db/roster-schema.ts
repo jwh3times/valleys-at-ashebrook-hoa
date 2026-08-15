@@ -700,11 +700,15 @@ export const correctionRequests = sqliteTable(
     // Lots, or anyone else's data.
     kind: text('kind', { enum: ['name', 'contact_method'] }).notNull(),
     // For `contact_method`: the existing method being corrected, or NULL to
-    // propose adding a new one.
+    // propose adding a new one — in which case `channel` says what kind of
+    // value `proposed_value` is. TS-enforced only (added by ALTER, where
+    // SQLite cannot attach a CHECK): non-null exactly when kind is
+    // `contact_method` with no target method.
     contactMethodId: text('contact_method_id').references(
       () => contactMethods.id,
       { onDelete: 'restrict' },
     ),
+    channel: text('channel', { enum: ['email', 'sms'] }),
     proposedValue: text('proposed_value').notNull(),
     note: text('note'),
     status: text('status', {

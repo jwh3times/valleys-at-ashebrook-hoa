@@ -516,3 +516,42 @@ export class AuditCorrelation {
 export function operationKey(route: string, action: string): string {
   return `${route}:${action}:${crypto.randomUUID()}`;
 }
+
+/**
+ * A statement that ERRORS — rolling back the entire batch — unless `guard`
+ * holds when it runs.
+ *
+ * The zero-row no-op protocol above is right for the command's own race (the
+ * route answers 409 from `meta.changes`), but some multi-part commands must
+ * be all-or-nothing across parts that cannot share one primary statement: a
+ * certification must not commit with one winner's term missing, and a named
+ * substitute qualifying Lot that fails validation must fail the command
+ * rather than fall through to a silent termination. This converts "the part
+ * did not land" into a rollback by attempting an insert that violates
+ * `audit_events_correlation_sequence_nonneg` — the CHECK's name is what the
+ * route sniffs for in the caught error to answer 409/400 instead of 500.
+ *
+ * When the guard holds, the SELECT yields no row and nothing is inserted:
+ * the ledger never sees this statement.
+ */
+export const BATCH_ASSERTION_CHECK = 'audit_events_correlation_sequence_nonneg';
+
+export function assertInBatch(
+  database: D1Database,
+  guard: SqlGuard,
+): D1PreparedStatement {
+  return database
+    .prepare(
+      `INSERT INTO audit_events (id, family, event_kind, correlation_id, correlation_sequence, causing_event_id, actor_kind, actor_account_id, automatic_cause, operation_key, recorded_at)
+       SELECT ?, 'access', 'batch_assertion_failed', ?, -1, NULL, 'bootstrap', NULL, NULL, NULL, 0
+       WHERE NOT (${guard.sql})`,
+    )
+    .bind(crypto.randomUUID(), crypto.randomUUID(), ...guard.binds);
+}
+
+/** True when a caught batch error is an `assertInBatch` rollback. */
+export function isBatchAssertionError(error: unknown): boolean {
+  return (
+    error instanceof Error && error.message.includes(BATCH_ASSERTION_CHECK)
+  );
+}

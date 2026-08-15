@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS `correction_requests` (
 	`person_id` text NOT NULL,
 	`kind` text NOT NULL,
 	`contact_method_id` text,
+	`channel` text,
 	`proposed_value` text NOT NULL,
 	`note` text,
 	`status` text DEFAULT 'open' NOT NULL,
