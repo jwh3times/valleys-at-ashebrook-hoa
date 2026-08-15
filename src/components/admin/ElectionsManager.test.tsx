@@ -26,7 +26,8 @@ const mockedContent = vi.mocked(content);
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchProperties.mockResolvedValue([]);
-  mocked.fetchBoardPeople.mockResolvedValue([]);
+  mocked.fetchMeetingRosterPeople.mockResolvedValue([]);
+  mocked.fetchRosterPeople.mockResolvedValue([]);
   mocked.fetchProxies.mockResolvedValue([]);
   mockedContent.fetchSiteSettings.mockResolvedValue({
     siteName: 'The Valleys at Ashebrook Residents',
@@ -514,17 +515,28 @@ describe('ElectionsManager', () => {
     expect(await screen.findByText(/election closed/i)).toBeInTheDocument();
   });
 
-  it('certifying collects a term start per winner and calls certifyElection with them', async () => {
+  it('certifying collects the #218 winner shape and calls certifyElection with it', async () => {
     mocked.fetchElections.mockResolvedValue([
       election({
         id: 'e1',
         title: 'Board Election 2026',
         status: 'closed',
-        candidates: [
-          candidate({ id: 'c1', fullName: 'Alice', sequence: 1 }),
-          candidate({ id: 'c2', fullName: 'Bob', sequence: 2 }),
-        ],
+        candidates: [candidate({ id: 'c1', fullName: 'Alice', sequence: 1 })],
       }),
+    ]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'lot-1',
+        address: '1 Ashebrook Lane',
+        unit: null,
+        status: 'active' as const,
+        voteWeight: 1,
+        notes: null,
+        owners: [],
+      },
+    ]);
+    mocked.fetchRosterPeople.mockResolvedValue([
+      { partyId: 'per-1', displayName: 'Alice Person' },
     ]);
     mocked.certifyElection.mockResolvedValue(undefined);
     render(<ElectionsManager />);
@@ -535,14 +547,25 @@ describe('ElectionsManager', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(screen.getByLabelText(/winner — alice/i));
-    await userEvent.click(screen.getByLabelText(/winner — bob/i));
+    await userEvent.selectOptions(
+      screen.getByLabelText(/person — alice/i),
+      'per-1',
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText(/qualifying lot — alice/i),
+      'lot-1',
+    );
     await userEvent.type(
-      screen.getByLabelText(/term start — alice/i),
+      screen.getByLabelText(/start day — alice/i),
       '2026-02-01',
     );
     await userEvent.type(
-      screen.getByLabelText(/term start — bob/i),
+      screen.getByLabelText(/scheduled end day — alice/i),
       '2027-02-01',
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText(/office \(optional\) — alice/i),
+      'president',
     );
     await userEvent.click(
       screen.getByRole('button', { name: /^certify election$/i }),
@@ -552,15 +575,11 @@ describe('ElectionsManager', () => {
       expect(mocked.certifyElection).toHaveBeenCalledWith('e1', [
         {
           candidateId: 'c1',
-          termStart: '2026-02-01',
-          termEnd: null,
-          title: null,
-        },
-        {
-          candidateId: 'c2',
-          termStart: '2027-02-01',
-          termEnd: null,
-          title: null,
+          personId: 'per-1',
+          qualifyingLotId: 'lot-1',
+          startDay: '2026-02-01',
+          scheduledEndDay: '2027-02-01',
+          office: 'president',
         },
       ]),
     );
@@ -743,6 +762,17 @@ describe('ElectionsManager', () => {
         candidates: [candidate({ id: 'c1', fullName: 'Alice' })],
       }),
     ]);
+    mocked.fetchProperties.mockResolvedValue([
+      {
+        id: 'lot-1',
+        address: '1 Ashebrook Lane',
+        unit: null,
+        status: 'active' as const,
+        voteWeight: 1,
+        notes: null,
+        owners: [],
+      },
+    ]);
     mocked.certifyElection.mockRejectedValue(
       new Error('Close the election before certifying it'),
     );
@@ -754,9 +784,17 @@ describe('ElectionsManager', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /details/i }));
     await userEvent.click(screen.getByLabelText(/winner — alice/i));
+    await userEvent.selectOptions(
+      screen.getByLabelText(/qualifying lot — alice/i),
+      'lot-1',
+    );
     await userEvent.type(
-      screen.getByLabelText(/term start — alice/i),
+      screen.getByLabelText(/start day — alice/i),
       '2026-02-01',
+    );
+    await userEvent.type(
+      screen.getByLabelText(/scheduled end day — alice/i),
+      '2027-02-01',
     );
     await userEvent.click(
       screen.getByRole('button', { name: /^certify election$/i }),

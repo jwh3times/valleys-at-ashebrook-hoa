@@ -672,3 +672,82 @@ export const systemAdminBootstrap = sqliteTable(
     ),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Member correction requests
+// ---------------------------------------------------------------------------
+
+// Operational and finite-lived, NOT part of the immutable history (#205):
+// members submit requests, never facts. `proposed_value` and `note` are free
+// text that must never be copied into any ledger table — acceptance is an
+// ordinary board Roster Change whose evidence cites this row's id as an opaque
+// `evidence_request_id` locator, and the accepted fact, not the request, is
+// what the ledger records. A declined or withdrawn request leaves no ledger
+// trace at all.
+export const correctionRequests = sqliteTable(
+  'correction_requests',
+  {
+    id: text('id').primaryKey(),
+    // The submitting Account and its then-linked Person, both pinned at
+    // submission so a later re-link cannot repoint an open request.
+    accountId: text('account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    personId: text('person_id')
+      .notNull()
+      .references(() => people.partyId, { onDelete: 'restrict' }),
+    // Own name or own Contact Methods only — never Ownership, Representation,
+    // Lots, or anyone else's data.
+    kind: text('kind', { enum: ['name', 'contact_method'] }).notNull(),
+    // For `contact_method`: the existing method being corrected, or NULL to
+    // propose adding a new one — in which case `channel` says what kind of
+    // value `proposed_value` is. TS-enforced only (added by ALTER, where
+    // SQLite cannot attach a CHECK): non-null exactly when kind is
+    // `contact_method` with no target method.
+    contactMethodId: text('contact_method_id').references(
+      () => contactMethods.id,
+      { onDelete: 'restrict' },
+    ),
+    channel: text('channel', { enum: ['email', 'sms'] }),
+    proposedValue: text('proposed_value').notNull(),
+    note: text('note'),
+    status: text('status', {
+      enum: ['open', 'accepted', 'declined', 'withdrawn'],
+    })
+      .notNull()
+      .default('open'),
+    createdAt: instant('created_at').notNull(),
+    decidedAt: instant('decided_at'),
+    // The board decider, or the member themself for a withdrawal.
+    decidedByAccountId: text('decided_by_account_id').references(
+      () => users.id,
+      { onDelete: 'restrict' },
+    ),
+  },
+  (t) => [
+    check(
+      'correction_requests_kind_check',
+      sql`"kind" IN ('name', 'contact_method')`,
+    ),
+    check(
+      'correction_requests_status_check',
+      sql`"status" IN ('open', 'accepted', 'declined', 'withdrawn')`,
+    ),
+    // Open requests carry no decision; decided ones carry the instant and who.
+    check(
+      'correction_requests_decision_paired',
+      sql`("status" = 'open') = ("decided_at" IS NULL)`,
+    ),
+    check(
+      'correction_requests_decider_paired',
+      sql`("decided_at" IS NULL) = ("decided_by_account_id" IS NULL)`,
+    ),
+    // Only a Contact Method request may target a Contact Method row.
+    check(
+      'correction_requests_contact_target_shape',
+      sql`"kind" = 'contact_method' OR "contact_method_id" IS NULL`,
+    ),
+    index('correction_requests_status_idx').on(t.status),
+    index('correction_requests_person_idx').on(t.personId),
+  ],
+);

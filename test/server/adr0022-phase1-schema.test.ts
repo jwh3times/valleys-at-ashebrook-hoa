@@ -108,8 +108,19 @@ const PHASE_1_TABLES = [
   'cutover_shadow_mismatches',
 ];
 
+// The four phase-1 files, named explicitly: the CREATE/ALTER discipline below
+// is a property of the phase-1 "expand" step, not of every later adr0022-named
+// migration — 3b's `0024` legitimately rebuilds a table (a CHECK cannot be
+// altered in SQLite), which requires a bare CREATE plus an ALTER ... RENAME.
+const PHASE_1_FILES = new Set([
+  '0019_adr0022_roster_core.sql',
+  '0020_adr0022_audit_ledger.sql',
+  '0021_adr0022_cutover_operational.sql',
+  '0022_adr0022_lot_retirement_columns.sql',
+]);
+
 function phase1Migrations() {
-  return env.MIGRATIONS!.filter((m) => m.name.includes('adr0022'));
+  return env.MIGRATIONS!.filter((m) => PHASE_1_FILES.has(m.name));
 }
 
 describe('ADR 0022 phase 1 migrations', () => {

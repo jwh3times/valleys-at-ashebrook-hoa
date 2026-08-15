@@ -37,6 +37,10 @@ export const RESERVATION_SENTINELS = {
   tallies: '__replacing_tallies__',
   ballots: '__replacing_ballots__',
   certify: '__certifying__',
+  // #218: uncertify reverses certified -> closed. Distinct from `certify`'s
+  // sentinel even though the two never coexist on one election, so a batch
+  // caught mid-flight (a debugging session, a crash dump) reads unambiguously.
+  uncertify: '__uncertifying__',
 } as const;
 
 export type ReservationSentinel =
