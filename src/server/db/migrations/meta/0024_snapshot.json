@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ff69f575-c1ba-43b9-9c9a-a466c2c066eb",
+  "id": "84974438-2c06-4514-a168-7bfa1d8bce67",
   "prevId": "e4d6e596-4108-47ec-927f-c8f5e8f5489f",
   "tables": {
     "announcements": {
@@ -3672,6 +3672,13 @@
         },
         "contact_method_id": {
           "name": "contact_method_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

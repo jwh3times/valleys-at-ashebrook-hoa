@@ -77,9 +77,31 @@ const MEMBER_ONLY = caller('m', 'member');
 const BOARD = caller('b', 'board', 'member');
 /** A board member who owns nothing — the class the old ladder handled wrong. */
 const BOARD_NO_LOTS = caller('bn', 'board');
-const SYSTEM_ADMIN = caller('sa', 'systemAdmin', 'board');
+/** Carries the four technical capabilities exactly as derivation grants them
+ * with the `system_admin` grant (#205) — they are names for that boundary,
+ * never separate grants. */
+const SYSTEM_ADMIN = caller(
+  'sa',
+  'systemAdmin',
+  'board',
+  'redactionAuthorize',
+  'redactionCleanup',
+  'accessDenialDetail',
+  'auditIntegrityViews',
+);
 /** Authenticated, linked to nothing. Under derived authorization this is 403. */
 const UNLINKED = caller('u');
+
+/**
+ * Admin routes whose DECLARED capability is finer than `board`: the
+ * System-Administrator-only technical surfaces (#205, #218). Plain board is
+ * refused here — the one boundary finer than board that actually exists.
+ */
+const SYSTEM_ADMIN_ONLY = new Set([
+  'admin/redactions',
+  'admin/access-denials',
+  'admin/audit-integrity',
+]);
 
 function cases(modules: Record<string, Record<string, unknown>>) {
   const out: { name: string; route: string; verb: string; handler: unknown }[] =
@@ -154,6 +176,30 @@ describe('the admin API declares board', () => {
   });
 
   for (const { name, route, verb, handler } of all) {
+    if (SYSTEM_ADMIN_ONLY.has(name)) {
+      it(`${name} ${verb} admits only a System Administrator`, async () => {
+        expect(
+          await callWith(handler, route, verb, MEMBER_ONLY),
+          `${name} ${verb} must refuse a member-only caller`,
+        ).toBe(403);
+        expect(
+          await callWith(handler, route, verb, UNLINKED),
+          `${name} ${verb} must refuse an unlinked caller`,
+        ).toBe(403);
+        // The whole point of the finer declaration: plain board is refused.
+        expect(
+          await callWith(handler, route, verb, BOARD),
+          `${name} ${verb} must refuse plain board`,
+        ).toBe(403);
+        expect(
+          [401, 403].includes(
+            await callWith(handler, route, verb, SYSTEM_ADMIN),
+          ),
+          `${name} ${verb} must admit a System Administrator`,
+        ).toBe(false);
+      });
+      continue;
+    }
     it(`${name} ${verb} admits board and refuses member`, async () => {
       expect(
         await callWith(handler, route, verb, MEMBER_ONLY),

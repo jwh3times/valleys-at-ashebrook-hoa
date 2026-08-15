@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7e4ae7c4-777c-4a29-977f-aca3720a802f",
-  "prevId": "ff69f575-c1ba-43b9-9c9a-a466c2c066eb",
+  "id": "f375407f-587d-4152-966e-5ba944d3c2f4",
+  "prevId": "84974438-2c06-4514-a168-7bfa1d8bce67",
   "tables": {
     "announcements": {
       "name": "announcements",
@@ -3672,6 +3672,13 @@
         },
         "contact_method_id": {
           "name": "contact_method_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
