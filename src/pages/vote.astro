@@ -11,8 +11,11 @@ if (!site.officialMode || !site.liveVotingEnabled) {
 }
 
 const ctx = Astro.locals.authContext ?? null;
+// A capability question: acting here needs Lot authority (`member`), not rank.
+// Identical under legacy synthesis; under derived, a board member owning no Lot
+// is not "verified" for these member actions, matching the API gates.
 const verified =
-  ctx !== null && ctx.role !== 'visitor' && ctx.propertyIds.length > 0;
+  ctx !== null && ctx.capabilities.has('member') && ctx.lotIds.length > 0;
 const items = verified ? await fetchOpenVotingFor(env, ctx) : [];
 ---
 

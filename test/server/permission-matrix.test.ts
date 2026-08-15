@@ -27,7 +27,10 @@ import type { AuthContext, Capability } from '../../src/server/authz/guards';
 const MEMBER_ROUTES = import.meta.glob('../../src/pages/api/member/**/*.ts', {
   eager: true,
 }) as Record<string, Record<string, unknown>>;
-const ADMIN_ROUTES = import.meta.glob('../../src/pages/api/admin/*.ts', {
+// Recursive on purpose, unlike admin-routes-all-gated's flat glob: a route
+// added in a subdirectory tomorrow must land in this matrix without anyone
+// remembering it exists.
+const ADMIN_ROUTES = import.meta.glob('../../src/pages/api/admin/**/*.ts', {
   eager: true,
 }) as Record<string, Record<string, unknown>>;
 const VOTE_ROUTE = import.meta.glob('../../src/pages/api/vote.ts', {
@@ -103,9 +106,8 @@ function cases(modules: Record<string, Record<string, unknown>>) {
  * Requests carry no body on purpose — every gate must run before any body read,
  * which is what `admin-routes-all-gated.test.ts` relies on too. For an admitted
  * caller that means some routes throw while parsing instead of returning a
- * status. That throw is the strongest possible evidence of admission: execution
- * reached the route's own logic. Treating it as a status keeps the assertions
- * uniform.
+ * status. That throw is evidence of admission — execution reached the route's
+ * own logic — and treating it as a status keeps the assertions uniform.
  */
 const ADMITTED_THEN_THREW = 599;
 
@@ -127,8 +129,20 @@ async function callWith(
       locals: { authContext: ctx },
     });
     return res.status;
-  } catch {
-    return ADMITTED_THEN_THREW;
+  } catch (error) {
+    // Admission evidence must be POSITIVE. The guards return Responses and
+    // never throw for a denial, so the only throws this sentinel may absorb
+    // are the empty-body parse failures a route hits AFTER its gate: JSON
+    // (SyntaxError) or formData (a TypeError naming FormData). Anything else —
+    // a D1 failure inside a guard, a malformed context — is an unknown state
+    // and fails the test loudly. A security matrix whose unknown outcome
+    // scores as "admitted" would itself be fail-open.
+    if (
+      error instanceof SyntaxError ||
+      (error instanceof TypeError && String(error).includes('FormData'))
+    )
+      return ADMITTED_THEN_THREW;
+    throw error;
   }
 }
 

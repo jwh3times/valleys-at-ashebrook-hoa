@@ -117,9 +117,10 @@ describe('re-validating a stored Board grant', () => {
 });
 
 /**
- * The recording half — an Access Event per #200 — is NOT implemented, and the
- * reason is a contradiction rather than an omission. See the note on
- * `invalidBoardGrantId` in derive.ts: the ledger's causal design forbids an
- * automatic event at a correlation root, and an evaluation-time finding has no
- * initiating command to descend from. Tests for it land with that decision.
+ * The recording half — an Access Event per #200 — is not implemented yet. The
+ * `automatic` shape is schema-impossible at a correlation root, but an
+ * account-attributed root is legal (the shape #197's last-System-Administrator
+ * denial already uses); what remains open is whether attributing the event to
+ * the denied caller is right, or whether this belongs in #205's bounded
+ * security telemetry. Decision tracked on #217; tests for it land with it.
  */

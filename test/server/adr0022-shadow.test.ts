@@ -9,7 +9,11 @@ import {
   recordMismatch,
 } from '../../src/server/authz/shadow';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import {
+  derivedContext,
+  legacyAuthContext,
+} from '../../src/server/authz/context';
+import { deriveAccess } from '../../src/server/authz/derive';
 
 // ADR 0022 shadow comparison (issue #210, phase 2).
 
@@ -24,6 +28,8 @@ const db = () => getDb(env);
 beforeEach(async () => {
   for (const table of [
     'cutover_shadow_mismatches',
+    'cutover_settings',
+    'user_property_links',
     'access_grants',
     'person_links',
     'person_verifications',
@@ -244,5 +250,89 @@ describe('the shadow path cannot affect a request', () => {
     ).resolves.toBeUndefined();
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
+  });
+});
+
+describe('the comparison is mode-aware', () => {
+  // The defect this block pins: phase 2 treated the served context as the
+  // legacy side unconditionally, so once `cutover_mode = derived` existed the
+  // served context WAS the derived answer and the shadow compared it with
+  // itself — structurally incapable of mismatching, exactly through the flip's
+  // quiet period. Mode-aware means the OTHER model is always computed fresh.
+
+  async function setMode(value: 'legacy' | 'derived') {
+    await db().run(sql.raw(`DELETE FROM cutover_settings`));
+    await db().run(
+      sql.raw(
+        `INSERT INTO cutover_settings (key, value, updated_at) VALUES ('cutover_mode', '${value}', 1)`,
+      ),
+    );
+  }
+
+  /** Legacy says homeowner-with-a-Lot; the new model has never heard of them. */
+  async function seedDivergent(id: string) {
+    await account(id);
+    await db().run(sql`UPDATE users SET role = 'homeowner' WHERE id = ${id}`);
+    await db().run(
+      sql`INSERT INTO properties (id, address, address_normalized, status, vote_weight, created_at, updated_at)
+          VALUES ('prop-shadow', '1 Shadow Way', '1 shadow way', 'active', 1, 1, 1)`,
+    );
+    await db().run(
+      sql`INSERT INTO user_property_links (id, user_id, property_id, verified_at, method)
+          VALUES ('lnk-shadow', ${id}, 'prop-shadow', 1, 'otp_email')`,
+    );
+  }
+
+  it('under derived mode, computes the legacy side fresh instead of self-comparing', async () => {
+    await seedDivergent('a7');
+    await setMode('derived');
+
+    // What middleware passes under derived mode: the DERIVED answer, which for
+    // an unlinked account is visitor-with-nothing. The old code would have
+    // compared this with itself and recorded nothing.
+    const served = derivedContext(await deriveAccess(env, 'a7', DAY));
+    expect(served.contentTier).toBe('visitor');
+
+    await compareInShadow(env, served, DAY);
+
+    const rows = await db().all<{
+      account_id: string;
+      legacy_role: string;
+      derived_content_tier: string;
+    }>(
+      sql`SELECT account_id, legacy_role, derived_content_tier FROM cutover_shadow_mismatches`,
+    );
+    expect(rows).toEqual([
+      {
+        account_id: 'a7',
+        legacy_role: 'homeowner',
+        derived_content_tier: 'visitor',
+      },
+    ]);
+  });
+
+  it('under derived mode, agreement still writes nothing', async () => {
+    await account('a8');
+    await setMode('derived');
+    // Nothing on either side: legacy has no role or links, derivation has no
+    // Person Link. Both answer visitor.
+    const served = derivedContext(await deriveAccess(env, 'a8', DAY));
+    await compareInShadow(env, served, DAY);
+    const rows = await db().all(sql`SELECT id FROM cutover_shadow_mismatches`);
+    expect(rows).toEqual([]);
+  });
+
+  it('under an explicit legacy mode, behaves as phase 2 always did', async () => {
+    await seedDivergent('a9');
+    await setMode('legacy');
+    await compareInShadow(
+      env,
+      legacyAuthContext('a9', 'homeowner', ['prop-shadow']),
+      DAY,
+    );
+    const rows = await db().all<{ legacy_role: string }>(
+      sql`SELECT legacy_role FROM cutover_shadow_mismatches`,
+    );
+    expect(rows).toEqual([{ legacy_role: 'homeowner' }]);
   });
 });
