@@ -26,11 +26,7 @@
 // through another current basis (a second Lot's co-ownership, an
 // organization-wide Representation) keeps the term untouched.
 
-import {
-  AuditCorrelation,
-  andGuards,
-  type SqlGuard,
-} from './audit';
+import { AuditCorrelation, andGuards, type SqlGuard } from './audit';
 
 /**
  * The one qualification predicate, shared by this engine, `createTerm`,
@@ -351,7 +347,12 @@ export async function lossConsequences(
             `UPDATE board_office_assignments SET end_day = MAX(?, date(start_day, '+1 day')), updated_at = ?
              WHERE id = ? AND end_day IS NULL AND voided_at IS NULL AND (${endedMarker.sql})`,
           )
-          .bind(input.effectiveDay, input.nowMs, office.id, ...endedMarker.binds),
+          .bind(
+            input.effectiveDay,
+            input.nowMs,
+            office.id,
+            ...endedMarker.binds,
+          ),
       );
       statements.push(
         input.database

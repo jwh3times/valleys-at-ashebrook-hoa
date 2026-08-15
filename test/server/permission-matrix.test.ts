@@ -176,31 +176,16 @@ describe('the admin API declares board', () => {
   });
 
   for (const { name, route, verb, handler } of all) {
-    if (SYSTEM_ADMIN_ONLY.has(name)) {
-      it(`${name} ${verb} admits only a System Administrator`, async () => {
-        expect(
-          await callWith(handler, route, verb, MEMBER_ONLY),
-          `${name} ${verb} must refuse a member-only caller`,
-        ).toBe(403);
-        expect(
-          await callWith(handler, route, verb, UNLINKED),
-          `${name} ${verb} must refuse an unlinked caller`,
-        ).toBe(403);
-        // The whole point of the finer declaration: plain board is refused.
-        expect(
-          await callWith(handler, route, verb, BOARD),
-          `${name} ${verb} must refuse plain board`,
-        ).toBe(403);
-        expect(
-          [401, 403].includes(
-            await callWith(handler, route, verb, SYSTEM_ADMIN),
-          ),
-          `${name} ${verb} must admit a System Administrator`,
-        ).toBe(false);
-      });
-      continue;
-    }
-    it(`${name} ${verb} admits board and refuses member`, async () => {
+    // The declared capability: `board` everywhere except the three
+    // System-Administrator-only technical surfaces (#205, #218), where plain
+    // board is refused and only a System Administrator passes. Expressed as
+    // data rather than branched assertions so every route runs the identical
+    // test body.
+    const sysAdminOnly = SYSTEM_ADMIN_ONLY.has(name);
+    const label = sysAdminOnly
+      ? 'admits only a System Administrator'
+      : 'admits board and refuses member';
+    it(`${name} ${verb} ${label}`, async () => {
       expect(
         await callWith(handler, route, verb, MEMBER_ONLY),
         `${name} ${verb} must refuse a member-only caller`,
@@ -209,26 +194,41 @@ describe('the admin API declares board', () => {
         await callWith(handler, route, verb, UNLINKED),
         `${name} ${verb} must refuse an unlinked caller`,
       ).toBe(403);
-      // Board passes the GATE. What it does next is the route's business, so
-      // assert only that it was not an authorization refusal.
+      // Board passes the GATE exactly when the route declares `board`; on a
+      // System-Administrator-only route the refusal must be 403, never 401.
+      const boardStatus = await callWith(handler, route, verb, BOARD);
+      expect(boardStatus, `${name} ${verb} board must not be 401`).not.toBe(
+        401,
+      );
       expect(
-        [401, 403].includes(await callWith(handler, route, verb, BOARD)),
-        `${name} ${verb} must admit board`,
+        boardStatus === 403,
+        `${name} ${verb} board admission must match the declared capability`,
+      ).toBe(sysAdminOnly);
+      // A System Administrator passes every admin gate.
+      expect(
+        [401, 403].includes(await callWith(handler, route, verb, SYSTEM_ADMIN)),
+        `${name} ${verb} must admit a System Administrator`,
       ).toBe(false);
     });
   }
 
   it('admits a board member who owns no Lot', async () => {
     // Board capability comes from a grant, never from Lot Authority. A board
-    // member who owns nothing must still reach the admin API.
-    const { route, verb, handler } = all[0];
+    // member who owns nothing must still reach the admin API. Probed against
+    // a board-declared route — the System-Administrator-only surfaces refuse
+    // plain board by design.
+    const { route, verb, handler } = all.find(
+      (c) => !SYSTEM_ADMIN_ONLY.has(c.name),
+    )!;
     expect([401, 403]).not.toContain(
       await callWith(handler, route, verb, BOARD_NO_LOTS),
     );
   });
 
   it('admits a System Administrator, who carries board', async () => {
-    const { route, verb, handler } = all[0];
+    const { route, verb, handler } = all.find(
+      (c) => !SYSTEM_ADMIN_ONLY.has(c.name),
+    )!;
     expect([401, 403]).not.toContain(
       await callWith(handler, route, verb, SYSTEM_ADMIN),
     );

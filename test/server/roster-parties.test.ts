@@ -26,8 +26,9 @@ import type { AdminRoster } from '../../src/server/roster/reads';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -74,12 +75,16 @@ beforeEach(async () => {
 });
 
 function req(body?: unknown, method = 'POST'): never {
+  const init: RequestInit = {
+    method,
+    headers: {
+      origin: 'http://localhost',
+      'content-type': 'application/json',
+    },
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
   return {
-    request: new Request('http://localhost/api/admin/roster-parties', {
-      method,
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
+    request: new Request('http://localhost/api/admin/roster-parties', init),
   } as never;
 }
 
@@ -134,13 +139,19 @@ describe('creation', () => {
 
   it('warns on an organization name collision but still creates', async () => {
     const first = await POST(
-      req({ action: 'createOrganization', legalName: 'The Smith Family Trust' }),
+      req({
+        action: 'createOrganization',
+        legalName: 'The Smith Family Trust',
+      }),
     );
     expect(first.status).toBe(201);
     expect((await first.json()) as object).not.toHaveProperty('warning');
 
     const second = await POST(
-      req({ action: 'createOrganization', legalName: 'The Smith Family Trust' }),
+      req({
+        action: 'createOrganization',
+        legalName: 'The Smith Family Trust',
+      }),
     );
     expect(second.status).toBe(201);
     const body = (await second.json()) as { id: string; warning?: string };
@@ -225,20 +236,25 @@ describe('consolidation', () => {
     const orgId = ((await org.json()) as { id: string }).id;
 
     const crossKind = await POST(
-      req({ action: 'consolidate', duplicatePartyId: dup, survivorPartyId: orgId }),
+      req({
+        action: 'consolidate',
+        duplicatePartyId: dup,
+        survivorPartyId: orgId,
+      }),
     );
     expect(crossKind.status).toBe(409);
     expect(await crossKind.text()).toBe('Parties are different kinds');
 
     const res = await POST(
-      req({ action: 'consolidate', duplicatePartyId: dup, survivorPartyId: survivor }),
+      req({
+        action: 'consolidate',
+        duplicatePartyId: dup,
+        survivorPartyId: survivor,
+      }),
     );
     expect(res.status).toBe(204);
     const db = getDb(env);
-    const [dupRow] = await db
-      .select()
-      .from(parties)
-      .where(eq(parties.id, dup));
+    const [dupRow] = await db.select().from(parties).where(eq(parties.id, dup));
     expect(dupRow.consolidatedIntoPartyId).toBe(survivor);
 
     const subjects = await db.all<{ role: string }>(
@@ -246,12 +262,19 @@ describe('consolidation', () => {
           JOIN audit_events e ON e.id = s.event_id
           WHERE e.event_kind = 'parties_consolidated'`,
     );
-    expect(subjects.map((s) => s.role).sort()).toEqual(['duplicate', 'survivor']);
+    expect(subjects.map((s) => s.role).sort()).toEqual([
+      'duplicate',
+      'survivor',
+    ]);
 
     // One-hop: the freshly consolidated duplicate cannot be a survivor.
     const third = await createPerson('Jay Third');
     const chained = await POST(
-      req({ action: 'consolidate', duplicatePartyId: third, survivorPartyId: dup }),
+      req({
+        action: 'consolidate',
+        duplicatePartyId: third,
+        survivorPartyId: dup,
+      }),
     );
     expect(chained.status).toBe(409);
 

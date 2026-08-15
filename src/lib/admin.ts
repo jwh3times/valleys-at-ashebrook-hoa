@@ -8,7 +8,6 @@ import type {
   MembersView,
   MemberUser,
   DuplicatesView,
-  BoardPersonWithTerms,
   MeetingSummary,
   MeetingDetail,
   MeetingInput,
@@ -341,51 +340,40 @@ export async function deleteReport(id: string): Promise<void> {
   await adminRequest('/api/admin/reports', 'DELETE', { id }, 'Delete failed');
 }
 
-// ---------- Board roster ----------
-export async function fetchBoardPeople(): Promise<BoardPersonWithTerms[]> {
+// ---------- Board roster (retired by #218) ----------
+// /api/admin/board-people and /api/admin/board-terms are gone: the identity
+// layer moved to the party roster and board_service_terms. The meeting record
+// still references legacy board_people until its Person repointing, so the
+// record-keeping pickers read the flat list from the meetings surface.
+export async function fetchMeetingRosterPeople(): Promise<
+  { id: string; fullName: string }[]
+> {
   return adminRequest(
-    '/api/admin/board-people',
+    '/api/admin/meetings?roster=people',
     'GET',
     undefined,
     'Load board failed',
   );
 }
 
-export async function saveBoardPerson(
-  data: { fullName?: string; userId?: string | null },
-  id?: string,
-): Promise<void> {
-  await adminSave('/api/admin/board-people', data, id, 'Save person failed');
+/** The party-roster people list (empty until the flip's backfill runs). */
+export async function fetchRosterPeople(): Promise<
+  { partyId: string; displayName: string }[]
+> {
+  const roster = await adminRequest<{
+    people: { partyId: string; displayName: string }[];
+  }>('/api/admin/roster', 'GET', undefined, 'Load roster failed');
+  return roster.people;
 }
 
-export async function deleteBoardPerson(id: string): Promise<void> {
-  await adminRequest(
-    '/api/admin/board-people',
-    'DELETE',
-    { id },
-    'Delete failed',
-  );
-}
-
-export async function saveBoardTerm(
-  data: {
-    personId?: string;
-    title?: string | null;
-    termStart?: string;
-    termEnd?: string | null;
-  },
-  id?: string,
-): Promise<void> {
-  await adminSave('/api/admin/board-terms', data, id, 'Save term failed');
-}
-
-export async function deleteBoardTerm(id: string): Promise<void> {
-  await adminRequest(
-    '/api/admin/board-terms',
-    'DELETE',
-    { id },
-    'Delete failed',
-  );
+/** Lots for the certification qualifying-lot picker. */
+export async function fetchRosterLots(): Promise<
+  { id: string; address: string }[]
+> {
+  const roster = await adminRequest<{
+    lots: { id: string; address: string }[];
+  }>('/api/admin/roster', 'GET', undefined, 'Load roster failed');
+  return roster.lots;
 }
 
 // ---------- Meetings ----------
@@ -690,9 +678,11 @@ export async function certifyElection(
   id: string,
   winners: {
     candidateId: string;
-    termStart: string;
-    termEnd?: string | null;
-    title?: string | null;
+    personId?: string | null;
+    qualifyingLotId: string;
+    startDay: string;
+    scheduledEndDay: string;
+    office?: string | null;
   }[],
 ): Promise<void> {
   await adminRequest(

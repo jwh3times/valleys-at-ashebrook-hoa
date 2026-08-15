@@ -27,8 +27,9 @@ import type { BoardServiceDetail } from '../../src/server/roster/reads';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -79,15 +80,17 @@ beforeEach(async () => {
 
 async function seedLot(id: string) {
   const now = new Date();
-  await getDb(env).insert(properties).values({
-    id,
-    address: `${id} Ashebrook Lane`,
-    addressNormalized: `${id} ashebrook lane`,
-    status: 'active',
-    voteWeight: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(properties)
+    .values({
+      id,
+      address: `${id} Ashebrook Lane`,
+      addressNormalized: `${id} ashebrook lane`,
+      status: 'active',
+      voteWeight: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 async function seedPerson(id: string) {
@@ -95,13 +98,15 @@ async function seedPerson(id: string) {
   await getDb(env)
     .insert(parties)
     .values({ id, kind: 'person', createdAt: now, updatedAt: now });
-  await getDb(env).insert(people).values({
-    partyId: id,
-    partyKind: 'person',
-    fullName: `Person ${id}`,
-    nameNormalized: `person ${id}`,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(people)
+    .values({
+      partyId: id,
+      partyKind: 'person',
+      fullName: `Person ${id}`,
+      nameNormalized: `person ${id}`,
+      updatedAt: now,
+    });
 }
 
 async function seedOwnership(id: string, ownerPartyId: string, lotId: string) {
@@ -124,12 +129,16 @@ async function seedQualified(person: string, lot: string) {
 }
 
 function req(body?: unknown, method = 'POST'): never {
+  const init: RequestInit = {
+    method,
+    headers: {
+      origin: 'http://localhost',
+      'content-type': 'application/json',
+    },
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
   return {
-    request: new Request('http://localhost/api/admin/board-service', {
-      method,
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
+    request: new Request('http://localhost/api/admin/board-service', init),
   } as never;
 }
 
@@ -155,8 +164,12 @@ async function createTerm(
 
 async function integrityClean() {
   const db = getDb(env);
-  expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual([]);
-  expect(await db.all(sql`SELECT * FROM board_eligibility_violations_v`)).toEqual([]);
+  expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual(
+    [],
+  );
+  expect(
+    await db.all(sql`SELECT * FROM board_eligibility_violations_v`),
+  ).toEqual([]);
 }
 
 describe('createTerm and non-overlap', () => {
@@ -184,9 +197,16 @@ describe('createTerm and non-overlap', () => {
       (await createTerm('per-1', 'lot-1', '2026-12-01', '2027-12-01')).status,
     ).toBe(201);
     // Overlapping third term: refused.
-    const overlap = await createTerm('per-1', 'lot-1', '2027-06-01', '2028-06-01');
+    const overlap = await createTerm(
+      'per-1',
+      'lot-1',
+      '2027-06-01',
+      '2028-06-01',
+    );
     expect(overlap.status).toBe(409);
-    expect(await overlap.text()).toBe('Overlaps an existing term for this person');
+    expect(await overlap.text()).toBe(
+      'Overlaps an existing term for this person',
+    );
   });
 
   it('refuses per-lot overlap across two persons, and an unqualified person', async () => {
@@ -196,14 +216,24 @@ describe('createTerm and non-overlap', () => {
     expect(
       (await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01')).status,
     ).toBe(201);
-    const lotTaken = await createTerm('per-2', 'lot-1', '2026-06-01', '2027-06-01');
+    const lotTaken = await createTerm(
+      'per-2',
+      'lot-1',
+      '2026-06-01',
+      '2027-06-01',
+    );
     expect(lotTaken.status).toBe(409);
     expect(await lotTaken.text()).toBe(
       'That lot already qualifies another board member for an overlapping term',
     );
 
     await seedLot('lot-x');
-    const unqualified = await createTerm('per-2', 'lot-x', '2026-06-01', '2027-06-01');
+    const unqualified = await createTerm(
+      'per-2',
+      'lot-x',
+      '2026-06-01',
+      '2027-06-01',
+    );
     expect(unqualified.status).toBe(409);
     expect(await unqualified.text()).toBe(
       'Person does not currently own or represent that lot',
@@ -237,24 +267,41 @@ describe('createTerm and non-overlap', () => {
 describe('the three ending kinds', () => {
   it('endTerm ends offices with it and ends the grant at recorded-at', async () => {
     await seedQualified('per-1', 'lot-1');
-    const created = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const created = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     const termId = ((await created.json()) as { id: string }).id;
     const assigned = await POST(
-      req({ action: 'assignOffice', termId, office: 'president', startDay: '2026-01-02' }),
+      req({
+        action: 'assignOffice',
+        termId,
+        office: 'president',
+        startDay: '2026-01-02',
+      }),
     );
     expect(assigned.status).toBe(201);
-    await getDb(env).insert(accessGrants).values({
-      id: 'grant-1',
-      accountId: 'board-1',
-      grantType: 'board',
-      qualifyingBoardTermId: termId,
-      startedAt: new Date('2026-01-02T00:00:00Z'),
-      grantReason: 'board_service',
-    });
+    await getDb(env)
+      .insert(accessGrants)
+      .values({
+        id: 'grant-1',
+        accountId: 'board-1',
+        grantType: 'board',
+        qualifyingBoardTermId: termId,
+        startedAt: new Date('2026-01-02T00:00:00Z'),
+        grantReason: 'board_service',
+      });
 
     const before = Date.now();
     const res = await POST(
-      req({ action: 'endTerm', termId, endDay: '2026-07-01', reasonCode: 'resigned' }),
+      req({
+        action: 'endTerm',
+        termId,
+        endDay: '2026-07-01',
+        reasonCode: 'resigned',
+      }),
     );
     expect(res.status).toBe(204);
 
@@ -277,7 +324,12 @@ describe('the three ending kinds', () => {
 
   it('cancelTerm refuses a started term, cancels a scheduled one, voids its office', async () => {
     await seedQualified('per-1', 'lot-1');
-    const started = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const started = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     const startedId = ((await started.json()) as { id: string }).id;
     const refuse = await POST(
       req({ action: 'cancelTerm', termId: startedId, reasonCode: 'resigned' }),
@@ -286,7 +338,12 @@ describe('the three ending kinds', () => {
     expect(await refuse.text()).toBe('Term already started — end it instead');
 
     await seedQualified('per-2', 'lot-2');
-    const scheduled = await createTerm('per-2', 'lot-2', '2030-01-01', '2031-01-01');
+    const scheduled = await createTerm(
+      'per-2',
+      'lot-2',
+      '2030-01-01',
+      '2031-01-01',
+    );
     const scheduledId = ((await scheduled.json()) as { id: string }).id;
     const assigned = await POST(
       req({
@@ -299,7 +356,11 @@ describe('the three ending kinds', () => {
     expect(assigned.status).toBe(201);
 
     const res = await POST(
-      req({ action: 'cancelTerm', termId: scheduledId, reasonCode: 'resigned' }),
+      req({
+        action: 'cancelTerm',
+        termId: scheduledId,
+        reasonCode: 'resigned',
+      }),
     );
     expect(res.status).toBe(204);
     const db = getDb(env);
@@ -319,10 +380,20 @@ describe('the three ending kinds', () => {
 
   it('voidTerm clears a prior ending as scalar deltas and frees the interval', async () => {
     await seedQualified('per-1', 'lot-1');
-    const created = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const created = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     const termId = ((await created.json()) as { id: string }).id;
     await POST(
-      req({ action: 'endTerm', termId, endDay: '2026-07-01', reasonCode: 'resigned' }),
+      req({
+        action: 'endTerm',
+        termId,
+        endDay: '2026-07-01',
+        reasonCode: 'resigned',
+      }),
     );
 
     const res = await POST(req({ action: 'voidTerm', termId }));
@@ -343,7 +414,12 @@ describe('the three ending kinds', () => {
     });
 
     // A voided term is excluded from overlap: the same interval is free again.
-    const again = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const again = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     expect(again.status).toBe(201);
     await integrityClean();
   });
@@ -354,11 +430,20 @@ describe('substitution and correction', () => {
     await seedQualified('per-1', 'lot-1');
     await seedLot('lot-2');
     await seedOwnership('own-b', 'per-1', 'lot-2');
-    const created = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const created = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     const termId = ((await created.json()) as { id: string }).id;
 
     const res = await POST(
-      req({ action: 'substituteQualifyingLot', termId, qualifyingLotId: 'lot-2' }),
+      req({
+        action: 'substituteQualifyingLot',
+        termId,
+        qualifyingLotId: 'lot-2',
+      }),
     );
     expect(res.status).toBe(204);
     const db = getDb(env);
@@ -372,29 +457,50 @@ describe('substitution and correction', () => {
           WHERE e.event_kind = 'qualifying_lot_substituted'`,
     );
     expect(subjects).toHaveLength(3);
-    expect(subjects.find((s) => s.role === 'replacement')?.lot_id).toBe('lot-2');
+    expect(subjects.find((s) => s.role === 'replacement')?.lot_id).toBe(
+      'lot-2',
+    );
     await integrityClean();
   });
 
   it('refuses a substitute the person does not qualify through', async () => {
     await seedQualified('per-1', 'lot-1');
     await seedLot('lot-x');
-    const created = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const created = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     const termId = ((await created.json()) as { id: string }).id;
     const res = await POST(
-      req({ action: 'substituteQualifyingLot', termId, qualifyingLotId: 'lot-x' }),
+      req({
+        action: 'substituteQualifyingLot',
+        termId,
+        qualifyingLotId: 'lot-x',
+      }),
     );
     expect(res.status).toBe(409);
   });
 
   it('correctTerm records election provenance as evidence', async () => {
     await seedQualified('per-1', 'lot-1');
-    const created = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const created = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     const termId = ((await created.json()) as { id: string }).id;
-    const res = await POST(req({ action: 'correctTerm', termId, electionId: null }));
+    const res = await POST(
+      req({ action: 'correctTerm', termId, electionId: null }),
+    );
     expect(res.status).toBe(204);
     const db = getDb(env);
-    const [change] = await db.all<{ reason_code: string; evidence_kind: string }>(
+    const [change] = await db.all<{
+      reason_code: string;
+      evidence_kind: string;
+    }>(
       sql`SELECT bsc.reason_code, bsc.evidence_kind FROM board_service_changes bsc
           JOIN audit_events e ON e.id = bsc.event_id
           WHERE e.event_kind = 'board_term_corrected'`,
@@ -449,10 +555,20 @@ describe('offices', () => {
 
   it('endOffice and voidOffice conclude an assignment their own ways', async () => {
     await seedQualified('per-1', 'lot-1');
-    const created = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
+    const created = await createTerm(
+      'per-1',
+      'lot-1',
+      '2026-01-01',
+      '2027-01-01',
+    );
     const termId = ((await created.json()) as { id: string }).id;
     const assigned = await POST(
-      req({ action: 'assignOffice', termId, office: 'president', startDay: '2026-01-02' }),
+      req({
+        action: 'assignOffice',
+        termId,
+        office: 'president',
+        startDay: '2026-01-02',
+      }),
     );
     const assignmentId = ((await assigned.json()) as { id: string }).id;
 
@@ -480,7 +596,9 @@ describe('GET advisories', () => {
     const a = await createTerm('per-1', 'lot-1', '2026-01-01', '2027-01-01');
     const termA = ((await a.json()) as { id: string }).id;
     await createTerm('per-2', 'lot-2', '2026-01-01', '2027-01-01');
-    await POST(req({ action: 'assignOffice', termId: termA, office: 'president' }));
+    await POST(
+      req({ action: 'assignOffice', termId: termA, office: 'president' }),
+    );
 
     const res = await GET(req(undefined, 'GET'));
     expect(res.status).toBe(200);
@@ -504,7 +622,12 @@ describe('GET advisories', () => {
     const expiring = await createTerm('per-1', 'lot-1', '2026-01-01', soonDay);
     const expiringId = ((await expiring.json()) as { id: string }).id;
     // Lapsed: concluded by schedule with no successor recorded.
-    const lapsed = await createTerm('per-2', 'lot-2', '2025-01-01', '2025-12-01');
+    const lapsed = await createTerm(
+      'per-2',
+      'lot-2',
+      '2025-01-01',
+      '2025-12-01',
+    );
     const lapsedId = ((await lapsed.json()) as { id: string }).id;
 
     const res = await GET(req(undefined, 'GET'));

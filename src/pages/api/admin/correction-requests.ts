@@ -9,7 +9,11 @@ import type { AuthContext } from '../../../server/authz/guards';
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import type { Db } from '../../../server/db/client';
-import { correctionRequests, people, contactMethods } from '../../../server/db/roster-schema';
+import {
+  correctionRequests,
+  people,
+  contactMethods,
+} from '../../../server/db/roster-schema';
 import {
   AuditCorrelation,
   operationKey,
@@ -64,20 +68,28 @@ async function listCorrectionRequests(
       .select()
       .from(correctionRequests)
       .orderBy(desc(correctionRequests.createdAt)),
-    db.select({ partyId: people.partyId, fullName: people.fullName }).from(people),
+    db
+      .select({ partyId: people.partyId, fullName: people.fullName })
+      .from(people),
     db.select().from(contactMethods),
   ]);
   const names = new Map(
-    personRows.map((p) => [p.partyId, personDisplayLabel(p.fullName, p.partyId)]),
+    personRows.map((p) => [
+      p.partyId,
+      personDisplayLabel(p.fullName, p.partyId),
+    ]),
   );
   const contacts = new Map(contactRows.map((c) => [c.id, c]));
   return requests.map((r) => {
-    const target = r.contactMethodId ? contacts.get(r.contactMethodId) : undefined;
+    const target = r.contactMethodId
+      ? contacts.get(r.contactMethodId)
+      : undefined;
     return {
       id: r.id,
       accountId: r.accountId,
       personId: r.personId,
-      personDisplayName: names.get(r.personId) ?? personDisplayLabel(null, r.personId),
+      personDisplayName:
+        names.get(r.personId) ?? personDisplayLabel(null, r.personId),
       kind: r.kind,
       contactMethodId: r.contactMethodId,
       targetChannel: target ? target.channel : null,
@@ -125,8 +137,7 @@ async function acceptCorrectionRequest(
   ctx: AuthContext,
 ): Promise<Response> {
   const requestId = stringField(body, 'requestId');
-  if (!requestId)
-    return new Response('requestId is required', { status: 400 });
+  if (!requestId) return new Response('requestId is required', { status: 400 });
 
   const [reqRow] = await db
     .select()
@@ -236,7 +247,13 @@ async function acceptCorrectionRequest(
            SET end_day = MAX(?, date(COALESCE(start_day, ?), '+1 day')), is_preferred = 0, updated_at = ?
            WHERE id = ? AND voided_at IS NULL AND redacted_at IS NULL AND (${requestGuard.sql})`,
         )
-        .bind(associationDay, associationDay, nowMs, oldId, ...requestGuard.binds),
+        .bind(
+          associationDay,
+          associationDay,
+          nowMs,
+          oldId,
+          ...requestGuard.binds,
+        ),
     );
     const oldEndedGuard = updatedRowGuard(
       'contact_methods',
@@ -356,8 +373,7 @@ async function declineCorrectionRequest(
   ctx: AuthContext,
 ): Promise<Response> {
   const requestId = stringField(body, 'requestId');
-  if (!requestId)
-    return new Response('requestId is required', { status: 400 });
+  if (!requestId) return new Response('requestId is required', { status: 400 });
   const [reqRow] = await db
     .select({ id: correctionRequests.id, status: correctionRequests.status })
     .from(correctionRequests)

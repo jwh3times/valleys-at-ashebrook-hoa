@@ -2,7 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { settings, properties } from '../../src/server/db/schema';
+import { settings } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   parties,
@@ -35,8 +35,9 @@ import {
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -273,7 +274,9 @@ describe('member correction requests', () => {
     await seedPerson('per-1', 'Jamie Resident');
     await submitNameRequest('mem-1', 'per-1');
 
-    const list = await memberList(memberReq(memberCtx('mem-1', 'per-1'), 'GET'));
+    const list = await memberList(
+      memberReq(memberCtx('mem-1', 'per-1'), 'GET'),
+    );
     expect(list.status).toBe(200);
     expect(((await list.json()) as unknown[]).length).toBe(1);
 
@@ -339,7 +342,10 @@ describe('board review of correction requests', () => {
             `SELECT COUNT(*) AS n FROM "${table}" WHERE "${column}" LIKE '%PRIVATE-NOTE-TEXT%' OR "${column}" LIKE '%Jamie Q. Corrected%'`,
           ),
         );
-        expect(hits[0].n, `${table}.${column} must not carry request text`).toBe(0);
+        expect(
+          hits[0].n,
+          `${table}.${column} must not carry request text`,
+        ).toBe(0);
       }
     }
     // ...but the CATEGORY of the sensitive change is recorded.

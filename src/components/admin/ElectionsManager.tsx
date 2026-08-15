@@ -13,7 +13,8 @@ import {
   saveCandidate,
   deleteCandidate,
   fetchProperties,
-  fetchBoardPeople,
+  fetchMeetingRosterPeople,
+  fetchRosterPeople,
   fetchProxies,
 } from '../../lib/admin';
 import { fetchSiteSettings } from '../../lib/content';
@@ -30,7 +31,6 @@ import type {
   CandidateSummary,
   Visibility,
   PropertyWithOwners,
-  BoardPersonWithTerms,
   ProxyDetail,
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
@@ -73,19 +73,26 @@ interface BallotFormRow {
   castByOwnerId: string;
 }
 
-/** Per-candidate winner draft for certification, keyed by candidateId. */
+/** Per-candidate winner draft for certification, keyed by candidateId.
+ * #218 shape: a party-roster Person, a qualifying Lot, term days, and an
+ * optional bylaws office — certification writes board_service_terms now,
+ * never the retired legacy board roster. */
 interface WinnerFormRow {
   selected: boolean;
-  termStart: string;
-  termEnd: string;
-  title: string;
+  personId: string;
+  qualifyingLotId: string;
+  startDay: string;
+  scheduledEndDay: string;
+  office: string;
 }
 
 const emptyWinnerRow: WinnerFormRow = {
   selected: false,
-  termStart: '',
-  termEnd: '',
-  title: '',
+  personId: '',
+  qualifyingLotId: '',
+  startDay: '',
+  scheduledEndDay: '',
+  office: '',
 };
 
 export default function ElectionsManager() {
@@ -126,17 +133,31 @@ export default function ElectionsManager() {
   }, [setMsg]);
   const activeProperties = properties.filter((p) => p.status === 'active');
 
-  // The board roster backs the candidate's optional "link to board member"
-  // picker — a returning board member's candidacy can be tied to their
-  // existing board_people identity instead of certify minting a new one.
-  const [boardPeople, setBoardPeople] = useState<BoardPersonWithTerms[]>([]);
+  // The meeting-record people list backs the candidate's optional "link to
+  // board member" picker (legacy board_people ids the meeting record still
+  // references); the PARTY-ROSTER people list backs the certification form's
+  // person picker — empty until the flip's backfill populates the roster.
+  const [boardPeople, setBoardPeople] = useState<
+    { id: string; fullName: string }[]
+  >([]);
+  const [rosterPeople, setRosterPeople] = useState<
+    { partyId: string; displayName: string }[]
+  >([]);
   useEffect(() => {
-    fetchBoardPeople()
+    fetchMeetingRosterPeople()
       .then(setBoardPeople)
       .catch((err: unknown) => {
         const message =
           (err as { message?: string } | null)?.message ??
           'could not load the board roster.';
+        setMsg('Error: ' + message);
+      });
+    fetchRosterPeople()
+      .then(setRosterPeople)
+      .catch((err: unknown) => {
+        const message =
+          (err as { message?: string } | null)?.message ??
+          'could not load the party roster.';
         setMsg('Error: ' + message);
       });
   }, [setMsg]);
@@ -293,7 +314,7 @@ export default function ElectionsManager() {
   async function handleUncertify(e: ElectionDetail) {
     if (
       !confirm(
-        `Uncertify "${e.title}"? This removes the terms of service it created.`,
+        `Uncertify "${e.title}"? This voids the terms of service it created.`,
       )
     )
       return;
@@ -417,9 +438,11 @@ export default function ElectionsManager() {
         const row = winnerRow(c.id);
         return {
           candidateId: c.id,
-          termStart: row.termStart,
-          termEnd: row.termEnd || null,
-          title: row.title.trim() || null,
+          personId: row.personId || null,
+          qualifyingLotId: row.qualifyingLotId,
+          startDay: row.startDay,
+          scheduledEndDay: row.scheduledEndDay,
+          office: row.office || null,
         };
       });
     if (winners.length === 0) {
@@ -1315,20 +1338,95 @@ export default function ElectionsManager() {
                                               style={{ margin: 0 }}
                                             >
                                               <label
-                                                htmlFor={`term-start-${e.id}-${c.id}`}
+                                                htmlFor={`winner-person-${e.id}-${c.id}`}
                                               >
-                                                Term start — {c.fullName}
+                                                Person — {c.fullName}
                                               </label>
-                                              <input
-                                                id={`term-start-${e.id}-${c.id}`}
-                                                type="date"
-                                                value={row.termStart}
+                                              <select
+                                                id={`winner-person-${e.id}-${c.id}`}
+                                                value={row.personId}
                                                 onChange={(evt) =>
                                                   setWinnerForm((prev) => ({
                                                     ...prev,
                                                     [c.id]: {
                                                       ...winnerRow(c.id),
-                                                      termStart:
+                                                      personId:
+                                                        evt.target.value,
+                                                    },
+                                                  }))
+                                                }
+                                              >
+                                                <option value="">
+                                                  {'\u2014'} select the person{' '}
+                                                  {'\u2014'}
+                                                </option>
+                                                {rosterPeople.map((p) => (
+                                                  <option
+                                                    key={p.partyId}
+                                                    value={p.partyId}
+                                                  >
+                                                    {p.displayName}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                            <div
+                                              className="field"
+                                              style={{ margin: 0 }}
+                                            >
+                                              <label
+                                                htmlFor={`winner-lot-${e.id}-${c.id}`}
+                                              >
+                                                Qualifying lot — {c.fullName}
+                                              </label>
+                                              <select
+                                                id={`winner-lot-${e.id}-${c.id}`}
+                                                value={row.qualifyingLotId}
+                                                onChange={(evt) =>
+                                                  setWinnerForm((prev) => ({
+                                                    ...prev,
+                                                    [c.id]: {
+                                                      ...winnerRow(c.id),
+                                                      qualifyingLotId:
+                                                        evt.target.value,
+                                                    },
+                                                  }))
+                                                }
+                                                required
+                                              >
+                                                <option value="">
+                                                  {'\u2014'} select a lot{' '}
+                                                  {'\u2014'}
+                                                </option>
+                                                {activeProperties.map((p) => (
+                                                  <option
+                                                    key={p.id}
+                                                    value={p.id}
+                                                  >
+                                                    {p.address}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                            <div
+                                              className="field"
+                                              style={{ margin: 0 }}
+                                            >
+                                              <label
+                                                htmlFor={`start-day-${e.id}-${c.id}`}
+                                              >
+                                                Start day — {c.fullName}
+                                              </label>
+                                              <input
+                                                id={`start-day-${e.id}-${c.id}`}
+                                                type="date"
+                                                value={row.startDay}
+                                                onChange={(evt) =>
+                                                  setWinnerForm((prev) => ({
+                                                    ...prev,
+                                                    [c.id]: {
+                                                      ...winnerRow(c.id),
+                                                      startDay:
                                                         evt.target.value,
                                                     },
                                                   }))
@@ -1341,24 +1439,25 @@ export default function ElectionsManager() {
                                               style={{ margin: 0 }}
                                             >
                                               <label
-                                                htmlFor={`term-end-${e.id}-${c.id}`}
+                                                htmlFor={`scheduled-end-${e.id}-${c.id}`}
                                               >
-                                                Term end (optional) —{' '}
-                                                {c.fullName}
+                                                Scheduled end day — {c.fullName}
                                               </label>
                                               <input
-                                                id={`term-end-${e.id}-${c.id}`}
+                                                id={`scheduled-end-${e.id}-${c.id}`}
                                                 type="date"
-                                                value={row.termEnd}
+                                                value={row.scheduledEndDay}
                                                 onChange={(evt) =>
                                                   setWinnerForm((prev) => ({
                                                     ...prev,
                                                     [c.id]: {
                                                       ...winnerRow(c.id),
-                                                      termEnd: evt.target.value,
+                                                      scheduledEndDay:
+                                                        evt.target.value,
                                                     },
                                                   }))
                                                 }
+                                                required
                                               />
                                             </div>
                                             <div
@@ -1366,26 +1465,36 @@ export default function ElectionsManager() {
                                               style={{ margin: 0 }}
                                             >
                                               <label
-                                                htmlFor={`office-title-${e.id}-${c.id}`}
+                                                htmlFor={`winner-office-${e.id}-${c.id}`}
                                               >
-                                                Office title (optional) —{' '}
-                                                {c.fullName}
+                                                Office (optional) — {c.fullName}
                                               </label>
-                                              <input
-                                                id={`office-title-${e.id}-${c.id}`}
-                                                type="text"
-                                                value={row.title}
+                                              <select
+                                                id={`winner-office-${e.id}-${c.id}`}
+                                                value={row.office}
                                                 onChange={(evt) =>
                                                   setWinnerForm((prev) => ({
                                                     ...prev,
                                                     [c.id]: {
                                                       ...winnerRow(c.id),
-                                                      title: evt.target.value,
+                                                      office: evt.target.value,
                                                     },
                                                   }))
                                                 }
-                                                placeholder="President"
-                                              />
+                                              >
+                                                <option value="">
+                                                  {'\u2014'} none {'\u2014'}
+                                                </option>
+                                                <option value="president">
+                                                  President
+                                                </option>
+                                                <option value="vice_president">
+                                                  Vice President
+                                                </option>
+                                                <option value="secretary_treasurer">
+                                                  Secretary-Treasurer
+                                                </option>
+                                              </select>
                                             </div>
                                           </div>
                                         )}

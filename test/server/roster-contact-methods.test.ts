@@ -3,7 +3,11 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/auth-schema';
-import { parties, people, contactMethods } from '../../src/server/db/roster-schema';
+import {
+  parties,
+  people,
+  contactMethods,
+} from '../../src/server/db/roster-schema';
 import { POST } from '../../src/pages/api/admin/roster-contact-methods';
 
 /**
@@ -15,8 +19,9 @@ import { POST } from '../../src/pages/api/admin/roster-contact-methods';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -71,7 +76,10 @@ function req(body: unknown): never {
   return {
     request: new Request('http://localhost/api/admin/roster-contact-methods', {
       method: 'POST',
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify(body),
     }),
   } as never;
@@ -109,22 +117,44 @@ describe('add', () => {
 
   it('rejects an invalid value and an unknown party', async () => {
     const bad = await POST(
-      req({ action: 'add', partyId: 'per-1', channel: 'email', value: 'not-an-email' }),
+      req({
+        action: 'add',
+        partyId: 'per-1',
+        channel: 'email',
+        value: 'not-an-email',
+      }),
     );
     expect(bad.status).toBe(400);
     const missing = await POST(
-      req({ action: 'add', partyId: 'nobody', channel: 'email', value: 'a@b.test' }),
+      req({
+        action: 'add',
+        partyId: 'nobody',
+        channel: 'email',
+        value: 'a@b.test',
+      }),
     );
     expect(missing.status).toBe(404);
   });
 
   it('a second preferred method displaces the first inside one batch', async () => {
     const first = await POST(
-      req({ action: 'add', partyId: 'per-1', channel: 'email', value: 'a@b.test', isPreferred: true }),
+      req({
+        action: 'add',
+        partyId: 'per-1',
+        channel: 'email',
+        value: 'a@b.test',
+        isPreferred: true,
+      }),
     );
     const firstId = ((await first.json()) as { id: string }).id;
     const second = await POST(
-      req({ action: 'add', partyId: 'per-1', channel: 'email', value: 'c@d.test', isPreferred: true }),
+      req({
+        action: 'add',
+        partyId: 'per-1',
+        channel: 'email',
+        value: 'c@d.test',
+        isPreferred: true,
+      }),
     );
     expect(second.status).toBe(201);
     const db = getDb(env);
@@ -137,7 +167,13 @@ describe('add', () => {
 describe('end, void, setPreferred', () => {
   async function add(value: string, isPreferred = false): Promise<string> {
     const res = await POST(
-      req({ action: 'add', partyId: 'per-1', channel: 'email', value, isPreferred }),
+      req({
+        action: 'add',
+        partyId: 'per-1',
+        channel: 'email',
+        value,
+        isPreferred,
+      }),
     );
     return ((await res.json()) as { id: string }).id;
   }
@@ -180,7 +216,9 @@ describe('end, void, setPreferred', () => {
     const before = await db.all<{ n: number }>(
       sql`SELECT COUNT(*) AS n FROM audit_events`,
     );
-    const noop = await POST(req({ action: 'setPreferred', contactMethodId: b }));
+    const noop = await POST(
+      req({ action: 'setPreferred', contactMethodId: b }),
+    );
     expect(noop.status).toBe(204);
     const after = await db.all<{ n: number }>(
       sql`SELECT COUNT(*) AS n FROM audit_events`,

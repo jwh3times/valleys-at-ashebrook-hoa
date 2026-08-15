@@ -167,7 +167,11 @@ async function orgCurrentlyOwnsLot(
 /** The lots a Representation covers right now: dynamic for 'organization'
  * scope, the explicit unvoided set for 'lots' scope. */
 async function coveredLots(
-  rep: { id: string; organizationPartyId: string; scopeKind: 'organization' | 'lots' },
+  rep: {
+    id: string;
+    organizationPartyId: string;
+    scopeKind: 'organization' | 'lots';
+  },
   associationDay: string,
 ): Promise<string[]> {
   if (rep.scopeKind === 'organization')
@@ -192,7 +196,9 @@ async function validateScope(
   body: unknown,
   organizationPartyId: string,
   associationDay: string,
-): Promise<{ ok: true; value: ScopeInput } | { ok: false; response: Response }> {
+): Promise<
+  { ok: true; value: ScopeInput } | { ok: false; response: Response }
+> {
   const r = body as Record<string, unknown> | null | undefined;
   const scopeKind = r?.scopeKind;
   if (scopeKind !== 'organization' && scopeKind !== 'lots')
@@ -217,9 +223,12 @@ async function validateScope(
   if (!Array.isArray(rawLotIds) || rawLotIds.length === 0)
     return {
       ok: false,
-      response: new Response('lotIds must be a non-empty array for scope lots', {
-        status: 400,
-      }),
+      response: new Response(
+        'lotIds must be a non-empty array for scope lots',
+        {
+          status: 400,
+        },
+      ),
     };
   const lotIds: string[] = [];
   for (const raw of rawLotIds) {
@@ -249,7 +258,9 @@ async function validateScope(
         ok: false,
         response: new Response('Lot not found', { status: 404 }),
       };
-    if (!(await orgCurrentlyOwnsLot(organizationPartyId, lotId, associationDay)))
+    if (
+      !(await orgCurrentlyOwnsLot(organizationPartyId, lotId, associationDay))
+    )
       return {
         ok: false,
         response: new Response('Organization does not currently own that lot', {
@@ -303,7 +314,11 @@ async function createRepresentation(
       { status: 409 },
     );
 
-  const scopeResult = await validateScope(body, organizationPartyId, associationDay);
+  const scopeResult = await validateScope(
+    body,
+    organizationPartyId,
+    associationDay,
+  );
   if (!scopeResult.ok) return scopeResult.response;
 
   const startDayRaw = stringField(body, 'startDay');
@@ -547,7 +562,11 @@ async function endRepresentation(
       evidence: evidenceResult.value,
       subjects: [
         { column: 'representation_id', id: representationId, role: 'ended' },
-        { column: 'party_id', id: existing.organizationPartyId, role: 'related' },
+        {
+          column: 'party_id',
+          id: existing.organizationPartyId,
+          role: 'related',
+        },
       ],
     },
   });
@@ -649,7 +668,11 @@ async function voidRepresentation(
       evidence: OPERATOR_OBSERVATION,
       subjects: [
         { column: 'representation_id', id: representationId, role: 'voided' },
-        { column: 'party_id', id: existing.organizationPartyId, role: 'related' },
+        {
+          column: 'party_id',
+          id: existing.organizationPartyId,
+          role: 'related',
+        },
       ],
     },
   });
@@ -738,7 +761,10 @@ async function correctScope(
   );
   const newLots =
     scopeResult.value.scopeKind === 'organization'
-      ? await orgCurrentOwnershipLots(existing.organizationPartyId, associationDay)
+      ? await orgCurrentOwnershipLots(
+          existing.organizationPartyId,
+          associationDay,
+        )
       : scopeResult.value.lotIds;
   const removedLots = oldLots.filter((l) => !newLots.includes(l));
 
@@ -786,7 +812,14 @@ async function correctScope(
          SELECT ?, ?, ?
          WHERE (${rootGuard.sql})
            AND NOT EXISTS (SELECT 1 FROM representation_lots WHERE representation_id = ? AND lot_id = ?)`,
-      ).bind(representationId, lotId, nowMs, ...rootGuard.binds, representationId, lotId),
+      ).bind(
+        representationId,
+        lotId,
+        nowMs,
+        ...rootGuard.binds,
+        representationId,
+        lotId,
+      ),
     );
     statements.push(
       env.DATABASE.prepare(
@@ -803,7 +836,11 @@ async function correctScope(
     actorAccountId,
     nowMs,
   });
-  const subjects: { column: RosterSubjectColumn; id: string; role: SubjectRole }[] = [
+  const subjects: {
+    column: RosterSubjectColumn;
+    id: string;
+    role: SubjectRole;
+  }[] = [
     { column: 'representation_id', id: representationId, role: 'primary' },
     { column: 'party_id', id: existing.organizationPartyId, role: 'related' },
     ...removedLots.map((lotId) => ({
@@ -839,7 +876,9 @@ async function correctScope(
   statements.push(...consequences.statements);
   statements.push(...correlation.statements);
   statements.push(
-    ...consequences.substitutionAsserts.map((g) => assertInBatch(env.DATABASE, g)),
+    ...consequences.substitutionAsserts.map((g) =>
+      assertInBatch(env.DATABASE, g),
+    ),
   );
 
   let results;
@@ -850,7 +889,8 @@ async function correctScope(
       return new Response(SUBSTITUTE_FAILED, { status: 409 });
     throw e;
   }
-  if (results[0].meta.changes !== 1) return new Response(CONCLUDED, { status: 409 });
+  if (results[0].meta.changes !== 1)
+    return new Response(CONCLUDED, { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -864,7 +904,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   switch (action) {
     case 'create':
-      return createRepresentation(parsed.value, locals, request, associationDay);
+      return createRepresentation(
+        parsed.value,
+        locals,
+        request,
+        associationDay,
+      );
     case 'end':
       return endRepresentation(parsed.value, locals, request, associationDay);
     case 'void':

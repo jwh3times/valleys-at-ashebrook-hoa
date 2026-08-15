@@ -239,36 +239,6 @@ export interface MembersView {
   queue: ManualApprovalItem[];
 }
 
-export interface BoardPerson {
-  id: string;
-  fullName: string;
-  userId: string | null;
-}
-
-export interface BoardTerm {
-  id: string;
-  personId: string;
-  title: string | null;
-  termStart: string;
-  termEnd: string | null;
-}
-
-export interface BoardPersonWithTerms extends BoardPerson {
-  terms: BoardTerm[];
-}
-
-export interface BoardPersonInput {
-  fullName?: string;
-  userId?: string | null;
-}
-
-export interface BoardTermInput {
-  personId?: string;
-  title?: string | null;
-  termStart?: string;
-  termEnd?: string | null;
-}
-
 // ---------- Admin write-input validation ----------
 // The site/dues settings normalizers above coerce-and-default (they never reject).
 // Board content writes instead validate loudly: trim, cap length, check enums,
@@ -575,60 +545,6 @@ export function normalizeOwnerInput(
   const status = statusField(r, 'status');
   if (!status.ok) return status;
   if (status.value !== undefined) out.status = status.value;
-  return { ok: true, value: out };
-}
-
-export function normalizeBoardPersonInput(
-  raw: unknown,
-  mode: WriteMode,
-): InputResult<BoardPersonInput> {
-  const r = asRecord(raw);
-  const out: BoardPersonInput = {};
-  const fullName = coreString(
-    r,
-    'fullName',
-    INPUT_LIMITS.fullName,
-    'fullName',
-    mode,
-  );
-  if (!fullName.ok) return fullName;
-  if (fullName.value !== undefined) out.fullName = fullName.value;
-  const userId = nullableString(r, 'userId', INPUT_LIMITS.userId, 'userId');
-  if (!userId.ok) return userId;
-  if (userId.value !== undefined) out.userId = userId.value;
-  return { ok: true, value: out };
-}
-
-export function normalizeBoardTermInput(
-  raw: unknown,
-  mode: WriteMode,
-): InputResult<BoardTermInput> {
-  const r = asRecord(raw);
-  const out: BoardTermInput = {};
-  const personId = coreString(
-    r,
-    'personId',
-    INPUT_LIMITS.personId,
-    'personId',
-    mode,
-  );
-  if (!personId.ok) return personId;
-  if (personId.value !== undefined) out.personId = personId.value;
-  const title = nullableString(r, 'title', INPUT_LIMITS.officeTitle, 'title');
-  if (!title.ok) return title;
-  if (title.value !== undefined) out.title = title.value;
-  const termStart = isoDate(r, 'termStart', 'termStart', mode);
-  if (!termStart.ok) return termStart;
-  if (termStart.value !== undefined) out.termStart = termStart.value;
-  const termEnd = nullableIsoDate(r, 'termEnd', 'termEnd');
-  if (!termEnd.ok) return termEnd;
-  if (termEnd.value !== undefined) out.termEnd = termEnd.value;
-  // Only checkable here when the write carries both ends; a PATCH supplying
-  // one end is re-checked against the stored row in the route.
-  if (out.termStart !== undefined && out.termEnd !== undefined) {
-    const err = termRangeError(out.termStart, out.termEnd);
-    if (err) return fail(err);
-  }
   return { ok: true, value: out };
 }
 

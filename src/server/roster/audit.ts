@@ -153,10 +153,7 @@ export type BoardServiceReason =
 /** `known` requires the real Association Day; `unknown` is reserved for
  * accepted legacy facts; `not_applicable` for identity/consolidation
  * corrections with no meaningful real-world day. */
-export type EffectiveDay =
-  | { day: string }
-  | 'unknown'
-  | 'not_applicable';
+export type EffectiveDay = { day: string } | 'unknown' | 'not_applicable';
 
 export type RosterSubjectColumn =
   | 'lot_id'
@@ -167,9 +164,7 @@ export type RosterSubjectColumn =
   | 'person_link_id';
 
 export type BoardSubjectColumn =
-  | 'board_term_id'
-  | 'office_assignment_id'
-  | 'lot_id';
+  'board_term_id' | 'office_assignment_id' | 'lot_id';
 
 export type SubjectRole =
   | 'primary'
@@ -197,11 +192,7 @@ const BOARD_SUBJECT_COLUMNS: ReadonlySet<string> = new Set([
 ]);
 
 export type SensitiveCategory =
-  | 'person_name'
-  | 'lot_address'
-  | 'email'
-  | 'phone'
-  | 'free_text';
+  'person_name' | 'lot_address' | 'email' | 'phone' | 'free_text';
 
 export interface ScalarDelta {
   fieldKey: string;
@@ -216,7 +207,11 @@ export type AuditDetail =
       effective: EffectiveDay;
       reason: RosterChangeReason;
       evidence: Evidence;
-      subjects: { column: RosterSubjectColumn; id: string; role: SubjectRole }[];
+      subjects: {
+        column: RosterSubjectColumn;
+        id: string;
+        role: SubjectRole;
+      }[];
     }
   | {
       family: 'board_service_change';
@@ -231,10 +226,7 @@ export type AuditDetail =
       targetAccountId?: string | null;
       grantType?: 'board' | 'system_admin' | null;
       requestedAction:
-        | 'grant'
-        | 'revoke'
-        | 'roster_export'
-        | 'last_administrator_change';
+        'grant' | 'revoke' | 'roster_export' | 'last_administrator_change';
       outcome: 'allowed' | 'denied';
       reason?: string | null;
     }
@@ -286,8 +278,13 @@ function evidenceColumns(
   ];
   const present = refs.filter((r) => r !== null).length;
   const expected = evidence.kind === 'operator_observation' ? 0 : 1;
-  if (present !== expected || (family !== 'roster_change' && evidence.requestId))
-    throw new Error(`evidence for ${family}/${evidence.kind} must carry exactly ${expected} reference`);
+  if (
+    present !== expected ||
+    (family !== 'roster_change' && evidence.requestId)
+  )
+    throw new Error(
+      `evidence for ${family}/${evidence.kind} must carry exactly ${expected} reference`,
+    );
   return refs;
 }
 
@@ -324,14 +321,18 @@ export class AuditCorrelation {
     this.seq += 1;
     const isRoot = seq === 0;
     if (isRoot) {
-      if (spec.actor) throw new Error('a correlation root is always account-attributed');
+      if (spec.actor)
+        throw new Error('a correlation root is always account-attributed');
       this.rootId = id;
     }
 
     const guard = isRoot
       ? spec.guard
       : andGuards(
-          { sql: 'EXISTS (SELECT 1 FROM audit_events WHERE id = ?)', binds: [this.rootId] },
+          {
+            sql: 'EXISTS (SELECT 1 FROM audit_events WHERE id = ?)',
+            binds: [this.rootId],
+          },
           spec.guard,
         );
 
@@ -395,7 +396,13 @@ export class AuditCorrelation {
             ...own.binds,
           ),
       );
-      this.pushSubjects(id, 'roster_change_subjects', ROSTER_SUBJECT_COLUMNS, detail.subjects, own);
+      this.pushSubjects(
+        id,
+        'roster_change_subjects',
+        ROSTER_SUBJECT_COLUMNS,
+        detail.subjects,
+        own,
+      );
       return;
     }
     if (detail.family === 'board_service_change') {
@@ -416,7 +423,13 @@ export class AuditCorrelation {
             ...own.binds,
           ),
       );
-      this.pushSubjects(id, 'board_service_change_subjects', BOARD_SUBJECT_COLUMNS, detail.subjects, own);
+      this.pushSubjects(
+        id,
+        'board_service_change_subjects',
+        BOARD_SUBJECT_COLUMNS,
+        detail.subjects,
+        own,
+      );
       return;
     }
     if (detail.family === 'access') {
@@ -470,7 +483,8 @@ export class AuditCorrelation {
       // The column name is interpolated, so it goes through the typed
       // allow-list even though the union already constrains it — a cast at a
       // call site must not become an injection.
-      if (!allowed.has(s.column)) throw new Error(`illegal subject column ${s.column}`);
+      if (!allowed.has(s.column))
+        throw new Error(`illegal subject column ${s.column}`);
       this.statements.push(
         this.database
           .prepare(

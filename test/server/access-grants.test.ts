@@ -26,8 +26,9 @@ import { GET, POST } from '../../src/pages/api/admin/access-grants';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -80,33 +81,39 @@ async function seedPerson(id: string) {
   await getDb(env)
     .insert(parties)
     .values({ id, kind: 'person', createdAt: now, updatedAt: now });
-  await getDb(env).insert(people).values({
-    partyId: id,
-    partyKind: 'person',
-    fullName: `Person ${id}`,
-    nameNormalized: `person ${id}`,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(people)
+    .values({
+      partyId: id,
+      partyKind: 'person',
+      fullName: `Person ${id}`,
+      nameNormalized: `person ${id}`,
+      updatedAt: now,
+    });
 }
 
 async function seedLink(accountId: string, personId: string) {
   const now = new Date();
-  await getDb(env).insert(personVerifications).values({
-    id: `ver-${accountId}`,
-    accountId,
-    personId,
-    method: 'manual',
-    approverAccountId: 'board-1',
-    reason: 'manual_board_decision',
-    verifiedAt: now,
-  });
-  await getDb(env).insert(personLinks).values({
-    id: `link-${accountId}`,
-    accountId,
-    personId,
-    verificationId: `ver-${accountId}`,
-    startedAt: now,
-  });
+  await getDb(env)
+    .insert(personVerifications)
+    .values({
+      id: `ver-${accountId}`,
+      accountId,
+      personId,
+      method: 'manual',
+      approverAccountId: 'board-1',
+      reason: 'manual_board_decision',
+      verifiedAt: now,
+    });
+  await getDb(env)
+    .insert(personLinks)
+    .values({
+      id: `link-${accountId}`,
+      accountId,
+      personId,
+      verificationId: `ver-${accountId}`,
+      startedAt: now,
+    });
 }
 
 async function seedTerm(
@@ -115,25 +122,29 @@ async function seedTerm(
   overrides: Partial<{ scheduledEndDay: string }> = {},
 ) {
   const now = new Date();
-  await getDb(env).insert(boardServiceTerms).values({
-    id,
-    personId,
-    qualifyingLotId: null,
-    startDay: '2026-01-01',
-    scheduledEndDay: overrides.scheduledEndDay ?? '2027-01-01',
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(boardServiceTerms)
+    .values({
+      id,
+      personId,
+      qualifyingLotId: null,
+      startDay: '2026-01-01',
+      scheduledEndDay: overrides.scheduledEndDay ?? '2027-01-01',
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 async function seedSysAdminGrant(id: string, accountId: string) {
-  await getDb(env).insert(accessGrants).values({
-    id,
-    accountId,
-    grantType: 'system_admin',
-    startedAt: new Date('2026-01-01T00:00:00Z'),
-    grantReason: 'technical_administration',
-  });
+  await getDb(env)
+    .insert(accessGrants)
+    .values({
+      id,
+      accountId,
+      grantType: 'system_admin',
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      grantReason: 'technical_administration',
+    });
 }
 
 function sysAdminCtx(userId = 'sa-1'): AuthContext {
@@ -158,12 +169,16 @@ function sysAdminCtx(userId = 'sa-1'): AuthContext {
 }
 
 function req(body?: unknown, ctx?: AuthContext, method = 'POST'): never {
+  const init: RequestInit = {
+    method,
+    headers: {
+      origin: 'http://localhost',
+      'content-type': 'application/json',
+    },
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
   return {
-    request: new Request('http://localhost/api/admin/access-grants', {
-      method,
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
+    request: new Request('http://localhost/api/admin/access-grants', init),
     ...(ctx ? { locals: { authContext: ctx } } : {}),
   } as never;
 }
@@ -171,12 +186,22 @@ function req(body?: unknown, ctx?: AuthContext, method = 'POST'): never {
 describe('grant', () => {
   it('walks the validation chain to a recorded board grant', async () => {
     const missingAccount = await POST(
-      req({ action: 'grant', accountId: 'nobody', grantType: 'board', qualifyingBoardTermId: 't' }),
+      req({
+        action: 'grant',
+        accountId: 'nobody',
+        grantType: 'board',
+        qualifyingBoardTermId: 't',
+      }),
     );
     expect(missingAccount.status).toBe(404);
 
     const unlinked = await POST(
-      req({ action: 'grant', accountId: 'acct-1', grantType: 'board', qualifyingBoardTermId: 't' }),
+      req({
+        action: 'grant',
+        accountId: 'acct-1',
+        grantType: 'board',
+        qualifyingBoardTermId: 't',
+      }),
     );
     expect(unlinked.status).toBe(409);
     expect(await unlinked.text()).toBe('Account has no linked Person');
@@ -184,7 +209,12 @@ describe('grant', () => {
     await seedPerson('per-1');
     await seedLink('acct-1', 'per-1');
     const noTerm = await POST(
-      req({ action: 'grant', accountId: 'acct-1', grantType: 'board', qualifyingBoardTermId: 't' }),
+      req({
+        action: 'grant',
+        accountId: 'acct-1',
+        grantType: 'board',
+        qualifyingBoardTermId: 't',
+      }),
     );
     expect(noTerm.status).toBe(404);
 
@@ -253,7 +283,9 @@ describe('grant', () => {
       outcome: 'allowed',
       target_account_id: 'acct-1',
     });
-    expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual([]);
+    expect(
+      await db.all(sql`SELECT * FROM audit_integrity_violations_v`),
+    ).toEqual([]);
   });
 
   it('restricts system_admin grants to a System Administrator', async () => {
@@ -343,7 +375,9 @@ describe('revoke', () => {
     );
     expect(denials).toHaveLength(1);
     expect(denials[0].outcome).toBe('denied');
-    expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual([]);
+    expect(
+      await db.all(sql`SELECT * FROM audit_integrity_violations_v`),
+    ).toEqual([]);
   });
 
   it('with two administrators, one revocation succeeds and the next refuses', async () => {
@@ -393,7 +427,11 @@ describe('GET', () => {
     await seedSysAdminGrant('g-sa', 'sa-1');
     const res = await GET(req(undefined, undefined, 'GET'));
     expect(res.status).toBe(200);
-    const rows = (await res.json()) as { id: string; accountEmail: string; live: boolean }[];
+    const rows = (await res.json()) as {
+      id: string;
+      accountEmail: string;
+      live: boolean;
+    }[];
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       id: 'g-sa',

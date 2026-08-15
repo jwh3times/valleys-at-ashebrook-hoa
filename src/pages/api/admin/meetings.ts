@@ -11,6 +11,7 @@ import type { Db } from '../../../server/db/client';
 import {
   meetings,
   boardAttendance,
+  boardPeople,
   memberAttendance,
   motions,
   motionEligibility,
@@ -320,7 +321,21 @@ async function unapproveMeeting(db: Db, body: unknown): Promise<Response> {
 export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
-  const id = new URL(request.url).searchParams.get('id');
+  const url = new URL(request.url);
+  // The meeting record still references legacy `board_people` until its
+  // Person repointing (#203's "the meeting record points at Person" — a later
+  // phase). `/api/admin/board-people` was retired by #218, so the
+  // record-keeping pickers (attendance rolls, mover/second, roll-call, the
+  // candidate link) read the flat list they need from the surface that owns
+  // the record.
+  if (url.searchParams.get('roster') === 'people') {
+    const rows = await getDb(env)
+      .select({ id: boardPeople.id, fullName: boardPeople.fullName })
+      .from(boardPeople)
+      .orderBy(boardPeople.fullName);
+    return Response.json(rows);
+  }
+  const id = url.searchParams.get('id');
   if (id) {
     const meeting = await fetchAdminMeeting(env, id);
     if (!meeting) return new Response('Meeting not found', { status: 404 });

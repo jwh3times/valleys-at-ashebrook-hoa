@@ -126,7 +126,9 @@ describe('access-denials admin route', () => {
 
 describe('audit-integrity admin route', () => {
   it('returns empty arrays on a clean database', async () => {
-    const res = await getAuditIntegrity(req(integrityUrl, systemAdminContext()));
+    const res = await getAuditIntegrity(
+      req(integrityUrl, systemAdminContext()),
+    );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       auditViolations: unknown[];

@@ -28,8 +28,9 @@ import { POST } from '../../src/pages/api/admin/roster-ownerships';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -87,15 +88,17 @@ beforeEach(async () => {
 
 async function seedLot(id: string) {
   const now = new Date();
-  await getDb(env).insert(properties).values({
-    id,
-    address: `${id} Ashebrook Lane`,
-    addressNormalized: `${id} ashebrook lane`,
-    status: 'active',
-    voteWeight: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(properties)
+    .values({
+      id,
+      address: `${id} Ashebrook Lane`,
+      addressNormalized: `${id} ashebrook lane`,
+      status: 'active',
+      voteWeight: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 async function seedPerson(id: string, fullName = `Person ${id}`) {
@@ -133,15 +136,18 @@ async function seedOwnership(
   overrides: Partial<{ startDay: string | null; endDay: string | null }> = {},
 ) {
   const now = new Date();
-  await getDb(env).insert(ownerships).values({
-    id,
-    ownerPartyId,
-    lotId,
-    startDay: overrides.startDay === undefined ? '2025-01-01' : overrides.startDay,
-    endDay: overrides.endDay ?? null,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(ownerships)
+    .values({
+      id,
+      ownerPartyId,
+      lotId,
+      startDay:
+        overrides.startDay === undefined ? '2025-01-01' : overrides.startDay,
+      endDay: overrides.endDay ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 async function seedTerm(
@@ -151,15 +157,17 @@ async function seedTerm(
   overrides: Partial<{ startDay: string; scheduledEndDay: string }> = {},
 ) {
   const now = new Date();
-  await getDb(env).insert(boardServiceTerms).values({
-    id,
-    personId,
-    qualifyingLotId,
-    startDay: overrides.startDay ?? '2026-01-01',
-    scheduledEndDay: overrides.scheduledEndDay ?? '2027-01-01',
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(boardServiceTerms)
+    .values({
+      id,
+      personId,
+      qualifyingLotId,
+      startDay: overrides.startDay ?? '2026-01-01',
+      scheduledEndDay: overrides.scheduledEndDay ?? '2027-01-01',
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 async function seedOffice(id: string, termId: string, personId: string) {
@@ -176,21 +184,26 @@ async function seedOffice(id: string, termId: string, personId: string) {
 }
 
 async function seedGrant(id: string, accountId: string, termId: string) {
-  await getDb(env).insert(accessGrants).values({
-    id,
-    accountId,
-    grantType: 'board',
-    qualifyingBoardTermId: termId,
-    startedAt: new Date('2026-01-02T00:00:00Z'),
-    grantReason: 'board_service',
-  });
+  await getDb(env)
+    .insert(accessGrants)
+    .values({
+      id,
+      accountId,
+      grantType: 'board',
+      qualifyingBoardTermId: termId,
+      startedAt: new Date('2026-01-02T00:00:00Z'),
+      grantReason: 'board_service',
+    });
 }
 
 function req(body: unknown): never {
   return {
     request: new Request('http://localhost/api/admin/roster-ownerships', {
       method: 'POST',
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify(body),
     }),
   } as never;
@@ -198,8 +211,12 @@ function req(body: unknown): never {
 
 async function integrityClean() {
   const db = getDb(env);
-  expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual([]);
-  expect(await db.all(sql`SELECT * FROM board_eligibility_violations_v`)).toEqual([]);
+  expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual(
+    [],
+  );
+  expect(
+    await db.all(sql`SELECT * FROM board_eligibility_violations_v`),
+  ).toEqual([]);
 }
 
 describe('create', () => {
@@ -207,7 +224,12 @@ describe('create', () => {
     await seedLot('lot-1');
     await seedPerson('per-1');
     const res = await POST(
-      req({ action: 'create', ownerPartyId: 'per-1', lotId: 'lot-1', startDay: PAST }),
+      req({
+        action: 'create',
+        ownerPartyId: 'per-1',
+        lotId: 'lot-1',
+        startDay: PAST,
+      }),
     );
     expect(res.status).toBe(201);
     const db = getDb(env);
@@ -215,7 +237,9 @@ describe('create', () => {
       event_kind: string;
       correlation_sequence: number;
       operation_key: string | null;
-    }>(sql`SELECT event_kind, correlation_sequence, operation_key FROM audit_events`);
+    }>(
+      sql`SELECT event_kind, correlation_sequence, operation_key FROM audit_events`,
+    );
     expect(root.event_kind).toBe('ownership_recorded');
     expect(root.correlation_sequence).toBe(0);
     expect(root.operation_key).not.toBeNull();
@@ -226,7 +250,12 @@ describe('create', () => {
     await seedLot('lot-1');
     await seedPerson('per-1');
     const future = await POST(
-      req({ action: 'create', ownerPartyId: 'per-1', lotId: 'lot-1', startDay: '2030-01-01' }),
+      req({
+        action: 'create',
+        ownerPartyId: 'per-1',
+        lotId: 'lot-1',
+        startDay: '2030-01-01',
+      }),
     );
     expect(future.status).toBe(400);
 
@@ -234,7 +263,12 @@ describe('create', () => {
       sql`UPDATE properties SET retired_at = ${Date.now()} WHERE id = ${'lot-1'}`,
     );
     const retired = await POST(
-      req({ action: 'create', ownerPartyId: 'per-1', lotId: 'lot-1', startDay: PAST }),
+      req({
+        action: 'create',
+        ownerPartyId: 'per-1',
+        lotId: 'lot-1',
+        startDay: PAST,
+      }),
     );
     expect(retired.status).toBe(409);
     expect(await retired.text()).toBe('Lot is retired');
@@ -245,7 +279,12 @@ describe('create', () => {
       sql`UPDATE parties SET consolidated_into_party_id = ${'per-2'} WHERE id = ${'per-1'}`,
     );
     const consolidated = await POST(
-      req({ action: 'create', ownerPartyId: 'per-1', lotId: 'lot-2', startDay: PAST }),
+      req({
+        action: 'create',
+        ownerPartyId: 'per-1',
+        lotId: 'lot-2',
+        startDay: PAST,
+      }),
     );
     expect(consolidated.status).toBe(409);
   });
@@ -259,17 +298,32 @@ describe('create', () => {
     });
 
     const overlapping = await POST(
-      req({ action: 'create', ownerPartyId: 'per-1', lotId: 'lot-1', startDay: '2025-01-01' }),
+      req({
+        action: 'create',
+        ownerPartyId: 'per-1',
+        lotId: 'lot-1',
+        startDay: '2025-01-01',
+      }),
     );
     expect(overlapping.status).toBe(409);
 
     const adjacent = await POST(
-      req({ action: 'create', ownerPartyId: 'per-1', lotId: 'lot-1', startDay: '2025-06-01' }),
+      req({
+        action: 'create',
+        ownerPartyId: 'per-1',
+        lotId: 'lot-1',
+        startDay: '2025-06-01',
+      }),
     );
     expect(adjacent.status).toBe(201);
 
     const duplicate = await POST(
-      req({ action: 'create', ownerPartyId: 'per-1', lotId: 'lot-1', startDay: '2025-07-01' }),
+      req({
+        action: 'create',
+        ownerPartyId: 'per-1',
+        lotId: 'lot-1',
+        startDay: '2025-07-01',
+      }),
     );
     expect(duplicate.status).toBe(409);
   });
@@ -317,7 +371,9 @@ describe('end, and the consequence engine', () => {
       actor_kind: string;
       causing_event_id: string | null;
       correlation_id: string;
-    }>(sql`SELECT event_kind, correlation_sequence, actor_kind, causing_event_id, correlation_id FROM audit_events ORDER BY correlation_sequence`);
+    }>(
+      sql`SELECT event_kind, correlation_sequence, actor_kind, causing_event_id, correlation_id FROM audit_events ORDER BY correlation_sequence`,
+    );
     const root = events.find((e) => e.correlation_sequence === 0)!;
     expect(root.event_kind).toBe('ownership_ended');
     expect(root.actor_kind).toBe('account');
@@ -361,17 +417,23 @@ describe('end, and the consequence engine', () => {
     expect(term.qualifyingLotId).toBe('lot-2');
     expect(term.actualEndDay).toBeNull();
 
-    const subjects = await db.all<{ role: string; lot_id: string | null; board_term_id: string | null }>(
+    const subjects = await db.all<{
+      role: string;
+      lot_id: string | null;
+      board_term_id: string | null;
+    }>(
       sql`SELECT s.role, s.lot_id, s.board_term_id FROM board_service_change_subjects s
           JOIN audit_events e ON e.id = s.event_id
           WHERE e.event_kind = 'qualifying_lot_substituted'`,
     );
     expect(subjects).toHaveLength(3);
-    expect(
-      subjects.find((s) => s.role === 'primary')?.board_term_id,
-    ).toBe('term-1');
+    expect(subjects.find((s) => s.role === 'primary')?.board_term_id).toBe(
+      'term-1',
+    );
     expect(subjects.find((s) => s.role === 'related')?.lot_id).toBe('lot-1');
-    expect(subjects.find((s) => s.role === 'replacement')?.lot_id).toBe('lot-2');
+    expect(subjects.find((s) => s.role === 'replacement')?.lot_id).toBe(
+      'lot-2',
+    );
     await integrityClean();
   });
 

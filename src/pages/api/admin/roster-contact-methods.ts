@@ -123,8 +123,7 @@ async function addContactMethod(
       });
     startDay = result.value;
   }
-  const isPreferred =
-    (body as Record<string, unknown>).isPreferred === true;
+  const isPreferred = (body as Record<string, unknown>).isPreferred === true;
 
   const id = crypto.randomUUID();
   const nowMs = Date.now();

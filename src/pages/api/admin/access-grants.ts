@@ -13,7 +13,10 @@ import {
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { users } from '../../../server/db/auth-schema';
-import { accessGrants, boardServiceTerms } from '../../../server/db/roster-schema';
+import {
+  accessGrants,
+  boardServiceTerms,
+} from '../../../server/db/roster-schema';
 import { associationDateIso } from '../../../lib/format';
 import {
   AuditCorrelation,
@@ -39,9 +42,7 @@ import { fetchAccessGrantsDetail } from '../../../server/roster/reads';
 
 export const prerender = false;
 
-async function requireSystemAdmin(
-  ctx: AuthContext,
-): Promise<Response | null> {
+async function requireSystemAdmin(ctx: AuthContext): Promise<Response | null> {
   try {
     requireCapability(ctx, 'systemAdmin');
   } catch (e) {
@@ -52,13 +53,9 @@ async function requireSystemAdmin(
   return null;
 }
 
-async function grantAccess(
-  body: unknown,
-  ctx: AuthContext,
-): Promise<Response> {
+async function grantAccess(body: unknown, ctx: AuthContext): Promise<Response> {
   const accountId = stringField(body, 'accountId');
-  if (!accountId)
-    return new Response('accountId is required', { status: 400 });
+  if (!accountId) return new Response('accountId is required', { status: 400 });
   const grantType = stringField(body, 'grantType');
   if (grantType !== 'board' && grantType !== 'system_admin')
     return new Response("grantType must be 'board' or 'system_admin'", {

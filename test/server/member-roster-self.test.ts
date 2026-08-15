@@ -4,7 +4,12 @@ import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings, properties } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
-import { parties, people, contactMethods, ownerships } from '../../src/server/db/roster-schema';
+import {
+  parties,
+  people,
+  contactMethods,
+  ownerships,
+} from '../../src/server/db/roster-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
@@ -81,15 +86,13 @@ async function seedPerson(id: string, fullName: string) {
   await getDb(env)
     .insert(parties)
     .values({ id, kind: 'person', createdAt: now, updatedAt: now });
-  await getDb(env)
-    .insert(people)
-    .values({
-      partyId: id,
-      partyKind: 'person',
-      fullName,
-      nameNormalized: fullName.toLowerCase(),
-      updatedAt: now,
-    });
+  await getDb(env).insert(people).values({
+    partyId: id,
+    partyKind: 'person',
+    fullName,
+    nameNormalized: fullName.toLowerCase(),
+    updatedAt: now,
+  });
 }
 
 async function redactPerson(id: string) {
@@ -117,9 +120,14 @@ async function seedContactMethod(id: string, partyId: string) {
 
 async function seedOwnership(id: string, partyId: string, lotId: string) {
   const now = new Date();
-  await getDb(env)
-    .insert(ownerships)
-    .values({ id, ownerPartyId: partyId, lotId, startDay: null, createdAt: now, updatedAt: now });
+  await getDb(env).insert(ownerships).values({
+    id,
+    ownerPartyId: partyId,
+    lotId,
+    startDay: null,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 function memberCtx(
@@ -143,7 +151,10 @@ function memberReq(ctx: AuthContext | null) {
   return {
     request: new Request('http://localhost/api/member/roster-self', {
       method: 'GET',
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
     }),
     locals: { authContext: ctx },
   } as never;
@@ -185,7 +196,9 @@ describe('GET /api/member/roster-self', () => {
     await seedAccount('mem-2');
     // legacyAuthContext always sets personId: null — the shape every caller
     // has under cutover_mode = legacy, since legacy has no Person concept.
-    const res = await GET(memberReq(legacyAuthContext('mem-2', 'homeowner', [])));
+    const res = await GET(
+      memberReq(legacyAuthContext('mem-2', 'homeowner', [])),
+    );
     expect(res.status).toBe(403);
     expect(await res.text()).toBe(
       'Your account is not linked to a resident record — complete verification first.',
@@ -194,7 +207,9 @@ describe('GET /api/member/roster-self', () => {
 
   it('never returns 401/404 for the not-linked case — it is a 403, not a masked absence', async () => {
     await seedAccount('mem-2b');
-    const res = await GET(memberReq(legacyAuthContext('mem-2b', 'homeowner', [])));
+    const res = await GET(
+      memberReq(legacyAuthContext('mem-2b', 'homeowner', [])),
+    );
     expect(res.status).not.toBe(401);
     expect(res.status).not.toBe(404);
   });

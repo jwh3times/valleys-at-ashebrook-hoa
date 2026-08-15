@@ -14,7 +14,6 @@ import {
   people,
   boardServiceTerms,
   boardOfficeAssignments,
-  accessGrants,
 } from '../../../server/db/roster-schema';
 import {
   AuditCorrelation,
@@ -335,7 +334,10 @@ async function createTerm(
       { status: 400 },
     );
 
-  const startDayResult = isoDateOrError(stringField(body, 'startDay'), 'startDay');
+  const startDayResult = isoDateOrError(
+    stringField(body, 'startDay'),
+    'startDay',
+  );
   if (!startDayResult.ok)
     return new Response(startDayResult.error, { status: 400 });
   const scheduledResult = isoDateOrError(
@@ -368,7 +370,12 @@ async function createTerm(
 
   // Readable pre-checks, re-asserted inside the batch.
   const qualifies = qualifiesGuard(personId, qualifyingLotId, associationDay);
-  const personClear = noOverlapGuard('person_id', personId, startDay, scheduledEndDay);
+  const personClear = noOverlapGuard(
+    'person_id',
+    personId,
+    startDay,
+    scheduledEndDay,
+  );
   const lotClear = noOverlapGuard(
     'qualifying_lot_id',
     qualifyingLotId,
@@ -678,7 +685,11 @@ async function substituteQualifyingLot(
   if (!evidenceResult.ok)
     return new Response(evidenceResult.error, { status: 400 });
 
-  const qualifies = qualifiesGuard(term.personId, qualifyingLotId, associationDay);
+  const qualifies = qualifiesGuard(
+    term.personId,
+    qualifyingLotId,
+    associationDay,
+  );
   const lotClear = noOverlapGuard(
     'qualifying_lot_id',
     qualifyingLotId,
@@ -703,13 +714,7 @@ async function substituteQualifyingLot(
     `UPDATE board_service_terms SET qualifying_lot_id = ?, updated_at = ?
      WHERE id = ? AND actual_end_day IS NULL AND cancelled_at IS NULL AND voided_at IS NULL
        AND (${qualifies.sql}) AND (${lotClear.sql})`,
-  ).bind(
-    qualifyingLotId,
-    nowMs,
-    termId,
-    ...qualifies.binds,
-    ...lotClear.binds,
-  );
+  ).bind(qualifyingLotId, nowMs, termId, ...qualifies.binds, ...lotClear.binds);
 
   const correlation = new AuditCorrelation(env.DATABASE, {
     operationKey: operationKey('board-service', 'substituteQualifyingLot'),
@@ -801,7 +806,11 @@ async function correctTerm(
       return new Response('Lot not found', { status: 404 });
     if (lotRows[0].retiredAt !== null)
       return new Response('Lot is retired', { status: 409 });
-    const qualifies = qualifiesGuard(term.personId, qualifyingLotId, associationDay);
+    const qualifies = qualifiesGuard(
+      term.personId,
+      qualifyingLotId,
+      associationDay,
+    );
     const lotClear = noOverlapGuard(
       'qualifying_lot_id',
       qualifyingLotId,
@@ -1166,7 +1175,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'voidTerm':
       return voidTerm(parsed.value, locals, request);
     case 'substituteQualifyingLot':
-      return substituteQualifyingLot(parsed.value, locals, request, associationDay);
+      return substituteQualifyingLot(
+        parsed.value,
+        locals,
+        request,
+        associationDay,
+      );
     case 'correctTerm':
       return correctTerm(parsed.value, locals, request, associationDay);
     case 'assignOffice':

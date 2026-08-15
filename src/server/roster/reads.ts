@@ -130,32 +130,39 @@ export async function fetchAdminRoster(
   associationDay: string,
 ): Promise<AdminRoster> {
   const db = getDb(env);
-  const [lotRows, personRows, orgRows, ownershipRows, repRows, repLotRows, contactRows] =
-    await Promise.all([
-      db.select().from(properties).orderBy(asc(properties.address)),
-      db
-        .select({
-          partyId: people.partyId,
-          fullName: people.fullName,
-          nameRedactedAt: people.nameRedactedAt,
-          consolidatedIntoPartyId: parties.consolidatedIntoPartyId,
-        })
-        .from(people)
-        .innerJoin(parties, eq(parties.id, people.partyId)),
-      db
-        .select({
-          partyId: organizations.partyId,
-          legalName: organizations.legalName,
-          displayName: organizations.displayName,
-          consolidatedIntoPartyId: parties.consolidatedIntoPartyId,
-        })
-        .from(organizations)
-        .innerJoin(parties, eq(parties.id, organizations.partyId)),
-      db.select().from(ownerships),
-      db.select().from(representations),
-      db.select().from(representationLots),
-      db.select().from(contactMethods),
-    ]);
+  const [
+    lotRows,
+    personRows,
+    orgRows,
+    ownershipRows,
+    repRows,
+    repLotRows,
+    contactRows,
+  ] = await Promise.all([
+    db.select().from(properties).orderBy(asc(properties.address)),
+    db
+      .select({
+        partyId: people.partyId,
+        fullName: people.fullName,
+        nameRedactedAt: people.nameRedactedAt,
+        consolidatedIntoPartyId: parties.consolidatedIntoPartyId,
+      })
+      .from(people)
+      .innerJoin(parties, eq(parties.id, people.partyId)),
+    db
+      .select({
+        partyId: organizations.partyId,
+        legalName: organizations.legalName,
+        displayName: organizations.displayName,
+        consolidatedIntoPartyId: parties.consolidatedIntoPartyId,
+      })
+      .from(organizations)
+      .innerJoin(parties, eq(parties.id, organizations.partyId)),
+    db.select().from(ownerships),
+    db.select().from(representations),
+    db.select().from(representationLots),
+    db.select().from(contactMethods),
+  ]);
 
   const scopeLots = new Map<string, string[]>();
   for (const rl of repLotRows) {
@@ -204,8 +211,7 @@ export async function fetchAdminRoster(
       startDay: o.startDay,
       endDay: o.endDay,
       voided: o.voidedAt !== null,
-      current:
-        !o.voidedAt && dayCurrent(o.startDay, o.endDay, associationDay),
+      current: !o.voidedAt && dayCurrent(o.startDay, o.endDay, associationDay),
     })),
     representations: repRows.map((r) => ({
       id: r.id,
@@ -216,8 +222,7 @@ export async function fetchAdminRoster(
       startDay: r.startDay,
       endDay: r.endDay,
       voided: r.voidedAt !== null,
-      current:
-        !r.voidedAt && dayCurrent(r.startDay, r.endDay, associationDay),
+      current: !r.voidedAt && dayCurrent(r.startDay, r.endDay, associationDay),
     })),
     contactMethods: contactRows.map((c) => ({
       id: c.id,
@@ -307,11 +312,16 @@ export async function fetchBoardService(
       .from(boardOfficeAssignments)
       .orderBy(asc(boardOfficeAssignments.startDay)),
     db.select().from(people),
-    db.select({ id: properties.id, address: properties.address }).from(properties),
+    db
+      .select({ id: properties.id, address: properties.address })
+      .from(properties),
   ]);
 
   const names = new Map(
-    personRows.map((p) => [p.partyId, personDisplayLabel(p.fullName, p.partyId)]),
+    personRows.map((p) => [
+      p.partyId,
+      personDisplayLabel(p.fullName, p.partyId),
+    ]),
   );
   const addresses = new Map(lotRows.map((l) => [l.id, l.address]));
 
@@ -496,7 +506,10 @@ export async function fetchMemberRosterSelf(
 
   const [contactRows, ownershipRows, repRows, orgRows, requestRows] =
     await Promise.all([
-      db.select().from(contactMethods).where(eq(contactMethods.partyId, personId)),
+      db
+        .select()
+        .from(contactMethods)
+        .where(eq(contactMethods.partyId, personId)),
       db.select().from(ownerships).where(eq(ownerships.ownerPartyId, personId)),
       db
         .select()

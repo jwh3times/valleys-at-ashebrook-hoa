@@ -24,7 +24,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocked.fetchBoardPeople.mockResolvedValue([]);
+  mocked.fetchMeetingRosterPeople.mockResolvedValue([]);
   mocked.fetchProperties.mockResolvedValue([]);
   mocked.fetchMeeting.mockResolvedValue(meetingDetail());
   mocked.fetchProxies.mockResolvedValue([]);
@@ -323,9 +323,9 @@ describe('MeetingsManager', () => {
 
   it('shows the derived tally beside the outcome selector', async () => {
     mocked.fetchMeetings.mockResolvedValue([meeting]);
-    mocked.fetchBoardPeople.mockResolvedValue([
-      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
-      { id: 'p2', fullName: 'B. Ortiz', userId: null, terms: [] },
+    mocked.fetchMeetingRosterPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes' },
+      { id: 'p2', fullName: 'B. Ortiz' },
     ]);
     render(<MeetingsManager />);
     await screen.findByText('September meeting');
@@ -352,8 +352,8 @@ describe('MeetingsManager', () => {
 
   it('lists motions loaded from the detail read', async () => {
     mocked.fetchMeetings.mockResolvedValue([meeting]);
-    mocked.fetchBoardPeople.mockResolvedValue([
-      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    mocked.fetchMeetingRosterPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes' },
     ]);
     mocked.fetchMeeting.mockResolvedValue(
       meetingDetail({
@@ -397,8 +397,8 @@ describe('MeetingsManager', () => {
 
   it('a motion can be edited', async () => {
     mocked.fetchMeetings.mockResolvedValue([meeting]);
-    mocked.fetchBoardPeople.mockResolvedValue([
-      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    mocked.fetchMeetingRosterPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes' },
     ]);
     mocked.fetchMeeting.mockResolvedValue(
       meetingDetail({
@@ -502,9 +502,9 @@ describe('MeetingsManager', () => {
 
   it('submitting attendance sends a row for every roster person, present or not', async () => {
     mocked.fetchMeetings.mockResolvedValue([meeting]);
-    mocked.fetchBoardPeople.mockResolvedValue([
-      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
-      { id: 'p2', fullName: 'B. Ortiz', userId: null, terms: [] },
+    mocked.fetchMeetingRosterPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes' },
+      { id: 'p2', fullName: 'B. Ortiz' },
     ]);
     mocked.setAttendance.mockResolvedValue(undefined);
     render(<MeetingsManager />);
@@ -600,8 +600,8 @@ describe('MeetingsManager', () => {
 
   it('shows the board editors for a board meeting, not the property ones', async () => {
     mocked.fetchMeetings.mockResolvedValue([meeting]);
-    mocked.fetchBoardPeople.mockResolvedValue([
-      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    mocked.fetchMeetingRosterPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes' },
     ]);
     mocked.fetchProperties.mockResolvedValue([
       {
@@ -788,8 +788,8 @@ describe('MeetingsManager', () => {
 
   it("does not offer the board-roster mover/second pickers on a member meeting's motion form", async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
-    mocked.fetchBoardPeople.mockResolvedValue([
-      { id: 'p1', fullName: 'A. Reyes', userId: null, terms: [] },
+    mocked.fetchMeetingRosterPeople.mockResolvedValue([
+      { id: 'p1', fullName: 'A. Reyes' },
     ]);
     mocked.fetchProperties.mockResolvedValue([
       {
