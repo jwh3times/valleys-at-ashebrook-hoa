@@ -3,6 +3,7 @@ import { getDb } from '../db/client';
 import { sendEmail, sendSms } from '../auth/senders';
 import { SITE_NAME } from '../../lib/site';
 import { maskEmail } from '../../lib/format';
+import { normalizeName } from '../roster/normalize';
 import {
   findActivePropertyByAddress,
   getActiveOwnersForProperty,
@@ -14,35 +15,63 @@ import {
   MAX_ATTEMPTS,
   CODE_TTL_MS,
 } from './codes';
+import { propertyVerifications, userPropertyLinks, users } from '../db/schema';
 import {
-  manualApprovalQueue,
-  propertyVerifications,
-  userPropertyLinks,
-  users,
-} from '../db/schema';
-import { checkPropertyRateLimit, recordVerificationSend } from './rate-limit';
+  checkPropertyRateLimit,
+  recordVerificationSend,
+  checkClaimedNames,
+  recordClaimedName,
+} from './rate-limit';
+
+// The LEGACY backend for /api/verify/request + confirm (#219/D1). Production
+// runs `cutover_mode = legacy` until the flip and the roster tables are empty
+// until the authoritative backfill, so this keeps the pre-flip fan-out exactly
+// as it was: every active owner contact on the channel gets the code. `name`
+// is accepted by the route contract but NOT used for matching here — that
+// closes only once the derived backend (`src/server/roster/verification.ts`)
+// takes over.
+//
+// #219 also retires the three `manual_approval_queue` auto-enqueue paths this
+// function used to write (address not found, no contact on file, every send
+// failed): nothing auto-queues anymore (#201). Every internal failure is
+// reported as an outcome code so the route can map it to the uniform response
+// (D2); the applicant-visible review request is now an explicit action
+// (`POST /api/verify/review`).
+export type PropertyVerificationOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      outcome: 'not_found' | 'no_contact' | 'send_failed' | 'rate_limited';
+    };
 
 export async function requestPropertyVerification(
   env: Env,
   userId: string,
   address: string,
+  name: string,
   channel: 'email' | 'sms',
-): Promise<
-  { ok: true } | { ok: false; queued: true } | { ok: false; rateLimited: true }
-> {
+): Promise<PropertyVerificationOutcome> {
   const db = getDb(env);
   const property = await findActivePropertyByAddress(db, address);
   const now = new Date();
-  if (!property) {
-    await db.insert(manualApprovalQueue).values({
-      id: crypto.randomUUID(),
+  if (!property) return { ok: false, outcome: 'not_found' };
+
+  const prl = await checkPropertyRateLimit(env, property.id);
+  if (!prl.ok) return { ok: false, outcome: 'rate_limited' };
+
+  // The distinct-claimed-names cap runs in BOTH modes (D11) even though
+  // legacy never matches on the name — it is the roster-walking control, not
+  // a matching aid.
+  const normalizedName = normalizeName(name);
+  if (normalizedName) {
+    const namesRl = await checkClaimedNames(
+      env,
+      property.id,
       userId,
-      claimedAddress: address,
-      reason: 'address not found',
-      status: 'pending',
-      createdAt: now,
-    });
-    return { ok: false, queued: true };
+      normalizedName,
+    );
+    if (!namesRl.ok) return { ok: false, outcome: 'rate_limited' };
+    await recordClaimedName(env, property.id, userId, normalizedName);
   }
 
   const propertyOwners = await getActiveOwnersForProperty(db, property.id);
@@ -53,20 +82,7 @@ export async function requestPropertyVerification(
         .filter((v): v is string => !!v),
     ),
   ];
-  if (recipients.length === 0) {
-    await db.insert(manualApprovalQueue).values({
-      id: crypto.randomUUID(),
-      userId,
-      claimedAddress: address,
-      reason: 'no contact on file for channel',
-      status: 'pending',
-      createdAt: now,
-    });
-    return { ok: false, queued: true };
-  }
-
-  const prl = await checkPropertyRateLimit(env, property.id);
-  if (!prl.ok) return { ok: false, rateLimited: true };
+  if (recipients.length === 0) return { ok: false, outcome: 'no_contact' };
 
   await db
     .delete(propertyVerifications)
@@ -108,15 +124,7 @@ export async function requestPropertyVerification(
     ),
   );
   if (!results.some((r) => r.status === 'fulfilled')) {
-    await db.insert(manualApprovalQueue).values({
-      id: crypto.randomUUID(),
-      userId,
-      claimedAddress: address,
-      reason: 'all sends failed',
-      status: 'pending',
-      createdAt: now,
-    });
-    return { ok: false, queued: true };
+    return { ok: false, outcome: 'send_failed' };
   }
   await recordVerificationSend(env, userId, property.id);
   return { ok: true };

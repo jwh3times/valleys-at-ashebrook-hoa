@@ -52,3 +52,83 @@ export async function recordVerificationSend(
     expirationTtl: DAY_SECONDS,
   });
 }
+
+// ADR 0022 phase 3c (#219) additions — the derived-mode Person matcher's
+// abuse throttles. Same KV-counter approach as above, for the same reason:
+// D1 round trips are not worth spending on a soft, best-effort cap.
+
+/** Per-Person daily cap on Automatic Person Verification sends (derived mode
+ * only — legacy has no Person). Distinct from the per-account and per-Lot
+ * caps: a Person who owns several Lots must not be re-sendable once per Lot. */
+export async function checkPersonRateLimit(
+  env: Env,
+  partyId: string,
+): Promise<{ ok: true } | { ok: false; reason: 'daily' }> {
+  if ((await count(env, `verif:day:person:${partyId}`)) >= DAILY_LIMIT)
+    return { ok: false, reason: 'daily' };
+  return { ok: true };
+}
+
+export async function recordPersonSend(
+  env: Env,
+  partyId: string,
+): Promise<void> {
+  const key = `verif:day:person:${partyId}`;
+  await env.KV.put(key, String((await count(env, key)) + 1), {
+    expirationTtl: DAY_SECONDS,
+  });
+}
+
+/** The distinct-claimed-names-per-Lot-per-account cap (both modes): the
+ * roster-walking control. An applicant who tries more than three different
+ * normalized names against one Lot from one account is capped, independent of
+ * whether any of those names actually matched a current owner — the cap is on
+ * probing, not on match failures. */
+const CLAIMED_NAME_CAP = 3;
+
+function claimedNamesKey(lotId: string, accountId: string): string {
+  return `verif:names:${lotId}:${accountId}`;
+}
+
+async function claimedNames(
+  env: Env,
+  lotId: string,
+  accountId: string,
+): Promise<string[]> {
+  const raw = await env.KV.get(claimedNamesKey(lotId, accountId));
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((v): v is string => typeof v === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function checkClaimedNames(
+  env: Env,
+  lotId: string,
+  accountId: string,
+  normalizedName: string,
+): Promise<{ ok: true } | { ok: false; reason: 'distinctNames' }> {
+  const names = await claimedNames(env, lotId, accountId);
+  if (names.includes(normalizedName)) return { ok: true };
+  if (names.length >= CLAIMED_NAME_CAP)
+    return { ok: false, reason: 'distinctNames' };
+  return { ok: true };
+}
+
+export async function recordClaimedName(
+  env: Env,
+  lotId: string,
+  accountId: string,
+  normalizedName: string,
+): Promise<void> {
+  const names = await claimedNames(env, lotId, accountId);
+  if (!names.includes(normalizedName)) names.push(normalizedName);
+  await env.KV.put(claimedNamesKey(lotId, accountId), JSON.stringify(names), {
+    expirationTtl: DAY_SECONDS,
+  });
+}
