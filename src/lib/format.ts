@@ -33,6 +33,23 @@ export function associationDateIso(date: Date = new Date()): string {
 }
 
 /**
+ * Display name for a Person, or the Roster Redaction fallback (#205).
+ *
+ * The fallback is a stable, non-identifying label derived from the durable
+ * Party id — the SAME string on every surface for EVERY viewer, board
+ * included. A privileged "formerly …" variant would defeat the mechanism:
+ * redaction exists because a legal or policy obligation says the value must be
+ * gone. Every read that renders a Person name goes through this function; a
+ * surface with its own fallback is a bug.
+ */
+export function personDisplayLabel(
+  fullName: string | null | undefined,
+  partyId: string,
+): string {
+  return fullName ?? `Resident ${partyId.slice(0, 8)}`;
+}
+
+/**
  * Mask an email for display to a third party: keep the first character of the
  * local part and the full domain (`jerryholland00@gmail.com` → `j***@gmail.com`).
  * The `***` is fixed-width so it never leaks the local-part length. Anything

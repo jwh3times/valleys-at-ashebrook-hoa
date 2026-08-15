@@ -246,6 +246,10 @@ export const boardServiceChanges = sqliteTable(
     }).notNull(),
     // Checked codes so the ledger distinguishes the Art. IV §1(c) absence
     // declaration from a resignation without free text.
+    // `legacy_migration_baseline` (migration 0024) is the backfill's baseline
+    // code — `roster_changes` accepts it because its reason column is
+    // unchecked, and the board-term baseline must not be forced to claim a
+    // human reason that never existed.
     reasonCode: text('reason_code', {
       enum: [
         'term_expired',
@@ -259,6 +263,7 @@ export const boardServiceChanges = sqliteTable(
         'office_assigned',
         'office_ended',
         'recorded_in_error',
+        'legacy_migration_baseline',
       ],
     }).notNull(),
     evidenceKind: text('evidence_kind', { enum: EVIDENCE_KINDS }).notNull(),
@@ -287,7 +292,7 @@ export const boardServiceChanges = sqliteTable(
     ),
     check(
       'board_service_changes_reason_code_check',
-      sql`"reason_code" IN ('term_expired', 'resigned', 'removed', 'declared_vacant_absences', 'eligibility_lost', 'vacancy_appointment', 'elected', 'qualifying_lot_substituted', 'office_assigned', 'office_ended', 'recorded_in_error')`,
+      sql`"reason_code" IN ('term_expired', 'resigned', 'removed', 'declared_vacant_absences', 'eligibility_lost', 'vacancy_appointment', 'elected', 'qualifying_lot_substituted', 'office_assigned', 'office_ended', 'recorded_in_error', 'legacy_migration_baseline')`,
     ),
     check(
       'board_service_changes_evidence_kind_check',
