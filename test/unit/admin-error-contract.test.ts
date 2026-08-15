@@ -51,7 +51,6 @@ const CALLS: Array<[string, () => Promise<unknown>]> = [
   ['deleteResolution', () => admin.deleteResolution('r1')],
   ['deleteElection', () => admin.deleteElection('e1')],
   ['deleteProxy', () => admin.deleteProxy('x1')],
-  ['deleteBoardPerson', () => admin.deleteBoardPerson('p1')],
   ['saveMeeting', () => admin.saveMeeting({} as never)],
   ['setMemberAttendance', () => admin.setMemberAttendance('m1', [])],
 ];

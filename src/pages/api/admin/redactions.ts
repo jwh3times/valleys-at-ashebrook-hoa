@@ -24,7 +24,6 @@ export const prerender = false;
 // capability — recording that a downstream purge succeeded or failed is a
 // separate authority from deciding a value should be erased at all.
 
-const AUTHORITY_KINDS = new Set(['legal_requirement', 'binding_policy']);
 const AUTHORITY_REFERENCE_MAX = 300;
 // A reason CODE, not free text (see AGENTS.md's ledger rules) — short, and
 // capped accordingly.
@@ -42,7 +41,10 @@ function validateAuthority(
   body: unknown,
 ): { ok: true; value: Authority } | { ok: false; error: string } {
   const authorityKind = stringField(body, 'authorityKind');
-  if (authorityKind !== 'legal_requirement' && authorityKind !== 'binding_policy')
+  if (
+    authorityKind !== 'legal_requirement' &&
+    authorityKind !== 'binding_policy'
+  )
     return {
       ok: false,
       error: 'authorityKind must be legal_requirement or binding_policy',
@@ -80,7 +82,13 @@ function redactionTaskStatement(
     `INSERT INTO redaction_tasks (id, redaction_event_id, target_kind, target_identifier, status, attempts, created_at)
      SELECT ?, ?, 'pseudonymizer_catalog', ?, 'pending', 0, ?
      WHERE EXISTS (SELECT 1 FROM audit_events WHERE id = ?)`,
-  ).bind(crypto.randomUUID(), rootEventId, targetIdentifier, nowMs, rootEventId);
+  ).bind(
+    crypto.randomUUID(),
+    rootEventId,
+    targetIdentifier,
+    nowMs,
+    rootEventId,
+  );
 }
 
 async function redactPersonName(
@@ -150,7 +158,8 @@ async function redactContactMethod(
     })
     .from(contactMethods)
     .where(eq(contactMethods.id, contactMethodId));
-  if (!contact) return new Response('Contact method not found', { status: 404 });
+  if (!contact)
+    return new Response('Contact method not found', { status: 404 });
 
   const authority = validateAuthority(body);
   if (!authority.ok) return new Response(authority.error, { status: 400 });

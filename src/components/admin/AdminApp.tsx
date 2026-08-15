@@ -11,7 +11,6 @@ import RosterManager from './RosterManager';
 import RosterPreview from './RosterPreview';
 import MembersManager from './MembersManager';
 import BoardAccessManager from './BoardAccessManager';
-import BoardPanel from './BoardPanel';
 import MeetingsManager from './MeetingsManager';
 import ResolutionsManager from './ResolutionsManager';
 import ElectionsManager from './ElectionsManager';
@@ -43,7 +42,6 @@ const SECTIONS = [
     render: () => <RosterPreview />,
   },
   { key: 'members', label: 'Members', render: () => <MembersManager /> },
-  { key: 'board-roster', label: 'The Board', render: () => <BoardPanel /> },
   {
     key: 'meetings',
     label: 'Meetings',

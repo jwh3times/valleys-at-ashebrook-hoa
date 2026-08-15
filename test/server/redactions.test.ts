@@ -289,7 +289,12 @@ describe('redactions admin route — redactContactMethod', () => {
   it('nulls value and normalized together, categorized by channel', async () => {
     await seedAccount('sa');
     await seedPerson('per-3', 'Contact Person');
-    await seedContactMethod('cm-email-1', 'per-3', 'email', 'resident@example.com');
+    await seedContactMethod(
+      'cm-email-1',
+      'per-3',
+      'email',
+      'resident@example.com',
+    );
     await seedContactMethod('cm-sms-1', 'per-3', 'sms', '+15550001111');
 
     const emailRes = await POST(
@@ -508,7 +513,9 @@ describe('redactions admin route — recordCleanup', () => {
 
 describe('redactions admin route — capability boundary', () => {
   it('refuses a plain board caller on GET and on a redact action', async () => {
-    const getRes = await GET(req('GET', undefined, legacyAuthContext('b', 'board', [])));
+    const getRes = await GET(
+      req('GET', undefined, legacyAuthContext('b', 'board', [])),
+    );
     expect(getRes.status).toBe(403);
 
     const postRes = await POST(

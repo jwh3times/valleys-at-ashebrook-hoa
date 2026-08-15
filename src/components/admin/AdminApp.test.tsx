@@ -119,7 +119,11 @@ describe('AdminApp', () => {
     ).toBeInTheDocument();
   });
 
-  it('offers The Board and Board access as separate tabs', () => {
+  it('offers a Board access tab', () => {
+    // #218 retired the separate "The Board" roster panel (BoardPanel), which
+    // read/wrote the legacy board_people/board_terms tables through the now-
+    // removed /api/admin/board-people and /api/admin/board-terms routes.
+    // Board access (sign-in rank) is unaffected and still gets its own tab.
     vi.mocked(useAuth).mockReturnValue({
       loading: false,
       user: fakeUser,
@@ -127,13 +131,10 @@ describe('AdminApp', () => {
     });
     render(<AdminApp />);
     expect(
-      screen.getByRole('button', { name: 'The Board' }),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole('button', { name: 'Board access' }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Board members' }),
+      screen.queryByRole('button', { name: 'The Board' }),
     ).not.toBeInTheDocument();
   });
 });

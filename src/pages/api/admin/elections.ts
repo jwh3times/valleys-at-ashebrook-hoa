@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, eq, inArray, isNull, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, notInArray } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -13,14 +13,9 @@ import {
   candidates,
   properties,
   meetings,
-  boardTerms,
 } from '../../../server/db/schema';
-import {
-  normalizeElectionInput,
-  isoDateOrError,
-  termRangeError,
-  INPUT_LIMITS,
-} from '../../../lib/types';
+import { people } from '../../../server/db/roster-schema';
+import { normalizeElectionInput, isoDateOrError } from '../../../lib/types';
 import { fetchAdminElections } from '../../../server/content/reads';
 import {
   proxyUseError,
@@ -33,6 +28,21 @@ import {
   reservationGuard,
   runReservedBatch,
 } from '../../../server/content/election-reservation';
+import {
+  AuditCorrelation,
+  operationKey,
+  assertInBatch,
+  insertedRowGuard,
+  isBatchAssertionError,
+  type SqlGuard,
+} from '../../../server/roster/audit';
+import {
+  qualifiesGuard,
+  noOverlapGuard,
+} from '../../../server/roster/board-consequences';
+import { OFFICES } from '../../../server/roster/reads';
+import { normalizeName } from '../../../server/roster/normalize';
+import { associationDateIso } from '../../../lib/format';
 
 export const prerender = false;
 
@@ -521,19 +531,39 @@ interface WinnerCandidate {
   id: string;
   electionId: string;
   withdrawn: boolean;
-  boardPersonId: string | null;
   fullName: string;
 }
 
 interface Winner {
   candidateId: string;
-  termStart: string;
-  termEnd: string | null;
-  title: string | null;
-  boardPersonId: string | null;
+  /** An existing Person, or null — the batch then creates one (which, having
+   * no Ownership or Representation yet, cannot pass the qualification gate;
+   * the escape is recording the basis first, #203). */
+  personId: string | null;
+  /** Pre-generated for the created-Person path; a D1 batch cannot thread ids
+   * between statements. */
+  createdPersonId: string;
+  termId: string;
+  qualifyingLotId: string;
+  startDay: string;
+  scheduledEndDay: string;
+  office: string | null;
+  officeAssignmentId?: string;
   fullName: string;
 }
 
+/**
+ * ADR 0022 phase 3b (#218), per #203: certification creates PARTY-ROSTER
+ * facts — a `board_service_terms` row per winner (election provenance
+ * stamped), an optional Office Assignment — and never a legacy
+ * board_people/board_terms row; the legacy identity layer is retired, not
+ * ported. `qualifyingLotId` is required and validated as a Lot the winner
+ * currently owns or represents and which no other current Board Member
+ * holds; a winner qualifying nowhere is a hard 409 naming them, and the
+ * escape is recording the Ownership or Representation that actually
+ * qualifies them, not a bypass flag. Certification still creates NO Access
+ * Grant — Board Access is never implicit.
+ */
 async function certifyElection(
   db: Db,
   body: unknown,
@@ -576,13 +606,15 @@ async function certifyElection(
     return new Response('More winners than seats', { status: 400 });
 
   // Structural extraction: every entry needs at least a candidateId to look
-  // anything up. Date/title validation (precondition 6) happens in a later
-  // pass so a candidateId problem (precondition 5) is always reported first.
+  // anything up. Field validation (precondition 6) happens in a later pass so
+  // a candidateId problem (precondition 5) is always reported first.
   interface RawWinner {
     candidateId: string;
-    termStart: unknown;
-    termEnd: unknown;
-    title: unknown;
+    personId: unknown;
+    qualifyingLotId: unknown;
+    startDay: unknown;
+    scheduledEndDay: unknown;
+    office: unknown;
   }
   const rawEntries: RawWinner[] = [];
   for (const item of rawWinners) {
@@ -592,9 +624,11 @@ async function certifyElection(
       return new Response('Each winner needs a candidateId', { status: 400 });
     rawEntries.push({
       candidateId,
-      termStart: record?.termStart,
-      termEnd: record?.termEnd,
-      title: record?.title,
+      personId: record?.personId,
+      qualifyingLotId: record?.qualifyingLotId,
+      startDay: record?.startDay,
+      scheduledEndDay: record?.scheduledEndDay,
+      office: record?.office,
     });
   }
 
@@ -611,7 +645,6 @@ async function certifyElection(
       id: candidates.id,
       electionId: candidates.electionId,
       withdrawn: candidates.withdrawn,
-      boardPersonId: candidates.boardPersonId,
       fullName: candidates.fullName,
     })
     .from(candidates)
@@ -627,175 +660,265 @@ async function certifyElection(
       });
   }
 
-  // 6. termStart/termEnd must be valid ISO dates, termEnd must not precede
-  // termStart (same rule board-terms.ts enforces on every write), and title
-  // is capped the same way normalizeBoardTermInput caps it.
+  // 6. per-winner fields: a real qualifying Lot, valid ordered days, an
+  // office from the bylaws' three when supplied, and a personId that names a
+  // real Person when supplied.
   const winners: Winner[] = [];
   for (const w of rawEntries) {
     const c = candidateById.get(w.candidateId)!;
-    const termStartRaw =
-      typeof w.termStart === 'string' ? w.termStart.trim() : '';
-    if (!termStartRaw)
-      return new Response('termStart is required', { status: 400 });
-    const startResult = isoDateOrError(termStartRaw, 'termStart');
+
+    const lotRaw =
+      typeof w.qualifyingLotId === 'string' ? w.qualifyingLotId.trim() : '';
+    if (!lotRaw)
+      return new Response('Each winner needs a qualifyingLotId', {
+        status: 400,
+      });
+    const lotRows = await db
+      .select({ id: properties.id, retiredAt: properties.retiredAt })
+      .from(properties)
+      .where(eq(properties.id, lotRaw))
+      .limit(1);
+    if (lotRows.length === 0)
+      return new Response('Lot not found', { status: 404 });
+    if (lotRows[0].retiredAt !== null)
+      return new Response('Lot is retired', { status: 409 });
+
+    const startRaw = typeof w.startDay === 'string' ? w.startDay.trim() : '';
+    if (!startRaw) return new Response('startDay is required', { status: 400 });
+    const startResult = isoDateOrError(startRaw, 'startDay');
     if (!startResult.ok)
       return new Response(startResult.error, { status: 400 });
+    const schedRaw =
+      typeof w.scheduledEndDay === 'string' ? w.scheduledEndDay.trim() : '';
+    if (!schedRaw)
+      return new Response('scheduledEndDay is required', { status: 400 });
+    const schedResult = isoDateOrError(schedRaw, 'scheduledEndDay');
+    if (!schedResult.ok)
+      return new Response(schedResult.error, { status: 400 });
+    if (schedResult.value <= startResult.value)
+      return new Response('scheduledEndDay must be after startDay', {
+        status: 400,
+      });
 
-    let termEnd: string | null = null;
-    if (w.termEnd !== undefined && w.termEnd !== null) {
-      if (typeof w.termEnd !== 'string')
-        return new Response('termEnd must be a string', { status: 400 });
-      const trimmedEnd = w.termEnd.trim();
-      if (trimmedEnd) {
-        const endResult = isoDateOrError(trimmedEnd, 'termEnd');
-        if (!endResult.ok)
-          return new Response(endResult.error, { status: 400 });
-        termEnd = endResult.value;
+    let office: string | null = null;
+    if (w.office !== undefined && w.office !== null) {
+      if (typeof w.office !== 'string')
+        return new Response('office must be a string', { status: 400 });
+      const trimmed = w.office.trim();
+      if (trimmed) {
+        if (!(OFFICES as readonly string[]).includes(trimmed))
+          return new Response(
+            "office must be one of 'president', 'vice_president', 'secretary_treasurer'",
+            { status: 400 },
+          );
+        office = trimmed;
       }
     }
-    const rangeError = termRangeError(startResult.value, termEnd);
-    if (rangeError) return new Response(rangeError, { status: 400 });
 
-    let title: string | null = null;
-    if (w.title !== undefined && w.title !== null) {
-      if (typeof w.title !== 'string')
-        return new Response('title must be a string', { status: 400 });
-      const trimmedTitle = w.title.trim();
-      if (trimmedTitle.length > INPUT_LIMITS.officeTitle)
-        return new Response(
-          `title must be ${INPUT_LIMITS.officeTitle} characters or fewer`,
-          { status: 400 },
-        );
-      title = trimmedTitle || null;
+    let personId: string | null = null;
+    if (w.personId !== undefined && w.personId !== null) {
+      if (typeof w.personId !== 'string')
+        return new Response('personId must be a string', { status: 400 });
+      const trimmed = w.personId.trim();
+      if (trimmed) {
+        const personRows = await db
+          .select({ partyId: people.partyId })
+          .from(people)
+          .where(eq(people.partyId, trimmed))
+          .limit(1);
+        if (personRows.length === 0)
+          return new Response('Person not found', { status: 404 });
+        personId = trimmed;
+      }
     }
 
     winners.push({
       candidateId: w.candidateId,
-      termStart: startResult.value,
-      termEnd,
-      title,
-      boardPersonId: c.boardPersonId,
+      personId,
+      createdPersonId: crypto.randomUUID(),
+      termId: crypto.randomUUID(),
+      qualifyingLotId: lotRaw,
+      startDay: startResult.value,
+      scheduledEndDay: schedResult.value,
+      office,
       fullName: c.fullName,
     });
   }
 
-  // 7. two winners resolving to the same non-null board_person_id — a
-  // repeated candidateId (5a) does not catch this, since two distinct
-  // candidate rows may carry the same boardPersonId.
-  const linkedPersonIds = winners
-    .map((w) => w.boardPersonId)
+  // 7. two winners resolving to the same Person
+  const namedPersonIds = winners
+    .map((w) => w.personId)
     .filter((pid): pid is string => pid !== null);
-  if (new Set(linkedPersonIds).size !== linkedPersonIds.length)
-    return new Response('Two winners resolve to the same board person', {
+  if (new Set(namedPersonIds).size !== namedPersonIds.length)
+    return new Response('Two winners resolve to the same person', {
       status: 400,
     });
 
-  // 8. a winner already holding an open term (term_end IS NULL) — only
-  // winners whose candidate already carries a boardPersonId can possibly
-  // hold one; a candidate with none is a new person by definition.
-  if (linkedPersonIds.length > 0) {
-    const openTerms = await db
-      .select({ personId: boardTerms.personId })
-      .from(boardTerms)
-      .where(
-        and(
-          inArray(boardTerms.personId, linkedPersonIds),
-          isNull(boardTerms.termEnd),
+  // 8. readable halves of the mutation-boundary gates: the winner qualifies
+  // through the Lot, and neither the person nor the Lot has an overlapping
+  // term. A winner with NO personId gets a fresh Person in the batch — which
+  // owns nothing and therefore cannot pass qualification; the readable
+  // refusal lands here rather than as an opaque batch failure.
+  const associationDay = associationDateIso();
+  const notQualified = (name: string) =>
+    new Response(
+      `${name} does not currently own or represent that lot — record the ownership or representation first`,
+      { status: 409 },
+    );
+  for (const w of winners) {
+    if (w.personId === null) return notQualified(w.fullName);
+    const probes: [SqlGuard, Response][] = [
+      [
+        qualifiesGuard(w.personId, w.qualifyingLotId, associationDay),
+        notQualified(w.fullName),
+      ],
+      [
+        noOverlapGuard('person_id', w.personId, w.startDay, w.scheduledEndDay),
+        new Response(`${w.fullName} already holds an overlapping term`, {
+          status: 409,
+        }),
+      ],
+      [
+        noOverlapGuard(
+          'qualifying_lot_id',
+          w.qualifyingLotId,
+          w.startDay,
+          w.scheduledEndDay,
         ),
-      );
-    if (openTerms.length > 0) {
-      const openPersonId = openTerms[0].personId;
-      const winner = winners.find((w) => w.boardPersonId === openPersonId)!;
-      return new Response(
-        `${winner.fullName} already holds an open term — end it before certifying`,
-        { status: 409 },
-      );
+        new Response(
+          `That lot already qualifies another board member for an overlapping term (${w.fullName})`,
+          { status: 409 },
+        ),
+      ],
+    ];
+    for (const [probe, refusal] of probes) {
+      const row = await env.DATABASE.prepare(
+        `SELECT CASE WHEN ${probe.sql} THEN 1 ELSE 0 END AS ok`,
+      )
+        .bind(...probe.binds)
+        .first<{ ok: number }>();
+      if (row?.ok !== 1) return refusal;
     }
   }
 
-  // Effects, all in one batch. The first statement reserves this closed
-  // election with a temporary status and re-checks the existing-person
-  // open-term invariant at the mutation boundary. The temporary value is
-  // never externally visible or committed: every effect requires it, and
-  // the final statement replaces it with `certified`. A competing batch for
-  // another election that opens a term first makes this reservation a no-op,
-  // which in turn makes every dependent effect a no-op.
-  //
-  // Every new id is pre-generated in JS — a D1 batch cannot thread a
-  // RETURNING value from one statement into the next, so the board_terms rows
-  // below must reference person ids that already exist as JS values before
-  // the batch is built.
+  // Effects, all in one reserved batch. Every gate above is re-asserted in
+  // SQL, and each winner's term insert is backed by an `assertInBatch` so a
+  // certification can never commit with a winner's term (or an explicitly
+  // requested office) missing — the whole batch rolls back instead.
   const ctx = await resolveAuthContext(locals, request, env);
   const now = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
   const sentinel = RESERVATION_SENTINELS.certify;
   const guard = reservationGuard(id, sentinel);
-  const linkedPersonPlaceholders = linkedPersonIds.map(() => '?').join(', ');
-  // Re-checked at the mutation boundary, not just read earlier: two
-  // concurrent certifications must not both open a term for the same person.
-  const openTermGuard =
-    linkedPersonIds.length > 0
-      ? `AND NOT EXISTS (
-           SELECT 1 FROM board_terms
-           WHERE person_id IN (${linkedPersonPlaceholders})
-             AND term_end IS NULL
-         )`
-      : '';
+  const reservedGuard = { sql: guard.sql, binds: guard.binds };
   const reserve = env.DATABASE.prepare(
     `UPDATE elections
        SET status = ?, updated_at = ?
        WHERE id = ? AND status = 'closed'
-         ${openTermGuard}
        RETURNING id`,
-  ).bind(sentinel, now, id, ...linkedPersonIds);
+  ).bind(sentinel, now, id);
+
   const children: D1PreparedStatement[] = [];
+  const asserts: D1PreparedStatement[] = [];
   for (const w of winners) {
-    if (w.boardPersonId === null) {
-      const personId = crypto.randomUUID();
+    const personId = w.personId ?? w.createdPersonId;
+    if (w.personId === null) {
+      // Unreachable through the API today (step 8 refuses first), kept for
+      // #203's resolve-or-create shape: a created Person owns nothing, so
+      // the qualification gate below would refuse the term anyway.
       children.push(
         env.DATABASE.prepare(
-          `INSERT INTO board_people (id, full_name, created_at, updated_at)
-           SELECT ?, ?, ?, ?
-           WHERE ${guard.sql}`,
-        ).bind(personId, w.fullName, now, now, ...guard.binds),
-      );
-      // Backfilled so a re-run cannot mint a second identity for the same
-      // human — ADR 0012's whole point is one identity across terms.
-      children.push(
+          `INSERT INTO parties (id, kind, created_at, updated_at)
+           SELECT ?, 'person', ?, ? WHERE ${guard.sql}`,
+        ).bind(personId, nowMs, nowMs, ...guard.binds),
         env.DATABASE.prepare(
-          `UPDATE candidates
-           SET board_person_id = ?
-           WHERE id = ? AND election_id = ? AND ${guard.sql}`,
-        ).bind(personId, w.candidateId, id, ...guard.binds),
+          `INSERT INTO people (party_id, party_kind, full_name, name_normalized, updated_at)
+           SELECT ?, 'person', ?, ?, ? WHERE ${guard.sql}`,
+        ).bind(
+          personId,
+          w.fullName,
+          normalizeName(w.fullName) ?? w.fullName.toLowerCase(),
+          nowMs,
+          ...guard.binds,
+        ),
       );
-      w.boardPersonId = personId;
     }
-  }
-  for (const w of winners) {
+    const qualifies = qualifiesGuard(
+      personId,
+      w.qualifyingLotId,
+      associationDay,
+    );
+    const personClear = noOverlapGuard(
+      'person_id',
+      personId,
+      w.startDay,
+      w.scheduledEndDay,
+    );
+    const lotClear = noOverlapGuard(
+      'qualifying_lot_id',
+      w.qualifyingLotId,
+      w.startDay,
+      w.scheduledEndDay,
+    );
     children.push(
       env.DATABASE.prepare(
-        `INSERT INTO board_terms (
-           id, person_id, title, term_start, term_end, election_id,
-           created_at, updated_at
-         )
+        `INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, election_id, start_day, scheduled_end_day, created_at, updated_at)
          SELECT ?, ?, ?, ?, ?, ?, ?, ?
          WHERE ${guard.sql}
-           AND NOT EXISTS (
-             SELECT 1 FROM board_terms
-             WHERE person_id = ? AND term_end IS NULL
-           )`,
+           AND (${qualifies.sql}) AND (${personClear.sql}) AND (${lotClear.sql})`,
       ).bind(
-        crypto.randomUUID(),
-        w.boardPersonId!,
-        w.title,
-        w.termStart,
-        w.termEnd,
+        w.termId,
+        personId,
+        w.qualifyingLotId,
         id,
-        now,
-        now,
+        w.startDay,
+        w.scheduledEndDay,
+        nowMs,
+        nowMs,
         ...guard.binds,
-        w.boardPersonId!,
+        ...qualifies.binds,
+        ...personClear.binds,
+        ...lotClear.binds,
       ),
     );
+    asserts.push(
+      assertInBatch(
+        env.DATABASE,
+        insertedRowGuard('board_service_terms', w.termId),
+      ),
+    );
+    if (w.office) {
+      const officeId = crypto.randomUUID();
+      children.push(
+        env.DATABASE.prepare(
+          `INSERT INTO board_office_assignments (id, board_term_id, person_id, office, start_day, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?
+           WHERE EXISTS (SELECT 1 FROM board_service_terms WHERE id = ?)
+             AND NOT EXISTS (SELECT 1 FROM board_office_assignments WHERE office = ? AND end_day IS NULL AND voided_at IS NULL)
+             AND NOT EXISTS (SELECT 1 FROM board_office_assignments WHERE person_id = ? AND end_day IS NULL AND voided_at IS NULL)`,
+        ).bind(
+          officeId,
+          w.termId,
+          personId,
+          w.office,
+          w.startDay,
+          nowMs,
+          nowMs,
+          w.termId,
+          w.office,
+          personId,
+        ),
+      );
+      // An explicitly requested office that cannot be assigned fails the
+      // whole certification rather than silently going unassigned.
+      asserts.push(
+        assertInBatch(
+          env.DATABASE,
+          insertedRowGuard('board_office_assignments', officeId),
+        ),
+      );
+      w.officeAssignmentId = officeId;
+    }
   }
   const winnerPlaceholders = winners.map(() => '?').join(', ');
   children.push(
@@ -806,6 +929,49 @@ async function certifyElection(
          AND ${guard.sql}`,
     ).bind(id, ...winners.map((w) => w.candidateId), ...guard.binds),
   );
+
+  const correlation = new AuditCorrelation(env.DATABASE, {
+    operationKey: operationKey('elections', 'certify'),
+    actorAccountId: ctx?.userId ?? 'unknown',
+    nowMs,
+  });
+  correlation.event({
+    kind: 'election_certified',
+    guard: reservedGuard,
+    detail: {
+      family: 'board_service_change',
+      effective: { day: associationDay },
+      reason: 'elected',
+      evidence: { kind: 'election', electionId: id },
+      subjects: winners.map((w) => ({
+        column: 'board_term_id' as const,
+        id: w.termId,
+        role: 'created' as const,
+      })),
+    },
+  });
+  for (const w of winners) {
+    if (!w.officeAssignmentId) continue;
+    correlation.event({
+      kind: 'office_assigned',
+      guard: insertedRowGuard('board_office_assignments', w.officeAssignmentId),
+      detail: {
+        family: 'board_service_change',
+        effective: { day: w.startDay },
+        reason: 'office_assigned',
+        evidence: { kind: 'election', electionId: id },
+        subjects: [
+          {
+            column: 'office_assignment_id',
+            id: w.officeAssignmentId,
+            role: 'created',
+          },
+          { column: 'board_term_id', id: w.termId, role: 'related' },
+        ],
+      },
+    });
+  }
+
   const release = env.DATABASE.prepare(
     `UPDATE elections
        SET status = 'certified', certified_at = ?, certified_by = ?,
@@ -813,39 +979,67 @@ async function certifyElection(
        WHERE id = ? AND status = ?
        RETURNING id`,
   ).bind(now, ctx?.userId ?? 'unknown', now, id, sentinel);
-  const committed = await runReservedBatch(
-    env.DATABASE,
-    reserve,
-    children,
-    release,
-  );
-  if (!committed) {
-    if (linkedPersonIds.length > 0) {
-      const openTerms = await db
-        .select({ personId: boardTerms.personId })
-        .from(boardTerms)
-        .where(
-          and(
-            inArray(boardTerms.personId, linkedPersonIds),
-            isNull(boardTerms.termEnd),
-          ),
-        );
-      if (openTerms.length > 0) {
-        const winner = winners.find(
-          (w) => w.boardPersonId === openTerms[0].personId,
-        )!;
-        return new Response(
-          `${winner.fullName} already holds an open term — end it before certifying`,
-          { status: 409 },
-        );
+
+  let committed: boolean;
+  try {
+    committed = await runReservedBatch(
+      env.DATABASE,
+      reserve,
+      [...children, ...correlation.statements, ...asserts],
+      release,
+    );
+  } catch (e) {
+    if (isBatchAssertionError(e)) {
+      // A winner's term (or requested office) failed its mutation-boundary
+      // gate after the readable pre-checks passed — name the loser.
+      for (const w of winners) {
+        if (w.personId === null) return notQualified(w.fullName);
+        const q = qualifiesGuard(w.personId, w.qualifyingLotId, associationDay);
+        const row = await env.DATABASE.prepare(
+          `SELECT CASE WHEN ${q.sql} THEN 1 ELSE 0 END AS ok`,
+        )
+          .bind(...q.binds)
+          .first<{ ok: number }>();
+        if (row?.ok !== 1) return notQualified(w.fullName);
+        if (w.office) {
+          const taken = await env.DATABASE.prepare(
+            `SELECT 1 FROM board_office_assignments WHERE office = ? AND end_day IS NULL AND voided_at IS NULL LIMIT 1`,
+          )
+            .bind(w.office)
+            .first();
+          if (taken)
+            return new Response('That office already has a current holder', {
+              status: 409,
+            });
+        }
       }
+      return new Response('A winner no longer qualifies for their lot', {
+        status: 409,
+      });
     }
-    return new Response('Election is no longer closed', { status: 409 });
+    throw e;
   }
+  if (!committed)
+    return new Response('Election is no longer closed', { status: 409 });
   return new Response(null, { status: 204 });
 }
 
-async function uncertifyElection(db: Db, body: unknown): Promise<Response> {
+/**
+ * Uncertify VOIDS the terms certification created rather than deleting them
+ * (#203, #218's acceptance criterion): a certification that happened and was
+ * reversed is a fact the ledger must be able to state, so the round-trip
+ * leaves voided rows visible. Office assignments on those terms are voided
+ * with them, and any Board grants they qualified end now with
+ * `recorded_in_error`. An election certified under the retired legacy model
+ * has no `board_service_terms` rows; its uncertify finds nothing to void and
+ * simply reverses the status.
+ */
+async function uncertifyElection(
+  db: Db,
+  body: unknown,
+  locals: App.Locals | undefined,
+  request: Request,
+): Promise<Response> {
   const id = stringField(body, 'id');
   if (!id) return new Response('id is required', { status: 400 });
   const existing = await db
@@ -859,25 +1053,163 @@ async function uncertifyElection(db: Db, body: unknown): Promise<Response> {
     return new Response('Only a certified election can be uncertified', {
       status: 409,
     });
-  // board_people rows created by certify are left alone — they may by now be
-  // referenced elsewhere, and the roster panel already refuses deletion of a
-  // person anything references.
-  await db.batch([
-    db.delete(boardTerms).where(eq(boardTerms.electionId, id)),
-    db
-      .update(candidates)
-      .set({ won: false })
-      .where(eq(candidates.electionId, id)),
-    db
-      .update(elections)
-      .set({
-        status: 'closed',
-        certifiedAt: null,
-        certifiedBy: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(elections.id, id)),
-  ] as never);
+
+  const termRows = await env.DATABASE.prepare(
+    `SELECT id FROM board_service_terms WHERE election_id = ? AND voided_at IS NULL`,
+  )
+    .bind(id)
+    .all<{ id: string }>();
+  const termIds = termRows.results.map((t) => t.id);
+  const termPlaceholders = termIds.map(() => '?').join(', ');
+  const officeRows = termIds.length
+    ? await env.DATABASE.prepare(
+        `SELECT id, board_term_id FROM board_office_assignments
+         WHERE board_term_id IN (${termPlaceholders}) AND voided_at IS NULL`,
+      )
+        .bind(...termIds)
+        .all<{ id: string; board_term_id: string }>()
+    : { results: [] as { id: string; board_term_id: string }[] };
+  const grantRows = termIds.length
+    ? await env.DATABASE.prepare(
+        `SELECT id, account_id, qualifying_board_term_id FROM access_grants
+         WHERE qualifying_board_term_id IN (${termPlaceholders}) AND ended_at IS NULL`,
+      )
+        .bind(...termIds)
+        .all<{
+          id: string;
+          account_id: string;
+          qualifying_board_term_id: string;
+        }>()
+    : {
+        results: [] as {
+          id: string;
+          account_id: string;
+          qualifying_board_term_id: string;
+        }[],
+      };
+
+  const ctx = await resolveAuthContext(locals, request, env);
+  const now = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
+  const sentinel = RESERVATION_SENTINELS.uncertify;
+  const guard = reservationGuard(id, sentinel);
+  const reserve = env.DATABASE.prepare(
+    `UPDATE elections SET status = ?, updated_at = ?
+     WHERE id = ? AND status = 'certified'
+     RETURNING id`,
+  ).bind(sentinel, now, id);
+
+  const children: D1PreparedStatement[] = [];
+  if (termIds.length) {
+    children.push(
+      env.DATABASE.prepare(
+        `UPDATE board_service_terms
+         SET voided_at = ?, actual_end_day = NULL, cancelled_day = NULL, cancelled_at = NULL, updated_at = ?
+         WHERE election_id = ? AND voided_at IS NULL AND ${guard.sql}`,
+      ).bind(nowMs, nowMs, id, ...guard.binds),
+    );
+    for (const office of officeRows.results) {
+      children.push(
+        env.DATABASE.prepare(
+          `UPDATE board_office_assignments SET voided_at = ?, end_day = NULL, updated_at = ?
+           WHERE id = ? AND voided_at IS NULL AND ${guard.sql}`,
+        ).bind(nowMs, nowMs, office.id, ...guard.binds),
+      );
+    }
+    for (const grant of grantRows.results) {
+      children.push(
+        env.DATABASE.prepare(
+          `UPDATE access_grants SET ended_at = ?, ended_by_account_id = ?, end_reason = 'recorded_in_error'
+           WHERE id = ? AND ended_at IS NULL AND ${guard.sql}`,
+        ).bind(nowMs, ctx?.userId ?? 'unknown', grant.id, ...guard.binds),
+      );
+    }
+  }
+  children.push(
+    env.DATABASE.prepare(
+      `UPDATE candidates SET won = 0 WHERE election_id = ? AND ${guard.sql}`,
+    ).bind(id, ...guard.binds),
+  );
+
+  const correlation = new AuditCorrelation(env.DATABASE, {
+    operationKey: operationKey('elections', 'uncertify'),
+    actorAccountId: ctx?.userId ?? 'unknown',
+    nowMs,
+  });
+  correlation.event({
+    kind: 'election_uncertified',
+    guard: { sql: guard.sql, binds: guard.binds },
+    detail: {
+      family: 'board_service_change',
+      effective: 'not_applicable',
+      reason: 'recorded_in_error',
+      evidence: { kind: 'election', electionId: id },
+      subjects: termIds.map((termId) => ({
+        column: 'board_term_id' as const,
+        id: termId,
+        role: 'voided' as const,
+      })),
+    },
+  });
+  for (const office of officeRows.results) {
+    correlation.event({
+      kind: 'office_assignment_voided',
+      actor: { kind: 'automatic', cause: 'election_uncertified' },
+      guard: {
+        sql: `EXISTS (SELECT 1 FROM board_office_assignments WHERE id = ? AND voided_at = ?)`,
+        binds: [office.id, nowMs],
+      },
+      detail: {
+        family: 'board_service_change',
+        effective: 'not_applicable',
+        reason: 'recorded_in_error',
+        evidence: { kind: 'election', electionId: id },
+        subjects: [
+          { column: 'office_assignment_id', id: office.id, role: 'voided' },
+          {
+            column: 'board_term_id',
+            id: office.board_term_id,
+            role: 'related',
+          },
+        ],
+      },
+    });
+  }
+  for (const grant of grantRows.results) {
+    correlation.event({
+      kind: 'grant_ended',
+      actor: { kind: 'automatic', cause: 'election_uncertified' },
+      guard: {
+        sql: `EXISTS (SELECT 1 FROM access_grants WHERE id = ? AND ended_at = ?)`,
+        binds: [grant.id, nowMs],
+      },
+      detail: {
+        family: 'access',
+        grantId: grant.id,
+        targetAccountId: grant.account_id,
+        grantType: 'board',
+        requestedAction: 'revoke',
+        outcome: 'allowed',
+        reason: 'recorded_in_error',
+      },
+    });
+  }
+
+  const release = env.DATABASE.prepare(
+    `UPDATE elections
+     SET status = 'closed', certified_at = NULL, certified_by = NULL, updated_at = ?
+     WHERE id = ? AND status = ?
+     RETURNING id`,
+  ).bind(now, id, sentinel);
+
+  const committed = await runReservedBatch(
+    env.DATABASE,
+    reserve,
+    [...children, ...correlation.statements],
+    release,
+  );
+  if (!committed)
+    return new Response('Election is no longer certified', { status: 409 });
   return new Response(null, { status: 204 });
 }
 
@@ -909,7 +1241,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'certify':
       return certifyElection(db, parsed.value, locals, request);
     case 'uncertify':
-      return uncertifyElection(db, parsed.value);
+      return uncertifyElection(db, parsed.value, locals, request);
     case '':
       break;
     default:

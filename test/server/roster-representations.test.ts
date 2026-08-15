@@ -25,8 +25,9 @@ import { POST } from '../../src/pages/api/admin/roster-representations';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -80,15 +81,17 @@ beforeEach(async () => {
 
 async function seedLot(id: string) {
   const now = new Date();
-  await getDb(env).insert(properties).values({
-    id,
-    address: `${id} Ashebrook Lane`,
-    addressNormalized: `${id} ashebrook lane`,
-    status: 'active',
-    voteWeight: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(properties)
+    .values({
+      id,
+      address: `${id} Ashebrook Lane`,
+      addressNormalized: `${id} ashebrook lane`,
+      status: 'active',
+      voteWeight: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 async function seedPerson(id: string) {
@@ -96,13 +99,15 @@ async function seedPerson(id: string) {
   await getDb(env)
     .insert(parties)
     .values({ id, kind: 'person', createdAt: now, updatedAt: now });
-  await getDb(env).insert(people).values({
-    partyId: id,
-    partyKind: 'person',
-    fullName: `Person ${id}`,
-    nameNormalized: `person ${id}`,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(people)
+    .values({
+      partyId: id,
+      partyKind: 'person',
+      fullName: `Person ${id}`,
+      nameNormalized: `person ${id}`,
+      updatedAt: now,
+    });
 }
 
 async function seedOrganization(id: string) {
@@ -110,13 +115,15 @@ async function seedOrganization(id: string) {
   await getDb(env)
     .insert(parties)
     .values({ id, kind: 'organization', createdAt: now, updatedAt: now });
-  await getDb(env).insert(organizations).values({
-    partyId: id,
-    partyKind: 'organization',
-    legalName: `Org ${id}`,
-    nameNormalized: `org ${id}`,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(organizations)
+    .values({
+      partyId: id,
+      partyKind: 'organization',
+      legalName: `Org ${id}`,
+      nameNormalized: `org ${id}`,
+      updatedAt: now,
+    });
 }
 
 async function seedOwnership(id: string, ownerPartyId: string, lotId: string) {
@@ -148,7 +155,10 @@ function req(body: unknown): never {
   return {
     request: new Request('http://localhost/api/admin/roster-representations', {
       method: 'POST',
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify(body),
     }),
   } as never;
@@ -156,8 +166,12 @@ function req(body: unknown): never {
 
 async function integrityClean() {
   const db = getDb(env);
-  expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual([]);
-  expect(await db.all(sql`SELECT * FROM board_eligibility_violations_v`)).toEqual([]);
+  expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual(
+    [],
+  );
+  expect(
+    await db.all(sql`SELECT * FROM board_eligibility_violations_v`),
+  ).toEqual([]);
 }
 
 describe('create', () => {

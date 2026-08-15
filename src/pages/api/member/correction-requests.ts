@@ -4,7 +4,10 @@ import { env } from 'cloudflare:workers';
 import { requireMemberApi } from '../../../server/authz/member-guards';
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
-import { correctionRequests, contactMethods } from '../../../server/db/roster-schema';
+import {
+  correctionRequests,
+  contactMethods,
+} from '../../../server/db/roster-schema';
 
 // ADR 0022 phase 3b (#218): members submit correction REQUESTS, never facts
 // (#205's resolution). This route only ever writes `correction_requests` —
@@ -51,8 +54,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const gate = await requireMemberApi(locals, request, env);
   if (!gate.ok) return gate.res;
   const ctx = gate.ctx;
-  if (!ctx.personId)
-    return new Response(VERIFICATION_MESSAGE, { status: 403 });
+  if (!ctx.personId) return new Response(VERIFICATION_MESSAGE, { status: 403 });
   const parsed = await readJson(request);
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
 
@@ -176,8 +178,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   const gate = await requireMemberApi(locals, request, env);
   if (!gate.ok) return gate.res;
   const ctx = gate.ctx;
-  if (!ctx.personId)
-    return new Response(VERIFICATION_MESSAGE, { status: 403 });
+  if (!ctx.personId) return new Response(VERIFICATION_MESSAGE, { status: 403 });
   const parsed = await readJson(request);
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
   const id = stringField(parsed.value, 'id');

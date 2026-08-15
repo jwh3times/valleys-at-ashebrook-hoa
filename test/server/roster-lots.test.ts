@@ -2,7 +2,11 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { properties, elections, electionEligibility } from '../../src/server/db/schema';
+import {
+  properties,
+  elections,
+  electionEligibility,
+} from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   parties,
@@ -23,8 +27,9 @@ import { POST } from '../../src/pages/api/admin/roster-lots';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (await importActual<typeof import('../../src/server/authz/context')>())
-      .legacyAuthContext('board-1', 'board', []),
+    (
+      await importActual<typeof import('../../src/server/authz/context')>()
+    ).legacyAuthContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -73,15 +78,17 @@ beforeEach(async () => {
 
 async function seedLot(id: string) {
   const now = new Date();
-  await getDb(env).insert(properties).values({
-    id,
-    address: `${id} Ashebrook Lane`,
-    addressNormalized: `${id} ashebrook lane`,
-    status: 'active',
-    voteWeight: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(properties)
+    .values({
+      id,
+      address: `${id} Ashebrook Lane`,
+      addressNormalized: `${id} ashebrook lane`,
+      status: 'active',
+      voteWeight: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
 }
 
 async function seedPerson(id: string) {
@@ -89,13 +96,15 @@ async function seedPerson(id: string) {
   await getDb(env)
     .insert(parties)
     .values({ id, kind: 'person', createdAt: now, updatedAt: now });
-  await getDb(env).insert(people).values({
-    partyId: id,
-    partyKind: 'person',
-    fullName: `Person ${id}`,
-    nameNormalized: `person ${id}`,
-    updatedAt: now,
-  });
+  await getDb(env)
+    .insert(people)
+    .values({
+      partyId: id,
+      partyKind: 'person',
+      fullName: `Person ${id}`,
+      nameNormalized: `person ${id}`,
+      updatedAt: now,
+    });
 }
 
 async function seedOwnership(id: string, ownerPartyId: string, lotId: string) {
@@ -114,7 +123,10 @@ function req(body: unknown): never {
   return {
     request: new Request('http://localhost/api/admin/roster-lots', {
       method: 'POST',
-      headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
       body: JSON.stringify(body),
     }),
   } as never;
@@ -147,7 +159,9 @@ describe('retire', () => {
       event_kind: string;
       correlation_sequence: number;
       actor_kind: string;
-    }>(sql`SELECT event_kind, correlation_sequence, actor_kind FROM audit_events ORDER BY correlation_sequence`);
+    }>(
+      sql`SELECT event_kind, correlation_sequence, actor_kind FROM audit_events ORDER BY correlation_sequence`,
+    );
     expect(events[0]).toMatchObject({
       event_kind: 'lot_retired',
       correlation_sequence: 0,
@@ -161,7 +175,9 @@ describe('retire', () => {
         actor_kind: 'automatic',
       });
 
-    expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual([]);
+    expect(
+      await db.all(sql`SELECT * FROM audit_integrity_violations_v`),
+    ).toEqual([]);
   });
 
   it('refuses while a live term names the lot as its qualifying lot', async () => {
@@ -238,7 +254,9 @@ describe('correctRetirement', () => {
     await seedOwnership('own-1', 'per-1', 'lot-1');
     await POST(req({ action: 'retire', lotId: 'lot-1' }));
 
-    const res = await POST(req({ action: 'correctRetirement', lotId: 'lot-1' }));
+    const res = await POST(
+      req({ action: 'correctRetirement', lotId: 'lot-1' }),
+    );
     expect(res.status).toBe(204);
 
     const db = getDb(env);
@@ -262,6 +280,8 @@ describe('correctRetirement', () => {
       req({ action: 'correctRetirement', lotId: 'lot-1' }),
     );
     expect(notRetired.status).toBe(409);
-    expect(await db.all(sql`SELECT * FROM audit_integrity_violations_v`)).toEqual([]);
+    expect(
+      await db.all(sql`SELECT * FROM audit_integrity_violations_v`),
+    ).toEqual([]);
   });
 });

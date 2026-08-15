@@ -1,6 +1,6 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
-import { sql, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/schema';
 import { auditEvents, accessEvents } from '../../src/server/db/audit-schema';
@@ -14,14 +14,16 @@ import { req } from './fixtures';
 // mock is file-wide.
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: vi.fn(
-    async (): Promise<AuthContext | null> =>
-      legacyAuthContext('b', 'board', []),
+  getAuthContext: vi.fn(async (): Promise<AuthContext | null> =>
+    legacyAuthContext('b', 'board', []),
   ),
 }));
 
 import { POST } from '../../src/pages/api/admin/roster-export';
-import { getAuthContext, legacyAuthContext } from '../../src/server/authz/context';
+import {
+  getAuthContext,
+  legacyAuthContext,
+} from '../../src/server/authz/context';
 import { fetchAdminRoster } from '../../src/server/roster/reads';
 import { associationDateIso } from '../../src/lib/format';
 

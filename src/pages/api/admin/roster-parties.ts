@@ -8,7 +8,11 @@ import {
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { associationDateIso } from '../../../lib/format';
-import { parties, people, organizations } from '../../../server/db/roster-schema';
+import {
+  parties,
+  people,
+  organizations,
+} from '../../../server/db/roster-schema';
 import { normalizeName } from '../../../server/roster/normalize';
 import {
   AuditCorrelation,
@@ -45,8 +49,6 @@ const normalized = (name: string): string =>
 export const prerender = false;
 
 const NAME_MAX = 200;
-const CONSOLIDATED =
-  'Party has been consolidated — record facts on the survivor';
 
 function parseEvidence(
   body: unknown,
@@ -413,7 +415,8 @@ async function consolidate(
     return new Response(evidenceResult.error, { status: 400 });
 
   const nowMs = Date.now();
-  const linkGuardSql = duplicate.kind === 'person' ? ` AND ${bothLinked.sql}` : '';
+  const linkGuardSql =
+    duplicate.kind === 'person' ? ` AND ${bothLinked.sql}` : '';
   const linkGuardBinds = duplicate.kind === 'person' ? bothLinked.binds : [];
   const primary = env.DATABASE.prepare(
     `UPDATE parties SET consolidated_into_party_id = ?, updated_at = ?
