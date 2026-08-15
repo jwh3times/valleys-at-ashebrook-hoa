@@ -80,12 +80,28 @@ export function insertedRowGuard(
     | 'representations'
     | 'board_service_terms'
     | 'board_office_assignments'
-    | 'access_grants',
+    | 'access_grants'
+    | 'person_verifications'
+    | 'person_links'
+    | 'verification_codes'
+    | 'system_admin_bootstrap',
   id: string,
 ): SqlGuard {
+  // The bootstrap singleton has no `id`; its key column is the marker.
+  const idColumn = table === 'system_admin_bootstrap' ? 'singleton_key' : 'id';
   return {
-    sql: `EXISTS (SELECT 1 FROM ${table} WHERE id = ?)`,
+    sql: `EXISTS (SELECT 1 FROM ${table} WHERE ${idColumn} = ?)`,
     binds: [id],
+  };
+}
+
+/** Marker guard for a Person Link ending: `person_links` carries no
+ * `updated_at`, so the post-state marker is the ending instant this command
+ * stamped. */
+export function endedLinkGuard(linkId: string, nowMs: number): SqlGuard {
+  return {
+    sql: 'EXISTS (SELECT 1 FROM person_links WHERE id = ? AND ended_at = ?)',
+    binds: [linkId, nowMs],
   };
 }
 
@@ -105,9 +121,11 @@ export type EvidenceKind =
   | 'operator_observation';
 
 /** Exactly one reference, matching its kind — `operator_observation` carries
- * none. `requestId` is legal only on a Roster Change (the opaque locator for a
- * member correction request); the board-service detail table has no such
- * column. */
+ * none. `requestId` is legal only on a Roster Change or an Identity Event
+ * (the opaque locator for a member correction request or a verification
+ * review request); the board-service detail table has no such column, and
+ * `identity_events` has no election column — an election proves nothing about
+ * who an account is. */
 export interface Evidence {
   kind: EvidenceKind;
   documentId?: string | null;
@@ -135,6 +153,27 @@ export type RosterChangeReason =
   | 'correction_request_accepted'
   | 'scope_correction'
   | 'recorded_in_error';
+
+/**
+ * Identity Event reason codes (#201/#219). The `identity_events.reason_code`
+ * column is deliberately unchecked (0024's board-service rebuild is the
+ * recorded lesson that reason-code CHECKs become flip-blockers), so this
+ * union IS the discipline — extend it here, never inline at a call site.
+ * The first four mirror `person_verifications.reason`; the rest are the
+ * Person Link ending reasons plus the review-queue decline.
+ */
+export type IdentityReason =
+  | 'automatic_contact_proof'
+  | 'manual_board_decision'
+  | 'migration_reverification'
+  | 'bootstrap_first_administrator'
+  | 'self_unlink'
+  | 'account_replaced'
+  | 'no_longer_qualifies'
+  | 'suspected_compromise'
+  | 'recorded_in_error'
+  | 'resident_request'
+  | 'verification_review_declined';
 
 /** Mirrors `board_service_changes_reason_code_check` (migration 0024). */
 export type BoardServiceReason =
@@ -221,12 +260,28 @@ export type AuditDetail =
       subjects: { column: BoardSubjectColumn; id: string; role: SubjectRole }[];
     }
   | {
+      family: 'identity';
+      reason: IdentityReason;
+      personVerificationId?: string | null;
+      personLinkId?: string | null;
+      personId?: string | null;
+      targetAccountId?: string | null;
+      /** Absent for automatic verification (the verification row itself
+       * carries the contact proof) and for link endings; a manual decision
+       * carries what the approver actually relied on. */
+      evidence?: Evidence | null;
+    }
+  | {
       family: 'access';
       grantId?: string | null;
       targetAccountId?: string | null;
       grantType?: 'board' | 'system_admin' | null;
       requestedAction:
-        'grant' | 'revoke' | 'roster_export' | 'last_administrator_change';
+        | 'grant'
+        | 'revoke'
+        | 'bootstrap'
+        | 'roster_export'
+        | 'last_administrator_change';
       outcome: 'allowed' | 'denied';
       reason?: string | null;
     }
@@ -267,20 +322,23 @@ const effectiveColumns = (
 
 function evidenceColumns(
   evidence: Evidence,
-  family: 'roster_change' | 'board_service_change',
+  family: 'roster_change' | 'board_service_change' | 'identity',
 ): unknown[] {
+  const allowRequest = family === 'roster_change' || family === 'identity';
+  const allowElection = family !== 'identity';
   const refs = [
     evidence.documentId ?? null,
     evidence.meetingId ?? null,
-    evidence.electionId ?? null,
-    ...(family === 'roster_change' ? [evidence.requestId ?? null] : []),
+    ...(allowElection ? [evidence.electionId ?? null] : []),
+    ...(allowRequest ? [evidence.requestId ?? null] : []),
     evidence.externalReference ?? null,
   ];
   const present = refs.filter((r) => r !== null).length;
   const expected = evidence.kind === 'operator_observation' ? 0 : 1;
   if (
     present !== expected ||
-    (family !== 'roster_change' && evidence.requestId)
+    (!allowRequest && evidence.requestId) ||
+    (!allowElection && evidence.electionId)
   )
     throw new Error(
       `evidence for ${family}/${evidence.kind} must carry exactly ${expected} reference`,
@@ -307,6 +365,10 @@ export class AuditCorrelation {
       operationKey: string;
       actorAccountId: string;
       nowMs: number;
+      /** `bootstrap` is legal exactly once: the first-System-Administrator
+       * operation (#201). The account is still recorded — the schema permits
+       * a NULL account for bootstrap, but this writer always knows it. */
+      actorKind?: 'account' | 'bootstrap';
     },
   ) {}
 
@@ -349,7 +411,7 @@ export class AuditCorrelation {
           this.correlationId,
           seq,
           isRoot ? null : this.rootId,
-          spec.actor ? 'automatic' : 'account',
+          spec.actor ? 'automatic' : (this.opts.actorKind ?? 'account'),
           spec.actor ? null : this.opts.actorAccountId,
           spec.actor ? spec.actor.cause : null,
           isRoot ? this.opts.operationKey : null,
@@ -429,6 +491,34 @@ export class AuditCorrelation {
         BOARD_SUBJECT_COLUMNS,
         detail.subjects,
         own,
+      );
+      return;
+    }
+    if (detail.family === 'identity') {
+      const evidence = detail.evidence ?? null;
+      const [doc, meeting, request, external] = evidence
+        ? evidenceColumns(evidence, 'identity')
+        : [null, null, null, null];
+      this.statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO identity_events (event_id, person_verification_id, person_link_id, person_id, target_account_id, reason_code, evidence_kind, evidence_document_id, evidence_meeting_id, evidence_request_id, external_reference)
+             SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${own.sql}`,
+          )
+          .bind(
+            id,
+            detail.personVerificationId ?? null,
+            detail.personLinkId ?? null,
+            detail.personId ?? null,
+            detail.targetAccountId ?? null,
+            detail.reason,
+            evidence?.kind ?? null,
+            doc,
+            meeting,
+            request,
+            external,
+            ...own.binds,
+          ),
       );
       return;
     }

@@ -88,10 +88,21 @@ const NEW_MODEL_SURFACE = new Set([
   'pages/api/admin/audit-integrity.ts',
   // Election certification creates Persons and board service terms (#203).
   'pages/api/admin/elections.ts',
+  // Phase 3c (#219): Person Verification, Person Links, and bootstrap.
+  'pages/api/verify/request.ts',
+  'pages/api/verify/confirm.ts',
+  'pages/api/verify/review.ts',
+  'pages/api/verify/unlink.ts',
+  'pages/api/bootstrap/board.ts',
+  'pages/api/admin/person-links.ts',
+  'pages/api/admin/verification-requests.ts',
   // Shared server modules for the routes above.
   'server/roster/audit.ts',
   'server/roster/reads.ts',
   'server/roster/board-consequences.ts',
+  'server/roster/verification.ts',
+  'server/roster/identity.ts',
+  'server/roster/bootstrap.ts',
 ]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
@@ -113,6 +124,10 @@ const NEW_TABLES = [
   'review_flags',
   'redaction_tasks',
   'correction_requests',
+  'identity_events',
+  'verification_codes',
+  'verification_review_requests',
+  'system_admin_bootstrap',
   'cutover_settings',
   'cutover_shadow_mismatches',
 ];

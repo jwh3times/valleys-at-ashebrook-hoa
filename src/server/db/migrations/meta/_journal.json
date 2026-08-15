@@ -183,6 +183,13 @@
       "when": 1786803606518,
       "tag": "0025_adr0022_board_eligibility_view_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1786823597892,
+      "tag": "0026_adr0022_person_verification",
+      "breakpoints": true
     }
   ]
 }

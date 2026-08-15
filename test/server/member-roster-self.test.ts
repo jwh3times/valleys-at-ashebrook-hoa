@@ -108,6 +108,7 @@ async function seedContactMethod(id: string, partyId: string) {
     .values({
       id,
       partyId,
+      partyKind: 'person',
       channel: 'email',
       value: `${id}@example.test`,
       valueNormalized: `${id}@example.test`,
