@@ -110,8 +110,8 @@ export async function seedRoster(spec: RosterSpec): Promise<void> {
       );
       if (owner.email) {
         statements.push(
-          `INSERT INTO contact_methods (id, party_id, channel, value, value_normalized, is_preferred, created_at, updated_at)
-           VALUES (${q(`${owner.id}-email`)}, ${q(owner.id)}, 'email', ${q(owner.email)}, ${q(owner.email.toLowerCase())}, 1, ${now}, ${now})`,
+          `INSERT INTO contact_methods (id, party_id, party_kind, channel, value, value_normalized, is_preferred, created_at, updated_at)
+           VALUES (${q(`${owner.id}-email`)}, ${q(owner.id)}, 'person', 'email', ${q(owner.email)}, ${q(owner.email.toLowerCase())}, 1, ${now}, ${now})`,
         );
       }
       if (active) {

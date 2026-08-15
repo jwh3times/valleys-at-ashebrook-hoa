@@ -109,6 +109,7 @@ async function seedContactMethod(
   await getDb(env).insert(contactMethods).values({
     id,
     partyId,
+    partyKind: 'person',
     channel: 'email',
     value,
     valueNormalized: value.toLowerCase(),

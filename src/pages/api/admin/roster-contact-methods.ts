@@ -153,9 +153,11 @@ async function addContactMethod(
     statements.push(clearPreferredStatement(partyId, channel, nowMs));
   statements.push(
     env.DATABASE.prepare(
-      `INSERT INTO contact_methods (id, party_id, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at)
-       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
-       WHERE EXISTS (SELECT 1 FROM parties WHERE id = ? AND consolidated_into_party_id IS NULL)`,
+      // `party_kind` comes from the party row itself, so the denormalized
+      // discriminator (migration 0026) can never disagree with the party.
+      `INSERT INTO contact_methods (id, party_id, party_kind, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at)
+       SELECT ?, ?, kind, ?, ?, ?, ?, ?, ?, ?
+       FROM parties WHERE id = ? AND consolidated_into_party_id IS NULL`,
     ).bind(
       id,
       partyId,
