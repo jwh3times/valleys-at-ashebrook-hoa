@@ -209,7 +209,6 @@ describe('retire', () => {
       electionId: 'el-1',
       propertyId: 'lot-1',
       weight: 1,
-      createdAt: now,
     });
 
     const res = await POST(req({ action: 'retire', lotId: 'lot-1' }));
