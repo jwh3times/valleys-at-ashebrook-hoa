@@ -151,22 +151,32 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   constant time, so a leaked database backup can't be reversed with a precomputed table.
   Verification requests are rate-limited in KV — a short per-user cooldown plus daily caps per user
   and per property — to curb abuse of the SMS/email fan-out.
-- **The ADR 0022 migration shadow layer cannot change an authorization decision and records only
-  non-personal comparison data.** `src/server/authz/derive.ts` computes a second, independent
-  authorization context from the new party-roster tables; legacy `users.role`/
-  `user_property_links` remain the sole source of truth for every request. Comparison
-  (`src/server/authz/shadow.ts`, wired into `src/middleware.ts` behind the off-by-default
-  `env.CUTOVER_SHADOW === 'on'`) runs only after the legacy context already decided the request,
-  returns no value, and swallows its own errors rather than propagating them — it is structurally
-  incapable of denying or granting anything. A disagreement is recorded to
-  `cutover_shadow_mismatches` as account id, role/tier codes, and lot **counts** only, never a lot
-  id, name, address, or other roster detail, and repeats collapse onto one row per account rather
-  than accumulating a per-request log. The companion offline sweep (`npm run shadow:sweep`) writes
-  the same shape from an operator machine, not the Worker. The new board-only
-  `GET /api/admin/roster-preview` panel is read-only by design — the phase-2 backfill clean-replaces
-  the underlying tables, so a write here would be silently erased — and exposes only structural
-  counts (including the count of unexplained shadow mismatches), never resident names, addresses,
-  or contact data.
+- **`cutover_mode` decides which authorization model answers, and fails safe to the model already
+  serving production.** The ADR 0022 phase-3 flip switch (`src/server/authz/cutover-mode.ts`,
+  reading the uncached `cutover_settings.cutover_mode` singleton) sits inside the single seam every
+  guard resolves its caller through (`src/server/authz/context.ts`). It fails closed to
+  **`legacy`** — the opposite polarity from the operator write freeze below, because refusing is
+  not the safe answer on this axis; the safe answer is whichever model has already been serving
+  production. An absent row is the normal pre-flip state, and the flag today remains at that
+  default: legacy `users.role`/`user_property_links` decide every request in production.
+- **The ADR 0022 derived-authorization layer cannot change a live authorization decision and
+  records only non-personal comparison data.** `src/server/authz/derive.ts` computes a second,
+  independent authorization context from the new party-roster tables, re-validating every stored
+  Board grant against its qualifying term on every call — a live grant whose term has lapsed, been
+  cancelled, or been voided is refused, independent of whether the write path already ended it.
+  Comparison (`src/server/authz/shadow.ts`, wired into `src/middleware.ts` behind the off-by-default
+  `env.CUTOVER_SHADOW === 'on'`) is mode-aware: it runs after whichever context answered the
+  request is already resolved and computes the other model fresh for the comparison — never the
+  served context compared with itself — returns no value, and swallows its own errors rather than
+  propagating them; it is structurally incapable of denying or granting anything. A disagreement is
+  recorded to `cutover_shadow_mismatches` as account id, role/tier codes, and lot **counts** only,
+  never a lot id, name, address, or other roster detail, and repeats collapse onto one row per
+  account rather than accumulating a per-request log. The companion offline sweep
+  (`npm run shadow:sweep`) writes the same shape from an operator machine, not the Worker. The new
+  board-only `GET /api/admin/roster-preview` panel is read-only by design — the phase-2 backfill
+  clean-replaces the underlying tables, so a write here would be silently erased — and exposes only
+  structural counts (including the count of unexplained shadow mismatches), never resident names,
+  addresses, or contact data.
 - **An operator-only write freeze can halt mutations site-wide without a deploy.** The
   `cutover_settings.write_freeze` singleton (built for the ADR 0022 phase-3 flip and retained
   afterward as a general maintenance switch) is read uncached on every covered request, in two
