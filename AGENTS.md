@@ -179,18 +179,15 @@ Markdown twins described below and never the human-readable originals.
   reads expose only `hasCast`, never choices for display or replacement. Turning either flag off
   pauses new opens and casts without deleting lifecycle state, snapshots, turnout, votes, or
   choices; an occasion still open resumes when both flags return true.
-- Board-only writes: `/api/admin/{documents,announcements,dues,site}`,
-  `/api/admin/{properties,owners,members}`, and `/api/admin/{board-people,board-terms}`.
-  `GET /api/admin/board-people` returns board people with their terms nested, mirroring the
-  properties/owners read. Deleting a board person who has a term of service on record returns
-  `409` from `DELETE /api/admin/board-people` — ending the term is the intended action instead —
-  and a term's `person_id` cannot be reassigned via `PATCH /api/admin/board-terms`; `DELETE
-/api/admin/board-terms` itself returns `409` for a term created by certifying an election
-  (`board_terms.election_id` set) — uncertify that election instead of deleting the term directly.
-  The same board-people `DELETE` also returns `409` if the person appears anywhere in the meeting
-  record (attendance, as a motion's mover/second, or a roll-call vote) or holds a candidacy
-  (`candidates.board_person_id`), pre-checking all six RESTRICT foreign keys so the response is
-  deterministic rather than a raw D1 FK error.
+- Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
+  `/api/admin/{properties,owners,members}`. `/api/admin/board-people` and
+  `/api/admin/board-terms` were **retired by phase 3b (#218), not ported**: the identity layer
+  moved to the party roster and `board_service_terms` (see the ADR 0022 roster routes below), and
+  porting the legacy routes would have kept two identity layers alive. The legacy `board_people`
+  table itself survives — the meeting record still references it until its Person repointing — so
+  the record-keeping pickers (attendance, mover/second, roll call, the candidate link) read a flat
+  `{id, fullName}` list from `GET /api/admin/meetings?roster=people` instead, and the admin app's
+  "The Board" panel is gone until phase 3e's writable board-service surface.
   `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
@@ -292,16 +289,23 @@ Markdown twins described below and never the human-readable originals.
   `properties.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
   same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
 meetingId: election.meetingId }` so a proxy signed for the election's own meeting also covers it.
-  `certify` takes per-winner
-  `{candidateId, termStart, termEnd?, title?}` and, in one `db.batch()`, creates `board_people`
-  rows for winners who lack one, backfills `candidates.board_person_id`, opens one `board_terms`
-  row per winner carrying `election_id`, sets `candidates.won`, and moves the election to
-  `certified`; its first statement reserves the closed election and re-checks the existing-person
-  open-term invariant at the mutation boundary, so concurrent certifications cannot open two terms
-  for the same person. It returns `409` for a winner who already holds an open term and `400` for
-  two winners resolving to the same person. `uncertify` reverses it, deleting the terms it created but
-  never the `board_people` rows. `DELETE` removes only a `draft` election; a `certified` election
-  cannot be voided directly (`void` returns `409` — uncertify first). `/api/admin/candidates`
+  `certify` (reworked by phase 3b, #218, per #203) takes per-winner
+  `{candidateId, personId?, qualifyingLotId, startDay, scheduledEndDay, office?}` and, in one
+  reserved `db.batch()`, creates PARTY-ROSTER facts: a `board_service_terms` row per winner
+  carrying `election_id`, validated in conditional SQL against the winner's qualifying basis
+  (`qualifiesGuard` — the person currently owns or represents the lot) and both non-overlap
+  directions, plus an optional `board_office_assignments` row; `candidates.won` is set and the
+  election moves to `certified`. It writes NO legacy `board_people`/`board_terms` rows, backfills
+  no `candidates.board_person_id`, and creates NO Access Grant — Board Access is never implicit.
+  A winner qualifying nowhere is a hard `409` naming them (the escape is recording the Ownership
+  or Representation first), and per-winner `assertInBatch` guards make the whole certification
+  roll back rather than commit with a term or an explicitly requested office missing.
+  `uncertify` VOIDS the terms it created rather than deleting them — the round-trip leaves
+  visible voided facts — voids their office assignments, ends any Board grants they qualified
+  (`recorded_in_error`), clears `won`, and returns the election to `closed`; an election
+  certified under the retired legacy model simply has nothing to void. `DELETE` removes only a
+  `draft` election; a `certified` election cannot be voided directly (`void` returns `409` —
+  uncertify first). `/api/admin/candidates`
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned, candidates
   can be added or deleted only while the election is a draft, and conducted candidates become
   immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
@@ -360,12 +364,70 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
 - Board handoff: `GET /api/admin/roles` lists current board; `POST /api/admin/roles` accepts
   `{ action: 'promote', email }` or `{ action: 'demote', userId }` and returns 409 when attempting
   to demote the last board member.
-- ADR 0022 phase 2 roster preview, `requireBoard`-gated and **read-only** — no `POST`/`PATCH`/
-  `DELETE` exists or should until phase 3, because the backfill clean-replaces these tables and
-  would silently erase a board edit: `GET /api/admin/roster-preview` returns structural counts (IDs
-  and non-personal fields only, not a roster browser) across five sections — Roster, Board, Access,
-  Review, Compliance — including the two ADR 0022 phase-2 integrity views and shadow-mismatch
-  counts. It is not a public or homeowner surface and does not affect authorization.
+- ADR 0022 phase 2 roster preview, `requireBoard`-gated and read-only:
+  `GET /api/admin/roster-preview` returns structural counts (IDs and non-personal fields only, not
+  a roster browser) across five sections — Roster, Board, Access, Review, Compliance — including
+  the two ADR 0022 integrity views and shadow-mismatch counts. It is not a public or homeowner
+  surface and does not affect authorization.
+- ADR 0022 phase 3b roster, board-service, and access routes (#218; decided by #202/#203/#205 —
+  read those resolution comments before touching any of this). Every mutation here is ONE D1 batch
+  of conditional statements — domain writes first, then the immutable-ledger rows built by
+  `src/server/roster/audit.ts`'s `AuditCorrelation` (one command = one correlation; root event
+  seq 0 with a unique `operation_key`; consequences name the root as cause), every statement gated
+  so a lost race leaves ZERO rows anywhere, with `meta.changes` on the primary deciding the `409`.
+  Until the flip, rows written through these routes exist only in the new model (production still
+  serves `legacy`), and a clean-replace backfill REHEARSAL would erase them — sequencing owned by
+  #222. The surfaces, all `requireBoard`-gated unless noted:
+  - `/api/admin/board-service` — `GET` (terms + offices + live-derived composition advisories:
+    below-three/above-five, vacant offices, expiring and lapsed terms) and a `POST` action bus
+    with NO `PATCH`: `createTerm`, `endTerm`, `cancelTerm`, `voidTerm` (the three disjoint ending
+    kinds), `substituteQualifyingLot` (in-place, three typed subjects), `correctTerm`,
+    `assignOffice`, `endOffice`, `voidOffice`. Interval non-overlap per Person AND per qualifying
+    Lot is conditional SQL at the mutation boundary (`noOverlapGuard`), proven under interleaving;
+    ending a term ends its current offices and its Board grants (the grant always at recorded-at).
+  - `/api/admin/access-grants` — `grant`/`revoke` for both grant types. Board callers act on
+    `board` grants (their own included); `system_admin` grants take a System Administrator. The
+    last-System-Administrator invariant lives on exactly this route as a mutation-boundary guard
+    (never in evaluation), re-checked inside the batch so concurrent revokes cannot empty the set,
+    and a refused attempt is permanently recorded as a denied Access Event. Grants validate the
+    account→Person-Link→term chain and are NEVER created implicitly by anything else.
+  - Roster: `GET /api/admin/roster` (full-detail Roster surface with the live Ownerless-Lot
+    advisory; single-record reads never write the ledger) plus per-entity `POST` action buses —
+    `/api/admin/roster-lots` (`retire` — ends current Ownerships as caused Roster Changes,
+    dual-writes legacy `properties.status`, refuses over a live qualifying term or an open frozen
+    snapshot; `correctRetirement` restores the Lot but never the ownerships), `/api/admin/
+roster-parties` (`createPerson`/`createOrganization` — party+subtype in one batch, org name
+    collisions warn rather than merge; name corrections; `consolidate` with an explicit survivor,
+    same-kind/one-hop/both-linked refusals; `correctConsolidation` clears the pointer),
+    `/api/admin/roster-ownerships` (`create` — no anticipated start OR end; `end` — backdated
+    end day allowed, with optional per-affected-term `substitutions` else terminate-by-default via
+    `src/server/roster/board-consequences.ts`; `void`), `/api/admin/roster-representations`
+    (`create` — scope XOR, scoped lots must be currently org-owned, end day MAY be future; `end`;
+    `void`; `correctScope` — scope rows void, never delete), and `/api/admin/
+roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on write and
+    reach the ledger as sensitive-field CATEGORIES only).
+  - `POST /api/admin/roster-export` — the bulk export, deliberately a mutating verb: it is the one
+    read that is also a recorded act, writing an `access` ledger event (`roster_export`) BEFORE
+    any data leaves and failing closed (500, no export) if the record cannot be written. Nothing
+    is persisted server-side.
+  - `GET`+`POST /api/admin/correction-requests` — the board review queue for member correction
+    requests; `accept` applies the fact as an ordinary Roster Change citing the request id as
+    opaque evidence (`evidence_request_id`); `decline` writes no ledger row.
+  - The three System-Administrator-only surfaces, gated by `requireApiCapability` on the four
+    technical capabilities (#205/#217): `/api/admin/redactions` (`redactPersonName`/
+    `redactContactMethod` under `redactionAuthorize` — value and marker nulled together, at least
+    one `redaction_tasks` row always created so the integrity view holds; `recordCleanup` under
+    `redactionCleanup`, operational only), `GET /api/admin/access-denials`
+    (`accessDenialDetail`), and `GET /api/admin/audit-integrity` (`auditIntegrityViews`). Under
+    `cutover_mode = legacy` nobody holds these capabilities, so the three answer 403 for every
+    caller until the flip — by design.
+  - Member correction requests: `GET /api/member/roster-self` (own Person, Contact Methods,
+    Ownerships, Representations, open requests — never the ledger, never another party's data)
+    and `GET`/`POST`/`DELETE /api/member/correction-requests` (own name and own Contact Methods
+    only; requests are operational rows whose free text NEVER enters the ledger; withdrawal and
+    out-of-scope ids mask as `404`). Both use `requireMemberApi` and then answer the deliberate
+    no-Person-Link `403` pointing at verification — which under `legacy` is every caller, until
+    the flip.
 - Board-only document assistant: `POST /api/admin/assistant` (SSE) takes `{ question, history? }`
   and streams a Claude-generated, cited answer over the document library, retrieved via Cloudflare
   AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
@@ -411,8 +473,10 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   those helpers.
 - `src/lib/admin.ts` handles board writes to `/api/admin/*` endpoints, typed document duplicate
   errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
-  `fetchReport`, `deleteReport`), board roster helpers (`fetchBoardPeople`, `saveBoardPerson`,
-  `deleteBoardPerson`, `saveBoardTerm`, `deleteBoardTerm`), meeting-record helpers
+  `fetchReport`, `deleteReport`), the meeting-record people-picker and party-roster reads that
+  replaced the retired board-roster helpers (`fetchMeetingRosterPeople` — the flat `{id,
+fullName}` list from `GET /api/admin/meetings?roster=people` — plus `fetchRosterPeople` and
+  `fetchRosterLots` over `GET /api/admin/roster`), meeting-record helpers
   (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
   `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
   `openMotionVoting`, `closeMotionVoting`, `setVotes`, `setMemberVotes`), resolutions-book helpers (`fetchResolutions`,
@@ -705,16 +769,32 @@ ladder — the removals derived authorization makes (a board member who owns no 
 pass into member surfaces) appear only once the flag flips, where the #206 allow-list expects
 them. `test/server/adr0022-parity.test.ts` now runs every caller class through `getAuthContext`
 with `cutover_mode` in both positions, including a board caller who owns no Lot and a revocation
-that must take effect on the very next request, to hold that claim to account. Phase 3 parts b
-(roster admin routes) and c (the verification rewrite) are not part of this slice — the five
-roster admin surfaces above stay read-only. Phase 2 adds:
+that must take effect on the very next request, to hold that claim to account. **Phase 3 part b
+(#218) is also built**: the roster, board-service, and access-grant routes described under **HTTP
+endpoints** above, the member correction-request flow, the four System-Administrator-only
+technical capabilities (`redactionAuthorize`, `redactionCleanup`, `accessDenialDetail`,
+`auditIntegrityViews` — granted only with the `system_admin` grant, in both `guards.ts` and
+`derive.ts`), and the #217-decided Access Event for a failed Board-grant re-validation
+(`src/server/authz/revalidation-event.ts` — an account-attributed root, day-idempotent by
+`operation_key = grant-revalidation:<grant>:<day>`, written only when `derived` is the SERVING
+model and never from shadow, errors swallowed so evaluation cannot 500 on a ledger failure). The
+shared writer machinery lives in `src/server/roster/`: `audit.ts` (the `AuditCorrelation`
+ledger-batch builder, guard helpers, `assertInBatch` — a statement that ERRORS to roll a whole
+batch back when an all-or-nothing part failed), `board-consequences.ts` (`qualifiesGuard`,
+`noOverlapGuard`, and `lossConsequences` — the substitute-or-terminate engine that ends or
+cancels Board Terms, their offices, and their grants when an Ownership or Representation change
+removes a qualifying basis; the term ends on the real-world day, the grant always at
+recorded-at), and `reads.ts` (the Roster/Board/Access reads, member self-read, and live-derived
+advisories, all rendering redacted identities through `personDisplayLabel` in `src/lib/format.ts`
+— the identical durable-ID fallback for every viewer, board included). Phase 3 part c (the
+verification rewrite, #219) remains unbuilt. Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
   compliance, plus two integrity views described below. They are query shapes, not authorization
   boundaries, and live authorization never joins them.
 - `src/server/authz/write-freeze.ts` — the operator-only write freeze, now enforced. It reads only
-  the `cutover_settings.write_freeze` singleton (`test/unit/adr0022-phase2-boundary.test.ts` pins
+  the `cutover_settings.write_freeze` singleton (`test/unit/adr0022-model-boundary.test.ts` pins
   that it references no other new ADR 0022 table). Coverage is deny-by-default: every mutation
   answers `503` while it is on unless its path is one of the two declared exemptions, so
   `/api/admin/*` writes, all of `/api/member/*` and `POST /api/vote`, and `/api/verify/*` are all
@@ -801,9 +881,9 @@ conducted `POST /api/vote` cast writes the per-lot turnout row and every indepen
 one checked D1 batch, taking both weights from `election_eligibility`. The supported caller read
 returns only `hasCast`, so a conducted ballot is final; conducted close derives final candidate
 totals from the retained rows.
-`board_terms` also carries a nullable `election_id` referencing `elections` on delete-set-null,
-recording which election produced that term; `certify` opens it, `uncertify` deletes it, and
-`DELETE /api/admin/board-terms` refuses to delete a term with one set.
+The legacy `board_terms` table still carries a nullable `election_id` referencing `elections` on
+delete-set-null, but as of phase 3b nothing writes it: certification's provenance now lands on
+`board_service_terms.election_id`, and the legacy board-roster routes are retired (#218).
 
 `proxies` (the proxies record — either entered from paper by the board or granted online by a
 homeowner for a lot they control, per
@@ -888,10 +968,20 @@ has no `ADD COLUMN IF NOT EXISTS`. Migration `0023` adds the eight ADR 0022 phas
 `audit_event_effective_v`, `audit_event_subjects_v`, `audit_entity_history_v`,
 `audit_operation_timeline_v`, `audit_review_queue_v`, `audit_redaction_compliance_v`,
 `audit_integrity_violations_v`, and `board_eligibility_violations_v` — every statement
-`CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run. See the ADR 0022 paragraph above for
+`CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run. Migration `0024` (phase 3b, #218)
+adds `correction_requests` (the operational member-request table whose free text never enters the
+ledger) and REBUILDS `board_service_changes` so its reason-code CHECK accepts
+`legacy_migration_baseline` — the code the backfill's board-term baseline emits, a latent
+flip-blocker until this migration; the rebuild drops and 0025 recreates the two views that
+reference the table (SQLite's `ALTER ... RENAME` reparses every view), and uses D1's
+`PRAGMA defer_foreign_keys`, not the unsupported `PRAGMA foreign_keys`. Migration `0025` also
+REDEFINES `board_eligibility_violations_v` twice over: concluded terms are excluded (eligibility
+is owed only while a term is current or scheduled — without this, every mutation-boundary
+termination would light the view up), and a Representation's FUTURE end day now reads as
+authority until it arrives, matching #202. See the ADR 0022 paragraph above for
 what these tables and views are and what now reads them (the phase-2 shadow layer, the board-only
-roster-preview panel, the operator write freeze, and — as of phase 3a — `cutover-mode.ts`, which
-decides which model answers a request; legacy authorization itself still reads none of the roster
+roster-preview panel, the operator write freeze, `cutover-mode.ts`, and — as of phase 3b — the
+roster/board-service/access routes; legacy authorization itself still reads none of the roster
 tables). Migrations `0016`
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
 ledger rather than assumed.
@@ -924,9 +1014,12 @@ in code or copy is the mistake this table exists to prevent. Use these words in 
 | **board member**  | A person who serves on the board. What motions and votes reference.    | `board_people`        | Yes — the record is the point.                                  |
 | **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms`         | Yes — a person may hold several, with gaps.                     |
 
-The two are managed in separate admin panels — **Board access** (`BoardAccessManager`) for sign-in
-access, **The Board** (`BoardPanel`) for the roster — and neither writes the other's data. A board
-member need not be a board admin, and a board admin need not be a board member. The content
+Sign-in access still has its own panel — **Board access** (`BoardAccessManager`) — and neither
+sense ever writes the other's data. The legacy roster panel (`BoardPanel`) and its routes were
+retired by phase 3b (#218): board service is now recorded in `board_service_terms` through
+`/api/admin/board-service`, the meeting record keeps referencing `board_people` through its
+Person repointing, and the writable Board surface returns as a phase-3e panel. A board member
+need not be a board admin, and a board admin need not be a board member. The content
 visibility tier `board` is a fourth use of the word and follows the access sense: it means "visible
 to a board admin". See [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md) for why the
 record is independent of `user` rows.
