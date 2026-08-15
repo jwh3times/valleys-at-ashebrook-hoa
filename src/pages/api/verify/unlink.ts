@@ -5,7 +5,10 @@ import { resolveAuthContext } from '../../../server/authz/api-guards';
 import { writeFreezeError } from '../../../server/authz/write-freeze';
 import { getDb } from '../../../server/db/client';
 import { personLinks } from '../../../server/db/roster-schema';
-import { operationKey } from '../../../server/roster/audit';
+import {
+  isBatchAssertionError,
+  operationKey,
+} from '../../../server/roster/audit';
 import {
   endLinkStatements,
   denyIfLastSystemAdministrator,
@@ -64,7 +67,19 @@ export const POST: APIRoute = async ({ request, locals }) => {
     nowMs,
     operationKey: operationKey('verify-unlink', 'unlink'),
   });
-  const results = await env.DATABASE.batch(statements);
+  let results: D1Result[];
+  try {
+    results = await env.DATABASE.batch(statements);
+  } catch (error) {
+    // A grant created concurrently with this unlink would have been ended
+    // without its caused Access Event; the batch assertion makes that race
+    // lose the whole command instead.
+    if (isBatchAssertionError(error))
+      return new Response('Access changed concurrently — try again', {
+        status: 409,
+      });
+    throw error;
+  }
   if (results[0].meta.changes !== 1) {
     if (
       await denyIfLastSystemAdministrator({

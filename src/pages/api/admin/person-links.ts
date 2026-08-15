@@ -15,7 +15,11 @@ import {
   personVerifications,
 } from '../../../server/db/roster-schema';
 import { personDisplayLabel } from '../../../lib/format';
-import { operationKey, type Evidence } from '../../../server/roster/audit';
+import {
+  isBatchAssertionError,
+  operationKey,
+  type Evidence,
+} from '../../../server/roster/audit';
 import {
   manualVerificationStatements,
   endLinkStatements,
@@ -323,7 +327,19 @@ async function unlink(
     nowMs,
     operationKey: operationKey('person-links', 'unlink'),
   });
-  const results = await env.DATABASE.batch(statements);
+  let results: D1Result[];
+  try {
+    results = await env.DATABASE.batch(statements);
+  } catch (error) {
+    // A grant created concurrently with this unlink would have been ended
+    // without its caused Access Event; the batch assertion makes that race
+    // lose the whole command instead.
+    if (isBatchAssertionError(error))
+      return new Response('Access changed concurrently — try again', {
+        status: 409,
+      });
+    throw error;
+  }
   if (results[0].meta.changes !== 1) {
     if (
       await denyIfLastSystemAdministrator({
