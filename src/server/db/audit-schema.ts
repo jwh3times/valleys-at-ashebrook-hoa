@@ -335,8 +335,13 @@ export const identityEvents = sqliteTable(
     // requests, external records, or the approver's own observation — an
     // election proves nothing about who an account is.
     evidenceKind: text('evidence_kind', {
-      enum: ['document', 'meeting', 'request', 'external',
-        'operator_observation'],
+      enum: [
+        'document',
+        'meeting',
+        'request',
+        'external',
+        'operator_observation',
+      ],
     }),
     evidenceDocumentId: text('evidence_document_id').references(
       () => documents.id,

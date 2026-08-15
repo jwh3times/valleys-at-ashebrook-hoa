@@ -15,7 +15,11 @@ vi.mock('../../src/server/auth/senders', () => ({
   sendSms: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { POST } from '../../src/pages/api/verify/request';
+import {
+  POST,
+  UNIFORM_REQUEST_RESPONSE,
+} from '../../src/pages/api/verify/request';
+import { sendEmail } from '../../src/server/auth/senders';
 import { getDb } from '../../src/server/db/client';
 import { properties, owners, users } from '../../src/server/db/schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
@@ -62,6 +66,7 @@ function req() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         address: '5 Rate St',
+        name: '',
         channel: 'email',
         turnstileToken: 't',
       }),
@@ -69,17 +74,22 @@ function req() {
   } as never);
 }
 
+// ADR 0022 phase 3c (#219/D2): rate-limited paths no longer 429 — they
+// converge on the SAME uniform response as everything else on this route.
+// The only observable difference the cooldown makes is that the retry sends
+// nothing.
 describe('POST /api/verify/request rate limiting', () => {
-  it('sends the first request then 429s the immediate retry (cooldown)', async () => {
+  it('sends the first request then answers the uniform response with no further send on the immediate retry (cooldown)', async () => {
     const first = await req();
     expect(first.status).toBe(200);
+    await expect(first.json()).resolves.toEqual(UNIFORM_REQUEST_RESPONSE);
+    expect(vi.mocked(sendEmail)).toHaveBeenCalledTimes(1);
+
     const second = await req();
-    expect(second.status).toBe(429);
-    const body = (await second.json()) as {
-      rateLimited?: boolean;
-      message?: string;
-    };
-    expect(body.rateLimited).toBe(true);
-    expect(typeof body.message).toBe('string');
+    expect(second.status).toBe(200);
+    await expect(second.json()).resolves.toEqual(UNIFORM_REQUEST_RESPONSE);
+    // Still just the one send from the first request — the cooldown blocked
+    // the retry from reaching the backend at all.
+    expect(vi.mocked(sendEmail)).toHaveBeenCalledTimes(1);
   });
 });

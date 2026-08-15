@@ -51,16 +51,26 @@ async function seedUser(id: string) {
     });
 }
 
-describe('property verification', () => {
-  it('queues for manual approval when the address is not on the roster', async () => {
+describe('property verification (legacy backend)', () => {
+  // ADR 0022 phase 3c (#219): nothing auto-queues anymore (#201). The three
+  // tests that used to assert a manual_approval_queue row now assert an
+  // outcome code AND that no queue row was written.
+
+  it('returns a not_found outcome and writes no manual_approval_queue row when the address is unknown', async () => {
     await seedUser('user-x');
     const result = await requestPropertyVerification(
       env,
       'user-x',
       '0000 Nonexistent St',
+      '',
       'email',
     );
-    expect(result).toEqual({ ok: false, queued: true });
+    expect(result).toEqual({ ok: false, outcome: 'not_found' });
+    const rows = await getDb(env)
+      .select()
+      .from(manualApprovalQueue)
+      .where(eq(manualApprovalQueue.userId, 'user-x'));
+    expect(rows).toHaveLength(0);
   });
 
   it('confirm: wrong code increments attempts; correct code links the property and consumes', async () => {
@@ -215,6 +225,7 @@ describe('property verification', () => {
       env,
       'user-fan',
       '9 Fan St',
+      '',
       'sms',
     );
     expect(res).toEqual({ ok: true });
@@ -232,7 +243,7 @@ describe('property verification', () => {
     expect(rows[0].propertyId).toBe('prop-fan');
   });
 
-  it('queues manual approval when the chosen channel has no contacts', async () => {
+  it('returns a no_contact outcome and writes no manual_approval_queue row when the channel has no contacts', async () => {
     const db = getDb(env);
     const now = new Date();
     await seedUser('user-noemail');
@@ -261,18 +272,18 @@ describe('property verification', () => {
       env,
       'user-noemail',
       '10 NoEmail St',
+      '',
       'email',
     );
-    expect(res).toEqual({ ok: false, queued: true });
+    expect(res).toEqual({ ok: false, outcome: 'no_contact' });
     const rows = await db
       .select()
       .from(manualApprovalQueue)
       .where(eq(manualApprovalQueue.userId, 'user-noemail'));
-    expect(rows).toHaveLength(1);
-    expect(rows[0].reason).toBe('no contact on file for channel');
+    expect(rows).toHaveLength(0);
   });
 
-  it('queues manual approval when every send fails', async () => {
+  it('returns a send_failed outcome and writes no manual_approval_queue row when every send fails', async () => {
     const db = getDb(env);
     const now = new Date();
     await seedUser('user-allfail');
@@ -302,15 +313,15 @@ describe('property verification', () => {
       env,
       'user-allfail',
       '11 AllFail St',
+      '',
       'sms',
     );
-    expect(res).toEqual({ ok: false, queued: true });
+    expect(res).toEqual({ ok: false, outcome: 'send_failed' });
     expect(vi.mocked(sendSms)).toHaveBeenCalledTimes(1);
     const rows = await db
       .select()
       .from(manualApprovalQueue)
       .where(eq(manualApprovalQueue.userId, 'user-allfail'));
-    expect(rows).toHaveLength(1);
-    expect(rows[0].reason).toBe('all sends failed');
+    expect(rows).toHaveLength(0);
   });
 });
