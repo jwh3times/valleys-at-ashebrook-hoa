@@ -169,6 +169,20 @@
       "when": 1786668486082,
       "tag": "0023_adr0022_audit_views",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1786803606517,
+      "tag": "0024_adr0022_correction_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1786803606518,
+      "tag": "0025_adr0022_board_eligibility_view_currency",
+      "breakpoints": true
     }
   ]
 }

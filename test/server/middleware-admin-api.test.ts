@@ -85,7 +85,7 @@ describe('middleware gate on /api/admin', () => {
 
   it('lets a board caller through to the route', async () => {
     role = 'board';
-    const { res, reached } = await run('/api/admin/board-people');
+    const { res, reached } = await run('/api/admin/roster');
     expect(res.status).toBe(200);
     expect(reached).toBe(true);
   });

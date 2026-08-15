@@ -77,9 +77,31 @@ const MEMBER_ONLY = caller('m', 'member');
 const BOARD = caller('b', 'board', 'member');
 /** A board member who owns nothing — the class the old ladder handled wrong. */
 const BOARD_NO_LOTS = caller('bn', 'board');
-const SYSTEM_ADMIN = caller('sa', 'systemAdmin', 'board');
+/** Carries the four technical capabilities exactly as derivation grants them
+ * with the `system_admin` grant (#205) — they are names for that boundary,
+ * never separate grants. */
+const SYSTEM_ADMIN = caller(
+  'sa',
+  'systemAdmin',
+  'board',
+  'redactionAuthorize',
+  'redactionCleanup',
+  'accessDenialDetail',
+  'auditIntegrityViews',
+);
 /** Authenticated, linked to nothing. Under derived authorization this is 403. */
 const UNLINKED = caller('u');
+
+/**
+ * Admin routes whose DECLARED capability is finer than `board`: the
+ * System-Administrator-only technical surfaces (#205, #218). Plain board is
+ * refused here — the one boundary finer than board that actually exists.
+ */
+const SYSTEM_ADMIN_ONLY = new Set([
+  'admin/redactions',
+  'admin/access-denials',
+  'admin/audit-integrity',
+]);
 
 function cases(modules: Record<string, Record<string, unknown>>) {
   const out: { name: string; route: string; verb: string; handler: unknown }[] =
@@ -154,7 +176,16 @@ describe('the admin API declares board', () => {
   });
 
   for (const { name, route, verb, handler } of all) {
-    it(`${name} ${verb} admits board and refuses member`, async () => {
+    // The declared capability: `board` everywhere except the three
+    // System-Administrator-only technical surfaces (#205, #218), where plain
+    // board is refused and only a System Administrator passes. Expressed as
+    // data rather than branched assertions so every route runs the identical
+    // test body.
+    const sysAdminOnly = SYSTEM_ADMIN_ONLY.has(name);
+    const label = sysAdminOnly
+      ? 'admits only a System Administrator'
+      : 'admits board and refuses member';
+    it(`${name} ${verb} ${label}`, async () => {
       expect(
         await callWith(handler, route, verb, MEMBER_ONLY),
         `${name} ${verb} must refuse a member-only caller`,
@@ -163,26 +194,41 @@ describe('the admin API declares board', () => {
         await callWith(handler, route, verb, UNLINKED),
         `${name} ${verb} must refuse an unlinked caller`,
       ).toBe(403);
-      // Board passes the GATE. What it does next is the route's business, so
-      // assert only that it was not an authorization refusal.
+      // Board passes the GATE exactly when the route declares `board`; on a
+      // System-Administrator-only route the refusal must be 403, never 401.
+      const boardStatus = await callWith(handler, route, verb, BOARD);
+      expect(boardStatus, `${name} ${verb} board must not be 401`).not.toBe(
+        401,
+      );
       expect(
-        [401, 403].includes(await callWith(handler, route, verb, BOARD)),
-        `${name} ${verb} must admit board`,
+        boardStatus === 403,
+        `${name} ${verb} board admission must match the declared capability`,
+      ).toBe(sysAdminOnly);
+      // A System Administrator passes every admin gate.
+      expect(
+        [401, 403].includes(await callWith(handler, route, verb, SYSTEM_ADMIN)),
+        `${name} ${verb} must admit a System Administrator`,
       ).toBe(false);
     });
   }
 
   it('admits a board member who owns no Lot', async () => {
     // Board capability comes from a grant, never from Lot Authority. A board
-    // member who owns nothing must still reach the admin API.
-    const { route, verb, handler } = all[0];
+    // member who owns nothing must still reach the admin API. Probed against
+    // a board-declared route — the System-Administrator-only surfaces refuse
+    // plain board by design.
+    const { route, verb, handler } = all.find(
+      (c) => !SYSTEM_ADMIN_ONLY.has(c.name),
+    )!;
     expect([401, 403]).not.toContain(
       await callWith(handler, route, verb, BOARD_NO_LOTS),
     );
   });
 
   it('admits a System Administrator, who carries board', async () => {
-    const { route, verb, handler } = all[0];
+    const { route, verb, handler } = all.find(
+      (c) => !SYSTEM_ADMIN_ONLY.has(c.name),
+    )!;
     expect([401, 403]).not.toContain(
       await callWith(handler, route, verb, SYSTEM_ADMIN),
     );

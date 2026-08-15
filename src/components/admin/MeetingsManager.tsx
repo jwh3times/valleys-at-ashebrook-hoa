@@ -14,7 +14,7 @@ import {
   closeMotionVoting,
   setVotes,
   setMemberVotes,
-  fetchBoardPeople,
+  fetchMeetingRosterPeople,
   fetchProperties,
   fetchProxies,
 } from '../../lib/admin';
@@ -27,6 +27,10 @@ import {
   MEMBER_VOTE_CHOICES,
   tallyVotes,
 } from '../../lib/types';
+
+// The flat picker shape the meeting record needs — the #218 retirement kept
+// this read on the meetings surface (see /api/admin/meetings?roster=people).
+type MeetingRosterPerson = { id: string; fullName: string };
 import type {
   MeetingSummary,
   MeetingDetail,
@@ -37,7 +41,6 @@ import type {
   VoteChoice,
   MemberVoteChoice,
   Visibility,
-  BoardPersonWithTerms,
   PropertyWithOwners,
   MotionDetail,
   ProxyDetail,
@@ -117,7 +120,7 @@ interface MemberVoteFormRow {
  */
 function personIdByName(
   name: string,
-  people: BoardPersonWithTerms[],
+  people: MeetingRosterPerson[],
 ): string | null {
   return people.find((p) => p.fullName === name)?.id ?? null;
 }
@@ -160,9 +163,9 @@ export default function MeetingsManager() {
   // The board roster backs attendance, mover/second pickers, and the roll
   // call — loaded once alongside the meetings, independent of useAdminResource
   // since it isn't the panel's primary save/delete target.
-  const [people, setPeople] = useState<BoardPersonWithTerms[]>([]);
+  const [people, setPeople] = useState<MeetingRosterPerson[]>([]);
   useEffect(() => {
-    fetchBoardPeople()
+    fetchMeetingRosterPeople()
       .then(setPeople)
       .catch((err: unknown) => {
         const message =

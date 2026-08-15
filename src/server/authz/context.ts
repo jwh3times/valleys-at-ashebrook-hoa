@@ -4,6 +4,7 @@ import { getDb } from '../db/client';
 import { properties, userPropertyLinks, users } from '../db/schema';
 import { getCutoverMode } from './cutover-mode';
 import { deriveAccess, type DerivedAccess } from './derive';
+import { recordGrantRevalidationDenial } from './revalidation-event';
 import type { AuthContext, Capability, Role } from './guards';
 
 const VALID_ROLES = new Set<string>(['visitor', 'homeowner', 'board']);
@@ -162,12 +163,20 @@ export async function getAuthContext(
 
   const mode = await getCutoverMode(env);
   if (mode === 'derived') {
-    // `access.invalidBoardGrantId` names a live Board grant this refused. Its
-    // recording as an Access Event (#200) awaits an attribution decision on
-    // #217 — see the note on that field in derive.ts.
-    return derivedContext(
-      await deriveAccess(env, result.user.id, associationDay),
-    );
+    const access = await deriveAccess(env, result.user.id, associationDay);
+    // A live Board grant that failed re-validation was refused by derivation;
+    // record the finding as a day-idempotent Access Event (#217's decision,
+    // implemented in 3b). Only when derived is the SERVING model — the shadow
+    // layer computes but must never write, and under `legacy` the caller was
+    // not actually denied anything.
+    if (access.invalidBoardGrantId) {
+      await recordGrantRevalidationDenial(env, {
+        accountId: result.user.id,
+        grantId: access.invalidBoardGrantId,
+        associationDay,
+      });
+    }
+    return derivedContext(access);
   }
   return readLegacyFacts(
     env,

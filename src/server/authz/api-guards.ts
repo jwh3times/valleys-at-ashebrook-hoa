@@ -1,6 +1,6 @@
 import { getAuthContext } from './context';
 import { requireCapability, Forbidden } from './guards';
-import type { AuthContext } from './guards';
+import type { AuthContext, Capability } from './guards';
 import { writeFreezeError } from './write-freeze';
 import { associationDateIso } from '../../lib/format';
 
@@ -42,12 +42,33 @@ export async function requireBoard(
   request: Request,
   env: Env,
 ): Promise<Response | null> {
+  return requireApiCapability(locals, request, env, 'board');
+}
+
+/**
+ * The same gate for a route whose declared capability is finer than `board` —
+ * the System-Administrator-only technical surfaces (#205): Roster Redaction,
+ * redaction cleanup, access-denial detail, and the audit integrity views.
+ *
+ * Identical order to `requireBoard`: freeze (mutating verbs only), then
+ * session, then the capability. Under `cutover_mode = legacy` nobody holds
+ * these capabilities — System Administration is a new-model concept with no
+ * legacy equivalent — so these routes answer 403 for every caller until the
+ * flip, which is correct: the surfaces they gate act on new-model rows that
+ * production does not yet serve.
+ */
+export async function requireApiCapability(
+  locals: App.Locals | undefined,
+  request: Request,
+  env: Env,
+  capability: Capability,
+): Promise<Response | null> {
   const frozen = await writeFreezeError(env, request);
   if (frozen) return frozen;
   const ctx = await resolveAuthContext(locals, request, env);
   if (!ctx) return new Response('Unauthorized', { status: 401 });
   try {
-    requireCapability(ctx, 'board');
+    requireCapability(ctx, capability);
   } catch (e) {
     if (e instanceof Forbidden)
       return new Response('Forbidden', { status: 403 });

@@ -32,8 +32,18 @@ import type { Role } from './guards';
 
 /** Capability levels. Deliberately a SET, not a ladder — `systemAdmin` implies
  * every `board` capability, but neither implies `member`, which comes only from
- * Ownership or Representation. */
-export type Capability = 'member' | 'board' | 'systemAdmin';
+ * Ownership or Representation. The last four are the System-Administrator-only
+ * technical capabilities (#205): granted with `systemAdmin`, never separately.
+ * (Duplicated from guards.ts so the offline sweep can import this module
+ * without the guard layer; keep the two unions identical.) */
+export type Capability =
+  | 'member'
+  | 'board'
+  | 'systemAdmin'
+  | 'redactionAuthorize'
+  | 'redactionCleanup'
+  | 'accessDenialDetail'
+  | 'auditIntegrityViews';
 
 export interface DerivedAccess {
   userId: string;
@@ -58,16 +68,10 @@ export interface DerivedAccess {
    * the grant is an integrity signal about the WRITE path (the mutation
    * boundary should have ended it), not an ordinary denial about the caller.
    *
-   * RECORDING IT AWAITS AN ATTRIBUTION DECISION on #217 — a decision, not a
-   * schema impossibility. The `automatic` shape is genuinely unavailable (an
-   * automatic event must name a `causing_event_id` and a correlation root must
-   * not have one, so an automatic root cannot exist), but an
-   * `actor_kind = 'account'` root attributed to the denied caller is
-   * schema-legal, and it is the same shape #197 already uses for the
-   * last-System-Administrator denial. The open question is purely whether that
-   * attribution is right for an evaluation-time finding the caller never
-   * initiated — or whether it belongs in #205's bounded security telemetry
-   * instead. Until that is decided, the detection ships and nothing records.
+   * Recorded as a day-idempotent Access Event attributed to the denied caller
+   * (#217's option 1, implemented in 3b): see `revalidation-event.ts`, called
+   * from `context.ts` only when derived is the SERVING model — the shadow
+   * layer computes this field too and must never write.
    *
    * Named independently of `capabilities` on purpose. A caller holding two
    * Board grants, one valid and one stale, is not denied — but the stale one is
@@ -265,6 +269,12 @@ export function toDerivedAccess(
     capabilities.add('systemAdmin');
     // Implied, not a duplicate grant.
     capabilities.add('board');
+    // The four technical capabilities travel with the grant as a unit — they
+    // are names for the System-Administrator boundary, not separate grants.
+    capabilities.add('redactionAuthorize');
+    capabilities.add('redactionCleanup');
+    capabilities.add('accessDenialDetail');
+    capabilities.add('auditIntegrityViews');
   }
 
   // Content sensitivity is a separate axis from capability. `tierAllows`,
