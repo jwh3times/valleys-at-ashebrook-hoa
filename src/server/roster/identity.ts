@@ -15,6 +15,7 @@ import {
   AuditCorrelation,
   ALWAYS,
   andGuards,
+  assertInBatch,
   insertedRowGuard,
   endedLinkGuard,
   type Evidence,
@@ -240,13 +241,35 @@ export async function endLinkStatements(
 
   const linkGuard = endedLinkGuard(linkId, nowMs);
 
-  const endGrants = database
-    .prepare(
-      `UPDATE access_grants
-       SET ended_at = ?, ended_by_account_id = ?, end_reason = 'person_link_ended'
-       WHERE account_id = ? AND ended_at IS NULL AND ${linkGuard.sql}`,
-    )
-    .bind(nowMs, actorAccountId, accountId, ...linkGuard.binds);
+  // End exactly the grants read above — never a blanket account-wide UPDATE.
+  // A grant created between the read and the batch would otherwise be ended
+  // with no caused Access Event, a domain consequence with no ledger row. The
+  // assertion appended below makes that race lose the whole command instead:
+  // if any current grant survives once the link has ended, the batch rolls
+  // back and the route answers 409.
+  const grantIds = (currentGrants.results ?? []).map((g) => g.id);
+  const endGrants =
+    grantIds.length === 0
+      ? []
+      : [
+          database
+            .prepare(
+              `UPDATE access_grants
+               SET ended_at = ?, ended_by_account_id = ?, end_reason = 'person_link_ended'
+               WHERE account_id = ? AND ended_at IS NULL AND id IN (${grantIds.map(() => '?').join(', ')}) AND ${linkGuard.sql}`,
+            )
+            .bind(
+              nowMs,
+              actorAccountId,
+              accountId,
+              ...grantIds,
+              ...linkGuard.binds,
+            ),
+        ];
+  const noSurvivingGrant: SqlGuard = {
+    sql: `NOT (${linkGuard.sql}) OR NOT EXISTS (SELECT 1 FROM access_grants WHERE account_id = ? AND ended_at IS NULL)`,
+    binds: [...linkGuard.binds, accountId],
+  };
 
   const correlation = new AuditCorrelation(database, {
     operationKey,
@@ -284,7 +307,12 @@ export async function endLinkStatements(
     });
   }
 
-  return [primary, endGrants, ...correlation.statements];
+  return [
+    primary,
+    ...endGrants,
+    ...correlation.statements,
+    assertInBatch(database, noSurvivingGrant),
+  ];
 }
 
 // ---------------------------------------------------------------------------

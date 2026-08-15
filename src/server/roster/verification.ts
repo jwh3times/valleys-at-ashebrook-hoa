@@ -216,8 +216,10 @@ async function createReviewRequest(
     .values({
       id: crypto.randomUUID(),
       accountId: opts.accountId,
-      claimedAddress: opts.address,
-      claimedName: opts.name,
+      // Same 200-char cap the explicit /api/verify/review action applies —
+      // the collision path must not be a loophole for unbounded free text.
+      claimedAddress: opts.address.slice(0, 200),
+      claimedName: opts.name.slice(0, 200),
       channel: opts.channel,
       internalReason: opts.internalReason,
       status: 'open',
