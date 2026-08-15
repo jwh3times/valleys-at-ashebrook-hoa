@@ -37,15 +37,15 @@ const ROLE_BEARING = [
   /\busers\b[^\n]*from\s+['"][^'"]*\/db\/schema['"]/,
 ];
 
-function files(dir: string): string[] {
+function files(dir: string, exts = ['.ts']): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
-      out.push(...files(full));
+      out.push(...files(full, exts));
       continue;
     }
-    if (entry.endsWith('.ts')) out.push(full);
+    if (exts.some((e) => entry.endsWith(e))) out.push(full);
   }
   return out;
 }
@@ -88,5 +88,30 @@ describe('the authorization layer and the legacy role column', () => {
     // in passing — that would make the flip a no-op dressed as a migration.
     const imports = importLines(join(AUTHZ, 'derive.ts'));
     expect(ROLE_BEARING.filter((p) => p.test(imports))).toEqual([]);
+  });
+});
+
+describe('the compatibility alias feeds only content reads', () => {
+  // `AuthContext.role` survives phase 3 as `contentTier` under its old name,
+  // and the contract (guards.ts) is that it feeds nothing but content reads. A
+  // COMPARISON on it is a guard-shaped use — capability questions belong to
+  // `ctx.capabilities` — and this scan keeps the call sites fixed in phase 3a
+  // (owner-lookup, the voting preflights, the proxies and vote pages) from
+  // growing back.
+  //
+  // A convention scan, not a proof: it matches the `ctx` naming convention, so
+  // a differently-named context variable slips it (src/lib/site.ts's `auth`
+  // param does, legitimately — its role reads decide which nav links render,
+  // which is presentation). Reads that pass `ctx.role` onward, like
+  // `visibleTiers(ctx.role)`, are the alias's job and deliberately not matched.
+  it('is never compared against a literal outside the guards', () => {
+    const pattern = /\bctx[!?]?\.role\s*[!=]==/;
+    const src = join(process.cwd(), 'src');
+    const offenders: string[] = [];
+    for (const file of files(src, ['.ts', '.tsx', '.astro'])) {
+      const name = relative(src, file).split('\\').join('/');
+      if (pattern.test(readFileSync(file, 'utf8'))) offenders.push(name);
+    }
+    expect(offenders).toEqual([]);
   });
 });

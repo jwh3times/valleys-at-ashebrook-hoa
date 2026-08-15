@@ -16,6 +16,7 @@ vi.mock('../../src/server/auth', () => ({
 }));
 
 import { getAuthContext } from '../../src/server/authz/context';
+import type { Capability } from '../../src/server/authz/guards';
 
 // The ADR 0022 parity suite (issue #210, phase 2).
 //
@@ -308,6 +309,7 @@ describe('the flag selects the model, for every caller class', () => {
         { id: 'lot-p2', owners: [{ id: 'own-p2', name: 'Bo Board' }] },
         { id: 'lot-p3', owners: [{ id: 'own-p3', name: 'Sam Sysadmin' }] },
         { id: 'lot-p4', owners: [{ id: 'own-p4', name: 'Uma Unlinked' }] },
+        { id: 'lot-p5', owners: [{ id: 'own-p5', name: 'Nan Nolots' }] },
       ],
       accounts: [
         {
@@ -346,8 +348,28 @@ describe('the flag selects the model, for every caller class', () => {
           role: 'homeowner',
           legacyLots: ['lot-p4'],
         },
+        {
+          // Board access with no Lot: linked and granted, but the Ownership is
+          // ended below. The second allow-list entry, exercised through the
+          // seam rather than only at derivation level.
+          id: 'acct-board-nolots',
+          role: 'board',
+          legacyLots: [],
+          linkedTo: 'own-p5',
+          grants: ['board'],
+          boardTerm: {
+            startDay: '2026-01-01',
+            scheduledEndDay: '2027-01-01',
+            lotId: 'lot-p5',
+          },
+        },
       ],
     });
+    // The builder writes a current Ownership for every active owner; this
+    // caller class is defined by not having one.
+    await getDb(env).run(
+      sql`UPDATE ownerships SET end_day = '2026-02-01' WHERE owner_party_id = 'own-p5'`,
+    );
   }
 
   /**
@@ -358,7 +380,7 @@ describe('the flag selects the model, for every caller class', () => {
     account: string;
     tier: string;
     lots: string[];
-    capabilities: string[];
+    capabilities: Capability[];
   }[] = [
     {
       account: 'acct-member',
@@ -390,7 +412,7 @@ describe('the flag selects the model, for every caller class', () => {
         expect([...(ctx?.lotIds ?? [])].sort()).toEqual([...lots].sort());
         for (const capability of capabilities) {
           expect(
-            ctx?.capabilities.has(capability as never),
+            ctx?.capabilities.has(capability),
             `${account} should hold ${capability} under ${mode}`,
           ).toBe(true);
         }
@@ -435,6 +457,43 @@ describe('the flag selects the model, for every caller class', () => {
     expect(derived?.lotIds).toEqual([]);
     // Authenticated, so still a context — the gates answer 403, not 401.
     expect(derived).not.toBeNull();
+  });
+
+  it('keeps the board-without-Lots divergence exactly at the flip', async () => {
+    // Allow-list entry two, through the seam. Legacy's rank ladder hands this
+    // caller `member` for free; derivation grants member only from Lot
+    // authority. Tier and lot set agree in both modes — the divergence is
+    // purely the capability, which is why the member-route gates and not the
+    // shadow comparison are what surface it.
+    const legacy = await resolve('legacy', 'acct-board-nolots');
+    expect(legacy?.contentTier).toBe('board');
+    expect(legacy?.lotIds).toEqual([]);
+    expect(legacy?.capabilities.has('member')).toBe(true);
+
+    const derived = await resolve('derived', 'acct-board-nolots');
+    expect(derived?.contentTier).toBe('board');
+    expect(derived?.lotIds).toEqual([]);
+    expect(derived?.capabilities.has('board')).toBe(true);
+    expect(derived?.capabilities.has('member')).toBe(false);
+  });
+
+  it('revoking a grant takes effect on the very next request', async () => {
+    // The uncached-capabilities criterion (#217), proven through the seam
+    // rather than by calling deriveAccess directly: nothing between the grant
+    // table and the request can be holding a stale answer.
+    expect(
+      (await resolve('derived', 'acct-board-owner'))?.capabilities.has('board'),
+    ).toBe(true);
+
+    await getDb(env).run(
+      sql`UPDATE access_grants SET ended_at = 2 WHERE account_id = 'acct-board-owner'`,
+    );
+
+    const after = await resolve('derived', 'acct-board-owner');
+    expect(after?.capabilities.has('board')).toBe(false);
+    // Still an Owner, so member survives; only the granted capability fell.
+    expect(after?.capabilities.has('member')).toBe(true);
+    expect(after?.contentTier).toBe('homeowner');
   });
 
   it('reverses on the way back, so the abort path is real', async () => {

@@ -213,8 +213,12 @@ async function electionPreflightError(
   ctx: AuthContext,
   input: CastBallotInput,
 ): Promise<VoteWriteResult | null> {
-  if (ctx.role !== 'homeowner' && ctx.role !== 'board')
-    return failure(403, 'Forbidden');
+  // Casting needs Lot authority — the `member` capability — not rank. Under
+  // legacy synthesis this admits exactly {homeowner, board}, same as the old
+  // role check; under derived, a board member who owns no Lot is refused here
+  // in agreement with requireVotingApi, instead of passing the preflight only
+  // to be denied by the casting SQL underneath.
+  if (!ctx.capabilities.has('member')) return failure(403, 'Forbidden');
   const db = getDb(env);
   const tiers = visibleTiers(ctx.role);
   const electionRows = await db
@@ -309,8 +313,12 @@ async function motionPreflightError(
   ctx: AuthContext,
   input: CastMotionVoteInput,
 ): Promise<VoteWriteResult | null> {
-  if (ctx.role !== 'homeowner' && ctx.role !== 'board')
-    return failure(403, 'Forbidden');
+  // Casting needs Lot authority — the `member` capability — not rank. Under
+  // legacy synthesis this admits exactly {homeowner, board}, same as the old
+  // role check; under derived, a board member who owns no Lot is refused here
+  // in agreement with requireVotingApi, instead of passing the preflight only
+  // to be denied by the casting SQL underneath.
+  if (!ctx.capabilities.has('member')) return failure(403, 'Forbidden');
   const db = getDb(env);
   const tiers = visibleTiers(ctx.role);
   const motionRows = await db

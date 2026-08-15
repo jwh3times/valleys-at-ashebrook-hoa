@@ -58,17 +58,16 @@ export interface DerivedAccess {
    * the grant is an integrity signal about the WRITE path (the mutation
    * boundary should have ended it), not an ordinary denial about the caller.
    *
-   * RECORDING IT IS BLOCKED, deliberately and not by oversight. #200 says a
-   * grant failing re-validation "is an Access Event", but the ledger's causal
-   * design (#197) forbids the shape that would need: an `automatic` event must
-   * name a `causing_event_id`, and a correlation root must not have one, so an
-   * automatic event can never be a root. An evaluation-time finding has no
-   * initiating command to descend from. Review Flags are no escape — they
-   * require a `source_event_id` too. Writing it as `actor_kind = 'account'`
-   * would be the easy fix and the wrong one: it would claim the denied caller
-   * decided something, when all they did was make a request.
-   *
-   * So the detection ships and the recording waits on a decision. See #217.
+   * RECORDING IT AWAITS AN ATTRIBUTION DECISION on #217 — a decision, not a
+   * schema impossibility. The `automatic` shape is genuinely unavailable (an
+   * automatic event must name a `causing_event_id` and a correlation root must
+   * not have one, so an automatic root cannot exist), but an
+   * `actor_kind = 'account'` root attributed to the denied caller is
+   * schema-legal, and it is the same shape #197 already uses for the
+   * last-System-Administrator denial. The open question is purely whether that
+   * attribution is right for an evaluation-time finding the caller never
+   * initiated — or whether it belongs in #205's bounded security telemetry
+   * instead. Until that is decided, the detection ships and nothing records.
    *
    * Named independently of `capabilities` on purpose. A caller holding two
    * Board grants, one valid and one stale, is not denied — but the stale one is

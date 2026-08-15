@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { createAuth } from '../auth';
 import { getDb } from '../db/client';
-import { properties, userPropertyLinks } from '../db/schema';
+import { properties, userPropertyLinks, users } from '../db/schema';
 import { getCutoverMode } from './cutover-mode';
 import { deriveAccess, type DerivedAccess } from './derive';
 import type { AuthContext, Capability, Role } from './guards';
@@ -75,14 +75,12 @@ export function derivedContext(access: DerivedAccess): AuthContext {
   };
 }
 
-/** Read the legacy roster facts for an authenticated account. */
-async function readLegacyFacts(
+/** The legacy links half: active-property links for one account. */
+async function activeLinkedPropertyIds(
   env: Env,
   userId: string,
-  rawRole: unknown,
-): Promise<AuthContext> {
-  const db = getDb(env);
-  const links = await db
+): Promise<string[]> {
+  const links = await getDb(env)
     .select({ propertyId: userPropertyLinks.propertyId })
     .from(userPropertyLinks)
     .innerJoin(properties, eq(userPropertyLinks.propertyId, properties.id))
@@ -92,14 +90,50 @@ async function readLegacyFacts(
         eq(properties.status, 'active'),
       ),
     );
-  const role: Role =
-    typeof rawRole === 'string' && VALID_ROLES.has(rawRole)
-      ? (rawRole as Role)
-      : 'visitor';
+  return links.map((l) => l.propertyId);
+}
+
+const coerceRole = (rawRole: unknown): Role =>
+  typeof rawRole === 'string' && VALID_ROLES.has(rawRole)
+    ? (rawRole as Role)
+    : 'visitor';
+
+/** Read the legacy roster facts for an authenticated account. */
+async function readLegacyFacts(
+  env: Env,
+  userId: string,
+  rawRole: unknown,
+): Promise<AuthContext> {
   return legacyAuthContext(
     userId,
-    role,
-    links.map((l) => l.propertyId),
+    coerceRole(rawRole),
+    await activeLinkedPropertyIds(env, userId),
+  );
+}
+
+/**
+ * The legacy answer for one account, read entirely from D1 — no session.
+ *
+ * Exists for the shadow layer, which under `cutover_mode = derived` must
+ * compute the legacy side fresh: the context that served the request is already
+ * the derived one, and comparing it with itself can never mismatch. The role
+ * comes from `users.role` directly, which is the same row Better Auth serves
+ * into the session, so this and `getAuthContext`'s legacy branch cannot
+ * disagree. This export keeps the seam intact: the column is still read only in
+ * this module, and consumers get a synthesized `AuthContext`, never the column.
+ */
+export async function readLegacyRosterContext(
+  env: Env,
+  userId: string,
+): Promise<AuthContext> {
+  const [row] = await getDb(env)
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId));
+  return legacyAuthContext(
+    userId,
+    coerceRole(row?.role),
+    await activeLinkedPropertyIds(env, userId),
   );
 }
 
@@ -129,8 +163,8 @@ export async function getAuthContext(
   const mode = await getCutoverMode(env);
   if (mode === 'derived') {
     // `access.invalidBoardGrantId` names a live Board grant this refused. Its
-    // recording as an Access Event (#200) is BLOCKED on a decision, not
-    // forgotten — see the note on that field in derive.ts.
+    // recording as an Access Event (#200) awaits an attribution decision on
+    // #217 — see the note on that field in derive.ts.
     return derivedContext(
       await deriveAccess(env, result.user.id, associationDay),
     );
