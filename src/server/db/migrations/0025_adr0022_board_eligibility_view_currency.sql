@@ -142,7 +142,11 @@ WHERE t.voided_at IS NULL
         AND o.end_day IS NULL
       UNION ALL
       -- Or representation of an Organization that owns it: organization-wide
-      -- scope resolves by join, Lot-scoped intersects its named Lots.
+      -- scope resolves by join, Lot-scoped intersects its named Lots. A
+      -- Representation may carry a FUTURE end day (#202) and still grants
+      -- authority until that day arrives, so — unlike an Ownership, whose
+      -- ends can never be anticipated — a bare `end_day IS NULL` test would
+      -- wrongly read a scheduled retirement as already ended.
       SELECT 1 FROM representations r
       JOIN ownerships o2 ON o2.owner_party_id = r.organization_party_id
         AND o2.lot_id = t.qualifying_lot_id
@@ -150,7 +154,7 @@ WHERE t.voided_at IS NULL
         AND o2.end_day IS NULL
       WHERE r.representative_person_id = t.person_id
         AND r.voided_at IS NULL
-        AND r.end_day IS NULL
+        AND (r.end_day IS NULL OR date('now') < r.end_day)
         AND (
           r.scope_kind = 'organization'
           OR EXISTS (
