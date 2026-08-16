@@ -14,6 +14,7 @@ import {
   documents,
   meetings,
   elections,
+  motions,
   memberAttendance,
   memberVotes,
   ballots,
@@ -704,6 +705,13 @@ export const reviewFlags = sqliteTable(
       () => memberVotes.id,
       { onDelete: 'restrict' },
     ),
+    // Phase 3d (#220): a vote_reset_on_transfer flag names the MOTION whose
+    // vote was reset — the deleted member_votes row cannot be referenced, and
+    // the queue row must answer "what was reset?" directly. RESTRICT is safe:
+    // motion deletion already refuses while live-voting history exists.
+    impactedMotionId: text('impacted_motion_id').references(() => motions.id, {
+      onDelete: 'restrict',
+    }),
     impactedBallotId: text('impacted_ballot_id').references(() => ballots.id, {
       onDelete: 'restrict',
     }),
@@ -732,7 +740,7 @@ export const reviewFlags = sqliteTable(
     ),
     check(
       'review_flags_impact_at_most_one',
-      sql`(CASE WHEN "impacted_proxy_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_member_attendance_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_member_vote_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_ballot_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_board_term_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_access_grant_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_event_id" IS NULL THEN 0 ELSE 1 END) <= 1`,
+      sql`(CASE WHEN "impacted_proxy_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_member_attendance_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_member_vote_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_motion_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_ballot_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_board_term_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_access_grant_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "impacted_event_id" IS NULL THEN 0 ELSE 1 END) <= 1`,
     ),
     index('review_flags_open_idx').on(t.status, t.openedAt),
     index('review_flags_source_idx').on(t.sourceEventId),
