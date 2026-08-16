@@ -93,6 +93,18 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   the admin panel's visibility control. Board meetings are unaffected: `board_attendance`/
   `board_votes` reference `board_people`, not addresses, and a board meeting's roll call has always
   named board members, never homeowners.
+- **A proxy's grantor is re-validated as a currently active owner every time the proxy is used, not
+  only when it is granted.** The ADR 0022 phase 3d grantor re-validation (#220, decided by #204)
+  adds a check to the shared `proxyUseError` guard behind `setMemberAttendance`, `setMemberVotes`,
+  and `setBallots`, and to both live-cast authority predicates behind `POST /api/vote`: a proxy
+  whose grantor no longer owns the proxy's lot is refused (`409`) rather than accepted on the
+  strength of having been valid when granted. It reads the legacy roster's current owner status in
+  both cutover modes — this is a live, pre-flip behavior change, not one gated behind
+  `cutover_mode` — and is a deliberate approximation, not an interval check: it refuses whenever
+  the grantor is _currently_ inactive, which can also refuse a proxy that was genuinely valid on
+  the day it was used if the grantor has since sold. The board's escape for a legitimate late
+  record-keeping entry is to record it without the proxy reference. Exact occasion-day interval
+  validation becomes possible only in phase 4, once proxies are re-keyed to the party roster.
 - **Election turnout and candidate choices have no explicit identity link or join key.** `ballots`
   records only that a lot participated — election, property, frozen record-date weight, and
   owner-or-proxy provenance. A successful conducted ballot atomically inserts that turnout row and
@@ -115,6 +127,16 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) for the paper-election baseline and
   [ADR 0020](./docs/adr/0020-digital-ballot-box.md) for the retained digital ballot box and its
   limits.
+- **The ADR 0022 phase 3d transfer-effects and review-flag machinery is held to the same
+  ballot-secrecy boundary.** A property transfer's automatic discovery of a not-yet-concluded
+  conducted ballot (`ballot_final_after_transfer`) reaches only the identity-linked turnout
+  `ballots` row and the election occasion — it never reads, joins, names, or counts
+  `ballot_choices` or a candidate selection, and the board's `GET /api/admin/review-flags` queue
+  exposes the same limited reach. A two-layer test suite (`test/unit/ballot-privacy-boundary.test.ts`,
+  a static scan of `src/`; `test/server/ballot-privacy.test.ts`, a runtime proof that
+  `ballot_choices` rows are byte-identical across a transfer) plus a `verify:invariants` check
+  hold that boundary as a permanent gate on the discovery/flag/ledger/export machinery, not a
+  point-in-time review.
 - **Live-vote eligibility and lifecycle history are immutable records.**
   `election_eligibility` and `motion_eligibility` are the record-date snapshots: they freeze every
   active property and its vote weight at first open, and every live ballot or motion vote stamps its

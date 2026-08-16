@@ -22,6 +22,7 @@ import {
   type Evidence,
 } from '../../../server/roster/audit';
 import { lossConsequences } from '../../../server/roster/board-consequences';
+import { transferEffects } from '../../../server/roster/transfer-effects';
 
 // ADR 0022 phase 3b (#218): the Ownership half of the roster's recorded-fact
 // surfaces. See docs/adr/0022-party-roster-derived-access.md and
@@ -372,10 +373,30 @@ async function endOwnership(
     actorAccountId,
   });
 
+  // Phase 3d (#220): the transfer itself. The one stored action a transfer
+  // reverses is an open member-motion vote; everything else it disturbs —
+  // backdated-window activity and still-upcoming occasions — is surfaced as a
+  // Review Flag. Flag INSERTs FK-reference their opening events, so they come
+  // AFTER the correlation's statements.
+  const effects = await transferEffects({
+    database: env.DATABASE,
+    nowMs,
+    associationDay,
+    effectiveDay: endDay,
+    lots: [existing.lotId],
+    rootGuard,
+    correlation,
+    cause: 'ownership_ended',
+    resetOpenMotionVotes: true,
+    affectedTermIds: consequences.affectedTermIds,
+  });
+
   const batch = [
     primary,
     ...consequences.statements,
+    ...effects.statements,
     ...correlation.statements,
+    ...effects.flagStatements,
     ...consequences.substitutionAsserts.map((g) =>
       assertInBatch(env.DATABASE, g),
     ),
@@ -464,10 +485,30 @@ async function voidOwnership(
     actorAccountId,
   });
 
+  // A void is NOT a transfer: no vote is reset (#204 — a reset vote is never
+  // restored either, and fabricating one back is worse than the friction).
+  // Its own flags resolve as `superseded`, never deleted. Discovery still
+  // runs, but its window opens today, so in practice only the forward pass
+  // has anything to say.
+  const effects = await transferEffects({
+    database: env.DATABASE,
+    nowMs,
+    associationDay,
+    effectiveDay: associationDay,
+    lots: [existing.lotId],
+    rootGuard,
+    correlation,
+    cause: 'ownership_voided',
+    affectedTermIds: consequences.affectedTermIds,
+    supersedes: { column: 'ownership_id', id: ownershipId },
+  });
+
   const batch = [
     primary,
     ...consequences.statements,
+    ...effects.statements,
     ...correlation.statements,
+    ...effects.flagStatements,
     ...consequences.substitutionAsserts.map((g) =>
       assertInBatch(env.DATABASE, g),
     ),
