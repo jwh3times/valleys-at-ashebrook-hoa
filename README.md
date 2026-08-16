@@ -154,9 +154,10 @@ remaining board admin can't be demoted), which supports handing the site off to 
 board over time. A board admin can't escalate their own access beyond `board`, and
 the Better Auth admin plugin's impersonation/ban/set-role endpoints are not granted to
 board sessions. A separate **The Board** tab records who serves on the board and their terms of
-service, independent of who can sign in. The _first_ board account is bootstrapped through a
-permanent, fail-closed `POST /api/bootstrap/board` endpoint that self-disables once any board
-account exists — see SETUP.md §6.
+service, independent of who can sign in. The _first_ System Administrator account is bootstrapped
+through a permanent, fail-closed `POST /api/bootstrap/board` endpoint that links an
+already-signed-in account to an existing roster Person and self-disables once its one-time
+bootstrap record is written — see SETUP.md §6.
 
 ## Live voting workflow
 
