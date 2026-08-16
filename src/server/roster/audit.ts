@@ -175,6 +175,15 @@ export type IdentityReason =
   | 'resident_request'
   | 'verification_review_declined';
 
+/**
+ * Review Flag resolution codes (#204/#220). Mirrors
+ * `review_events_resolution_code_check` (migration 0020). `superseded` is
+ * reserved for the automatic void/correction path — the admin resolve route
+ * rejects it.
+ */
+export type ReviewResolutionCode =
+  'remediated' | 'confirmed_valid' | 'no_effect' | 'superseded';
+
 /** Mirrors `board_service_changes_reason_code_check` (migration 0024). */
 export type BoardServiceReason =
   | 'term_expired'
@@ -284,6 +293,20 @@ export type AuditDetail =
         | 'last_administrator_change';
       outcome: 'allowed' | 'denied';
       reason?: string | null;
+    }
+  | {
+      /** The Review Flag lifecycle (#220): `review_flag_opened` is a caused
+       * event under the command that opened the flag, `review_flag_resolved`
+       * an account-attributed root from the resolve route,
+       * `review_flag_superseded` a caused event under the correcting command.
+       * The category is read from the flag row, so kinds stay uniform. The
+       * flag row FK-references its events, which is why flag statements come
+       * AFTER the correlation's statements in the batch — the one exception
+       * to domain-rows-first, documented at the top of this file's protocol. */
+      family: 'review';
+      reviewFlagId: string;
+      /** NULL on an opening event; set on resolution and supersession. */
+      resolutionCode?: ReviewResolutionCode | null;
     }
   | {
       family: 'roster_redaction';
@@ -517,6 +540,22 @@ export class AuditCorrelation {
             meeting,
             request,
             external,
+            ...own.binds,
+          ),
+      );
+      return;
+    }
+    if (detail.family === 'review') {
+      this.statements.push(
+        this.database
+          .prepare(
+            `INSERT INTO review_events (event_id, review_flag_id, resolution_code)
+             SELECT ?, ?, ? WHERE ${own.sql}`,
+          )
+          .bind(
+            id,
+            detail.reviewFlagId,
+            detail.resolutionCode ?? null,
             ...own.binds,
           ),
       );

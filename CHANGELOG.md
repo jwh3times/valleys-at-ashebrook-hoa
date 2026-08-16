@@ -7,6 +7,47 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-16
+
+### Added
+
+- **Selling a home now carries its consequences into votes and proxies,
+  correctly and automatically.** When the board records that an ownership
+  ended, the system settles what that means in the same stroke: the seller's
+  vote on any question still open is cleared so the current owner can decide
+  it (a finished vote is never touched — a recorded outcome must not change
+  under its minutes), and every activity the departing owner had in flight is
+  found and queued for one human look. A backdated sale is handled honestly:
+  the search covers the whole gap between the day the sale really happened
+  and the day it was typed in, so nothing that happened in between slips
+  past unexamined.
+- **A review queue for the board.** Each thing a transfer disturbs — a
+  cleared vote, a proxy for an upcoming meeting whose signer no longer owns
+  the home, activity found in a backdated gap, or a secret ballot that
+  nobody can redo — becomes one item the board reviews once and marks
+  handled. Items are never deleted: resolving one records who looked and
+  what they concluded, and voiding an erroneous transfer marks its items
+  superseded rather than erasing them. The cleared vote's choice is
+  preserved in the permanent history (member-meeting votes are attributable
+  by design), so the board can judge whether a re-vote is warranted.
+- **Secret ballots survive everything.** A transfer never touches a cast
+  election ballot: the buyer of a home that already voted cannot vote it
+  again, and the review item for that situation references only the fact
+  that the home voted — never what it chose. A standing test suite now
+  enforces, permanently, that no review item, history entry, or export can
+  reach a ballot's contents.
+
+### Fixed
+
+- **A former owner's proxy no longer works.** Recording attendance, votes,
+  or ballots through a proxy — and casting a live vote with one — now
+  verifies the person who signed the proxy still owns the home, not merely
+  that they owned it when they signed. Previously a seller's proxy remained
+  usable after the sale; now it is refused with a clear message, while the
+  proxy record itself stays on file.
+- **Restored the 0.9.0 release notes**, which were lost from this file in a
+  release-collision merge.
+
 ## [0.10.0] - 2026-08-15
 
 ### Added
@@ -54,6 +95,67 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   account may claim for one home.
 - An organization's contact details can never satisfy a person's
   verification — enforced by the database's own structure, not convention.
+
+### Added
+
+- **The association's new records can now be operated, not just previewed.**
+  The rebuild around durable people and homes gains its working surfaces: the
+  board can record who owns which home and since when, who acts for an owning
+  company, which homes a person's board service rests on, and who may sign in
+  with board or administrator access. Every change is validated against the
+  record as it exists at that moment — two people cannot hold overlapping
+  terms on one home's strength, a home cannot be retired while an election
+  still counts it, and a lost race leaves nothing half-written.
+- **Every change to the new records writes a permanent, tamper-evident
+  account of itself.** Each accepted change records what happened, who did it,
+  on what real-world day it took effect, and what evidence supported it — and
+  consequences stay causally linked to the change that forced them. Personal
+  details never enter this history: it records that "her name changed," never
+  what the name was, which is what makes true removal possible later.
+- **Losing the home a board seat rests on now settles itself correctly.**
+  When a sale or a change of representation removes the basis for someone's
+  board service, the term ends on the real-world day the basis ended — while
+  their sign-in access ends immediately, because access already used cannot be
+  un-used. The board may name a substitute qualifying home in the same action,
+  and a substitute that does not hold up fails the whole action rather than
+  silently dropping the person.
+- **Members can ask for corrections without being able to change records.**
+  A signed-in resident can review their own record and submit a correction to
+  their own name or contact details. The request waits for the board; accepting
+  it applies the fix as an ordinary board-recorded change citing the request,
+  and declining it leaves no trace in the permanent history.
+- **Election certification now creates the durable record directly.** Winners
+  are certified onto the new board-service record with the home their
+  eligibility rests on, validated at certification; reversing a certification
+  now marks those terms as voided rather than erasing them, so the record can
+  always say what happened. Certification still never grants sign-in access by
+  itself.
+- **Privacy boundaries ship inside the new surfaces, not after them.** Contact
+  details stay board-only on every surface (residents always see their own); a
+  removed name renders as the same neutral label for every viewer, board
+  included; the one bulk export of resident data is itself permanently
+  recorded before any data leaves; and the most sensitive views — redaction,
+  denial detail, ledger integrity — answer only to a system administrator, a
+  role that exists only after the eventual switchover.
+
+### Changed
+
+- **The old board-roster admin screens are retired.** The legacy
+  board-people/board-terms records and their panel are replaced by the new
+  board-service record; the meeting record's people pickers keep working
+  unchanged. The remaining new-record admin screens stay read-only until the
+  switchover, and none of this changes what any visitor, resident, or board
+  member can see or do on the live site today.
+
+### Fixed
+
+- **Two latent switchover blockers found while building.** The migration
+  baseline for board terms used a reason code the ledger's own rules rejected,
+  and the board-eligibility integrity check wrongly flagged terms that had
+  already ended — including every term the new consequence machinery ends
+  correctly. Both are fixed before either could block the eventual flip.
+
+## [0.9.0] - 2026-08-15
 
 ### Added
 
