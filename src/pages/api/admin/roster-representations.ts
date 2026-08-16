@@ -29,6 +29,7 @@ import {
   type SubjectRole,
 } from '../../../server/roster/audit';
 import { lossConsequences } from '../../../server/roster/board-consequences';
+import { transferEffects } from '../../../server/roster/transfer-effects';
 
 // ADR 0022 phase 3b (#218): the Representation half of the roster's
 // recorded-fact surfaces. See AGENT-BRIEF-3b.md and
@@ -596,8 +597,24 @@ async function endRepresentation(
       correlation,
       actorAccountId,
     });
+    // Phase 3d (#220): authority loss over the organization's Lots. A
+    // Representation change is NOT a transfer, so it never resets a member
+    // vote (#220's trigger matrix); it discovers and flags only.
+    const effects = await transferEffects({
+      database: env.DATABASE,
+      nowMs,
+      associationDay,
+      effectiveDay: endDay,
+      lots,
+      rootGuard,
+      correlation,
+      cause: 'representation_ended',
+      affectedTermIds: consequences.affectedTermIds,
+    });
     statements.push(...consequences.statements);
+    statements.push(...effects.statements);
     statements.push(...correlation.statements);
+    statements.push(...effects.flagStatements);
     statements.push(
       ...consequences.substitutionAsserts.map((g) =>
         assertInBatch(env.DATABASE, g),
@@ -698,10 +715,27 @@ async function voidRepresentation(
     actorAccountId,
   });
 
+  // No vote reset (a void is not a transfer), and this command's own open
+  // flags resolve as `superseded` rather than being deleted (#204).
+  const effects = await transferEffects({
+    database: env.DATABASE,
+    nowMs,
+    associationDay,
+    effectiveDay: associationDay,
+    lots,
+    rootGuard,
+    correlation,
+    cause: 'representation_voided',
+    affectedTermIds: consequences.affectedTermIds,
+    supersedes: { column: 'representation_id', id: representationId },
+  });
+
   const batch = [
     primary,
     ...consequences.statements,
+    ...effects.statements,
     ...correlation.statements,
+    ...effects.flagStatements,
     ...consequences.substitutionAsserts.map((g) =>
       assertInBatch(env.DATABASE, g),
     ),
@@ -873,8 +907,23 @@ async function correctScope(
     correlation,
     actorAccountId,
   });
+  // Only the Lots the correction removed lost authority; the rest are
+  // untouched, so discovery and the forward pass run over `removedLots` only.
+  const effects = await transferEffects({
+    database: env.DATABASE,
+    nowMs,
+    associationDay,
+    effectiveDay: associationDay,
+    lots: removedLots,
+    rootGuard,
+    correlation,
+    cause: 'representation_scope_corrected',
+    affectedTermIds: consequences.affectedTermIds,
+  });
   statements.push(...consequences.statements);
+  statements.push(...effects.statements);
   statements.push(...correlation.statements);
+  statements.push(...effects.flagStatements);
   statements.push(
     ...consequences.substitutionAsserts.map((g) =>
       assertInBatch(env.DATABASE, g),

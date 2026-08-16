@@ -401,6 +401,12 @@ function electionAuthorityPredicate(
       binds: [input.castByOwnerId, ctx.userId],
     };
   }
+  // The grantor-currency EXISTS is the ADR 0022 phase-3d addition (#220 /
+  // #204): a proxy whose grantor no longer holds the lot confers nothing. For
+  // a live cast the occasion is NOW, so the legacy roster's current-state
+  // answer is exact "held Lot Authority at the occasion" semantics here — the
+  // approximation caveat in proxy-guards.ts applies only to back-entered
+  // record-keeping.
   return {
     sql: `EXISTS (
       SELECT 1
@@ -420,6 +426,13 @@ function electionAuthorityPredicate(
         )
         AND holder_owner.status = 'active'
         AND caller_link.user_id = ?
+        AND EXISTS (
+          SELECT 1
+          FROM owners grantor_owner
+          WHERE grantor_owner.id = selected_proxy.grantor_owner_id
+            AND grantor_owner.property_id = selected_proxy.property_id
+            AND grantor_owner.status = 'active'
+        )
     )`,
     binds: [input.proxyId, ctx.userId],
   };
@@ -444,6 +457,8 @@ function motionAuthorityPredicate(
       binds: [input.castByOwnerId, ctx.userId],
     };
   }
+  // Same phase-3d grantor-currency re-check as the election predicate above;
+  // an open motion's cast happens now, so current status is exact.
   return {
     sql: `EXISTS (
       SELECT 1
@@ -457,6 +472,13 @@ function motionAuthorityPredicate(
         AND selected_proxy.meeting_id = meeting.id
         AND holder_owner.status = 'active'
         AND caller_link.user_id = ?
+        AND EXISTS (
+          SELECT 1
+          FROM owners grantor_owner
+          WHERE grantor_owner.id = selected_proxy.grantor_owner_id
+            AND grantor_owner.property_id = selected_proxy.property_id
+            AND grantor_owner.status = 'active'
+        )
     )`,
     binds: [input.proxyId, ctx.userId],
   };

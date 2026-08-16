@@ -182,10 +182,7 @@ export type IdentityReason =
  * rejects it.
  */
 export type ReviewResolutionCode =
-  | 'remediated'
-  | 'confirmed_valid'
-  | 'no_effect'
-  | 'superseded';
+  'remediated' | 'confirmed_valid' | 'no_effect' | 'superseded';
 
 /** Mirrors `board_service_changes_reason_code_check` (migration 0024). */
 export type BoardServiceReason =
