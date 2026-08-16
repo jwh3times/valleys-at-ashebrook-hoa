@@ -428,6 +428,61 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     out-of-scope ids mask as `404`). Both use `requireMemberApi` and then answer the deliberate
     no-Person-Link `403` pointing at verification — which under `legacy` is every caller, until
     the flip.
+- ADR 0022 phase 3c Person Verification / Person Link routes (#219; decided by #201, amended by
+  #202). `/api/verify/{request,confirm}` are now ONE route contract answered by TWO backends
+  branched on `getCutoverMode`: `legacy` keeps the existing property flow (address match,
+  owner-contact fan-out, `property_verifications`, confirm writes `user_property_links` and
+  promotes role); `derived` runs the new Person flow entirely in `src/server/roster/verification.ts`.
+  `POST /api/verify/request` takes `{ address, name, channel, turnstileToken }` in both modes;
+  after the write freeze, session, malformed-body, channel, and Turnstile gates — none of which
+  touch the roster — EVERY remaining outcome (success, unknown address, unmatched or ambiguous
+  name, an organization-owned lot, a shared/unattributable contact, both already-linked
+  collisions, and every rate limit) converges on the same byte-identical
+  `200 { ok: true, message: 'If the information matches our records, a code has been sent.' }`;
+  there is no more `queued`/`rateLimited` distinction and no `429` on this route. Under `derived`,
+  the matcher (`matchPersonForVerification`) resolves the claimed Lot, filters current Person
+  owners (never Organizations — the join through `people` excludes them structurally), applies a
+  two-tier name match (exact normalized full match; if zero, a first-and-last-token match; either
+  tier requires exactly one candidate), then picks the matched Person's current contact on the
+  chosen channel that is ALSO uniquely attributable roster-wide (`(channel, value_normalized)`
+  resolves to exactly one Party), and sends exactly one code to that contact — never a fan-out. A
+  Person already linked to a different account auto-creates a `verification_review_requests` row
+  (`internal_reason='person_already_linked'`) and sends nothing; the caller's own account already
+  being linked sends nothing and creates nothing. `POST /api/verify/confirm` collapses every
+  internal failure (wrong code, expired, locked, or a batch race) into
+  `{ ok: false, reason: 'mismatch' }` except `expired`/`locked`, which keep their own reason; on a
+  `derived` success it writes, in one D1 batch, `person_verifications`
+  (`method='otp_email'|'otp_sms'`), `person_links`, a root `identity`-family ledger event
+  (`person_verified`, reason `automatic_contact_proof`), and two write-behind mirrors (never read
+  for authorization) that insert `user_property_links` and promote `users.role` from `visitor` to
+  `homeowner` — kept only so the legacy read model and Better Auth session stay coherent through
+  the flip. Neither backend auto-queues to `manual_approval_queue` anymore — the three legacy
+  auto-enqueue paths (address not found, no contact on file, every send failed) were removed;
+  `POST /api/verify/review` is the one explicit applicant action that queues review (session-gated,
+  no Turnstile — the one-open-request-per-account partial unique index is the flooding control),
+  writing `verification_review_requests` identically in both modes and always answering the
+  uniform `200 { ok: true, message: 'Your request was sent to the board.' }`.
+  `POST /api/verify/unlink` is the applicant's always-available self-unlink — deliberately outside
+  `/api/member/*` and `officialMode`, gated only by the write freeze and an authenticated session —
+  ending the caller's own Person Link and every Access Grant it currently supports in one batch,
+  refusing (`409`) to strip the last System Administrator and permanently recording that refusal
+  as a denied Access Event. The board's mirror surfaces are flat, `requireBoard`-gated, and
+  new-model-always (no mode branch): `/api/admin/person-links` (`GET` the full link register with
+  verification provenance; `POST` `manualVerify { accountId, personId, reason:
+'manual_board_decision'|'migration_reverification', evidence }` links an EXISTING Person — never
+  creates one — with readable `404`/`409` pre-checks for an unknown/organization/consolidated
+  Person or either side already linked, and `unlink { linkId, endReason }` for every admin-facing
+  end reason except `self_unlink`, sharing the same grant-ending batch and last-System-
+  Administrator guard as `/api/verify/unlink`) and `/api/admin/verification-requests` (`GET` the
+  open review queue; `POST` `accept { id, personId, reason? }` is a `manualVerify` whose evidence
+  cites the request's own id, resolving the row `accepted` in the same batch; `decline { id }`
+  marks the row `declined` and writes a durable `identity` ledger event — denial IS ledgered here,
+  unlike a correction-request decline). Rate limiting (KV, `src/server/verification/rate-limit.ts`)
+  keeps Turnstile, the per-account 120s cooldown, and the per-account daily cap (5), keeps the
+  per-Lot daily cap (5, both modes), adds a per-Person daily cap (5, `derived` only — a Person who
+  owns several Lots must not be re-sendable once per Lot), and adds a distinct-claimed-names-
+  per-Lot-per-account cap (3/24h, both modes) — the roster-walking control, capping how many
+  different names one account can try against one Lot regardless of whether any of them matched.
 - Board-only document assistant: `POST /api/admin/assistant` (SSE) takes `{ question, history? }`
   and streams a Claude-generated, cited answer over the document library, retrieved via Cloudflare
   AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
@@ -460,9 +515,26 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   `DELETE /api/admin/reports` (body `{ id }`) removes a saved report. All three verbs are
   `requireBoard`-gated, fail-closed. See SECURITY.md for the privacy model shared with the chat
   assistant and the saved-report exposure it does not share.
-- Homeowner verification: `/api/verify/{request,confirm}`.
-- First-board bootstrap: `POST /api/bootstrap/board`, which is fail-closed, self-disables once a
-  board account exists, and requires bootstrap secret/config values.
+- Homeowner verification: `/api/verify/{request,confirm,review,unlink}` — see the ADR 0022 phase
+  3c entry above for the full contract.
+- First-System-Administrator bootstrap: `POST /api/bootstrap/board` (rewritten by #219; see
+  `src/server/roster/bootstrap.ts`), permanently fail-closed and checked in this order: the
+  `system_admin_bootstrap` singleton is unconsumed (`410` once used — this, not "does a board
+  account exist," is the primary guard, since an account can also be promoted board by other
+  means), a timing-safe `x-bootstrap-secret` match against `env.BOOTSTRAP_SECRET` (missing binding
+  = closed, `403`), an authenticated session (`401`, resolved directly off Better Auth rather than
+  through `getAuthContext`/`cutover_mode`, since bootstrap runs at flip step 4 while `cutover_mode`
+  may still read `legacy`), then a body `{ personId }` naming an already-recorded roster Person
+  (readable `404`/`409` for unknown/organization/consolidated or either side already linked). One
+  atomic batch then creates `person_verifications` (`method='bootstrap'`,
+  `reason='bootstrap_first_administrator'`), `person_links`, a `system_admin` row in
+  `access_grants` (`grant_reason='bootstrap'`), the `system_admin_bootstrap` singleton row itself,
+  a root `identity` ledger event plus its caused `access` event, and a `users.role='board'`
+  write-behind mirror (fresh-deploy admin access under `legacy`; a no-op if the account is already
+  board at the flip). The legacy BOARD_EMAIL/BOARD_PASSWORD/BOARD_NAME signup path and its
+  board-count guard are retired — `src/server/auth/seed-board.ts` and `scripts/seed-board.ts` are
+  deleted. The route stays at its unchanged path and remains one of the write freeze's two
+  permanent exemptions; it never calls `writeFreezeError`.
 - Better Auth handler: `/api/auth/[...all]`.
 
 **Client helpers.**
@@ -655,7 +727,14 @@ boolean`.
   `fetchMemberProxies` (lot-scoped granted/held lists with the ADR 0019 own-lot occasion exception
   and held-row tier redaction); these are not a public or complete tier-gated proxy register.
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
-- `roster/` and `verification/`: homeowner verification support.
+- `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
+  ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
+  shared Person Link creation/ending machinery behind `/api/verify/unlink` and
+  `/api/admin/person-links`, and `roster/bootstrap.ts` is the first-System-Administrator bootstrap
+  behind `POST /api/bootstrap/board` — all three join the phase 3b roster writer machinery
+  described below. `verification/property.ts` is the unchanged-shape legacy backend (minus its
+  three retired auto-enqueue paths) and `verification/rate-limit.ts` holds the shared KV throttles
+  both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible
@@ -786,8 +865,27 @@ cancels Board Terms, their offices, and their grants when an Ownership or Repres
 removes a qualifying basis; the term ends on the real-world day, the grant always at
 recorded-at), and `reads.ts` (the Roster/Board/Access reads, member self-read, and live-derived
 advisories, all rendering redacted identities through `personDisplayLabel` in `src/lib/format.ts`
-— the identical durable-ID fallback for every viewer, board included). Phase 3 part c (the
-verification rewrite, #219) remains unbuilt. Phase 2 adds:
+— the identical durable-ID fallback for every viewer, board included). **Phase 3 part c (the
+Person Verification / Person Link rewrite, #219) is also now built**: the `/api/verify/*` and
+`/api/bootstrap/board` routes described under **HTTP endpoints** above, and the board's
+`/api/admin/person-links` and `/api/admin/verification-requests` mirror surfaces. The shared
+writer machinery lives beside the phase 3b modules in `src/server/roster/`: `verification.ts` (the
+`derived`-mode Person matcher — two-tier name match, uniquely-attributable contact selection, and
+the one-batch confirm that writes `person_verifications`/`person_links` plus the write-behind
+`user_property_links`/`users.role` mirrors), `identity.ts` (`manualVerificationStatements` and
+`endLinkStatements` — the shared batch builders behind manual verification and every unlink path,
+including the last-System-Administrator refusal shared by `/api/verify/unlink` and the board's
+`unlink` action), and `bootstrap.ts` (the rewritten first-System-Administrator flow).
+`/api/verify/request` and `/api/verify/confirm` keep ONE
+route contract answered by TWO backends branched on `getCutoverMode` — `legacy` still runs the
+pre-existing property flow in `src/server/verification/property.ts` (its three
+`manual_approval_queue` auto-enqueue paths removed, per #201's anti-auto-queue rule), `derived`
+runs the new Person flow — mirroring the whole program's "legacy authoritative by flag, not code"
+philosophy: production is unaffected until the flip regardless of which backend answers, because
+`cutover_mode` still decides which is live. Phase 3d (proxy grantor re-validation, transfer
+effects, and review-flag impact discovery, #220) and phase 3e (the writable board-service,
+roster, and Person-Link admin panels — 3c and 3b ship only the APIs) remain unbuilt, as does the
+flip itself (#222). Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
@@ -978,11 +1076,28 @@ reference the table (SQLite's `ALTER ... RENAME` reparses every view), and uses 
 REDEFINES `board_eligibility_violations_v` twice over: concluded terms are excluded (eligibility
 is owed only while a term is current or scheduled — without this, every mutation-boundary
 termination would light the view up), and a Representation's FUTURE end day now reads as
-authority until it arrives, matching #202. See the ADR 0022 paragraph above for
-what these tables and views are and what now reads them (the phase-2 shadow layer, the board-only
-roster-preview panel, the operator write freeze, `cutover-mode.ts`, and — as of phase 3b — the
-roster/board-service/access routes; legacy authorization itself still reads none of the roster
-tables). Migrations `0016`
+authority until it arrives, matching #202. Migration `0026` (phase 3c, #219) REBUILDS three more
+tables inside `PRAGMA defer_foreign_keys`: `contact_methods` gains `party_kind` plus a composite FK
+to `parties(id, kind)` and a `UNIQUE (id, party_kind)` index — the target that lets
+`person_verifications` structurally require a PERSON's contact rather than an Organization's
+(#202); `person_verifications` gains the paired `contact_method_party_kind` column (composite FK,
+CHECK-pinned to `'person'`) replacing its old single-column contact FK, plus a
+`person_verifications_bootstrap_shape` CHECK closing the shape gap the automatic/manual CHECKs left
+open; and `identity_events` — provably empty, having never had a writer — is DROP+CREATEd to add
+the opaque `evidence_request_id` locator and an `identity_events_evidence_exactly_one` CHECK
+mirroring `roster_changes`, dropping the `election` evidence kind (an election proves nothing about
+who an account is) while leaving `reason_code` deliberately unchecked, the same discipline-over-CHECK
+lesson `0024`'s `board_service_changes` rebuild already recorded. The same file also adds two new
+operational tables, `verification_codes` (pending Automatic Person Verification codes: matched
+Person, contact, claimed Lot, code hash, attempts, expiry) and `verification_review_requests` (board
+review requests — `claimed_address`/`claimed_name` are applicant free text that never enters the
+ledger, one open row per account by partial unique index), and drops-then-recreates the two views
+that reference `identity_events` (`audit_event_effective_v`,
+`audit_integrity_violations_v`) verbatim, per the `0024`/`0025` precedent. See the ADR 0022
+paragraph above for what these tables and views are and what now reads them (the phase-2 shadow
+layer, the board-only roster-preview panel, the operator write freeze, `cutover-mode.ts`, and — as
+of phase 3b/3c — the roster/board-service/access/person-link/verification routes; legacy
+authorization itself still reads none of the roster tables). Migrations `0016`
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
 ledger rather than assumed.
 
@@ -1045,8 +1160,8 @@ than only that anonymous is refused; per #206 it outlives the migration rather t
 at the flip. Do not remove
 the per-route guards in favor of the middleware: that would leave the behavior untested. See
 [ADR 0013](./docs/adr/0013-admin-api-gated-in-middleware.md). `/api/bootstrap/board` sits outside the
-gated prefix on purpose — it is the fail-closed first-board bootstrap and must stay reachable, and
-for the same reason it is one of the write freeze's two exemptions.
+gated prefix on purpose — it is the fail-closed first-System-Administrator bootstrap and must stay
+reachable, and for the same reason it is one of the write freeze's two exemptions.
 
 **The write freeze inverts that enumeration, deliberately.** The auth gates above name the surfaces
 they protect, which is why `admin-routes-all-gated.test.ts` has to exist — coverage is a function of
@@ -1061,10 +1176,13 @@ own access beyond `board`. This is distinct from the admin app's **The Board** p
 who serves on the board and their terms of service (`board_people`/`board_terms`, see **Data
 model** above) and is deliberately independent of `user` rows — promoting or demoting a site
 account has no effect on the roster, and a person can be recorded there with no site login at all;
-see [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md). The first board account is
-bootstrapped through the permanent fail-closed
-`POST /api/bootstrap/board` endpoint, which self-disables once a board exists; guard logic lives in
-`src/server/auth/seed-board.ts` and is re-exported as `seedBoard` from `scripts/seed-board.ts`.
+see [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md). The first System Administrator
+account is bootstrapped through the permanent fail-closed `POST /api/bootstrap/board` endpoint
+(rewritten by #219; see the ADR 0022 phase 3c HTTP-endpoints entry above), which self-disables once
+its `system_admin_bootstrap` singleton is consumed — not merely once a board account exists, since
+an account can also reach `board` by ordinary promotion; guard and batch logic live in
+`src/server/roster/bootstrap.ts`. The retired `src/server/auth/seed-board.ts` and
+`scripts/seed-board.ts` (the old BOARD_EMAIL/BOARD_PASSWORD/BOARD_NAME signup path) are deleted.
 These role changes are direct D1 writes, not Better Auth admin API calls. The Better Auth admin
 plugin's impersonation, ban, and set-role endpoints are not granted to board sessions; see
 `src/server/auth/permissions.ts`.

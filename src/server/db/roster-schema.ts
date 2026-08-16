@@ -161,6 +161,13 @@ export const contactMethods = sqliteTable(
     partyId: text('party_id')
       .notNull()
       .references(() => parties.id, { onDelete: 'restrict' }),
+    // Denormalized discriminator, kept honest by the composite FK below, so
+    // that `person_verifications` can structurally require a PERSON's contact
+    // (#202): an Organization's contact id can never satisfy a composite
+    // reference to (id, 'person'). Migration 0026 rebuilt the table for this.
+    partyKind: text('party_kind', {
+      enum: ['person', 'organization'],
+    }).notNull(),
     channel: text('channel', { enum: ['email', 'sms'] }).notNull(),
     value: text('value'),
     valueNormalized: text('value_normalized'),
@@ -178,6 +185,18 @@ export const contactMethods = sqliteTable(
   },
   (t) => [
     check('contact_methods_channel_check', sql`"channel" IN ('email', 'sms')`),
+    check(
+      'contact_methods_party_kind_check',
+      sql`"party_kind" IN ('person', 'organization')`,
+    ),
+    foreignKey({
+      columns: [t.partyId, t.partyKind],
+      foreignColumns: [parties.id, parties.kind],
+      name: 'contact_methods_party_kind_fk',
+    }).onDelete('restrict'),
+    // The composite-FK target for `person_verifications`' person-only contact
+    // reference.
+    uniqueIndex('contact_methods_id_kind_unq').on(t.id, t.partyKind),
     check(
       'contact_methods_interval_ordered',
       intervalOrdered('start_day', 'end_day'),
@@ -337,10 +356,11 @@ export const personVerifications = sqliteTable(
       enum: ['otp_email', 'otp_sms', 'manual', 'bootstrap'],
     }).notNull(),
     // Automatic proof references the uniquely-attributable contact it used.
-    contactMethodId: text('contact_method_id').references(
-      () => contactMethods.id,
-      { onDelete: 'restrict' },
-    ),
+    // The pair below is a composite FK against contact_methods(id, party_kind)
+    // with the kind pinned to 'person', so an Organization's Contact Method
+    // can never verify a Person — structural, not conventional (#202).
+    contactMethodId: text('contact_method_id'),
+    contactMethodPartyKind: text('contact_method_party_kind'),
     approverAccountId: text('approver_account_id').references(() => users.id, {
       onDelete: 'restrict',
     }),
@@ -375,6 +395,28 @@ export const personVerifications = sqliteTable(
       'person_verifications_manual_shape',
       sql`"method" <> 'manual' OR ("approver_account_id" IS NOT NULL AND "reason" IS NOT NULL)`,
     ),
+    // Bootstrap proves nothing by contact and answers to no approver; its
+    // reason is fixed. Closes the shape gap the two checks above leave open.
+    check(
+      'person_verifications_bootstrap_shape',
+      sql`"method" <> 'bootstrap' OR ("contact_method_id" IS NULL AND "approver_account_id" IS NULL AND "reason" = 'bootstrap_first_administrator')`,
+    ),
+    // The person-only contact reference (#202): kind travels with the id and
+    // is pinned to 'person', and the composite FK makes a mismatched pair
+    // unrecordable.
+    check(
+      'person_verifications_contact_person_only',
+      sql`"contact_method_party_kind" IS NULL OR "contact_method_party_kind" = 'person'`,
+    ),
+    check(
+      'person_verifications_contact_kind_paired',
+      sql`("contact_method_id" IS NULL) = ("contact_method_party_kind" IS NULL)`,
+    ),
+    foreignKey({
+      columns: [t.contactMethodId, t.contactMethodPartyKind],
+      foreignColumns: [contactMethods.id, contactMethods.partyKind],
+      name: 'person_verifications_contact_person_fk',
+    }).onDelete('restrict'),
     index('person_verifications_person_idx').on(t.personId),
     index('person_verifications_account_idx').on(t.accountId),
   ],
@@ -749,5 +791,104 @@ export const correctionRequests = sqliteTable(
     ),
     index('correction_requests_status_idx').on(t.status),
     index('correction_requests_person_idx').on(t.personId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Person Verification operational tables (#219)
+// ---------------------------------------------------------------------------
+
+// A pending Automatic Person Verification code: the matched Person, the
+// contact the code went to, and the claimed Lot, remembered between request
+// and confirm. Operational and short-lived (the cleanup job sweeps consumed
+// and expired rows); the durable record is `person_verifications`, written
+// only on a successful confirm. Attempts count here because D1 increments are
+// atomic where KV read-modify-write is not.
+export const verificationCodes = sqliteTable(
+  'verification_codes',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    personId: text('person_id')
+      .notNull()
+      .references(() => people.partyId, { onDelete: 'restrict' }),
+    contactMethodId: text('contact_method_id')
+      .notNull()
+      .references(() => contactMethods.id, { onDelete: 'restrict' }),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    channel: text('channel', { enum: ['email', 'sms'] }).notNull(),
+    codeHash: text('code_hash').notNull(),
+    expiresAt: instant('expires_at').notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    consumedAt: instant('consumed_at'),
+    createdAt: instant('created_at').notNull(),
+  },
+  (t) => [
+    check(
+      'verification_codes_channel_check',
+      sql`"channel" IN ('email', 'sms')`,
+    ),
+    index('verification_codes_account_idx').on(t.accountId),
+    index('verification_codes_expires_idx').on(t.expiresAt),
+  ],
+);
+
+// A verification review request. Created ONLY by an explicit applicant action
+// (#201 — nothing auto-queues), with the single exception of the
+// person-already-linked collision, which #201 routes to manual review under an
+// internal reason code the applicant never sees. Operational and finite-lived:
+// `claimed_address`/`claimed_name` are applicant free text that must never
+// enter the ledger — a board acceptance is a Manual Person Verification whose
+// Identity Event cites this row's id as opaque evidence, and a decline's
+// Identity Event carries only the reason code and target account.
+export const verificationReviewRequests = sqliteTable(
+  'verification_review_requests',
+  {
+    id: text('id').primaryKey(),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    claimedAddress: text('claimed_address').notNull(),
+    claimedName: text('claimed_name').notNull(),
+    channel: text('channel', { enum: ['email', 'sms'] }),
+    internalReason: text('internal_reason', {
+      enum: ['applicant_requested', 'person_already_linked'],
+    }).notNull(),
+    status: text('status', { enum: ['open', 'accepted', 'declined'] })
+      .notNull()
+      .default('open'),
+    createdAt: instant('created_at').notNull(),
+    resolvedAt: instant('resolved_at'),
+    resolvedByAccountId: text('resolved_by_account_id').references(
+      () => users.id,
+      { onDelete: 'restrict' },
+    ),
+  },
+  (t) => [
+    check(
+      'verification_review_requests_internal_reason_check',
+      sql`"internal_reason" IN ('applicant_requested', 'person_already_linked')`,
+    ),
+    check(
+      'verification_review_requests_status_check',
+      sql`"status" IN ('open', 'accepted', 'declined')`,
+    ),
+    check(
+      'verification_review_requests_resolution_paired',
+      sql`("status" = 'open') = ("resolved_at" IS NULL)`,
+    ),
+    check(
+      'verification_review_requests_resolver_paired',
+      sql`("resolved_at" IS NULL) = ("resolved_by_account_id" IS NULL)`,
+    ),
+    // One open request per account — the queue-flooding control.
+    uniqueIndex('verification_review_requests_open_unq')
+      .on(t.accountId)
+      .where(sql`"status" = 'open'`),
+    index('verification_review_requests_status_idx').on(t.status),
   ],
 );

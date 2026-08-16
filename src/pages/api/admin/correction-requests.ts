@@ -264,8 +264,8 @@ async function acceptCorrectionRequest(
     domainStatements.push(
       database
         .prepare(
-          `INSERT INTO contact_methods (id, party_id, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${oldEndedGuard.sql}`,
+          `INSERT INTO contact_methods (id, party_id, party_kind, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at)
+           SELECT ?, ?, 'person', ?, ?, ?, ?, ?, ?, ? WHERE ${oldEndedGuard.sql}`,
         )
         .bind(
           newId,
@@ -310,8 +310,8 @@ async function acceptCorrectionRequest(
     domainStatements.push(
       database
         .prepare(
-          `INSERT INTO contact_methods (id, party_id, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at)
-           SELECT ?, ?, ?, ?, ?, 0, ?, ?, ? WHERE (${requestGuard.sql})`,
+          `INSERT INTO contact_methods (id, party_id, party_kind, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at)
+           SELECT ?, ?, 'person', ?, ?, ?, 0, ?, ?, ? WHERE (${requestGuard.sql})`,
         )
         .bind(
           newId,

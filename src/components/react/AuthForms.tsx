@@ -219,12 +219,26 @@ export function ResetPasswordForm() {
   );
 }
 
+// Every gate the server can fail before it reaches the roster (malformed
+// captcha, an unauthenticated caller, the maintenance freeze) keeps its own
+// status code; everything past those gates — matched or not, sent or not —
+// answers with the same 200 body, so this component never branches on
+// whether anything actually matched or was sent. See #219 D2.
+const DEFAULT_REQUEST_ERROR =
+  'Could not start verification. Check your information and try again.';
+const DEFAULT_REVIEW_ERROR = 'Could not send your request. Please try again.';
+
 export function VerifyPropertyForm() {
   const [address, setAddress] = useState('');
+  const [name, setName] = useState('');
   const [channel, setChannel] = useState<'email' | 'sms'>('email');
   const [code, setCode] = useState('');
   const [stage, setStage] = useState<'request' | 'confirm' | 'done'>('request');
   const [msg, setMsg] = useState('');
+  const [hasRequested, setHasRequested] = useState(false);
+  const [reviewMsg, setReviewMsg] = useState('');
+  const [reviewBusy, setReviewBusy] = useState(false);
+
   async function request(e: React.FormEvent) {
     e.preventDefault();
     const turnstileToken = window.turnstileToken;
@@ -233,49 +247,53 @@ export function VerifyPropertyForm() {
       return;
     }
 
+    setHasRequested(true);
     try {
       const res = await fetch('/api/verify/request', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           address,
+          name,
           channel,
           turnstileToken,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
-        queued?: boolean;
-        rateLimited?: boolean;
         message?: string;
       };
-      if (res.status === 429 || data.rateLimited) {
-        setMsg(data.message ?? 'Too many requests. Please wait and try again.');
-        return;
-      }
-      if (data.queued)
+      if (res.status === 200) {
+        // The uniform response never says whether a code went out, so the
+        // stage always advances — the message itself is the only signal the
+        // caller ever gets.
         setMsg(
-          "Sent for manual review — you'll get a confirmation once your account is approved.",
+          data.message ??
+            'If the information matches our records, a code has been sent.',
         );
-      else if (data.ok) {
-        setMsg('Code sent — check your phone/email.');
         setStage('confirm');
-      } else if (res.status === 400)
+      } else if (res.status === 400) {
         setMsg(
           data.message ??
             'Could not validate the captcha. Complete it again and retry.',
         );
-      else
+      } else if (res.status === 401) {
+        setMsg('Sign in and try again.');
+      } else if (res.status === 503) {
         setMsg(
-          'Could not start verification. Check the address and try again.',
+          'Verification is temporarily unavailable. Please try again later.',
         );
+      } else {
+        setMsg(DEFAULT_REQUEST_ERROR);
+      }
     } finally {
-      // The Turnstile token is single-use; reset the widget so a retry (after a
-      // rate-limit/error) gets a fresh token instead of failing "Bad captcha".
+      // The Turnstile token is single-use; reset the widget so a retry (after
+      // an error) gets a fresh token instead of failing "Bad captcha".
       if (window.turnstile) window.turnstile.reset();
       window.turnstileToken = undefined;
     }
   }
+
   async function confirm(e: React.FormEvent) {
     e.preventDefault();
     const res = await fetch('/api/verify/confirm', {
@@ -292,6 +310,37 @@ export function VerifyPropertyForm() {
       setMsg('Code invalid or expired.');
     }
   }
+
+  async function askForReview() {
+    setReviewBusy(true);
+    try {
+      const res = await fetch('/api/verify/review', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ address, name }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+      };
+      setReviewMsg(data.message ?? DEFAULT_REVIEW_ERROR);
+    } catch {
+      setReviewMsg(DEFAULT_REVIEW_ERROR);
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
+  const showReviewAction = stage === 'confirm' || hasRequested;
+  const reviewAction = showReviewAction && (
+    <div>
+      <button type="button" onClick={askForReview} disabled={reviewBusy}>
+        Didn't get a code? Ask the board to review
+      </button>
+      {reviewMsg && <p>{reviewMsg}</p>}
+    </div>
+  );
+
   if (stage === 'done')
     return (
       <div>
@@ -302,33 +351,46 @@ export function VerifyPropertyForm() {
       </div>
     );
   return stage === 'request' ? (
-    <form onSubmit={request}>
-      <input
-        value={address}
-        onChange={(e) => setAddress(e.target.value)}
-        placeholder="Your property address"
-        required
-      />
-      <select
-        value={channel}
-        onChange={(e) => setChannel(e.target.value as 'email' | 'sms')}
-      >
-        <option value="email">Email me the code</option>
-        <option value="sms">Text me the code</option>
-      </select>
-      <button type="submit">Send code</button>
-      {msg && <p>{msg}</p>}
-    </form>
+    <>
+      <form onSubmit={request}>
+        <input
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          placeholder="Your property address"
+          required
+        />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Your full name"
+          autoComplete="name"
+          required
+        />
+        <select
+          value={channel}
+          onChange={(e) => setChannel(e.target.value as 'email' | 'sms')}
+        >
+          <option value="email">Email me the code</option>
+          <option value="sms">Text me the code</option>
+        </select>
+        <button type="submit">Send code</button>
+        {msg && <p>{msg}</p>}
+      </form>
+      {reviewAction}
+    </>
   ) : (
-    <form onSubmit={confirm}>
-      <input
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
-        placeholder="6-digit code"
-        required
-      />
-      <button type="submit">Verify</button>
-      {msg && <p>{msg}</p>}
-    </form>
+    <>
+      <form onSubmit={confirm}>
+        {msg && <p>{msg}</p>}
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="6-digit code"
+          required
+        />
+        <button type="submit">Verify</button>
+      </form>
+      {reviewAction}
+    </>
   );
 }

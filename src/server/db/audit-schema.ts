@@ -326,8 +326,23 @@ export const identityEvents = sqliteTable(
     targetAccountId: text('target_account_id').references(() => users.id, {
       onDelete: 'restrict',
     }),
+    // Deliberately UNCHECKED at the SQL level: migration 0024's
+    // board-service-changes rebuild is the recorded lesson that reason-code
+    // CHECKs become flip-blockers. The `IdentityReason` union in
+    // `src/server/roster/audit.ts` is the discipline.
     reasonCode: text('reason_code').notNull(),
-    evidenceKind: text('evidence_kind', { enum: EVIDENCE_KINDS }),
+    // No election kind: identity decisions cite documents, meetings, review
+    // requests, external records, or the approver's own observation — an
+    // election proves nothing about who an account is.
+    evidenceKind: text('evidence_kind', {
+      enum: [
+        'document',
+        'meeting',
+        'request',
+        'external',
+        'operator_observation',
+      ],
+    }),
     evidenceDocumentId: text('evidence_document_id').references(
       () => documents.id,
       { onDelete: 'restrict' },
@@ -336,12 +351,22 @@ export const identityEvents = sqliteTable(
       () => meetings.id,
       { onDelete: 'restrict' },
     ),
+    // Opaque, non-personal locator for a verification review request that has
+    // since expired — the roster_changes precedent, never an FK.
+    evidenceRequestId: text('evidence_request_id'),
     externalReference: text('external_reference'),
   },
   () => [
     check(
       'identity_events_evidence_kind_check',
-      sql`"evidence_kind" IS NULL OR "evidence_kind" IN ('document', 'meeting', 'election', 'request', 'external', 'operator_observation')`,
+      sql`"evidence_kind" IS NULL OR "evidence_kind" IN ('document', 'meeting', 'request', 'external', 'operator_observation')`,
+    ),
+    // Evidence is optional (automatic verification carries none), but when a
+    // kind is named it carries exactly its one reference, and
+    // `operator_observation` carries none — mirroring roster_changes.
+    check(
+      'identity_events_evidence_exactly_one',
+      sql`(CASE WHEN "evidence_document_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "evidence_meeting_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "evidence_request_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "external_reference" IS NULL THEN 0 ELSE 1 END) = (CASE WHEN "evidence_kind" IS NULL OR "evidence_kind" = 'operator_observation' THEN 0 ELSE 1 END)`,
     ),
   ],
 );

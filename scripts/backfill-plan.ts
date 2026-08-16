@@ -361,8 +361,10 @@ export function buildPlan(
       if (!normalized) continue;
       const contactId = derivedId(`contact:${channel}`, o.id);
       statements.push(
-        `INSERT INTO contact_methods (id, party_id, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at) ` +
-          `VALUES (${quote(contactId)}, ${quote(partyId)}, '${channel}', ${quote(String(raw))}, ${quote(normalized)}, 1, NULL, ${now}, ${now})`,
+        // Always 'person': the backfill creates only person parties — an
+        // organization candidate is a flip-blocking exception, never a row.
+        `INSERT INTO contact_methods (id, party_id, party_kind, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at) ` +
+          `VALUES (${quote(contactId)}, ${quote(partyId)}, 'person', '${channel}', ${quote(String(raw))}, ${quote(normalized)}, 1, NULL, ${now}, ${now})`,
       );
       counts.contactMethods += 1;
       c?.event(

@@ -83,8 +83,8 @@ async function seedContactMethod(
   value: string,
 ) {
   await env.DATABASE.prepare(
-    `INSERT INTO contact_methods (id, party_id, channel, value, value_normalized, is_preferred, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 0, 1, 1)`,
+    `INSERT INTO contact_methods (id, party_id, party_kind, channel, value, value_normalized, is_preferred, created_at, updated_at)
+     VALUES (?, ?, 'person', ?, ?, ?, 0, 1, 1)`,
   )
     .bind(id, partyId, channel, value, value.toLowerCase())
     .run();
