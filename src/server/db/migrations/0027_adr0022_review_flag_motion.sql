@@ -1,11 +1,22 @@
 -- ADR 0022 phase 3d (#220): the review-flag machinery gains its first writer.
 --
 -- `review_flags` is REBUILT (provably empty — created by 0020, no writer until
--- this phase) to add `impacted_motion_id`: a `vote_reset_on_transfer` flag must
--- name the motion whose vote was reset, because the reset DELETES the
--- member_votes row and the existing `impacted_member_vote_id` FK can no longer
--- reference it. RESTRICT is safe — motion deletion already refuses while any
--- live-voting history exists.
+-- this phase) with two changes:
+--
+--   1. It gains `impacted_motion_id`: a `vote_reset_on_transfer` flag must
+--      name the motion whose vote was reset, because the reset DELETES the
+--      member_votes row and the existing `impacted_member_vote_id` FK can no
+--      longer reference it.
+--   2. The four legacy-record impacted FKs (proxy, member attendance, member
+--      vote, ballot) become ON DELETE SET NULL. With a writer, RESTRICT would
+--      have made every flag freeze the record it points at: proxy deletion IS
+--      the revocation model, and setMemberAttendance/setMemberVotes/setBallots
+--      are full-replacement corrections — the board's own remedy per #204. The
+--      flag survives such a deletion with its source event and ledger context,
+--      impact unset. `impacted_motion_id` and the new-model/ledger references
+--      stay RESTRICT: their parents are already undeletable while a flag could
+--      exist (a motion with live-voting history refuses deletion; terms,
+--      grants, and audit events are never deleted).
 --
 -- The never-written table takes the 0026 `identity_events` precedent: plain
 -- DROP + CREATE, no __new copy dance. `audit_review_queue_v` references the
@@ -32,11 +43,11 @@ CREATE TABLE `review_flags` (
 	`impacted_access_grant_id` text,
 	`impacted_event_id` text,
 	FOREIGN KEY (`source_event_id`) REFERENCES `audit_events`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`impacted_proxy_id`) REFERENCES `proxies`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`impacted_member_attendance_id`) REFERENCES `member_attendance`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`impacted_member_vote_id`) REFERENCES `member_votes`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`impacted_proxy_id`) REFERENCES `proxies`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`impacted_member_attendance_id`) REFERENCES `member_attendance`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`impacted_member_vote_id`) REFERENCES `member_votes`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`impacted_motion_id`) REFERENCES `motions`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`impacted_ballot_id`) REFERENCES `ballots`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`impacted_ballot_id`) REFERENCES `ballots`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`impacted_board_term_id`) REFERENCES `board_service_terms`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`impacted_access_grant_id`) REFERENCES `access_grants`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`impacted_event_id`) REFERENCES `audit_events`(`id`) ON UPDATE no action ON DELETE restrict,

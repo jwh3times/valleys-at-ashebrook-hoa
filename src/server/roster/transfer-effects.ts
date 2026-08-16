@@ -20,7 +20,12 @@
 // SHAPE. This mirrors `board-consequences.ts`: a builder taking the command's
 // clock, window, lots, root guard, and correlation, doing its enumeration as
 // PRE-BATCH reads and returning statements whose preconditions are re-checked
-// in their own WHERE. A lost race leaves ZERO rows anywhere.
+// in their own WHERE. A lost race leaves ZERO rows anywhere. One known sliver:
+// an action committed between the pre-batch enumeration and the batch itself
+// is neither reset nor flagged by THIS command — it was valid when made
+// (uncached derivation re-checked its authority), it simply lands unflagged.
+// #204 accepts both commit orders as legal histories; the miss here is a flag,
+// never an authority decision, and the board's correction remedies cover it.
 //
 // BATCH POSITION. Two statement lists come back, because review flags
 // FK-reference the audit event that opened them:
@@ -349,8 +354,15 @@ export async function transferEffects(
             ...advanceGuard.binds,
           ),
       );
+      // `voting_state = 'open'` is load-bearing, not belt-and-braces: the
+      // stamp is SECONDS, so a concurrent closeVoting committing in the same
+      // wall-clock second also stamps `updated_at` and advances the revision.
+      // Without the state term, that close would satisfy this marker while
+      // our advance no-oped — and the delete would strip votes from a CLOSED
+      // motion. Our own advance never changes the state, so requiring 'open'
+      // distinguishes the two writers.
       const advanced: SqlGuard = {
-        sql: 'EXISTS (SELECT 1 FROM motions WHERE id = ? AND updated_at = ? AND voting_revision = ?)',
+        sql: "EXISTS (SELECT 1 FROM motions WHERE id = ? AND updated_at = ? AND voting_revision = ? AND voting_state = 'open')",
         binds: [group.motionId, motionStamp, group.votingRevision + 1],
       };
       statements.push(
@@ -409,12 +421,16 @@ export async function transferEffects(
     // A conducted Ballot on an election that has not concluded is the one
     // thing a transfer cannot fix: the Lot has voted, the buyer cannot, and
     // ballot finality forbids a correction path. The flag reaches the turnout
-    // row and the occasion, never a choice.
+    // row and the occasion, never a choice. CONDUCTED only — a recorded
+    // election's board-entered ballot rows are freely replaceable through
+    // setBallots, so "final" would be the wrong claim; if one falls in the
+    // window it is flagged as backdated activity below instead.
     const pendingBallots = await input.database
       .prepare(
         `SELECT b.id FROM ballots b
          JOIN elections e ON e.id = b.election_id
          WHERE b.property_id IN (${lotList})
+           AND e.source = 'conducted'
            AND e.status NOT IN ${TERMINAL_ELECTION_STATUSES}`,
       )
       .bind(...lots)
@@ -502,10 +518,17 @@ export async function transferEffects(
         .all<{ account_id: string }>();
       const accountIds = accounts.results.map((r) => r.account_id);
       if (accountIds.length > 0) {
+        // Families pinned to #204's shared enumeration — Roster Changes and
+        // Representations accepted (`roster_change`) and Manual Person
+        // Verifications approved (`identity`). Without the filter, every
+        // access event and review resolution the account ever touched in the
+        // window would be flagged too, which is broader than the list the
+        // spec fixes.
         const acts = await input.database
           .prepare(
             `SELECT id FROM audit_events
              WHERE actor_account_id IN (${placeholders(accountIds)})
+               AND family IN ('roster_change', 'identity')
                AND recorded_at >= ? AND recorded_at <= ?`,
           )
           .bind(...accountIds, windowStartMs, input.nowMs)

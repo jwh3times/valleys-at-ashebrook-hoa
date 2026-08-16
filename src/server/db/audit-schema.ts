@@ -694,16 +694,24 @@ export const reviewFlags = sqliteTable(
     resolutionCode: text('resolution_code', {
       enum: ['remediated', 'confirmed_valid', 'no_effect', 'superseded'],
     }),
-    // At most one typed impacted action.
+    // At most one typed impacted action. The four legacy-record references
+    // are SET NULL, not RESTRICT: proxy deletion IS the revocation model, and
+    // setMemberAttendance/setMemberVotes/setBallots are full-replacement
+    // corrections — the board's own remedy per #204 — so a flag must never
+    // freeze the record it points at. When the referenced row goes, the flag
+    // survives with its source event and ledger context, impact unset. The
+    // remaining references stay RESTRICT because their parents are already
+    // undeletable while a flag could exist (a motion with live-voting history
+    // refuses deletion; terms, grants, and ledger events are never deleted).
     impactedProxyId: text('impacted_proxy_id').references(() => proxies.id, {
-      onDelete: 'restrict',
+      onDelete: 'set null',
     }),
     impactedMemberAttendanceId: text(
       'impacted_member_attendance_id',
-    ).references(() => memberAttendance.id, { onDelete: 'restrict' }),
+    ).references(() => memberAttendance.id, { onDelete: 'set null' }),
     impactedMemberVoteId: text('impacted_member_vote_id').references(
       () => memberVotes.id,
-      { onDelete: 'restrict' },
+      { onDelete: 'set null' },
     ),
     // Phase 3d (#220): a vote_reset_on_transfer flag names the MOTION whose
     // vote was reset — the deleted member_votes row cannot be referenced, and
@@ -713,7 +721,7 @@ export const reviewFlags = sqliteTable(
       onDelete: 'restrict',
     }),
     impactedBallotId: text('impacted_ballot_id').references(() => ballots.id, {
-      onDelete: 'restrict',
+      onDelete: 'set null',
     }),
     impactedBoardTermId: text('impacted_board_term_id').references(
       () => boardServiceTerms.id,

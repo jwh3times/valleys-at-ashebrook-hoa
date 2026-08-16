@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1697ff70-4ee1-45f4-b6c3-fc47c67810ff",
+  "id": "316de89e-74bc-435b-a94d-12410ac60e59",
   "prevId": "a15e79e7-b3af-48a4-a1b5-429fd0ffb12f",
   "tables": {
     "announcements": {
@@ -5829,7 +5829,7 @@
           "tableTo": "proxies",
           "columnsFrom": ["impacted_proxy_id"],
           "columnsTo": ["id"],
-          "onDelete": "restrict",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "review_flags_impacted_member_attendance_id_member_attendance_id_fk": {
@@ -5838,7 +5838,7 @@
           "tableTo": "member_attendance",
           "columnsFrom": ["impacted_member_attendance_id"],
           "columnsTo": ["id"],
-          "onDelete": "restrict",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "review_flags_impacted_member_vote_id_member_votes_id_fk": {
@@ -5847,7 +5847,7 @@
           "tableTo": "member_votes",
           "columnsFrom": ["impacted_member_vote_id"],
           "columnsTo": ["id"],
-          "onDelete": "restrict",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "review_flags_impacted_motion_id_motions_id_fk": {
@@ -5865,7 +5865,7 @@
           "tableTo": "ballots",
           "columnsFrom": ["impacted_ballot_id"],
           "columnsTo": ["id"],
-          "onDelete": "restrict",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "review_flags_impacted_board_term_id_board_service_terms_id_fk": {
