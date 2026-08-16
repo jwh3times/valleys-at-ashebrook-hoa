@@ -8,6 +8,34 @@ import {
   owners,
 } from '../db/schema';
 
+/**
+ * GRANTOR RE-VALIDATION (ADR 0022 phase 3d, #220 / #204).
+ *
+ * `proxyUseError` below asks, in addition to lot and occasion scope, whether
+ * the proxy's GRANTOR still holds Lot Authority. That question is answered
+ * from the LEGACY roster (`owners.status`/`owners.property_id`) in BOTH cutover
+ * modes, deliberately: no runtime mapping exists from a legacy owner row to a
+ * Party (the backfill's party ids are a one-way hash), and name-matching
+ * identities to decide an authority question is unacceptable. The guard
+ * therefore stays in the content layer and names no new-model table — the
+ * model-boundary content pin depends on that.
+ *
+ * The legacy roster records CURRENT state only, so this is an approximation of
+ * the real rule, "the grantor held Lot Authority AT THE OCCASION": we refuse
+ * whenever the grantor is currently inactive on the lot. That deliberately
+ * accepts false refusals of late record-keeping — a grantor who sold AFTER the
+ * occasion still fails, even though the proxy was good on the day — because the
+ * alternative (accepting every proxy from a former owner) is exactly the
+ * March-proxy / April-meeting / recorded-in-May hole #204 opens with. The
+ * escape for a legitimate late entry is to record it without the proxy
+ * reference.
+ *
+ * Exact occasion-day interval validation becomes possible in phase 4, when
+ * proxies are re-keyed to Parties and Ownership intervals can be queried in
+ * SQL against the occasion's day; this comparison becomes interval containment
+ * then, and the false-refusal caveat above goes away with it.
+ */
+
 export interface ProxyUse {
   propertyId: string;
   proxyId: string;
@@ -100,13 +128,17 @@ export interface ProxyUseFailure {
 
 /**
  * Validates every proxy referenced by a write action's entries: the proxy
- * must exist, belong to the entry's own lot, and be scoped to the occasion
- * being written. `occasion` carries the meeting or election under write; an
+ * must exist, belong to the entry's own lot, be scoped to the occasion
+ * being written, and have a grantor who still holds Lot Authority for that
+ * lot. `occasion` carries the meeting or election under write; an
  * election held at a meeting passes BOTH ids, because a form signed "for the
  * annual meeting" covers that meeting's business, its election included —
  * the lookup rule ADR 0018 records. The database cannot express any of this
  * (each is a cross-row condition), which is why this guard exists in front of
  * every insert that writes a proxy_id.
+ *
+ * The grantor check is the ADR 0022 phase-3d addition; see the module comment
+ * above for why it reads the legacy roster and what it approximates.
  */
 export async function proxyUseError(
   db: Db,
@@ -121,8 +153,14 @@ export async function proxyUseError(
       propertyId: proxies.propertyId,
       meetingId: proxies.meetingId,
       electionId: proxies.electionId,
+      grantorOwnerId: proxies.grantorOwnerId,
+      grantorPropertyId: owners.propertyId,
+      grantorStatus: owners.status,
     })
     .from(proxies)
+    // grantor_owner_id is NOT NULL with ON DELETE RESTRICT, so the owner row
+    // always exists; an inner join cannot hide a proxy from the checks below.
+    .innerJoin(owners, eq(owners.id, proxies.grantorOwnerId))
     .where(inArray(proxies.id, ids));
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const u of uses) {
@@ -130,6 +168,11 @@ export async function proxyUseError(
     if (!p) return { status: 400, message: 'Unknown proxyId in entries' };
     if (p.propertyId !== u.propertyId)
       return { status: 409, message: 'Proxy is for a different lot' };
+    if (p.grantorStatus !== 'active' || p.grantorPropertyId !== p.propertyId)
+      return {
+        status: 409,
+        message: 'Proxy grantor no longer holds authority for this lot',
+      };
     const coversMeeting =
       p.meetingId !== null &&
       occasion.meetingId != null &&
