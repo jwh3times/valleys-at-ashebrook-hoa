@@ -172,7 +172,10 @@ Markdown twins described below and never the human-readable originals.
   `new URL(request.url).origin` (`403`), `application/json` media type (`415`), authenticated
   session (`401`), then `homeowner`-or-higher role (`403`). Only then are the action and resource
   resolved. Out-of-tier or unknown occasions are masked as `404`; own-lot or occasion-scoped
-  held-proxy authority, frozen-snapshot eligibility and weight, open state, both feature flags, and
+  held-proxy authority — a held-proxy cast also re-checks the proxy's grantor is still a currently
+  active owner of the lot (the ADR 0022 phase 3d grantor re-validation, #220/#204, exact at-the-
+  occasion semantics for a live cast) — frozen-snapshot eligibility and weight, open state, both
+  feature flags, and
   one cast per lot are re-checked inside the mutation SQL. Election turnout and identity-unlinked
   retained choices are a single checked D1 batch, and a race with close, pause, authority change,
   or another cast returns `409` without a partial write. Conducted ballots are final: supported
@@ -237,7 +240,10 @@ Markdown twins described below and never the human-readable originals.
   instead of the old `viaProxy` boolean; every referenced proxy is checked by the shared
   `proxyUseError` guard (`src/server/content/proxy-guards.ts`) — unknown `proxyId` is `400`, a proxy
   for a different lot or scoped to a different occasion is `409` (a meeting-scoped proxy also
-  covers an election held at that meeting; a standalone election accepts only its own) — and an
+  covers an election held at that meeting; a standalone election accepts only its own), a proxy
+  whose grantor is not currently an active owner of the proxy's lot is `409` (the ADR 0022 phase 3d
+  grantor re-validation, #220/#204 — a current-state approximation of "held Lot Authority at the
+  occasion", read from the legacy roster in both cutover modes; see the module comment) — and an
   entry carrying both `proxyId` and `representedByOwnerId`/`castByOwnerId` is `400`, since who acted
   lives on the canonical proxy row, never beside it. All verbs on both routes are
   `requireBoard`-gated.
@@ -401,9 +407,12 @@ roster-parties` (`createPerson`/`createOrganization` — party+subtype in one ba
     same-kind/one-hop/both-linked refusals; `correctConsolidation` clears the pointer),
     `/api/admin/roster-ownerships` (`create` — no anticipated start OR end; `end` — backdated
     end day allowed, with optional per-affected-term `substitutions` else terminate-by-default via
-    `src/server/roster/board-consequences.ts`; `void`), `/api/admin/roster-representations`
+    `src/server/roster/board-consequences.ts`, then the phase 3d transfer-effects engine below;
+    `void` — no vote reset, supersede-on-void of that Ownership's own open flags),
+    `/api/admin/roster-representations`
     (`create` — scope XOR, scoped lots must be currently org-owned, end day MAY be future; `end`;
-    `void`; `correctScope` — scope rows void, never delete), and `/api/admin/
+    `void`; `correctScope` — scope rows void, never delete; `end`/`void`/`correctScope` each also
+    run the phase 3d transfer-effects engine, discovery-only), and `/api/admin/
 roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on write and
     reach the ledger as sensitive-field CATEGORIES only).
   - `POST /api/admin/roster-export` — the bulk export, deliberately a mutating verb: it is the one
@@ -483,6 +492,40 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   owns several Lots must not be re-sendable once per Lot), and adds a distinct-claimed-names-
   per-Lot-per-account cap (3/24h, both modes) — the roster-walking control, capping how many
   different names one account can try against one Lot regardless of whether any of them matched.
+- ADR 0022 phase 3d transfer effects and the review-flag queue (#220; decided by #204).
+  `src/server/roster/transfer-effects.ts` is the mutation-boundary engine wired into
+  `/api/admin/roster-ownerships` `end` (resets every open member-motion vote for the departing
+  Lot, then runs retrospective discovery and the forward pass) and `void` (no vote reset — a void
+  is not a transfer — plus supersede-on-void of that Ownership's own open flags) and into
+  `/api/admin/roster-representations` `end`/`void`/`correctScope` (discovery and the forward pass
+  only; a Representation change never resets a vote). Per #204, a transfer changes who may act for
+  a Lot, never whether the Lot counts: no eligibility snapshot, weight, turnout row, or quorum
+  denominator is touched. The ONE stored action it reverses is an open member-motion vote for the
+  transferred Lot — `member_votes` deleted and the motion's `voting_revision` advanced under the
+  same compare-and-swap `setMemberVotes` and live casting already require, closed motions
+  untouched. Everything else is surfaced, never rewritten, as a `review_flags` row: retrospective
+  discovery walks the `[effectiveDay, recordedAt]` window (occasion-day rule for member
+  attendance/votes, recorded-instant rule for ballots and granted proxies) and flags
+  `intervening_action_backdated`, plus an account-keyed pass over `roster_change`/`identity`
+  ledger events for any Board Term the command affected; a forward pass over still-upcoming
+  occasions flags a pending held proxy `authority_lost_pending_occasion` and a not-yet-concluded
+  conducted ballot `ballot_final_after_transfer` (conducted only — a recorded election's ballots
+  stay replaceable via `setBallots`). One flag per record: the forward pass is enumerated first and
+  wins any record both passes would reach. A void supersedes its own open flags
+  (`resolution_code = 'superseded'`) rather than deleting them; nothing stored is ever reversed.
+  Flag INSERTs FK-reference the `review_flag_opened` audit event that opens them, so
+  `effects.flagStatements` runs after `correlation.statements` in every caller's batch — the one
+  documented exception to `audit.ts`'s domain-writes-first ordering. BALLOT SECRECY: this module
+  never reads, joins, names, or counts `ballot_choices` or a candidate selection — a
+  `ballot_final_after_transfer` flag reaches only the identity-linked turnout `ballots` row and the
+  election occasion. The board's read/resolve surface is `GET`+`POST /api/admin/review-flags`,
+  `requireBoard`-gated: `GET` returns the full-detail register (every flag, open first, with its
+  typed impacted reference and source-event summary — the same full-detail-on-list shape as the
+  other phase-3b/3c registers); `POST { action: 'resolve', id, resolutionCode }` accepts
+  `remediated`/`confirmed_valid`/`no_effect` (`400` for `superseded`, reserved for the automatic
+  void/correction path above; `409` on an already-resolved flag) and, in one batch, flips the flag
+  and writes an account-attributed `review_flag_resolved` root event. There is no client helper for
+  this route yet; the admin panel is phase 3e's.
 - Board-only document assistant: `POST /api/admin/assistant` (SSE) takes `{ question, history? }`
   and streams a Claude-generated, cited answer over the document library, retrieved via Cloudflare
   AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
@@ -730,8 +773,11 @@ boolean`.
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
   shared Person Link creation/ending machinery behind `/api/verify/unlink` and
-  `/api/admin/person-links`, and `roster/bootstrap.ts` is the first-System-Administrator bootstrap
-  behind `POST /api/bootstrap/board` — all three join the phase 3b roster writer machinery
+  `/api/admin/person-links`, `roster/bootstrap.ts` is the first-System-Administrator bootstrap
+  behind `POST /api/bootstrap/board`, and `roster/transfer-effects.ts` is the phase 3d (#220)
+  transfer-time effects engine behind `/api/admin/roster-ownerships` and
+  `/api/admin/roster-representations` (see the HTTP endpoints entry above and **Data model**
+  below) — all four join the phase 3b roster writer machinery
   described below. `verification/property.ts` is the unchanged-shape legacy backend (minus its
   three retired auto-enqueue paths) and `verification/rate-limit.ts` holds the shared KV throttles
   both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
@@ -859,7 +905,11 @@ technical capabilities (`redactionAuthorize`, `redactionCleanup`, `accessDenialD
 model and never from shadow, errors swallowed so evaluation cannot 500 on a ledger failure). The
 shared writer machinery lives in `src/server/roster/`: `audit.ts` (the `AuditCorrelation`
 ledger-batch builder, guard helpers, `assertInBatch` — a statement that ERRORS to roll a whole
-batch back when an all-or-nothing part failed), `board-consequences.ts` (`qualifiesGuard`,
+batch back when an all-or-nothing part failed; gained the `review` detail family in phase 3d, #220
+— `review_flag_opened`/`review_flag_resolved`/`review_flag_superseded` events and
+`ReviewResolutionCode` — with a documented batch-order exception: flag INSERTs FK-reference the
+audit event that opens them, so they are the one write that follows a correlation's own statements
+rather than preceding them), `board-consequences.ts` (`qualifiesGuard`,
 `noOverlapGuard`, and `lossConsequences` — the substitute-or-terminate engine that ends or
 cancels Board Terms, their offices, and their grants when an Ownership or Representation change
 removes a qualifying basis; the term ends on the real-world day, the grant always at
@@ -882,10 +932,20 @@ pre-existing property flow in `src/server/verification/property.ts` (its three
 `manual_approval_queue` auto-enqueue paths removed, per #201's anti-auto-queue rule), `derived`
 runs the new Person flow — mirroring the whole program's "legacy authoritative by flag, not code"
 philosophy: production is unaffected until the flip regardless of which backend answers, because
-`cutover_mode` still decides which is live. Phase 3d (proxy grantor re-validation, transfer
-effects, and review-flag impact discovery, #220) and phase 3e (the writable board-service,
-roster, and Person-Link admin panels — 3c and 3b ship only the APIs) remain unbuilt, as does the
-flip itself (#222). Phase 2 adds:
+`cutover_mode` still decides which is live. **Phase 3 part d (transfer effects and the review-flag
+queue, #220; decided by #204) is also now built**: proxy grantor re-validation in
+`proxyUseError` and the live-cast authority predicates in `content/voting.ts` (both described
+under **HTTP endpoints** above), the `roster/transfer-effects.ts` engine wired into
+`/api/admin/roster-ownerships`'s `end`/`void` and `/api/admin/roster-representations`'s
+`end`/`void`/`correctScope`, and the board's `GET`+`POST /api/admin/review-flags` queue. Unlike
+phases 1-3c, this one is a LIVE pre-flip behavior change, not gated behind `cutover_mode`: proxy
+grantor re-validation reads the LEGACY roster in both cutover modes (see `proxy-guards.ts`'s
+module comment), so a proxy whose grantor has since become an inactive owner is refused today,
+and an Ownership `end` reached through `/api/admin/roster-ownerships` resets any open
+member-motion vote for the departing Lot in the shared, legacy-read `member_votes` table. Migration
+`0027` (below) rebuilds `review_flags` — created empty by migration `0020`, given its first writer
+here. Phase 3e (the writable board-service, roster, and Person-Link admin panels — 3b/3c/3d ship
+only the APIs) remains unbuilt, as does the flip itself (#222). Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
@@ -978,7 +1038,16 @@ selections, while SQLite insertion order and D1 Time Travel add temporal inferen
 conducted `POST /api/vote` cast writes the per-lot turnout row and every independent choice row in
 one checked D1 batch, taking both weights from `election_eligibility`. The supported caller read
 returns only `hasCast`, so a conducted ballot is final; conducted close derives final candidate
-totals from the retained rows.
+totals from the retained rows. The boundary is pinned by a two-layer suite #206 says outlives the
+migration: `test/unit/ballot-privacy-boundary.test.ts` statically scans `src/` for the term
+`ballot_choices`/`ballotChoices` and `candidate_id`/`candidateId`, allow-listing only the schema
+definition, the cast path, and conducted close's tally derivation, letting the two modules that
+prose-declare the rule (`transfer-effects.ts`, `audit-schema.ts`'s `review_flags` header) mention
+it only in comments, and hard-denying the phase 3d discovery/flag/ledger/export machinery any
+reference at all; `test/server/ballot-privacy.test.ts` is the runtime half, proving
+`ballot_choices` rows are byte-identical before and after a transfer and that the review-flag
+register exposes only the turnout row. `verify:invariants`'
+`no_flag_references_ballot_choices` is the third leg, checked live against D1.
 The legacy `board_terms` table still carries a nullable `election_id` referencing `elections` on
 delete-set-null, but as of phase 3b nothing writes it: certification's provenance now lands on
 `board_service_terms.election_id`, and the legacy board-roster routes are retired (#218).
@@ -1093,11 +1162,23 @@ Person, contact, claimed Lot, code hash, attempts, expiry) and `verification_rev
 review requests — `claimed_address`/`claimed_name` are applicant free text that never enters the
 ledger, one open row per account by partial unique index), and drops-then-recreates the two views
 that reference `identity_events` (`audit_event_effective_v`,
-`audit_integrity_violations_v`) verbatim, per the `0024`/`0025` precedent. See the ADR 0022
+`audit_integrity_violations_v`) verbatim, per the `0024`/`0025` precedent. Migration `0027` (phase
+3d, #220) gives the never-written `review_flags` table (created empty by migration `0020`) its
+first writer: a plain DROP+CREATE, the `0026` `identity_events` precedent. It adds
+`impacted_motion_id` (FK restrict to `motions` — a `vote_reset_on_transfer` flag names the motion
+whose vote was reset, since the reset DELETES the `member_votes` row the old shape would have
+pointed at), widens the at-most-one impact CHECK to cover it, and converts the four legacy-record
+impacted FKs (`impacted_proxy_id`, `impacted_member_attendance_id`, `impacted_member_vote_id`,
+`impacted_ballot_id`) from RESTRICT to `ON DELETE SET NULL` — proxy deletion is the entire
+revocation model and `setMemberAttendance`/`setMemberVotes`/`setBallots` are full-replacement
+corrections, so a flag must survive the referenced record's deletion with its source event and
+ledger context intact rather than freezing that record in place. `audit_review_queue_v` (which
+references the table) is dropped first and recreated at the end with the new `motion` impacted
+kind, the `0024`/`0025`/`0026` view precedent. See the ADR 0022
 paragraph above for what these tables and views are and what now reads them (the phase-2 shadow
 layer, the board-only roster-preview panel, the operator write freeze, `cutover-mode.ts`, and — as
-of phase 3b/3c — the roster/board-service/access/person-link/verification routes; legacy
-authorization itself still reads none of the roster tables). Migrations `0016`
+of phase 3b/3c/3d — the roster/board-service/access/person-link/verification/review-flag routes;
+legacy authorization itself still reads none of the roster tables). Migrations `0016`
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
 ledger rather than assumed.
 
