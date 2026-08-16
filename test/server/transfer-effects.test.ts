@@ -24,6 +24,7 @@ import {
   truncateAll,
 } from './fixtures';
 import { POST } from '../../src/pages/api/admin/roster-ownerships';
+import { DELETE as PROXY_DELETE } from '../../src/pages/api/admin/proxies';
 
 /**
  * ADR 0022 phase 3d (#220): transfer-time effects, per #204's resolution.
@@ -512,6 +513,66 @@ describe('forward pass and idempotency', () => {
     expect(rows).toHaveLength(2);
     expect(new Set(rows.map((r) => r.source_event_id)).size).toBe(2);
     expect(rows.every((r) => r.status === 'open')).toBe(true);
+    await integrityClean();
+  });
+});
+
+describe('flags never freeze the record they reference', () => {
+  it("deleting a flagged proxy still works and unsets the flag's reference", async () => {
+    // The review pass caught this as the RESTRICT trap: with a writer, a
+    // RESTRICT FK would have turned proxy revocation — "the whole revocation
+    // model" — into a permanent 500 the moment the forward pass flagged the
+    // proxy. Migration 0027 makes the legacy-record references SET NULL, so
+    // revocation proceeds and the flag survives with its ledger context.
+    await seedTransferrableLot();
+    await seedMeeting('mtg-next', { body: 'member', date: day(7) });
+    await seedProxy('px-1', {
+      propertyId: 'lot-1',
+      grantorOwnerId: 'own-1',
+      meetingId: 'mtg-next',
+    });
+    expect(
+      (await POST(req({ action: 'end', ownershipId: 'osh-1', endDay: TODAY })))
+        .status,
+    ).toBe(204);
+    expect((await flags())[0].impacted_proxy_id).toBe('px-1');
+
+    const del = await PROXY_DELETE({
+      request: new Request('http://localhost/api/admin/proxies', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: 'px-1' }),
+      }),
+    } as never);
+    expect(del.status).toBe(204);
+
+    const rows = await flags();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('open');
+    expect(rows[0].impacted_proxy_id).toBeNull();
+    await integrityClean();
+  });
+});
+
+describe('recorded elections', () => {
+  it('flags a recorded ballot as backdated activity, never as final', async () => {
+    // `ballot_final_after_transfer` is #204's irreversible CONDUCTED case. A
+    // recorded election's board-entered rows are freely replaceable through
+    // setBallots, so an in-window one is ordinary backdated activity.
+    await seedTransferrableLot();
+    await seedElection('elec-rec', { source: 'recorded', status: 'draft' });
+    await seedBallot('bal-rec', 'elec-rec', 'lot-1');
+
+    const res = await POST(
+      req({ action: 'end', ownershipId: 'osh-1', endDay: TODAY }),
+    );
+    expect(res.status).toBe(204);
+
+    const rows = (await flags()).filter(
+      (f) => f.impacted_ballot_id === 'bal-rec',
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].category).toBe('intervening_action_backdated');
     await integrityClean();
   });
 });
