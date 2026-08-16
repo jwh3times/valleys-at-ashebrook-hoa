@@ -7,7 +7,53 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-08-15
+## [0.10.0] - 2026-08-15
+
+### Added
+
+- **Homeowner verification now proves who you are, not just which house you
+  can type.** The sign-up flow asks for your name as well as your address.
+  Once the new records take over, the confirmation code goes only to the one
+  person on the roster whose name matches — never blasted to every contact on
+  file for the home — and it must reach a contact that belongs to exactly one
+  person across the whole neighborhood, so a shared household inbox can no
+  longer verify either of its owners. Verifying once covers every home that
+  person owns, including homes bought years later. Until the records
+  switch-over, the existing address-based flow keeps working unchanged behind
+  the same screens.
+- **Asking the board for help is now an explicit choice.** When a code does
+  not arrive, a "Didn't get a code? Ask the board to review" action sends the
+  board a review request with the name and address you claimed. Nothing is
+  queued automatically anymore, so every request the board sees is one a
+  resident deliberately made, and each account can have one open request at a
+  time. The board reviews these on new surfaces that can confirm the
+  applicant's identity — citing the request itself as evidence — or decline
+  it, with either decision recorded permanently.
+- **Accounts can be unlinked, carefully.** A resident can disconnect their own
+  account from their verified identity at any time, and the board can do so
+  with a recorded reason (a replaced account, a suspected compromise, an
+  error). Ending the link also ends every access the identity supported, in
+  the same action — and the one link protecting the association's last System
+  Administrator can never be ended by any path; the refusal itself is
+  permanently recorded.
+- **The one-time first-administrator bootstrap is rebuilt for the records
+  switch-over.** It now links a signed-in account to a named person on the
+  roster and grants System Administration in a single all-or-nothing action
+  that can only ever happen once, stays reachable while the maintenance
+  freeze is on (the switch-over depends on that), and writes its own
+  permanent record. The old first-board sign-up via `BOARD_EMAIL` and
+  `BOARD_PASSWORD` environment variables is retired.
+
+### Changed
+
+- **Verification no longer confirms whether an address or name is on file.**
+  Every request for a code — matched or not, rate-limited or not — gets the
+  same neutral response, closing a lookup channel that previously revealed
+  which addresses exist in the roster. Guessing is further limited by
+  per-person and per-home daily caps and a cap on how many different names one
+  account may claim for one home.
+- An organization's contact details can never satisfy a person's
+  verification — enforced by the database's own structure, not convention.
 
 ### Added
 

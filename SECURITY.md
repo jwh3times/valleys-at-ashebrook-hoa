@@ -44,9 +44,25 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   board admin from the admin panel's **Board access** section (the last remaining board admin
   can't be demoted), but cannot escalate their own access beyond `board`. These are direct database
   writes: the Better Auth admin plugin's impersonation, ban, and set-role endpoints are deliberately
-  not granted to board sessions. The first board account is bootstrapped through a permanent,
-  fail-closed `POST /api/bootstrap/board` endpoint that is inert once any board account exists and
-  requires a constant-time secret match plus `BOARD_*` config (see `SETUP.md` §6).
+  not granted to board sessions. The first System Administrator account is bootstrapped through a
+  permanent, fail-closed `POST /api/bootstrap/board` endpoint (rewritten by #219) that self-disables
+  (`410`) the moment its one-time `system_admin_bootstrap` record is written — not merely "once a
+  board account exists," since an account can also be promoted board by ordinary means. It requires,
+  in order, a constant-time `x-bootstrap-secret` match against `BOOTSTRAP_SECRET`, an already
+  authenticated session, and a body naming an existing, unconsolidated roster Person to link (see
+  `SETUP.md` §6). The retired BOARD_EMAIL/BOARD_PASSWORD/BOARD_NAME signup path — which used to
+  create a brand-new account directly from board credentials — is gone.
+- **A homeowner can end their own Person Link at any time, and a board caller can end anyone's.**
+  `POST /api/verify/unlink` (session-gated only — deliberately outside `officialMode` and
+  `/api/member/*`, since an account must always be able to disown a bad link) and the board's
+  `/api/admin/person-links` `unlink` action both end a Person Link and every Access Grant it
+  currently supports in one atomic batch, so an ended link never leaves a stray Board or System
+  Administrator grant live. Ending the sole `system_admin` grant is refused (`409`) on both paths,
+  and the refusal is permanently recorded as a denied Access Event so an attempted lockout leaves a
+  durable trace even though nothing changes. Manual board verification (`POST
+/api/admin/person-links` `manualVerify`, and its `POST /api/admin/verification-requests` `accept`
+  counterpart) only ever links an EXISTING Person to an account — it never creates a Person and
+  never grants access on its own — keeping identity and authority as separate decisions.
 - **A public member meeting publishes each represented property's address alongside its vote,
   gated only by the meeting's own visibility tier.** The meeting record's public pages
   (`/meetings`, `/meetings/[id]`, rendered server-side via `fetchMeetingsFor`/`fetchMeetingFor` —
@@ -145,12 +161,34 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   remain attributable and board-visible, and the board-only correction workflow may replace them
   after voting closes. Admin election history exposes turnout and final aggregate results without a
   lot-to-choice link.
-- **Homeowner verification is possession-based and throttled.** Sign-up is verified against the
-  owner roster via a one-time code sent to the phone/email already on file (Resend / Twilio), gated
-  by Cloudflare Turnstile. Codes are stored only as keyed HMAC-SHA-256 hashes and compared in
-  constant time, so a leaked database backup can't be reversed with a precomputed table.
-  Verification requests are rate-limited in KV — a short per-user cooldown plus daily caps per user
-  and per property — to curb abuse of the SMS/email fan-out.
+- **Homeowner verification is possession-based, throttled, and answers uniformly regardless of
+  whether anything matched.** `POST /api/verify/request` takes `{ address, name, channel,
+turnstileToken }` and, once past the write freeze/session/Turnstile gates — none of which touch
+  the roster — returns the exact same `200 { ok: true, message: 'If the information matches our
+records, a code has been sent.' }` for success, an unknown address, an unmatched or ambiguous
+  name, an organization-owned lot, a shared/unattributable contact, an already-linked account or
+  Person, and every rate limit. This closes the address-existence oracle the previous
+  `queued`/`rateLimited` distinction (and its `429`) exposed; there is no longer a way to learn from
+  the response alone whether an address, a name, or a rate limit caused a given outcome.
+  `POST /api/verify/confirm` is equally non-committal: every internal failure collapses to
+  `{ ok: false, reason: 'mismatch' }` except `expired`/`locked`, which keep their own reason. Which
+  backend answers is decided by `cutover_mode` (see below). Under the current production default,
+  `legacy`, sign-up matches by address only and fans the code out to every active owner contact on
+  file for the chosen channel — no name is matched yet. Once the flip sets `cutover_mode =
+derived`, sign-up additionally matches the claimed name against the Lot's current Person owners
+  (an exact normalized match, or a first-and-last-token match if none matched exactly) and sends a
+  single code to that one matched Person's own contact — never a fan-out — and only if that contact
+  is uniquely attributable to one Party roster-wide. Codes are stored only as keyed HMAC-SHA-256
+  hashes and compared in constant time, so a leaked database backup can't be reversed with a
+  precomputed table. Requests are rate-limited in KV: a short per-account cooldown, a daily cap per
+  account, a daily cap per Lot (both modes), a daily cap per matched Person (`derived` only, so a
+  Person owning several Lots isn't re-sendable once per Lot), and a cap on the number of distinct
+  names one account may try against one Lot per day — the roster-walking control. Nothing
+  auto-queues for board review anymore: an applicant who can't complete the code flow must take the
+  explicit `POST /api/verify/review` action (session-gated, one open request per account), with one
+  exception — a claimed Person already linked to a different account auto-creates that review row,
+  since #201 treats that specific collision as worth a board look regardless of the uniform
+  response the requester sees.
 - **`cutover_mode` decides which authorization model answers, and fails safe to the model already
   serving production.** The ADR 0022 phase-3 flip switch (`src/server/authz/cutover-mode.ts`,
   reading the uncached `cutover_settings.cutover_mode` singleton) sits inside the single seam every
