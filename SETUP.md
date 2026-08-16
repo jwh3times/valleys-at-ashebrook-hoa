@@ -65,13 +65,13 @@ names for your deployment.
 Server secrets are set locally in `.dev.vars` and in production with Cloudflare Worker secrets.
 Do not commit real values.
 
-| Secret                                                            | Purpose                                           |
-| ----------------------------------------------------------------- | ------------------------------------------------- |
-| `BETTER_AUTH_SECRET`                                              | Better Auth secret and verification-code HMAC key |
-| `EMAIL_API_KEY`, `EMAIL_FROM`                                     | Account verification and password-reset email     |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`          | SMS homeowner-verification codes                  |
-| `TURNSTILE_SECRET_KEY`                                            | Server-side Turnstile verification                |
-| `BOOTSTRAP_SECRET`, `BOARD_EMAIL`, `BOARD_PASSWORD`, `BOARD_NAME` | One-time first-board bootstrap configuration      |
+| Secret                                                   | Purpose                                              |
+| -------------------------------------------------------- | ---------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                                     | Better Auth secret and verification-code HMAC key    |
+| `EMAIL_API_KEY`, `EMAIL_FROM`                            | Account verification and password-reset email        |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | SMS homeowner-verification codes                     |
+| `TURNSTILE_SECRET_KEY`                                   | Server-side Turnstile verification                   |
+| `BOOTSTRAP_SECRET`                                       | One-time first-System-Administrator bootstrap secret |
 
 Public build-time values are safe to expose and are inlined by Astro:
 
@@ -128,14 +128,43 @@ and should not be committed. Production operators should document removal, erasu
 retention procedures privately because those procedures depend on the deployment owner and data
 handling process.
 
-## 6. Seed the First Board Account
+## 6. Bootstrap the First System Administrator
 
-The first board account is created through `POST /api/bootstrap/board`. The endpoint is fail-closed:
-it requires bootstrap configuration and self-disables once any board account exists.
+The first System Administrator account is created through `POST /api/bootstrap/board`. The
+endpoint is permanently fail-closed and self-disables (`410`) the moment its one-time
+`system_admin_bootstrap` record is written — not "once a board account exists" (an account can
+also be promoted board later from `/admin`), but "has bootstrap itself already run."
 
-Keep the exact bootstrap command and any temporary bootstrap secrets in private operations notes.
-After the first board account exists, board membership is managed from `/admin` -> **Board
-members**.
+Bootstrap **links** an already-signed-in account to an already-recorded roster Person; it does not
+create a new account from board credentials.
+
+1. Sign up a normal account on the site (email/password) and sign in with it.
+2. Make sure the Person you intend to bootstrap already exists in the party roster. On a fresh
+   deploy this means running the roster import from §5 and then the roster backfill:
+   ```bash
+   npm run roster:backfill -- --local --write --operator=<accountId>
+   # drop --local for the remote database once you've reviewed the dry-run output
+   ```
+   Look up the target Person's id if you don't already have it, e.g.:
+   ```bash
+   npx wrangler d1 execute <database-name> --command \
+     "SELECT party_id, full_name FROM people WHERE full_name LIKE '%Name%'"
+   ```
+3. While signed in as the account from step 1, call the endpoint with the bootstrap secret and
+   that Person's id:
+   ```bash
+   curl -X POST https://<your-domain>/api/bootstrap/board \
+     -H "x-bootstrap-secret: <BOOTSTRAP_SECRET>" \
+     -H "content-type: application/json" \
+     --cookie "<your session cookie>" \
+     -d '{"personId":"<party_id from step 2>"}'
+   ```
+
+A successful call links the account to that Person, records a `bootstrap` Person Verification,
+grants `system_admin` Access, and mirrors `users.role = 'board'` so the admin panel works
+immediately. Keep the exact bootstrap command, secret, and session details in private operations
+notes. After the first account exists, board and System Administrator access are managed from
+`/admin`.
 
 ## 7. Import Documents
 
@@ -265,8 +294,12 @@ Astro SSR requests and the scheduled cleanup trigger.
 ## Scheduled Maintenance
 
 Wrangler config includes a daily cron trigger. It runs `cleanupVerificationState`, which keeps 30
-days of consumed/expired property-verification rows and resolved manual-approval rows. Pending
-manual approvals are retained.
+days of consumed/expired property-verification rows and resolved manual-approval rows (pending
+manual approvals are retained), plus the ADR 0022 phase 3c equivalents: pending Person
+Verification codes (`verification_codes`) age out after about a day past consumption/expiry, since
+a code is only ever useful for its ~10-minute TTL, and resolved (accepted/declined) verification
+review requests (`verification_review_requests`) age out after 30 days — open requests are
+retained.
 
 ## Security Headers
 

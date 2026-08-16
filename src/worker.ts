@@ -14,7 +14,7 @@ export default {
     try {
       const result = await cleanupVerificationState(env);
       console.log(
-        `[cleanup] verification=${result.verificationRows} manual_approval=${result.manualApprovalRows}`,
+        `[cleanup] verification=${result.verificationRows} manual_approval=${result.manualApprovalRows} verification_codes=${result.verificationCodeRows} review_requests=${result.reviewRequestRows}`,
       );
     } catch (err) {
       console.error('[cleanup] failed', err);
