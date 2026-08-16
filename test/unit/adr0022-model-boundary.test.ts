@@ -96,6 +96,8 @@ const NEW_MODEL_SURFACE = new Set([
   'pages/api/bootstrap/board.ts',
   'pages/api/admin/person-links.ts',
   'pages/api/admin/verification-requests.ts',
+  // Phase 3d (#220): transfer-time effects and the review-flag queue.
+  'pages/api/admin/review-flags.ts',
   // Shared server modules for the routes above.
   'server/roster/audit.ts',
   'server/roster/reads.ts',
@@ -103,6 +105,7 @@ const NEW_MODEL_SURFACE = new Set([
   'server/roster/verification.ts',
   'server/roster/identity.ts',
   'server/roster/bootstrap.ts',
+  'server/roster/transfer-effects.ts',
 ]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
