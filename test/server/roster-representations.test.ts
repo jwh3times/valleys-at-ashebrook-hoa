@@ -4,6 +4,7 @@ import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { properties } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
+import { associationDateIso } from '../../src/lib/format';
 import {
   parties,
   people,
@@ -34,7 +35,10 @@ beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
-const TODAY = new Date().toISOString().slice(0, 10);
+// The routes compare days against the America/New_York association day, so
+// the fixture must too — a UTC date here fails every CI run between UTC
+// midnight and Eastern midnight.
+const TODAY = associationDateIso();
 
 const CLEAR = [
   'audit_scalar_changes',

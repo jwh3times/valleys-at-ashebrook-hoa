@@ -4,6 +4,7 @@ import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { properties } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
+import { associationDateIso } from '../../src/lib/format';
 import {
   parties,
   people,
@@ -36,7 +37,10 @@ beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
-const TODAY = new Date().toISOString().slice(0, 10);
+// The routes compare days against the America/New_York association day, so
+// the fixture must too — a UTC date here fails every CI run between UTC
+// midnight and Eastern midnight.
+const TODAY = associationDateIso();
 
 const CLEAR = [
   'audit_scalar_changes',
@@ -618,7 +622,7 @@ describe('GET advisories', () => {
     // Expiring: a current term ending within thirty days of today.
     const soon = new Date();
     soon.setDate(soon.getDate() + 10);
-    const soonDay = soon.toISOString().slice(0, 10);
+    const soonDay = associationDateIso(soon);
     const expiring = await createTerm('per-1', 'lot-1', '2026-01-01', soonDay);
     const expiringId = ((await expiring.json()) as { id: string }).id;
     // Lapsed: concluded by schedule with no successor recorded.
