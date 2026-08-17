@@ -56,7 +56,7 @@ npm run sync:agents -- --check # fail if generated agent trees drifted, enforced
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run db:generate       # generate Drizzle migration files
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
-npm run db:migrate:remote # manual catch-up only; merges to main apply migrations automatically
+npm run db:migrate:remote # apply migrations to production D1 — the ONLY path; deploys do not run migrations
 npm run auth:generate     # regenerate Better Auth schema from config
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
@@ -64,7 +64,7 @@ npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
 npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; see SETUP.md §7
 npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins; see SETUP.md
 npm run verify:invariants # ADR 0022 migration invariant gate; pass --local or --remote
-npm run roster:backfill   # ADR 0022 roster backfill; dry-run by default, --write --operator=<id>
+npm run roster:backfill   # ADR 0022 roster backfill; dry-run by default, --write --operator=<id>, --classify=<id>=technical
 npm run shadow:sweep      # ADR 0022 offline shadow sweep over every account; --local/--remote, --write
 npm run deploy            # build and deploy with Wrangler
 ```
@@ -1039,11 +1039,25 @@ durable — the deny-by-default write freeze is what makes landing this branch s
   writing exception queues for ambiguous cases and an audit baseline (one correlation per migrated
   root entity, `actor_kind = 'migration'`); `--authoritative` is the phase-3 insert-once mode
   (`ON CONFLICT DO NOTHING`, deletes nothing, refuses to run while a flip-blocking exception is
-  outstanding).
+  outstanding). The repeatable `--classify=<accountId>=technical` flag (#222) resolves that
+  account's `board_account_unclassified` blocking exception on the record — printed under
+  "Operator decisions applied" — and plans no rows, since System Administration Access arrives
+  only via `POST /api/bootstrap/board`, never the backfill; an unmatched account id is itself a
+  new blocking exception (`classification_unmatched`), and any other classification value exits 2.
 - `scripts/shadow-sweep.ts` (`npm run shadow:sweep`): an offline sweep that derives both
   authorization contexts for every account (not just accounts that sign in during the phase-2
   window) and records mismatches with `source='sweep'`, sharing `derive.ts`'s SQL and
   `shadow-compare.ts`'s comparison with the request-path shadow rather than reimplementing them.
+  Local execution still batches through Wrangler's `--file` (D1's query API, per-statement
+  results); remote execution goes through order-preserving, command-line-budgeted `--command`
+  chunks instead, because remote `--file` is D1's import API (progress lines plus one summary, no
+  per-statement results) and would otherwise silently mis-index as data.
+- `scripts/wrangler-d1.ts` (#222): pure helpers shared by the scripts above and by
+  `verify-invariants.ts` — `parseD1Output` types a `wrangler d1 execute --json` response as
+  per-statement results, the import-API summary, or an unrecognized/non-JSON shape rather than
+  ever letting one be misread as the other; `chunkStatements` splits SQL into order-preserving,
+  Windows command-line-budgeted chunks for remote `--command` execution; `withRetry` bounds a
+  retry loop around a `shouldRetry` discriminator.
 - `src/server/roster/normalize.ts` gains `normalizeEmail`, `normalizePhone`, and `normalizeName`,
   used by the backfill to detect cross-Party contact ambiguity that legacy data never normalized
   consistently enough to catch on its own.
@@ -1056,7 +1070,12 @@ or candidates, and the two view-backed checks migration `0023` un-stubs
 (`audit_integrity_violations_v`, `board_eligibility_violations_v`) — against local or remote D1 via
 Wrangler, printing any violating rows and exiting non-zero. `audit_integrity_violations_v` sits
 exactly at D1's five-term compound-`SELECT` ceiling; a sixth check there needs a second view rather
-than a sixth branch.
+than a sixth branch. Each query retries up to 3 attempts (`scripts/wrangler-d1.ts`'s `withRetry`),
+absorbing an intermittent Node 26/Windows Wrangler libuv exit-crash after the query already
+succeeded; a deterministic failure — stdout carrying Wrangler's own `--json` error object — fails
+immediately instead of burning retries on a repeatable error, and a response shaped as anything
+other than exactly one statement result throws rather than being read as zero rows (this gate's
+green).
 
 `resolutions` (the resolutions book — standing rules the board adopts, per
 [ADR 0016](./docs/adr/0016-resolutions-supersession-chain.md)) is a durable record: amending one
@@ -1244,21 +1263,23 @@ layer, the board-only roster-preview panel, the operator write freeze, `cutover-
 of phase 3b/3c/3d — the roster/board-service/access/person-link/verification/review-flag routes;
 legacy authorization itself still reads none of the roster tables). Migrations `0016`
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
-ledger rather than assumed.
+ledger rather than assumed. Migrations `0023` through `0027` were applied to production manually
+(`db:migrate:remote`) on 2026-08-17, after sitting unapplied for days under deployed v0.12.0 code —
+the observation that falsified the deploys-apply-migrations doctrine below.
 
-**Committed migrations reach production automatically.** `wrangler.toml` sets `migrations_dir` on
-the `DATABASE` binding, so the Cloudflare Workers Builds deploy that follows every merge to `main`
-applies any unapplied files as part of that deploy — no GitHub workflow and no operator step is
-involved. That is how `0016`-`0022` all landed at one timestamp minutes after their merge, having
-sat unapplied for days. The build command itself lives in the Cloudflare dashboard rather than in
-this repo, so the trigger is inferred from that evidence rather than read from a file here.
+**Committed migrations do NOT reach production on their own.** Deploys never apply D1
+migrations. This doctrine previously said the opposite, inferred from `0016`-`0022` landing at one
+timestamp shortly after their merge; that inference was falsified on 2026-08-17, when deploys had
+succeeded daily while migrations `0023`-`0027` sat unapplied under v0.12.0 code — the earlier
+observation was almost certainly a manual catch-up misread as the deploy's work. The real path is
+the operator running `npm run db:migrate:remote`, which applies any unapplied files and is safe to
+re-run (Wrangler tracks applied files in D1 and skips them).
 
-Two consequences worth internalising. A migration is **live the moment its PR merges**, so a
-schema change and the code that depends on it must be safe in either order — which is the whole
-reason ADR 0022 phase 1 is behaviorally inert. And `npm run db:migrate:remote` is a
-**manual catch-up for an unusual situation**, not the normal path; running it is harmless
-(Wrangler skips applied files) but expecting to need it is a misreading of how this project
-deploys.
+Two consequences worth internalising. Merged code can run **ahead of the production schema** for
+days, so a schema change and the code that depends on it must be safe in either order — which is
+the whole reason ADR 0022 phase 1 is behaviorally inert. And schema parity is a **standing
+pre-freeze check**: before any write freeze, backfill, or other schema-dependent operation,
+`npx wrangler d1 migrations list DATABASE --remote` must list nothing unapplied.
 
 Migrations are applied locally with `npm run db:migrate:local` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and

@@ -34,6 +34,11 @@ import {
   type CapabilityRow,
 } from '../src/server/authz/derive.ts';
 import { compareContexts } from '../src/server/authz/shadow-compare.ts';
+import {
+  chunkStatements,
+  parseD1Output,
+  type D1StatementResult,
+} from './wrangler-d1.ts';
 
 // The SQL and the mapper are IMPORTED, never copied. A sweep with its own
 // implementation would agree with itself and miss the derivation bug it exists
@@ -45,6 +50,10 @@ const WRANGLER = join(
   'wrangler.js',
 );
 
+// No withRetry here, deliberately: the sweep is an operator-attended
+// measurement, not an unattended gate, and a retried invocation that half
+// succeeded would be harder to reason about than a loud failure the operator
+// re-runs. verify-invariants.ts is the caller that retries.
 function wrangler(args: string[]): string {
   return execFileSync(process.execPath, [WRANGLER, ...args], {
     encoding: 'utf8',
@@ -53,16 +62,61 @@ function wrangler(args: string[]): string {
   });
 }
 
-interface StatementResult<T> {
-  results?: T[];
+/** Conservative budget for the SQL carried by one remote `--command` argument.
+ * Windows caps the whole process command line at 32767 characters; leave room
+ * for the wrangler arguments around the SQL. */
+const REMOTE_COMMAND_BUDGET = 24_000;
+
+function parseStatements<T>(
+  raw: string,
+  expected: number,
+  source: string,
+): D1StatementResult<T>[] {
+  const parsed = parseD1Output(raw);
+  if (parsed.kind !== 'statements') {
+    throw new Error(
+      `${source}: expected per-statement query results, got ${parsed.kind}: ${parsed.detail}`,
+    );
+  }
+  if (parsed.statements.length !== expected) {
+    // Indexing results[i*2] over a short array would silently derive every
+    // account from empty rows, so a count mismatch is fatal, never padded.
+    throw new Error(
+      `${source}: expected ${expected} statement result(s), got ${parsed.statements.length}`,
+    );
+  }
+  return parsed.statements as D1StatementResult<T>[];
 }
 
-/** Runs many statements in one Wrangler invocation and returns one result set
- * per statement, in order. Spawning the CLI per account would take minutes. */
+/** Runs many statements and returns one result set per statement, in order,
+ * in as few Wrangler invocations as possible — spawning the CLI per account
+ * would take minutes.
+ *
+ * Local goes through `--file`, which the local backend answers with the
+ * per-statement query shape. Remote `--file` is D1's IMPORT API — non-JSON
+ * progress lines plus one summary object, never per-statement results — so
+ * remote goes through `--command` (the QUERY API) in order-preserving chunks
+ * sized for the command-line cap. */
 function runBatch<T>(
   statements: string[],
   remote: boolean,
-): StatementResult<T>[] {
+): D1StatementResult<T>[] {
+  if (remote) {
+    const out: D1StatementResult<T>[] = [];
+    for (const chunk of chunkStatements(statements, REMOTE_COMMAND_BUDGET)) {
+      const raw = wrangler([
+        'd1',
+        'execute',
+        'DATABASE',
+        '--remote',
+        '--json',
+        '--command',
+        chunk.join(';\n'),
+      ]);
+      out.push(...parseStatements<T>(raw, chunk.length, 'remote --command'));
+    }
+    return out;
+  }
   const path = join(tmpdir(), `adr0022-sweep-${randomUUID()}.sql`);
   writeFileSync(path, statements.join(';\n') + ';\n', 'utf8');
   try {
@@ -70,12 +124,12 @@ function runBatch<T>(
       'd1',
       'execute',
       'DATABASE',
-      remote ? '--remote' : '--local',
+      '--local',
       '--json',
       '--file',
       path,
     ]);
-    return JSON.parse(out) as StatementResult<T>[];
+    return parseStatements<T>(out, statements.length, 'local --file');
   } finally {
     unlinkSync(path);
   }

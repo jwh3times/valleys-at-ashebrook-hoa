@@ -270,6 +270,59 @@ describe('board service', () => {
   });
 });
 
+describe('board-account classification (#222)', () => {
+  it('suppresses the blocking exception for a technical account and records the decision', () => {
+    const plan = buildPlan(legacy({ boardAccounts: [{ id: 'acct-1' }] }), NOW, {
+      classifications: { 'acct-1': 'technical' },
+    });
+    expect(blocking(plan, 'board_account_unclassified')).toHaveLength(0);
+    expect(plan.decisions).toHaveLength(1);
+    expect(plan.decisions[0]).toContain('acct-1');
+    expect(plan.decisions[0]).toContain('technical');
+  });
+
+  it('classifies only the named account', () => {
+    const plan = buildPlan(
+      legacy({ boardAccounts: [{ id: 'acct-1' }, { id: 'acct-2' }] }),
+      NOW,
+      { classifications: { 'acct-1': 'technical' } },
+    );
+    const remaining = blocking(plan, 'board_account_unclassified');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].detail).toContain('acct-2');
+  });
+
+  it('plans no rows for a technical classification', () => {
+    // System Administration Access arrives only via the bootstrap, so the
+    // flag's entire effect is recorded suppression: the plan with the
+    // classification is statement-for-statement the plan without it.
+    const data = legacy({
+      properties: [{ id: 'lot-1', status: 'active' }],
+      owners: [owner('o1', 'lot-1', { email: 'a@example.com' })],
+      boardAccounts: [{ id: 'acct-1' }],
+    });
+    const unclassified = buildPlan(data, NOW, { operatorAccountId: 'op-1' });
+    const classified = buildPlan(data, NOW, {
+      operatorAccountId: 'op-1',
+      classifications: { 'acct-1': 'technical' },
+    });
+    expect(classified.statements).toEqual(unclassified.statements);
+    expect(classified.counts).toEqual(unclassified.counts);
+    expect(classified.statements.join('\n')).not.toContain('access_grants');
+  });
+
+  it('blocks a classification that names no board account', () => {
+    // A typo'd account id that silently did nothing is how the wrong account
+    // stays suppressed while the operator believes the queue is resolved.
+    const plan = buildPlan(legacy({ boardAccounts: [{ id: 'acct-1' }] }), NOW, {
+      classifications: { 'acct-typo': 'technical' },
+    });
+    expect(blocking(plan, 'classification_unmatched')).toHaveLength(1);
+    expect(blocking(plan, 'board_account_unclassified')).toHaveLength(1);
+    expect(plan.decisions).toHaveLength(0);
+  });
+});
+
 describe('office mapping', () => {
   it('maps the bylaws offices and refuses to guess', () => {
     expect(mapOffice('President')).toBe('president');

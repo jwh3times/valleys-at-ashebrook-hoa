@@ -20,6 +20,7 @@
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { parseD1Output, withRetry } from './wrangler-d1.ts';
 
 interface Check {
   name: string;
@@ -213,23 +214,65 @@ const WRANGLER = join(
   'wrangler.js',
 );
 
+/** Total tries per check. Wrangler on Node 26/Windows intermittently dies AT
+ * EXIT with a libuv assertion after the query already completed, so a first
+ * failure is usually a phantom; a persistent failure still reports red. A gate
+ * that flakes is not a gate. */
+const QUERY_ATTEMPTS = 3;
+
 function runQuery(sql: string, remote: boolean): unknown[] {
-  const out = execFileSync(
-    process.execPath,
-    [
-      WRANGLER,
-      'd1',
-      'execute',
-      'DATABASE',
-      remote ? '--remote' : '--local',
-      '--json',
-      '--command',
-      sql,
-    ],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+  const out = withRetry(
+    () =>
+      execFileSync(
+        process.execPath,
+        [
+          WRANGLER,
+          'd1',
+          'execute',
+          'DATABASE',
+          remote ? '--remote' : '--local',
+          '--json',
+          '--command',
+          sql,
+        ],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      ),
+    QUERY_ATTEMPTS,
+    {
+      // A failed spawn whose stdout carries wrangler's `--json` error object
+      // is a real answer — a SQL error, a missing table — not the exit-crash
+      // flake; retrying it would repeat a deterministic failure. Everything
+      // else (empty stdout, partial output, even a complete result set from a
+      // process that then died at exit) is worth another try.
+      shouldRetry: (error) => {
+        const stdout = (error as { stdout?: unknown } | null)?.stdout;
+        if (typeof stdout !== 'string' || stdout.trim() === '') return true;
+        const kind = parseD1Output(stdout).kind;
+        return kind !== 'unrecognized' && kind !== 'import-summary';
+      },
+      onRetry: (attempt, error) => {
+        const line = String(
+          error instanceof Error ? error.message : error,
+        ).split('\n')[0];
+        console.error(
+          `    ↻ transient subprocess failure (attempt ${attempt}/${QUERY_ATTEMPTS}): ${line}`,
+        );
+      },
+    },
   );
-  const parsed = JSON.parse(out) as { results?: unknown[] }[];
-  return parsed[0]?.results ?? [];
+  // A check whose output is not a one-statement result set must read as a
+  // failed query, never as zero rows — zero rows is this gate's GREEN.
+  const parsed = parseD1Output(out);
+  if (parsed.kind !== 'statements' || parsed.statements.length !== 1) {
+    throw new Error(
+      `expected one statement result, got ${
+        parsed.kind === 'statements'
+          ? `${parsed.statements.length} results`
+          : `${parsed.kind}: ${parsed.detail}`
+      }`,
+    );
+  }
+  return parsed.statements[0].results ?? [];
 }
 
 function main(): void {
