@@ -56,7 +56,7 @@ npm run sync:agents -- --check # fail if generated agent trees drifted, enforced
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run db:generate       # generate Drizzle migration files
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
-npm run db:migrate:remote # manual catch-up only; merges to main apply migrations automatically
+npm run db:migrate:remote # apply migrations to production D1 — the ONLY path; deploys do not run migrations
 npm run auth:generate     # regenerate Better Auth schema from config
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
@@ -1244,21 +1244,23 @@ layer, the board-only roster-preview panel, the operator write freeze, `cutover-
 of phase 3b/3c/3d — the roster/board-service/access/person-link/verification/review-flag routes;
 legacy authorization itself still reads none of the roster tables). Migrations `0016`
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
-ledger rather than assumed.
+ledger rather than assumed. Migrations `0023` through `0027` were applied to production manually
+(`db:migrate:remote`) on 2026-08-17, after sitting unapplied for days under deployed v0.12.0 code —
+the observation that falsified the deploys-apply-migrations doctrine below.
 
-**Committed migrations reach production automatically.** `wrangler.toml` sets `migrations_dir` on
-the `DATABASE` binding, so the Cloudflare Workers Builds deploy that follows every merge to `main`
-applies any unapplied files as part of that deploy — no GitHub workflow and no operator step is
-involved. That is how `0016`-`0022` all landed at one timestamp minutes after their merge, having
-sat unapplied for days. The build command itself lives in the Cloudflare dashboard rather than in
-this repo, so the trigger is inferred from that evidence rather than read from a file here.
+**Committed migrations do NOT reach production on their own.** Deploys never apply D1
+migrations. This doctrine previously said the opposite, inferred from `0016`-`0022` landing at one
+timestamp shortly after their merge; that inference was falsified on 2026-08-17, when deploys had
+succeeded daily while migrations `0023`-`0027` sat unapplied under v0.12.0 code — the earlier
+observation was almost certainly a manual catch-up misread as the deploy's work. The real path is
+the operator running `npm run db:migrate:remote`, which applies any unapplied files and is safe to
+re-run (Wrangler tracks applied files in D1 and skips them).
 
-Two consequences worth internalising. A migration is **live the moment its PR merges**, so a
-schema change and the code that depends on it must be safe in either order — which is the whole
-reason ADR 0022 phase 1 is behaviorally inert. And `npm run db:migrate:remote` is a
-**manual catch-up for an unusual situation**, not the normal path; running it is harmless
-(Wrangler skips applied files) but expecting to need it is a misreading of how this project
-deploys.
+Two consequences worth internalising. Merged code can run **ahead of the production schema** for
+days, so a schema change and the code that depends on it must be safe in either order — which is
+the whole reason ADR 0022 phase 1 is behaviorally inert. And schema parity is a **standing
+pre-freeze check**: before any write freeze, backfill, or other schema-dependent operation,
+`npx wrangler d1 migrations list DATABASE --remote` must list nothing unapplied.
 
 Migrations are applied locally with `npm run db:migrate:local` via
 Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
