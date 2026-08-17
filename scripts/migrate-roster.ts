@@ -95,7 +95,8 @@ function main(): void {
   // `board_account_unclassified` blocking exception, on the record and with no
   // rows planned. `technical` is the only value; a Board Member classification
   // needs a qualifying Lot and a scheduled end, which are Board-panel facts.
-  const classifications: Record<string, 'technical'> = {};
+  // Null prototype so an id like `__proto__` is stored, not swallowed.
+  const classifications: Record<string, 'technical'> = Object.create(null);
   for (const arg of argv.filter((a) => a.startsWith('--classify='))) {
     const value = arg.slice('--classify='.length);
     const sep = value.lastIndexOf('=');

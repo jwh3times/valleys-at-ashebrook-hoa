@@ -238,13 +238,26 @@ function runQuery(sql: string, remote: boolean): unknown[] {
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
       ),
     QUERY_ATTEMPTS,
-    (attempt, error) => {
-      const line = String(error instanceof Error ? error.message : error).split(
-        '\n',
-      )[0];
-      console.error(
-        `    ↻ transient subprocess failure (attempt ${attempt}/${QUERY_ATTEMPTS}): ${line}`,
-      );
+    {
+      // A failed spawn whose stdout carries wrangler's `--json` error object
+      // is a real answer — a SQL error, a missing table — not the exit-crash
+      // flake; retrying it would repeat a deterministic failure. Everything
+      // else (empty stdout, partial output, even a complete result set from a
+      // process that then died at exit) is worth another try.
+      shouldRetry: (error) => {
+        const stdout = (error as { stdout?: unknown } | null)?.stdout;
+        if (typeof stdout !== 'string' || stdout.trim() === '') return true;
+        const kind = parseD1Output(stdout).kind;
+        return kind !== 'unrecognized' && kind !== 'import-summary';
+      },
+      onRetry: (attempt, error) => {
+        const line = String(
+          error instanceof Error ? error.message : error,
+        ).split('\n')[0];
+        console.error(
+          `    ↻ transient subprocess failure (attempt ${attempt}/${QUERY_ATTEMPTS}): ${line}`,
+        );
+      },
     },
   );
   // A check whose output is not a one-statement result set must read as a
