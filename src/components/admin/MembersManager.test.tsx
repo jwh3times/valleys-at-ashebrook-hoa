@@ -15,6 +15,9 @@ vi.mock('../../lib/admin', () => ({
 const fetchVerificationRequests = vi.fn();
 const acceptVerificationRequest = vi.fn();
 const declineVerificationRequest = vi.fn();
+const fetchCorrectionRequests = vi.fn();
+const acceptCorrectionRequest = vi.fn();
+const declineCorrectionRequest = vi.fn();
 vi.mock('../../lib/roster-admin', () => ({
   fetchVerificationRequests: (...a: unknown[]) =>
     fetchVerificationRequests(...a),
@@ -22,6 +25,9 @@ vi.mock('../../lib/roster-admin', () => ({
     acceptVerificationRequest(...a),
   declineVerificationRequest: (...a: unknown[]) =>
     declineVerificationRequest(...a),
+  fetchCorrectionRequests: (...a: unknown[]) => fetchCorrectionRequests(...a),
+  acceptCorrectionRequest: (...a: unknown[]) => acceptCorrectionRequest(...a),
+  declineCorrectionRequest: (...a: unknown[]) => declineCorrectionRequest(...a),
 }));
 
 import MembersManager from './MembersManager';
@@ -35,6 +41,24 @@ const request = {
   channel: 'email' as const,
   internalReason: 'applicant_requested_review',
   createdAt: Date.UTC(2026, 6, 4, 12),
+};
+
+const correction = {
+  id: 'cr1',
+  accountId: 'a2',
+  personId: 'per2',
+  personDisplayName: 'Lee Owner',
+  kind: 'contact_method' as const,
+  contactMethodId: 'cm1',
+  targetChannel: 'email' as const,
+  targetCurrentValue: 'old@x.com',
+  channel: 'email' as const,
+  proposedValue: 'new@x.com',
+  note: 'typo in my email',
+  status: 'open' as const,
+  createdAt: Date.UTC(2026, 6, 5, 12),
+  decidedAt: null,
+  decidedByAccountId: null,
 };
 
 beforeEach(() => {
@@ -78,6 +102,9 @@ beforeEach(() => {
     verificationId: 'v1',
   });
   declineVerificationRequest.mockReset().mockResolvedValue(undefined);
+  fetchCorrectionRequests.mockReset().mockResolvedValue([correction]);
+  acceptCorrectionRequest.mockReset().mockResolvedValue(undefined);
+  declineCorrectionRequest.mockReset().mockResolvedValue(undefined);
   memberAction.mockClear();
 });
 
@@ -138,7 +165,7 @@ describe('MembersManager', () => {
       fireEvent.change(screen.getByLabelText(/person for applicant@x.com/i), {
         target: { value: 'per1' },
       });
-      fireEvent.click(screen.getByRole('button', { name: /accept/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
       await waitFor(() =>
         expect(acceptVerificationRequest).toHaveBeenCalledWith({
           id: 'vr1',
@@ -153,7 +180,7 @@ describe('MembersManager', () => {
     it('refuses to accept until a person is picked', async () => {
       render(<MembersManager />);
       await screen.findByText('applicant@x.com');
-      fireEvent.click(screen.getByRole('button', { name: /accept/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
       expect(
         await screen.findByText(/pick the person this account belongs to/i),
       ).toBeInTheDocument();
@@ -171,7 +198,7 @@ describe('MembersManager', () => {
       fireEvent.change(screen.getByLabelText(/person for applicant@x.com/i), {
         target: { value: 'per1' },
       });
-      fireEvent.click(screen.getByRole('button', { name: /accept/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
       expect(
         await screen.findByText(
           /this person is already linked to an account — unlink it first/i,
@@ -182,12 +209,61 @@ describe('MembersManager', () => {
     it('declines a request', async () => {
       render(<MembersManager />);
       await screen.findByText('applicant@x.com');
-      fireEvent.click(screen.getByRole('button', { name: /decline/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
       await waitFor(() =>
         expect(declineVerificationRequest).toHaveBeenCalledWith('vr1'),
       );
       expect(
         await screen.findByText(/verification request declined/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('correction requests queue', () => {
+    it('shows an empty state when no corrections are open', async () => {
+      fetchCorrectionRequests.mockResolvedValue([]);
+      render(<MembersManager />);
+      expect(
+        await screen.findByText(/no correction requests/i),
+      ).toBeInTheDocument();
+    });
+
+    it('renders only open requests, with the proposed change and note', async () => {
+      fetchCorrectionRequests.mockResolvedValue([
+        correction,
+        { ...correction, id: 'cr2', status: 'accepted' as const },
+      ]);
+      render(<MembersManager />);
+      expect(await screen.findByText('Lee Owner')).toBeInTheDocument();
+      expect(screen.getAllByText(/old@x\.com → new@x\.com/)).toHaveLength(1);
+      expect(screen.getByText(/typo in my email/)).toBeInTheDocument();
+    });
+
+    it('accepts a correction', async () => {
+      render(<MembersManager />);
+      await screen.findByText('Lee Owner');
+      fireEvent.click(
+        screen.getByRole('button', { name: /accept correction from lee/i }),
+      );
+      await waitFor(() =>
+        expect(acceptCorrectionRequest).toHaveBeenCalledWith('cr1'),
+      );
+      expect(
+        await screen.findByText(/correction accepted/i),
+      ).toBeInTheDocument();
+    });
+
+    it('declines a correction and surfaces a route refusal verbatim', async () => {
+      declineCorrectionRequest.mockRejectedValue(
+        new Error('Correction request was already decided'),
+      );
+      render(<MembersManager />);
+      await screen.findByText('Lee Owner');
+      fireEvent.click(
+        screen.getByRole('button', { name: /decline correction from lee/i }),
+      );
+      expect(
+        await screen.findByText(/correction request was already decided/i),
       ).toBeInTheDocument();
     });
   });

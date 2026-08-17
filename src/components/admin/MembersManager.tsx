@@ -6,11 +6,17 @@ import {
   memberAction,
 } from '../../lib/admin';
 import {
+  acceptCorrectionRequest,
   acceptVerificationRequest,
+  declineCorrectionRequest,
   declineVerificationRequest,
+  fetchCorrectionRequests,
   fetchVerificationRequests,
 } from '../../lib/roster-admin';
-import type { VerificationReviewRequestRow } from '../../lib/roster-admin';
+import type {
+  CorrectionRequestRow,
+  VerificationReviewRequestRow,
+} from '../../lib/roster-admin';
 import { formatDate } from '../../lib/format';
 import type {
   MembersView,
@@ -44,6 +50,7 @@ export default function MembersManager() {
   const [homes, setHomes] = useState<PropertyWithOwners[]>([]);
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [requests, setRequests] = useState<VerificationReviewRequestRow[]>([]);
+  const [corrections, setCorrections] = useState<CorrectionRequestRow[]>([]);
   const [people, setPeople] = useState<RosterPerson[]>([]);
   const [personPicks, setPersonPicks] = useState<Record<string, string>>({});
   const [requestsError, setRequestsError] = useState('');
@@ -71,17 +78,20 @@ export default function MembersManager() {
     // roster read is empty until the flip's backfill runs, and either route
     // could 403 — still leaves the legacy sections usable.
     try {
-      const [open, roster] = await Promise.all([
+      const [open, corrs, roster] = await Promise.all([
         fetchVerificationRequests(),
+        fetchCorrectionRequests(),
         fetchRosterPeople(),
       ]);
       setRequests(open);
+      setCorrections(corrs.filter((c) => c.status === 'open'));
       setPeople(roster);
       setPersonPicks({});
       setRequestsError('');
     } catch (err: any) {
       setRequests([]);
-      setRequestsError(err?.message ?? 'Could not load verification requests.');
+      setCorrections([]);
+      setRequestsError(err?.message ?? 'Could not load member requests.');
     }
     setLoading(false);
   }
@@ -217,6 +227,66 @@ export default function MembersManager() {
                     requestAction(
                       () => declineVerificationRequest(r.id),
                       'Verification request declined.',
+                    )
+                  }
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="panel-editor__title">Correction requests</div>
+      <p className="admin-panel__intro">
+        Members asking to correct their own name or contact details. Accepting
+        records the corrected fact as an ordinary roster change; declining
+        leaves no record on the ledger.
+      </p>
+      <div className="panel-list" style={{ marginBottom: '26px' }}>
+        {loading ? (
+          <p className="loading panel-pad">Loading…</p>
+        ) : requestsError ? (
+          <p className="muted panel-pad">Error: {requestsError}</p>
+        ) : corrections.length === 0 ? (
+          <p className="muted panel-pad">No correction requests.</p>
+        ) : (
+          corrections.map((c) => (
+            <div key={c.id} className="list-row">
+              <div className="admin-row-date">{formatMs(c.createdAt)}</div>
+              <div className="admin-row-main">
+                <div className="admin-row-title">{c.personDisplayName}</div>
+                <div className="admin-row-sub">
+                  {c.kind === 'name'
+                    ? `Name: "${c.proposedValue}"`
+                    : `Contact (${c.channel ?? c.targetChannel ?? 'contact'}): ` +
+                      (c.targetCurrentValue
+                        ? `${c.targetCurrentValue} → ${c.proposedValue}`
+                        : `"${c.proposedValue}" (new)`)}
+                </div>
+                {c.note && <div className="admin-row-sub">Note: {c.note}</div>}
+              </div>
+              <div className="row-actions">
+                <button
+                  className="row-link"
+                  aria-label={`Accept correction from ${c.personDisplayName}`}
+                  onClick={() =>
+                    requestAction(
+                      () => acceptCorrectionRequest(c.id),
+                      'Correction accepted.',
+                    )
+                  }
+                >
+                  Accept
+                </button>
+                <button
+                  className="row-link row-link--danger"
+                  aria-label={`Decline correction from ${c.personDisplayName}`}
+                  onClick={() =>
+                    requestAction(
+                      () => declineCorrectionRequest(c.id),
+                      'Correction declined.',
                     )
                   }
                 >

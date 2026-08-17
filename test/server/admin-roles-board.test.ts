@@ -130,6 +130,18 @@ describe('admin roles — board handoff', () => {
     expect(u.role).toBe('homeowner');
   });
 
+  it('refuses any demotion while only one board member remains — even of a non-board target', async () => {
+    // Bit-for-bit legacy parity: the historical route checked the count
+    // before looking at the target at all, so a board of one answered 409 to
+    // every demotion, including a pointless one. The re-point keeps that
+    // answer rather than quietly changing it to a 204 no-op.
+    await mkUser('rd-solo', 'solo@example.com', 'board');
+    await mkUser('rd-home', 'home@example.com', 'homeowner');
+    const res = await post({ action: 'demote', userId: 'rd-home' });
+    expect(res.status).toBe(409);
+    expect(await res.text()).toBe('Cannot demote the last board member');
+  });
+
   it('never empties the board, even when two demotions race', async () => {
     // The race #221 closes: both requests used to read "two board members
     // remain" and then both update. The count now lives inside the update's
