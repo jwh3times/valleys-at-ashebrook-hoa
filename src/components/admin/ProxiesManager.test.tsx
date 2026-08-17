@@ -247,6 +247,72 @@ describe('ProxiesManager', () => {
     expect(screen.getByText(/Alice Holder/)).toBeInTheDocument();
   });
 
+  describe('inactive grantor warning', () => {
+    // The route accepts an inactive grantor on purpose (historical paper
+    // records), but the phase 3d grantor re-validation refuses the proxy
+    // wherever it would be used — the panel says so at entry time.
+    function grantorProperty() {
+      return property({
+        id: 'p1',
+        address: '100 Main St',
+        owners: [
+          {
+            id: 'o1',
+            propertyId: 'p1',
+            fullName: 'Jane Doe',
+            phone: null,
+            email: null,
+            status: 'active' as const,
+            notes: null,
+          },
+          {
+            id: 'o2',
+            propertyId: 'p1',
+            fullName: 'Prior Owner',
+            phone: null,
+            email: null,
+            status: 'inactive' as const,
+            notes: null,
+          },
+        ],
+      });
+    }
+
+    it('warns that the proxy would be born unusable when the grantor is inactive', async () => {
+      mocked.fetchProxies.mockResolvedValue([]);
+      mocked.fetchProperties.mockResolvedValue([grantorProperty()]);
+      render(<ProxiesManager />);
+      await screen.findByText(/no proxies recorded yet/i);
+
+      await userEvent.selectOptions(screen.getByLabelText(/^property$/i), 'p1');
+      await userEvent.selectOptions(screen.getByLabelText(/^grantor/i), 'o2');
+
+      expect(
+        await screen.findByText(
+          /is not currently an active owner of this lot/i,
+        ),
+      ).toBeInTheDocument();
+      // Entry is still allowed — the warning never disables the form.
+      expect(
+        screen.getByRole('button', { name: /^add proxy$/i }),
+      ).not.toBeDisabled();
+    });
+
+    it('does not warn when the grantor is an active owner', async () => {
+      mocked.fetchProxies.mockResolvedValue([]);
+      mocked.fetchProperties.mockResolvedValue([grantorProperty()]);
+      render(<ProxiesManager />);
+      await screen.findByText(/no proxies recorded yet/i);
+
+      await userEvent.selectOptions(screen.getByLabelText(/^property$/i), 'p1');
+      await userEvent.selectOptions(screen.getByLabelText(/^grantor/i), 'o1');
+
+      expect(
+        screen.queryByText(/is not currently an active owner of this lot/i),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe('edit affordance', () => {
     // Owner requires the full seven-field shape (src/lib/types.ts:205).
     function owner(id: string, fullName: string) {

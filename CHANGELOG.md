@@ -7,6 +7,54 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-17
+
+### Added
+
+- **The board can now run the new neighborhood records from the admin site.**
+  Five new admin panels — Roster, Board, Access, Review, and Compliance —
+  make every record the migration introduced editable: homes and their
+  retirements, people and organizations (including merging duplicates, where
+  the board must explicitly choose which record survives), ownerships and
+  representations with their board-service consequences, contact details,
+  board terms and offices (ending, cancelling, and voiding a term are three
+  distinctly named actions, never one button with a hidden mode), sign-in
+  access grants, and the transfer-review queue — which the board can now
+  both see and resolve. A roster export sits behind a confirmation stating
+  the export is permanently recorded. The Compliance panel is reserved for
+  the System Administrator role that begins at the cutover; until then it
+  explains itself instead of erroring. In production these panels stay held
+  by the maintenance freeze until the cutover's final data load has run.
+- **Two request queues the board can act on.** Verification requests
+  (residents asking the board to verify them by hand) and correction
+  requests (members asking to fix their own name or contact details) now
+  each have a queue in the Members panel with accept and decline actions.
+- **A warning when a proxy is dead on arrival.** Recording a paper proxy
+  whose signer is no longer an active owner of the home is still allowed —
+  the paper record is real — but the entry form now says plainly that the
+  proxy cannot be used.
+
+### Changed
+
+- **The promote, demote, and revoke buttons now act on whichever record
+  system is live.** Before the cutover they behave exactly as they always
+  have; after it, promoting to board records a real access grant (and tells
+  you what roster fact is missing if it can't), and demoting or revoking
+  ends the grants and links the new records actually read. Either way, a
+  button that looks like it worked has worked.
+- The legacy editors are labeled as such — "Homes & owners (legacy)" and
+  "Board access (legacy)" — and the read-only "New roster (preview)" tab,
+  now superseded by the writable panels, is gone.
+
+### Fixed
+
+- **Verification requests are visible to the board again.** Since 0.10.0, a
+  resident asking the board for hands-on verification created a request no
+  admin screen displayed; the new Members-panel queue shows them.
+- Two board members demoting people at the same moment can no longer
+  accidentally empty the board: the "last board member" safeguard now holds
+  even when demotions race.
+
 ## [0.11.0] - 2026-08-16
 
 ### Added
