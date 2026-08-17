@@ -92,17 +92,22 @@ Set `BETTER_AUTH_URL` to the exact production origin visitors use.
 
 ## 4. Apply Migrations
 
-**Merging to `main` applies migrations to production automatically.** `wrangler.toml` sets
-`migrations_dir` on the `DATABASE` binding, so the deploy that follows every merge applies any
-unapplied files as part of that deploy. A schema change is therefore live the moment its pull
-request merges, and it must be safe alongside code that has not shipped yet.
-
-Apply the ledger by hand for a **local** database, or against production only as a catch-up in an
-unusual situation — running it is harmless, since Wrangler skips files already applied:
+**Merging to `main` does NOT apply migrations to production.** Deploys never run D1 migrations —
+this was verified on 2026-08-17, when daily deploys succeeded while five committed migrations sat
+unapplied. Migrations are applied by hand, for the local database and for production alike; the
+command is safe to re-run, since Wrangler tracks applied files in D1 and skips them:
 
 ```bash
 npm run db:migrate:local
 npm run db:migrate:remote
+```
+
+Because merged code can run ahead of the production schema, check parity — the following must list
+nothing unapplied — before trusting schema-dependent code in production, and always before a
+maintenance freeze or backfill:
+
+```bash
+npx wrangler d1 migrations list DATABASE --remote
 ```
 
 Before applying migrations that add referential integrity to an existing remote database, run the

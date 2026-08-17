@@ -7,6 +7,45 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-17
+
+### Added
+
+- **The cutover's account-classification decision now has a switch.** The
+  roster backfill accepts `--classify=<accountId>=technical`, which resolves
+  its one remaining flip-blocking exception — a sign-in account holding board
+  access for technical rather than governance reasons — as a deliberate,
+  printed decision. The classification writes nothing: administrator access
+  under the new model comes only from the cutover's own bootstrap step, so
+  the flag's entire effect is recorded suppression. A classification naming
+  an account that doesn't hold board access blocks the run instead of
+  silently doing nothing.
+
+### Fixed
+
+- **The pre-cutover account sweep now works against the production
+  database.** Run remotely, the sweep previously crashed on Cloudflare's
+  bulk-import output, which reports a single upload summary rather than one
+  answer per query — so the "every account checked" cutover criterion could
+  not actually be measured. Remote runs now use the per-query API, and every
+  response is shape-checked before it is trusted: an answer that isn't the
+  expected list of per-query results is a loud failure, never silently read
+  as "no differences found".
+- **The data-integrity gate no longer fails on a known Windows flake.** The
+  tooling occasionally crashes on exit after its query already finished,
+  which showed up as phantom "query failed" results. Each check now retries a
+  bounded number of times; a real error — like a genuine SQL failure — is
+  reported immediately, and a persistent failure still fails the gate.
+
+### Changed
+
+- **The deployment guide no longer claims database migrations apply
+  themselves.** Observed directly on 2026-08-17: deploys had succeeded for
+  days while five committed migrations sat unapplied. The docs now state the
+  truth — an operator applies migrations manually — and add a standing
+  pre-maintenance check that production's schema is caught up before any
+  freeze, backfill, or other schema-dependent operation.
+
 ## [0.12.0] - 2026-08-17
 
 ### Added
