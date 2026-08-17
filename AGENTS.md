@@ -189,8 +189,11 @@ Markdown twins described below and never the human-readable originals.
   porting the legacy routes would have kept two identity layers alive. The legacy `board_people`
   table itself survives — the meeting record still references it until its Person repointing — so
   the record-keeping pickers (attendance, mover/second, roll call, the candidate link) read a flat
-  `{id, fullName}` list from `GET /api/admin/meetings?roster=people` instead, and the admin app's
-  "The Board" panel is gone until phase 3e's writable board-service surface.
+  `{id, fullName}` list from `GET /api/admin/meetings?roster=people` instead. The legacy "The
+  Board" editor stayed retired; the writable board-service surface is now the phase-3e (#221)
+  **Board** panel (`BoardServicePanel`), which writes `board_service_terms`/
+  `board_office_assignments` through `/api/admin/board-service` (see the ADR 0022 roster routes
+  below), not the legacy `board_people`/`board_terms` tables.
   `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
@@ -367,14 +370,38 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   `deleteIds` document (D1 row + R2 object), and marks the surviving `keepIds` as kept-verified;
   `keepIds` must be non-empty and disjoint from `deleteIds`, while `deleteIds` may be empty for a
   keep-all/mark-reviewed resolution.
-- Board handoff: `GET /api/admin/roles` lists current board; `POST /api/admin/roles` accepts
-  `{ action: 'promote', email }` or `{ action: 'demote', userId }` and returns 409 when attempting
-  to demote the last board member.
+- Board handoff, re-pointed by ADR 0022 phase 3e (#221) onto the same `cutover_mode` branch
+  `/api/verify/*` established: `GET /api/admin/roles` lists current board; `POST /api/admin/roles`
+  accepts `{ action: 'promote', email }` or `{ action: 'demote', userId }`. Under `legacy` both
+  actions write `users.role` exactly as before — `demote`'s last-board-member count-then-update race
+  is now closed by folding the live-board-count check into the update's own `WHERE` (a lost race
+  answers `409` rather than emptying the board), and the historical `409` for demoting anyone while
+  only one board member remains is preserved bit-for-bit. Under `derived`, `promote` instead walks
+  account → Person Link → a current-or-scheduled Board Term and creates a `board` Access Grant plus
+  a `users.role` write-behind mirror in one batch (readable `404`/`409` naming whichever link is
+  missing or already granted), and `demote` ends every live Board grant the account holds, refusing
+  (`409`) if that would leave no other account holding Board Access, then mirrors the role the
+  account derives to afterward — `homeowner` if Lot Authority survives, `visitor` otherwise, `board`
+  if a live `system_admin` grant remains. The shared builders (`grantStatements`,
+  `endBoardGrantsStatements`, and the chain/mirror reads) live in the new
+  `src/server/roster/access.ts`, called by both this route and `/api/admin/access-grants` so the two
+  surfaces can never write different grants.
+- Member revocation, also re-pointed by phase 3e: `GET`/`POST /api/admin/members` lists recently
+  verified homeowners plus the legacy manual-approval queue (write-dead since v0.10.0 — nothing
+  enqueues to it in either cutover mode; its `approve`/`deny` actions stay legacy-queue-only and
+  unbranched). `POST { action: 'revoke', userId }` ends a homeowner's access: under `legacy` it
+  clears `users.role` to `visitor` and deletes the account's `user_property_links`, refusing (`409`)
+  a current board member exactly as before; under `derived` it ends the account's Person Link via
+  the shared `endLinkStatements` (reason `no_longer_qualifies`), writing the same
+  `users.role`/`user_property_links` mirrors in the same batch, and decides the board-member
+  refusal from live Board grants — never from the mirror it is itself writing.
 - ADR 0022 phase 2 roster preview, `requireBoard`-gated and read-only:
   `GET /api/admin/roster-preview` returns structural counts (IDs and non-personal fields only, not
   a roster browser) across five sections — Roster, Board, Access, Review, Compliance — including
   the two ADR 0022 integrity views and shadow-mismatch counts. It is not a public or homeowner
-  surface and does not affect authorization.
+  surface and does not affect authorization. Its phase-2 admin panel (`RosterPreview`) was retired
+  by phase 3e in favor of the five writable panels below; this route and its structural-count shape
+  are unchanged.
 - ADR 0022 phase 3b roster, board-service, and access routes (#218; decided by #202/#203/#205 —
   read those resolution comments before touching any of this). Every mutation here is ONE D1 batch
   of conditional statements — domain writes first, then the immutable-ledger rows built by
@@ -396,7 +423,10 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
     last-System-Administrator invariant lives on exactly this route as a mutation-boundary guard
     (never in evaluation), re-checked inside the batch so concurrent revokes cannot empty the set,
     and a refused attempt is permanently recorded as a denied Access Event. Grants validate the
-    account→Person-Link→term chain and are NEVER created implicitly by anything else.
+    account→Person-Link→term chain and are created only through this route's explicit `grant`
+    action or, as of phase 3e (#221), the board-handoff `/api/admin/roles` `promote` action under
+    `derived` — both call the same `grantStatements` builder in `src/server/roster/access.ts` —
+    never implicitly by anything else.
   - Roster: `GET /api/admin/roster` (full-detail Roster surface with the live Ownerless-Lot
     advisory; single-record reads never write the ledger) plus per-entity `POST` action buses —
     `/api/admin/roster-lots` (`retire` — ends current Ownerships as caused Roster Changes,
@@ -524,8 +554,11 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   other phase-3b/3c registers); `POST { action: 'resolve', id, resolutionCode }` accepts
   `remediated`/`confirmed_valid`/`no_effect` (`400` for `superseded`, reserved for the automatic
   void/correction path above; `409` on an already-resolved flag) and, in one batch, flips the flag
-  and writes an account-attributed `review_flag_resolved` root event. There is no client helper for
-  this route yet; the admin panel is phase 3e's.
+  and writes an account-attributed `review_flag_resolved` root event. `src/lib/roster-admin.ts`'s
+  `fetchReviewFlags`/`resolveReviewFlag` and the phase-3e (#221) **Review** panel (`ReviewPanel`)
+  are its client helper and admin panel: `ReviewPanel` lists every flag with its typed `impacted`
+  reference (rendering `null` rather than hiding the row), offers only the three manual resolution
+  codes, and never offers `superseded`.
 - Board-only document assistant: `POST /api/admin/assistant` (SSE) takes `{ question, history? }`
   and streams a Claude-generated, cited answer over the document library, retrieved via Cloudflare
   AI Search; document excerpts and chat history are pseudonymized (known resident PII replaced with
@@ -604,6 +637,22 @@ fullName}` list from `GET /api/admin/meetings?roster=people` — plus `fetchRost
   (`fetchProxies`, `saveProxy`, `deleteProxy`). `setMemberAttendance`, `setMemberVotes`, and
   `setBallots` each take a `proxyId?: string | null` per entry, replacing the old `viaProxy?:
 boolean`.
+- `src/lib/roster-admin.ts` (ADR 0022 phase 3e, #221) handles board — and, for its three
+  System-Administrator-only actions, capability-gated — writes to every phase 3b/3c/3d roster admin
+  surface, one group per admin panel: Roster (`fetchRoster`, lot retire/correct, party
+  create/correct/consolidate, ownership create/end/void, representation
+  create/end/void/correctScope, contact-method add/end/void/setPreferred, `exportRoster`), Board
+  (`fetchBoardService` plus the nine create/end/cancel/void-term, substitute-qualifying-lot,
+  correct-term, and assign/end/void-office actions), Access
+  (`fetchAccessGrants`/`grantAccess`/`revokeAccess`,
+  `fetchPersonLinks`/`manualVerifyPersonLink`/`unlinkPersonLink`, and the
+  verification-review/correction-request queue helpers), Review
+  (`fetchReviewFlags`/`resolveReviewFlag`), and Compliance
+  (`fetchRedactions`/`redactPersonName`/`redactContactMethod`/`recordRedactionCleanup`,
+  `fetchAccessDenials`, `fetchAuditIntegrity`). `isCapabilityRefusal` identifies the pre-flip `403`
+  every System-Administrator-only helper returns while `cutover_mode = legacy`. The five admin
+  panels (`RosterAdminPanel`, `BoardServicePanel`, `AccessPanel`, `ReviewPanel`, `CompliancePanel`)
+  call only these helpers, never the routes directly.
 - `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for one-time
   homeowner election-ballot and member-motion submissions; failed responses surface their server
   message and never create a receipt.
@@ -944,8 +993,23 @@ module comment), so a proxy whose grantor has since become an inactive owner is 
 and an Ownership `end` reached through `/api/admin/roster-ownerships` resets any open
 member-motion vote for the departing Lot in the shared, legacy-read `member_votes` table. Migration
 `0027` (below) rebuilds `review_flags` — created empty by migration `0020`, given its first writer
-here. Phase 3e (the writable board-service, roster, and Person-Link admin panels — 3b/3c/3d ship
-only the APIs) remains unbuilt, as does the flip itself (#222). Phase 2 adds:
+here. **Phase 3 part e (the writable board-service, roster, and Person-Link admin surface, #221;
+decided by #200/#205) is also now built**: `/api/admin/roles` and `/api/admin/members` are
+re-pointed onto the same `cutover_mode` branch (see the board-handoff and member-revocation entries
+under **HTTP endpoints** above and the new `src/server/roster/access.ts` module), and five admin
+panels — `RosterAdminPanel`, `BoardServicePanel`, `AccessPanel`, `ReviewPanel`, and
+`CompliancePanel`, wired through the new `src/lib/roster-admin.ts` — give the board a writable
+surface over every phase 3b/3c/3d route for the first time; the phase-2 `RosterPreview` panel is
+retired in their favor (its read-only `GET /api/admin/roster-preview` route survives unchanged).
+`MembersManager` also gained the verification-review queue — closing the gap where
+`verification_review_requests` rows had been invisible to the board since v0.10.0 — and the
+correction-requests queue; the legacy manual-approval queue keeps rendering only while it still
+holds pending rows. `ProxiesManager` now warns when a chosen grantor is an inactive owner, the same
+proxy the phase 3d grantor re-validation above would refuse at use. None of this is safe to USE in
+production yet: the surfaces are writable in code, but the phase-2 clean-replace backfill rehearsal
+still erases new-model writes, and only the flip's authoritative (insert-once) backfill makes them
+durable — the deny-by-default write freeze is what makes landing this branch safe ahead of that, and
+#222 owns the sequencing. Only the flip itself (#222) remains before phase 4. Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
@@ -1210,11 +1274,12 @@ in code or copy is the mistake this table exists to prevent. Use these words in 
 | **board member**  | A person who serves on the board. What motions and votes reference.    | `board_people`        | Yes — the record is the point.                                  |
 | **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms`         | Yes — a person may hold several, with gaps.                     |
 
-Sign-in access still has its own panel — **Board access** (`BoardAccessManager`) — and neither
-sense ever writes the other's data. The legacy roster panel (`BoardPanel`) and its routes were
-retired by phase 3b (#218): board service is now recorded in `board_service_terms` through
+Sign-in access still has its own panel — **Board access (legacy)** (`BoardAccessManager`) — and
+neither sense ever writes the other's data. The legacy roster panel (`BoardPanel`) and its routes
+were retired by phase 3b (#218): board service is now recorded in `board_service_terms` through
 `/api/admin/board-service`, the meeting record keeps referencing `board_people` through its
-Person repointing, and the writable Board surface returns as a phase-3e panel. A board member
+Person repointing, and the writable Board surface is the phase-3e (#221) **Board** panel
+(`BoardServicePanel`). A board member
 need not be a board admin, and a board admin need not be a board member. The content
 visibility tier `board` is a fourth use of the word and follows the access sense: it means "visible
 to a board admin". See [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md) for why the
@@ -1251,22 +1316,25 @@ unless its path is named live, so a route added tomorrow is covered before anyon
 and `test/unit/freeze-coverage.test.ts` fails if a mutating route escapes without being declared in
 two files. When adding a route, you must remember its auth guard; you do not have to remember the
 freeze. Site sign-in access for board admins is managed in the admin app's
-**Board access** panel: a board admin can promote another account to `board` and demote a board
-admin, except the last remaining board admin cannot be demoted. A board admin cannot escalate their
-own access beyond `board`. This is distinct from the admin app's **The Board** panel, which records
-who serves on the board and their terms of service (`board_people`/`board_terms`, see **Data
-model** above) and is deliberately independent of `user` rows — promoting or demoting a site
-account has no effect on the roster, and a person can be recorded there with no site login at all;
-see [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md). The first System Administrator
+**Board access (legacy)** panel — re-pointed onto `cutover_mode` by ADR 0022 phase 3e (#221; see the
+board-handoff entry under **HTTP endpoints** above): a board admin can promote another account to
+`board` and demote a board admin, except the last remaining board admin cannot be demoted. A board
+admin cannot escalate their own access beyond `board`. This is distinct from the admin app's
+phase-3e **Board** panel (`BoardServicePanel`), which records who serves on the board and their
+terms of service (`board_service_terms`/`board_office_assignments`, see **Data model** above) and is
+deliberately independent of `user` rows — promoting or demoting a site account has no effect on the
+roster, and a person can be recorded there with no site login at all; the legacy
+`board_people`/`board_terms` shape it replaces for new writes is described in
+[ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md). The first System Administrator
 account is bootstrapped through the permanent fail-closed `POST /api/bootstrap/board` endpoint
 (rewritten by #219; see the ADR 0022 phase 3c HTTP-endpoints entry above), which self-disables once
 its `system_admin_bootstrap` singleton is consumed — not merely once a board account exists, since
 an account can also reach `board` by ordinary promotion; guard and batch logic live in
 `src/server/roster/bootstrap.ts`. The retired `src/server/auth/seed-board.ts` and
 `scripts/seed-board.ts` (the old BOARD_EMAIL/BOARD_PASSWORD/BOARD_NAME signup path) are deleted.
-These role changes are direct D1 writes, not Better Auth admin API calls. The Better Auth admin
-plugin's impersonation, ban, and set-role endpoints are not granted to board sessions; see
-`src/server/auth/permissions.ts`.
+These role changes are direct D1 writes under `legacy`, and Access Grant writes under `derived`,
+never Better Auth admin API calls. The Better Auth admin plugin's impersonation, ban, and set-role
+endpoints are not granted to board sessions; see `src/server/auth/permissions.ts`.
 
 The official-mode homeowner-write API repeats that two-layer pattern. Middleware gates
 `/api/member/*`, and every handler independently opens with `requireMemberApi`; mode off is checked

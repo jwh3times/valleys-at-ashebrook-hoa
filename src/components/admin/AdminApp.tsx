@@ -8,7 +8,11 @@ import DuplicatesManager from './DuplicatesManager';
 import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
 import RosterManager from './RosterManager';
-import RosterPreview from './RosterPreview';
+import RosterAdminPanel from './RosterAdminPanel';
+import BoardServicePanel from './BoardServicePanel';
+import AccessPanel from './AccessPanel';
+import ReviewPanel from './ReviewPanel';
+import CompliancePanel from './CompliancePanel';
 import MembersManager from './MembersManager';
 import BoardAccessManager from './BoardAccessManager';
 import MeetingsManager from './MeetingsManager';
@@ -32,14 +36,33 @@ const SECTIONS = [
     label: 'Duplicates',
     render: () => <DuplicatesManager />,
   },
-  { key: 'roster', label: 'Roster', render: () => <RosterManager /> },
-  // ADR 0022 phase 2: read-only preview of the new roster tables. Sits next to
-  // the legacy Roster panel deliberately — the two are meant to be compared
-  // during the migration, and the legacy one stays authoritative until the flip.
+  // The legacy homes+owners editor. Writable and authoritative until the ADR
+  // 0022 flip; retired in phase 4 (#212).
   {
-    key: 'roster-preview',
-    label: 'New roster (preview)',
-    render: () => <RosterPreview />,
+    key: 'roster',
+    label: 'Homes & owners (legacy)',
+    render: () => <RosterManager />,
+  },
+  // ADR 0022 phase 3e (#221): the five writable surfaces over the party
+  // roster, per #205's taxonomy. They replace the phase-2 read-only preview;
+  // in production their writes stay held by the operator write freeze until
+  // the flip's authoritative backfill has run (#222 owns the sequencing).
+  {
+    key: 'party-roster',
+    label: 'Roster',
+    render: () => <RosterAdminPanel />,
+  },
+  {
+    key: 'board-service',
+    label: 'Board',
+    render: () => <BoardServicePanel />,
+  },
+  { key: 'access', label: 'Access', render: () => <AccessPanel /> },
+  { key: 'review', label: 'Review', render: () => <ReviewPanel /> },
+  {
+    key: 'compliance',
+    label: 'Compliance',
+    render: () => <CompliancePanel />,
   },
   { key: 'members', label: 'Members', render: () => <MembersManager /> },
   {
@@ -63,10 +86,12 @@ const SECTIONS = [
     render: () => <ProxiesManager />,
   },
   {
-    // Site sign-in access, not who serves on the board — see the
-    // "The Board" tab above for the roster of members and their terms.
+    // Legacy site sign-in access (users.role). Its buttons drive the
+    // re-pointed /api/admin/roles, so it acts on whichever model cutover_mode
+    // says is live; the Access panel above is the grant-level surface.
+    // Retired in phase 4 (#212).
     key: 'board',
-    label: 'Board access',
+    label: 'Board access (legacy)',
     render: () => <BoardAccessManager />,
   },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },

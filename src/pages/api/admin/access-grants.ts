@@ -21,9 +21,9 @@ import { associationDateIso } from '../../../lib/format';
 import {
   AuditCorrelation,
   operationKey,
-  insertedRowGuard,
   ALWAYS,
 } from '../../../server/roster/audit';
+import { grantStatements } from '../../../server/roster/access';
 import { fetchAccessGrantsDetail } from '../../../server/roster/reads';
 
 // ADR 0022 phase 3b (#218): Access Grants, per #203's resolution. Board
@@ -129,78 +129,28 @@ async function grantAccess(body: unknown, ctx: AuthContext): Promise<Response> {
       status: 409,
     });
 
-  const id = crypto.randomUUID();
-  const nowMs = Date.now();
-  const grantReason =
-    grantType === 'board' ? 'board_service' : 'technical_administration';
-  // Every precondition re-checked at the mutation boundary: no live same-type
-  // grant, the link still current and still the term's person, the term still
-  // supporting a grant.
-  const termGuardSql =
-    grantType === 'board'
-      ? `AND EXISTS (
-           SELECT 1 FROM board_service_terms t
-           JOIN person_links pl ON pl.person_id = t.person_id
-           WHERE t.id = ? AND pl.account_id = ? AND pl.ended_at IS NULL
-             AND t.cancelled_at IS NULL AND t.voided_at IS NULL
-             AND ? < COALESCE(t.actual_end_day, t.scheduled_end_day)
-         )`
-      : `AND EXISTS (
-           SELECT 1 FROM person_links pl
-           WHERE pl.account_id = ? AND pl.ended_at IS NULL
-         )`;
-  const termGuardBinds =
-    grantType === 'board'
-      ? [qualifyingBoardTermId, accountId, associationDay]
-      : [accountId];
-  const primary = env.DATABASE.prepare(
-    `INSERT INTO access_grants (id, account_id, grant_type, qualifying_board_term_id, started_at, granted_by_account_id, grant_reason)
-     SELECT ?, ?, ?, ?, ?, ?, ?
-     WHERE NOT EXISTS (
-         SELECT 1 FROM access_grants WHERE account_id = ? AND grant_type = ? AND ended_at IS NULL
-       )
-       ${termGuardSql}`,
-  ).bind(
-    id,
+  // Every precondition is re-checked at the mutation boundary — no live
+  // same-type grant, the link still current and still the term's person, the
+  // term still supporting a grant — by the shared builder, which the
+  // re-pointed board-handoff route (#221) calls too so the two surfaces
+  // cannot write different grants.
+  const batch = grantStatements({
+    database: env.DATABASE,
     accountId,
     grantType,
-    grantType === 'board' ? qualifyingBoardTermId : null,
-    nowMs,
-    ctx.userId,
-    grantReason,
-    accountId,
-    grantType,
-    ...termGuardBinds,
-  );
-
-  const correlation = new AuditCorrelation(env.DATABASE, {
-    operationKey: operationKey('access-grants', 'grant'),
+    qualifyingBoardTermId: grantType === 'board' ? qualifyingBoardTermId : null,
+    associationDay,
     actorAccountId: ctx.userId,
-    nowMs,
-  });
-  correlation.event({
-    kind: 'grant_created',
-    guard: insertedRowGuard('access_grants', id),
-    detail: {
-      family: 'access',
-      grantId: id,
-      targetAccountId: accountId,
-      grantType,
-      requestedAction: 'grant',
-      outcome: 'allowed',
-      reason: grantReason,
-    },
+    nowMs: Date.now(),
+    operationKey: operationKey('access-grants', 'grant'),
   });
 
-  const results = await env.DATABASE.batch([
-    primary,
-    ...correlation.statements,
-  ]);
+  const results = await env.DATABASE.batch(batch.statements);
   if (results[0].meta.changes !== 1)
     return new Response('Grant conflicts with the current state', {
       status: 409,
     });
-  return Response.json({ id }, { status: 201 });
+  return Response.json({ id: batch.grantId }, { status: 201 });
 }
 
 /** Permanently records the refused attempt to change the last System
