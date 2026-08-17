@@ -14,8 +14,8 @@
 // makes the distinction typed: callers get per-statement results or a refusal
 // naming the shape, never a silent misread.
 
-export interface D1StatementResult {
-  results?: unknown[];
+export interface D1StatementResult<T = unknown> {
+  results?: T[];
 }
 
 export type D1ParseOutcome =
@@ -138,11 +138,18 @@ export function chunkStatements(
  * already completed, so subprocess callers see phantom failures. A gate that
  * flakes is not a gate — but a gate that retries forever is not one either, so
  * the bound is small and a persistent failure still fails.
+ *
+ * `shouldRetry` lets a caller stop early on failures it can prove are
+ * deterministic (a wrangler-reported SQL error, say) so only genuinely
+ * transient crashes burn attempts.
  */
 export function withRetry<T>(
   fn: () => T,
   attempts: number,
-  onRetry?: (failedAttempt: number, error: unknown) => void,
+  options: {
+    onRetry?: (failedAttempt: number, error: unknown) => void;
+    shouldRetry?: (error: unknown) => boolean;
+  } = {},
 ): T {
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -150,7 +157,8 @@ export function withRetry<T>(
       return fn();
     } catch (error) {
       lastError = error;
-      if (attempt < attempts) onRetry?.(attempt, error);
+      if (options.shouldRetry && !options.shouldRetry(error)) break;
+      if (attempt < attempts) options.onRetry?.(attempt, error);
     }
   }
   throw lastError;

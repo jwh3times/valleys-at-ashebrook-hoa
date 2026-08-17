@@ -150,12 +150,29 @@ describe('withRetry', () => {
         return 'ok';
       },
       3,
-      onRetry,
+      { onRetry },
     );
     expect(value).toBe('ok');
     expect(calls).toBe(3);
     expect(onRetry).toHaveBeenCalledTimes(2);
     expect(onRetry).toHaveBeenLastCalledWith(2, expect.any(Error));
+  });
+
+  it('stops immediately on a failure the caller proves deterministic', () => {
+    // A wrangler-reported SQL error is a real answer; re-running it three
+    // times would only delay the red gate.
+    let calls = 0;
+    expect(() =>
+      withRetry(
+        () => {
+          calls += 1;
+          throw new Error('no such table: nope');
+        },
+        3,
+        { shouldRetry: (e) => !(e instanceof Error) },
+      ),
+    ).toThrow('no such table');
+    expect(calls).toBe(1);
   });
 
   it('rethrows the last error after the bound — a persistent failure still fails', () => {
