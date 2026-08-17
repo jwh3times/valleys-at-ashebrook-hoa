@@ -55,9 +55,9 @@ const ALLOWED = new Set([
   'server/authz/cutover-mode.ts',
   // The failed-grant-re-validation Access Event writer (#217, option 1).
   'server/authz/revalidation-event.ts',
-  // The read-only admin preview and its route.
+  // The read-only admin preview route. (Its phase-2 panel, RosterPreview.tsx,
+  // was retired by phase 3e in favor of the five writable panels.)
   'pages/api/admin/roster-preview.ts',
-  'components/admin/RosterPreview.tsx',
 ]);
 
 /**
@@ -98,8 +98,14 @@ const NEW_MODEL_SURFACE = new Set([
   'pages/api/admin/verification-requests.ts',
   // Phase 3d (#220): transfer-time effects and the review-flag queue.
   'pages/api/admin/review-flags.ts',
+  // Phase 3e (#221): the two legacy role surfaces, re-pointed behind the
+  // cutover flag. Their `derived` branch writes Access Grants and Person Link
+  // endings; their `legacy` branch is unchanged.
+  'pages/api/admin/roles.ts',
+  'pages/api/admin/members.ts',
   // Shared server modules for the routes above.
   'server/roster/audit.ts',
+  'server/roster/access.ts',
   'server/roster/reads.ts',
   'server/roster/board-consequences.ts',
   'server/roster/verification.ts',
