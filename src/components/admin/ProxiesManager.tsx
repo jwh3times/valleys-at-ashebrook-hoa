@@ -82,6 +82,16 @@ export default function ProxiesManager() {
     properties.find((p) => p.id === form.propertyId)?.owners ?? [];
   const allOwners = properties.flatMap((p) => p.owners);
 
+  // The route deliberately accepts an inactive grantor, so that a historical
+  // paper proxy can still be entered. Since the phase 3d grantor
+  // re-validation, though, such a proxy is refused wherever it would be USED
+  // (attendance, member votes, ballots) — so say so at entry rather than let
+  // the board discover it months later.
+  const selectedGrantor = grantorOptions.find(
+    (o) => o.id === form.grantorOwnerId,
+  );
+  const grantorInactive = selectedGrantor?.status === 'inactive';
+
   function resetForm() {
     setForm(emptyProxy);
     setEditingId(null);
@@ -259,9 +269,22 @@ export default function ProxiesManager() {
               {grantorOptions.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.fullName}
+                  {o.status === 'inactive' ? ' (inactive)' : ''}
                 </option>
               ))}
             </select>
+            {grantorInactive && (
+              <p
+                className="form-message form-message--error"
+                role="alert"
+                style={{ marginTop: '8px' }}
+              >
+                {selectedGrantor?.fullName} is not currently an active owner of
+                this lot. The proxy can still be recorded for the paper record,
+                but it cannot be used: attendance, votes, and ballots refuse a
+                proxy whose grantor is no longer an active owner.
+              </p>
+            )}
           </div>
         </div>
         <div className="field-grid" style={{ marginBottom: '16px' }}>
