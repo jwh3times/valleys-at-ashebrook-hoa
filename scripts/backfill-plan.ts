@@ -92,12 +92,28 @@ export interface PlanOptions {
    * on one act.
    */
   mode?: 'rehearsal' | 'authoritative';
+  /**
+   * Operator classifications for `board_account_unclassified` (#222). The only
+   * accepted value is `technical`: the account holds `role = 'board'` for
+   * operational rather than governance reasons, so its blocking exception is
+   * suppressed ON THE RECORD — the decision lands in `BackfillPlan.decisions` —
+   * and NO rows are planned, because System Administration Access arrives only
+   * via the System Administrator Bootstrap, never from the backfill. A Board
+   * Member classification is deliberately not offered: it would need a
+   * qualifying Lot and a scheduled end, which are Board-panel facts, not
+   * command-line arguments; the flag grows only if a future site state ever
+   * needs one.
+   */
+  classifications?: Record<string, 'technical'>;
 }
 
 export interface BackfillPlan {
   statements: string[];
   exceptions: PlanException[];
   counts: PlanCounts;
+  /** Operator decisions the plan applied — printed so a suppressed exception
+   * is a recorded judgment, never a silent absence. */
+  decisions: string[];
 }
 
 /**
@@ -246,6 +262,7 @@ export function buildPlan(
   const baseline: string[] = [];
   const operator = options.operatorAccountId ?? null;
   const exceptions: PlanException[] = [];
+  const decisions: string[] = [];
   const add = (queue: ExceptionQueue, kind: string, detail: string) =>
     exceptions.push({ queue, kind, detail });
 
@@ -567,13 +584,34 @@ export function buildPlan(
   // account holding `role = 'board'` for technical rather than governance
   // reasons has no seat in the new model except System Administration Access.
   // Both possible defaults are wrong: one invents governance authority, the
-  // other hands out the strictly larger grant.
+  // other hands out the strictly larger grant. The operator resolves each
+  // account explicitly — a `technical` classification suppresses the exception
+  // and plans nothing (see `PlanOptions.classifications`).
+  const classifications = options.classifications ?? {};
   for (const a of data.boardAccounts) {
+    if (classifications[a.id] === 'technical') {
+      decisions.push(
+        `account ${a.id} classified as technical administrator: no Board Term, no rows — ` +
+          `System Administration Access arrives only via the bootstrap`,
+      );
+      continue;
+    }
     add(
       'blocking',
       'board_account_unclassified',
       `account ${a.id} holds role='board'; classify as Board Member or technical administrator`,
     );
+  }
+  // A classification naming no role='board' account is a typo, and a typo that
+  // silently does nothing is how the wrong account stays suppressed.
+  for (const id of Object.keys(classifications)) {
+    if (!data.boardAccounts.some((a) => a.id === id)) {
+      add(
+        'blocking',
+        'classification_unmatched',
+        `--classify names account ${id}, which does not hold role='board'`,
+      );
+    }
   }
 
   // Baseline last: every event names a domain row through a RESTRICT foreign
@@ -586,6 +624,7 @@ export function buildPlan(
         : ordered,
     exceptions,
     counts,
+    decisions,
   };
 }
 

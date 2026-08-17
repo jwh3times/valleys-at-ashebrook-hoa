@@ -91,6 +91,25 @@ function main(): void {
   const operator =
     argv.find((a) => a.startsWith('--operator='))?.split('=')[1] ?? null;
 
+  // --classify=<accountId>=technical (#222): resolves that account's
+  // `board_account_unclassified` blocking exception, on the record and with no
+  // rows planned. `technical` is the only value; a Board Member classification
+  // needs a qualifying Lot and a scheduled end, which are Board-panel facts.
+  const classifications: Record<string, 'technical'> = {};
+  for (const arg of argv.filter((a) => a.startsWith('--classify='))) {
+    const value = arg.slice('--classify='.length);
+    const sep = value.lastIndexOf('=');
+    const accountId = sep === -1 ? '' : value.slice(0, sep);
+    const kind = sep === -1 ? value : value.slice(sep + 1);
+    if (accountId === '' || kind !== 'technical') {
+      console.error(
+        `Malformed ${arg} — the only supported form is --classify=<accountId>=technical.`,
+      );
+      process.exit(2);
+    }
+    classifications[accountId] = 'technical';
+  }
+
   if (!remote && !argv.includes('--local')) {
     console.error('Pass --local or --remote.');
     process.exit(2);
@@ -135,6 +154,7 @@ function main(): void {
   const plan = buildPlan(data, Date.now(), {
     operatorAccountId: operator,
     mode: authoritative ? 'authoritative' : 'rehearsal',
+    classifications,
   });
   const blocking = plan.exceptions.filter((e) => e.queue === 'blocking');
   const advisory = plan.exceptions.filter((e) => e.queue === 'advisory');
@@ -157,6 +177,11 @@ function main(): void {
         ? '  (pass --operator to plan the audit baseline)'
         : ''),
   );
+
+  if (plan.decisions.length > 0) {
+    console.log('\nOperator decisions applied:');
+    for (const d of plan.decisions) console.log(`  ${d}`);
+  }
 
   report('FLIP-BLOCKING', blocking);
   report('advisory', advisory);
