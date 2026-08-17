@@ -69,17 +69,29 @@ async function promoteLegacy(accountId: string): Promise<Response> {
 }
 
 /**
- * Today's contract with the count-then-update race closed: the "another board
- * member remains" test moved INTO the update's WHERE, so two concurrent
- * demotions of the final two board members serialize and the second finds
- * nobody else and refuses.
+ * Today's contract, bit-for-bit, with the count-then-update race closed.
+ *
+ * The pre-check reproduces the historical answers exactly — including the
+ * edge where the board is down to one member and the target is not a board
+ * member at all, which has always refused rather than no-op — and the
+ * "another board member remains" test is ALSO inside the update's WHERE, so
+ * two concurrent demotions of the final two board members serialize and the
+ * loser refuses instead of emptying the board.
  *
  * A zero-row result is disambiguated afterwards rather than assumed to be the
- * refusal: demoting an account that is not (or is no longer) a board member
- * has always answered 204, and a read taken after a write that did not happen
- * cannot reintroduce the race.
+ * refusal: with two or more board members, demoting an account that is not
+ * (or is no longer) a board member has always answered 204, and a read taken
+ * after a write that did not happen cannot reintroduce the race.
  */
 async function demoteLegacy(accountId: string): Promise<Response> {
+  const board = await getDb(env)
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.role, 'board'));
+  if (board.length <= 1)
+    return new Response('Cannot demote the last board member', {
+      status: 409,
+    });
   const result = await env.DATABASE.prepare(
     `UPDATE users SET role = 'visitor'
      WHERE id = ? AND role = 'board'

@@ -170,17 +170,22 @@ export const POST: APIRoute = async ({ request, locals }) => {
   };
   if (body.action === 'revoke') {
     if (!body.userId) return new Response('Bad Request', { status: 400 });
+    if ((await getCutoverMode(env)) === 'derived') {
+      // The board-member refusal is decided inside revokeDerived from live
+      // Access Grants — never from the users.role mirror, which this mode
+      // only writes.
+      const ctx = await resolveAuthContext(locals, request, env);
+      if (!ctx) return new Response('Unauthorized', { status: 401 });
+      return revokeDerived(body.userId, ctx.userId);
+    }
+    // Legacy branch: users.role IS the authoritative store here, so reading
+    // it to refuse is the pre-3e behavior, kept bit-for-bit.
     const [target] = await db
       .select({ role: users.role })
       .from(users)
       .where(eq(users.id, body.userId));
     if (target?.role === 'board')
       return new Response(BOARD_MEMBER_REFUSAL, { status: 409 });
-    if ((await getCutoverMode(env)) === 'derived') {
-      const ctx = await resolveAuthContext(locals, request, env);
-      if (!ctx) return new Response('Unauthorized', { status: 401 });
-      return revokeDerived(body.userId, ctx.userId);
-    }
     await db
       .update(users)
       .set({ role: 'visitor' })

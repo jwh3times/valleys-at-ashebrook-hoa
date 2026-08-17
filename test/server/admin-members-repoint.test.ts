@@ -373,17 +373,25 @@ describe('revoke under derived', () => {
     ).toHaveLength(1);
   });
 
-  it('still refuses a stored board member', async () => {
+  it('ignores a stale board mirror when no live grant supports it', async () => {
+    // Under `derived` the board-member refusal is decided from live Access
+    // Grants, never from the users.role mirror — a mirror stuck at 'board'
+    // (say, after a grant was revoked out-of-band) must not block revoking
+    // the Person Link, and the revoke corrects the mirror on its way out.
     await setMode('derived');
+    await seedPersonLink('acct-1', 'per-1');
     await getDb(env)
       .update(users)
       .set({ role: 'board' })
       .where(eq(users.id, 'acct-1'));
     const res = await post({ action: 'revoke', userId: 'acct-1' });
-    expect(res.status).toBe(409);
-    expect(await res.text()).toBe(
-      'Cannot demote a board member here; use Board members.',
-    );
+    expect(res.status).toBe(204);
+    const [link] = await getDb(env)
+      .select()
+      .from(personLinks)
+      .where(eq(personLinks.id, 'link-acct-1'));
+    expect(link.endedAt).not.toBeNull();
+    expect(await roleOf('acct-1')).toBe('visitor');
   });
 });
 
