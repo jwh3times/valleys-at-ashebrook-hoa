@@ -119,11 +119,12 @@ describe('AdminApp', () => {
     ).toBeInTheDocument();
   });
 
-  it('offers a Board access tab', () => {
+  it('offers a legacy Board access tab', () => {
     // #218 retired the separate "The Board" roster panel (BoardPanel), which
     // read/wrote the legacy board_people/board_terms tables through the now-
     // removed /api/admin/board-people and /api/admin/board-terms routes.
-    // Board access (sign-in rank) is unaffected and still gets its own tab.
+    // Board access (sign-in rank) is unaffected and still gets its own tab,
+    // relabeled "(legacy)" by phase 3e when the Access panel arrived.
     vi.mocked(useAuth).mockReturnValue({
       loading: false,
       user: fakeUser,
@@ -131,10 +132,30 @@ describe('AdminApp', () => {
     });
     render(<AdminApp />);
     expect(
-      screen.getByRole('button', { name: 'Board access' }),
+      screen.getByRole('button', { name: 'Board access (legacy)' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'The Board' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers the five ADR 0022 phase-3e panels and retires the preview', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    for (const label of ['Roster', 'Board', 'Access', 'Review', 'Compliance']) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    }
+    // The legacy homes+owners editor is relabeled, not removed…
+    expect(
+      screen.getByRole('button', { name: 'Homes & owners (legacy)' }),
+    ).toBeInTheDocument();
+    // …and the phase-2 read-only preview tab is gone.
+    expect(
+      screen.queryByRole('button', { name: 'New roster (preview)' }),
     ).not.toBeInTheDocument();
   });
 });
