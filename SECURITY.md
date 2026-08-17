@@ -39,12 +39,20 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   a holder in the later voting flow without exposing a browsable roster, but a verified homeowner
   can still repeat address queries to collect those names and IDs. That accepted tradeoff and a
   possible future rate limiter are recorded in ADR 0019.
-- **`board` is never self-grantable, and board handoff is a supported workflow.** A user's role is
-  a column on the user record. A board admin can promote another account to `board` and demote a
-  board admin from the admin panel's **Board access** section (the last remaining board admin
-  can't be demoted), but cannot escalate their own access beyond `board`. These are direct database
-  writes: the Better Auth admin plugin's impersonation, ban, and set-role endpoints are deliberately
-  not granted to board sessions. The first System Administrator account is bootstrapped through a
+- **`board` is never self-grantable, and board handoff is a supported workflow.** `POST
+/api/admin/roles` (`promote`/`demote`, the admin panel's **Board access (legacy)** section — the
+  last remaining board admin can't be demoted, and a board admin can't escalate their own access
+  beyond `board`) was re-pointed by ADR 0022 phase 3e (#221) onto the same `cutover_mode` branch as
+  `/api/verify/*`: under `legacy` it still writes the `users.role` column directly (the demote race
+  is now closed by folding the live-board-count check into the update's own `WHERE` instead of a
+  separate count-then-update); under `derived` it instead grants or ends a `board` Access Grant
+  against the account's Person Link and current-or-scheduled Board Term
+  (`src/server/roster/access.ts`, shared with `/api/admin/access-grants` so the two surfaces can
+  never write different grants), carrying `users.role` along only as a write-behind mirror. Both
+  branches preserve the last-board-member refusal and the no-self-escalation rule exactly. These are
+  direct database writes either way: the Better Auth admin plugin's impersonation, ban, and set-role
+  endpoints are deliberately not granted to board sessions. The first System Administrator account
+  is bootstrapped through a
   permanent, fail-closed `POST /api/bootstrap/board` endpoint (rewritten by #219) that self-disables
   (`410`) the moment its one-time `system_admin_bootstrap` record is written — not merely "once a
   board account exists," since an account can also be promoted board by ordinary means. It requires,
@@ -63,6 +71,10 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
 /api/admin/person-links` `manualVerify`, and its `POST /api/admin/verification-requests` `accept`
   counterpart) only ever links an EXISTING Person to an account — it never creates a Person and
   never grants access on its own — keeping identity and authority as separate decisions.
+  `POST /api/admin/members`'s `revoke` action ends the same way under `derived` (phase 3e, #221:
+  `endLinkStatements`, reason `no_longer_qualifies`, refusing a current board member — demote that on
+  the board-handoff surface first); under `legacy` it keeps clearing `users.role` and deleting
+  `user_property_links` directly, unchanged.
 - **A public member meeting publishes each represented property's address alongside its vote,
   gated only by the meeting's own visibility tier.** The meeting record's public pages
   (`/meetings`, `/meetings/[id]`, rendered server-side via `fetchMeetingsFor`/`fetchMeetingFor` —
