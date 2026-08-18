@@ -164,12 +164,34 @@ create a new account from board credentials.
      --cookie "<your session cookie>" \
      -d '{"personId":"<party_id from step 2>"}'
    ```
+   The session cookie is `httpOnly`, so it has to be copied out of the browser's devtools by
+   hand — easy to mangle, and a mangled value looks exactly like an auth failure (`401`). The
+   reliable alternative is to send the request from the site's own devtools **Console**, where a
+   same-origin `fetch` attaches the cookie and a correct `Origin` automatically:
+   ```javascript
+   await fetch('/api/bootstrap/board', {
+     method: 'POST',
+     headers: {
+       'x-bootstrap-secret': '<BOOTSTRAP_SECRET>',
+       'content-type': 'application/json',
+     },
+     body: JSON.stringify({ personId: '<party_id from step 2>' }),
+   }).then((r) => r.status); // expect 204
+   ```
+   Delete the secret afterwards (`npx wrangler secret delete BOOTSTRAP_SECRET`). Note that in
+   PowerShell `curl` is an alias for `Invoke-WebRequest`; use `curl.exe` if you take the curl
+   route there.
 
 A successful call links the account to that Person, records a `bootstrap` Person Verification,
 grants `system_admin` Access, and mirrors `users.role = 'board'` so the admin panel works
 immediately. Keep the exact bootstrap command, secret, and session details in private operations
 notes. After the first account exists, board and System Administrator access are managed from
 `/admin`.
+
+This section describes a **fresh** deployment. On the existing production deployment bootstrap has
+already run — it was step 4 of the ADR 0022 phase 3f flip on 2026-08-18 — so the endpoint there is
+permanently disabled and answers `410`. Additional System Administrators are granted from the admin
+**Access** panel by an existing one; the last live `system_admin` grant cannot be revoked.
 
 ## 7. Import Documents
 

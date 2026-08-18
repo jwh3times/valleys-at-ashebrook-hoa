@@ -7,6 +7,48 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-08-17
+
+### Changed
+
+- **The neighborhood's records now run on the new roster, and the
+  documentation says so.** The migration's final cutover was carried out on
+  the live site: from now on, who may see and do what is worked out from the
+  roster itself — which people are linked to which sign-in accounts, which
+  homes they own or represent, which board terms they hold, and which access
+  they have been granted — rather than from a role stored on the account. The
+  old role column survives only as a copy kept in step for the sign-in system;
+  nothing reads it to make a decision. Every project document that still said
+  the old model was live has been corrected, including the one-line summary
+  of what a "board admin" is and where it lives, so anyone — person or
+  agent — reading them now starts from what the site actually does.
+- **Written down what must never be run against the live database again.**
+  The roster import tool has two modes: the original one wipes the roster and
+  rebuilds it, which was safe only while the new records were unused, and the
+  cutover mode, which only ever adds. Now that the live roster is real, the
+  wipe-and-rebuild mode would destroy it along with its permanent history, so
+  the documentation states plainly that any future run against production
+  must use the add-only mode.
+- **The first-administrator setup instructions now describe what actually
+  works.** The one-time bootstrap needs the operator's signed-in session, and
+  copying that session by hand out of browser developer tools is easy to get
+  wrong in a way that looks exactly like a rejected password. The guide now
+  offers the reliable alternative — issuing the request from the site's own
+  developer console, where the browser supplies the session itself — notes the
+  PowerShell naming collision that silently changes what `curl` means, and
+  records that this deployment's bootstrap has already been used and is
+  permanently closed.
+
+## [0.13.1] - 2026-08-17
+
+### Changed
+
+- Routine dependency maintenance: `@anthropic-ai/sdk`, `astro`,
+  `@astrojs/cloudflare`, `better-auth`, `@cloudflare/vitest-pool-workers`,
+  `@cloudflare/workers-types`, `@napi-rs/canvas`, and
+  `@testing-library/user-event` moved to their current minor and patch
+  releases. No behavior change.
+
 ## [0.13.0] - 2026-08-17
 
 ### Added

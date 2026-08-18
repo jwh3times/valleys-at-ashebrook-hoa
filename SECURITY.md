@@ -59,7 +59,11 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   in order, a constant-time `x-bootstrap-secret` match against `BOOTSTRAP_SECRET`, an already
   authenticated session, and a body naming an existing, unconsolidated roster Person to link (see
   `SETUP.md` §6). The retired BOARD_EMAIL/BOARD_PASSWORD/BOARD_NAME signup path — which used to
-  create a brand-new account directly from board credentials — is gone.
+  create a brand-new account directly from board credentials — is gone. **On this deployment the
+  singleton was consumed during the ADR 0022 phase 3f flip on 2026-08-18, so the endpoint is now
+  permanently disabled and answers `410` to every caller**; further System Administrators are
+  granted through `/api/admin/access-grants` by an existing one, and the last live `system_admin`
+  grant cannot be revoked.
 - **A homeowner can end their own Person Link at any time, and a board caller can end anyone's.**
   `POST /api/verify/unlink` (session-gated only — deliberately outside `officialMode` and
   `/api/member/*`, since an account must always be able to disown a bad link) and the board's
@@ -206,10 +210,11 @@ records, a code has been sent.' }` for success, an unknown address, an unmatched
   the response alone whether an address, a name, or a rate limit caused a given outcome.
   `POST /api/verify/confirm` is equally non-committal: every internal failure collapses to
   `{ ok: false, reason: 'mismatch' }` except `expired`/`locked`, which keep their own reason. Which
-  backend answers is decided by `cutover_mode` (see below). Under the current production default,
-  `legacy`, sign-up matches by address only and fans the code out to every active owner contact on
-  file for the chosen channel — no name is matched yet. Once the flip sets `cutover_mode =
-derived`, sign-up additionally matches the claimed name against the Lot's current Person owners
+  backend answers is decided by `cutover_mode` (see below), which since the phase 3f flip reads
+  `derived` in production. Under the retained `legacy` backend, sign-up matches by address only and
+  fans the code out to every active owner contact on file for the chosen channel, matching no name.
+  Under `derived`, which is what production runs, sign-up additionally matches the claimed name
+  against the Lot's current Person owners
   (an exact normalized match, or a first-and-last-token match if none matched exactly) and sends a
   single code to that one matched Person's own contact — never a fan-out — and only if that contact
   is uniquely attributable to one Party roster-wide. Codes are stored only as keyed HMAC-SHA-256
@@ -229,8 +234,12 @@ derived`, sign-up additionally matches the claimed name against the Lot's curren
   guard resolves its caller through (`src/server/authz/context.ts`). It fails closed to
   **`legacy`** — the opposite polarity from the operator write freeze below, because refusing is
   not the safe answer on this axis; the safe answer is whichever model has already been serving
-  production. An absent row is the normal pre-flip state, and the flag today remains at that
-  default: legacy `users.role`/`user_property_links` decide every request in production.
+  production. **The phase 3f flip executed on 2026-08-18, so the singleton now reads `derived` and
+  the party roster decides every request**: capabilities and content tier are recomputed per
+  request from the caller's Person Link, Ownerships, Representations, Board Terms, and Access
+  Grants, with every stored grant re-validated against current facts. Legacy
+  `users.role`/`user_property_links` are written behind as mirrors and read for authorization only
+  if the flag is written back to `legacy`, which remains possible and is what an absent row means.
 - **The ADR 0022 derived-authorization layer cannot change a live authorization decision and
   records only non-personal comparison data.** `src/server/authz/derive.ts` computes a second,
   independent authorization context from the new party-roster tables, re-validating every stored
