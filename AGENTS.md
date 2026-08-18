@@ -408,9 +408,10 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   `src/server/roster/audit.ts`'s `AuditCorrelation` (one command = one correlation; root event
   seq 0 with a unique `operation_key`; consequences name the root as cause), every statement gated
   so a lost race leaves ZERO rows anywhere, with `meta.changes` on the primary deciding the `409`.
-  Until the flip, rows written through these routes exist only in the new model (production still
-  serves `legacy`), and a clean-replace backfill REHEARSAL would erase them — sequencing owned by
-  #222. The surfaces, all `requireBoard`-gated unless noted:
+  Since the phase 3f flip these routes write the roster production actually runs on, and the
+  authoritative backfill that seeded it is insert-once, so the clean-replace mode that once could
+  have erased their rows is permanently retired. The surfaces, all `requireBoard`-gated unless
+  noted:
   - `/api/admin/board-service` — `GET` (terms + offices + live-derived composition advisories:
     below-three/above-five, vacant offices, expiring and lapsed terms) and a `POST` action bus
     with NO `PATCH`: `createTerm`, `endTerm`, `cancelTerm`, `voidTerm` (the three disjoint ending
@@ -457,16 +458,19 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     `redactContactMethod` under `redactionAuthorize` — value and marker nulled together, at least
     one `redaction_tasks` row always created so the integrity view holds; `recordCleanup` under
     `redactionCleanup`, operational only), `GET /api/admin/access-denials`
-    (`accessDenialDetail`), and `GET /api/admin/audit-integrity` (`auditIntegrityViews`). Under
-    `cutover_mode = legacy` nobody holds these capabilities, so the three answer 403 for every
-    caller until the flip — by design.
+    (`accessDenialDetail`), and `GET /api/admin/audit-integrity` (`auditIntegrityViews`). These
+    capabilities come only with a live `system_admin` grant, so under `derived` they answer only
+    the System Administrator (one exists since the phase 3f bootstrap) and 403 everyone else; if
+    the flag were ever written back to `legacy`, nobody holds them and all three answer 403 for
+    every caller — by design.
   - Member correction requests: `GET /api/member/roster-self` (own Person, Contact Methods,
     Ownerships, Representations, open requests — never the ledger, never another party's data)
     and `GET`/`POST`/`DELETE /api/member/correction-requests` (own name and own Contact Methods
     only; requests are operational rows whose free text NEVER enters the ledger; withdrawal and
     out-of-scope ids mask as `404`). Both use `requireMemberApi` and then answer the deliberate
-    no-Person-Link `403` pointing at verification — which under `legacy` is every caller, until
-    the flip.
+    no-Person-Link `403` pointing at verification — under `derived` that is any caller whose
+    account has not been linked to a Person; under `legacy`, which has no Person concept, it is
+    every caller.
 - ADR 0022 phase 3c Person Verification / Person Link routes (#219; decided by #201, amended by
   #202). `/api/verify/{request,confirm}` are now ONE route contract answered by TWO backends
   branched on `getCutoverMode`: `legacy` keeps the existing property flow (address match,
@@ -649,8 +653,9 @@ boolean`.
   verification-review/correction-request queue helpers), Review
   (`fetchReviewFlags`/`resolveReviewFlag`), and Compliance
   (`fetchRedactions`/`redactPersonName`/`redactContactMethod`/`recordRedactionCleanup`,
-  `fetchAccessDenials`, `fetchAuditIntegrity`). `isCapabilityRefusal` identifies the pre-flip `403`
-  every System-Administrator-only helper returns while `cutover_mode = legacy`. The five admin
+  `fetchAccessDenials`, `fetchAuditIntegrity`). `isCapabilityRefusal` identifies the bare `403`
+  every System-Administrator-only helper returns to a caller holding no live `system_admin` grant
+  — which, while `cutover_mode = legacy`, is every caller. The five admin
   panels (`RosterAdminPanel`, `BoardServicePanel`, `AccessPanel`, `ReviewPanel`, `CompliancePanel`)
   call only these helpers, never the routes directly.
 - `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for one-time
@@ -700,7 +705,8 @@ boolean`.
   `derivedContext(deriveAccess(...))` (below). `getCutoverMode` fails closed to **`legacy`** — the
   opposite polarity from the write freeze below, deliberately: the freeze falls back to frozen
   because refusing is the restrictive answer, while the safe answer here is whichever model is
-  already serving production; an absent row is the normal pre-flip state. `associationDay` is a
+  already serving production. Since the phase 3f flip the row exists and reads `derived`; an
+  absent row now means the singleton was never written, and answers `legacy`. `associationDay` is a
   required third parameter, computed once per request by `src/middleware.ts` and by
   `resolveAuthContext` (middleware-first caller resolution with a fail-closed fallback) via
   `associationDateIso()`, never read from `locals` or recomputed downstream.
@@ -936,12 +942,13 @@ all, identically for every caller, and never who a caller is, what tier they rea
 are theirs — with no row written it is bit-for-bit what the site was before the freeze existed.
 **Phase 3 ("cutover"), part a (#217), is also now built: `cutover_mode` decides which of the two
 models answers, via `cutover-mode.ts` inside the `context.ts` seam** (see the `authz/` entry under
-**Server code** above for the full mechanism). This is a seam existing, not a cutover happening:
-production is unaffected because the flag defaults to, and today remains at, `legacy`, so every
-request still resolves through `legacyAuthContext`, which deliberately reproduces the old rank
-ladder — the removals derived authorization makes (a board member who owns no Lot losing the free
-pass into member surfaces) appear only once the flag flips, where the #206 allow-list expects
-them. `test/server/adr0022-parity.test.ts` now runs every caller class through `getAuthContext`
+**Server code** above for the full mechanism). Read every "under `legacy` … under `derived`"
+description below as a description of the SEAM, not of production: **the flip has happened, and
+production runs `derived`** (see the phase 3f paragraph below). The legacy branch is retained,
+still reachable by writing the flag back, and deliberately reproduces the old rank ladder, so it
+stays bit-for-bit what the site was — the removals derived authorization makes (a board member who
+owns no Lot losing the free pass into member surfaces) are live now, as the #206 allow-list
+expected. `test/server/adr0022-parity.test.ts` runs every caller class through `getAuthContext`
 with `cutover_mode` in both positions, including a board caller who owns no Lot and a revocation
 that must take effect on the very next request, to hold that claim to account. **Phase 3 part b
 (#218) is also built**: the roster, board-service, and access-grant routes described under **HTTP
@@ -979,15 +986,16 @@ including the last-System-Administrator refusal shared by `/api/verify/unlink` a
 route contract answered by TWO backends branched on `getCutoverMode` — `legacy` still runs the
 pre-existing property flow in `src/server/verification/property.ts` (its three
 `manual_approval_queue` auto-enqueue paths removed, per #201's anti-auto-queue rule), `derived`
-runs the new Person flow — mirroring the whole program's "legacy authoritative by flag, not code"
-philosophy: production is unaffected until the flip regardless of which backend answers, because
-`cutover_mode` still decides which is live. **Phase 3 part d (transfer effects and the review-flag
+runs the new Person flow — mirroring the whole program's "authoritative by flag, not code"
+philosophy: shipping both backends changed nothing until `cutover_mode` said so, and since the
+phase 3f flip that flag says `derived`, so the Person flow is the one production runs. **Phase 3 part d (transfer effects and the review-flag
 queue, #220; decided by #204) is also now built**: proxy grantor re-validation in
 `proxyUseError` and the live-cast authority predicates in `content/voting.ts` (both described
 under **HTTP endpoints** above), the `roster/transfer-effects.ts` engine wired into
 `/api/admin/roster-ownerships`'s `end`/`void` and `/api/admin/roster-representations`'s
 `end`/`void`/`correctScope`, and the board's `GET`+`POST /api/admin/review-flags` queue. Unlike
-phases 1-3c, this one is a LIVE pre-flip behavior change, not gated behind `cutover_mode`: proxy
+phases 1-3c, this one took effect immediately when it shipped — a live behavior change ahead of
+the flip rather than one gated behind `cutover_mode`: proxy
 grantor re-validation reads the LEGACY roster in both cutover modes (see `proxy-guards.ts`'s
 module comment), so a proxy whose grantor has since become an inactive owner is refused today,
 and an Ownership `end` reached through `/api/admin/roster-ownerships` resets any open
@@ -1005,11 +1013,27 @@ retired in their favor (its read-only `GET /api/admin/roster-preview` route surv
 `verification_review_requests` rows had been invisible to the board since v0.10.0 — and the
 correction-requests queue; the legacy manual-approval queue keeps rendering only while it still
 holds pending rows. `ProxiesManager` now warns when a chosen grantor is an inactive owner, the same
-proxy the phase 3d grantor re-validation above would refuse at use. None of this is safe to USE in
-production yet: the surfaces are writable in code, but the phase-2 clean-replace backfill rehearsal
-still erases new-model writes, and only the flip's authoritative (insert-once) backfill makes them
-durable — the deny-by-default write freeze is what makes landing this branch safe ahead of that, and
-#222 owns the sequencing. Only the flip itself (#222) remains before phase 4. Phase 2 adds:
+proxy the phase 3d grantor re-validation above would refuse at use. These surfaces are now safe to
+use: the caveat that stood here — writable in code but erasable by the phase-2 clean-replace
+backfill rehearsal — was dissolved by phase 3f's authoritative backfill, which is insert-once and
+deletes nothing, permanently retiring clean replace.
+
+**Phase 3 part f — THE FLIP — was EXECUTED on 2026-08-18 UTC (#222, closed).** Production now runs
+`cutover_mode = derived` with the write freeze off: derived authorization answers every request,
+and `users.role`/`user_property_links` survive only as write-behind mirrors nothing reads for
+authorization. The sequence ran under an operator write freeze held for 27 minutes: authoritative
+(insert-once) backfill → first System Administrator bootstrapped through `POST /api/bootstrap/board`
+(that route is now permanently self-disabled; its `system_admin_bootstrap` singleton is consumed
+and a re-run answers `410`) → shadow sweep showing only the two pre-classified rows → flag to
+`derived` → smoke → named sign-off lifting the freeze. Steps 5 and 6 of the #222 sequence were
+measured VACUOUS on this site (0 legacy board people, 0 legacy terms, one board account classified
+technical) and recorded as no-ops rather than skipped. Production roster after the flip: 40 parties,
+40 ownerships, 56 contact methods, 159 audit events, one live `system_admin` grant, one live Person
+Link, zero open review flags, `verify:invariants --remote` 17/17 under `derived`. **Only phase 4
+(#212) remains**: deleting the shadow layer (`shadow.ts`, `shadow-compare.ts`, the offline sweep)
+and the `role`/`propertyIds` compatibility aliases. The write freeze, the permission matrix, and
+the ballot-privacy suites are retained permanently per #206/#212, not retired with the migration.
+Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
   subjects, one entity's/one operation's event stream, the open review queue, and redaction
@@ -1044,6 +1068,11 @@ durable — the deny-by-default write freeze is what makes landing this branch s
   "Operator decisions applied" — and plans no rows, since System Administration Access arrives
   only via `POST /api/bootstrap/board`, never the backfill; an unmatched account id is itself a
   new blocking exception (`classification_unmatched`), and any other classification value exits 2.
+  **Post-flip caution:** the default (non-`--authoritative`) `--write` mode is a CLEAN REPLACE. It
+  was safe only while the new model was inert; the flip's authoritative backfill has since seeded
+  the roster production runs on, so running `--write` against remote D1 without `--authoritative`
+  would delete live roster rows and their audit baseline. Any future run against production must
+  pass `--authoritative`.
 - `scripts/shadow-sweep.ts` (`npm run shadow:sweep`): an offline sweep that derives both
   authorization contexts for every account (not just accounts that sign in during the phase-2
   window) and records mismatches with `source='sweep'`, sharing `derive.ts`'s SQL and
@@ -1289,11 +1318,11 @@ so `npm run db:generate` should diff cleanly for future changes.
 **Glossary — "board" names three separate things.** They are deliberately distinct; conflating them
 in code or copy is the mistake this table exists to prevent. Use these words in that sense.
 
-| Term              | Is                                                                     | Lives in              | Has history?                                                    |
-| ----------------- | ---------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------- |
-| **board admin**   | An access level. Grants admin writes _and_ the top content tier.       | `user.role = 'board'` | No — current state only. Demoting rewrites "now", never "then". |
-| **board member**  | A person who serves on the board. What motions and votes reference.    | `board_people`        | Yes — the record is the point.                                  |
-| **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms`         | Yes — a person may hold several, with gaps.                     |
+| Term              | Is                                                                     | Lives in                                                                                                                                    | Has history?                                                                                   |
+| ----------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **board admin**   | An access level. Grants admin writes _and_ the top content tier.       | `access_grants` (a live `board` or `system_admin` grant) since the phase 3f flip; `user.role = 'board'` is now only its write-behind mirror | The grant has an interval, so ending one is recorded; the mirror column is current-state only. |
+| **board member**  | A person who serves on the board. What motions and votes reference.    | `board_people`                                                                                                                              | Yes — the record is the point.                                                                 |
+| **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms`                                                                                                                               | Yes — a person may hold several, with gaps.                                                    |
 
 Sign-in access still has its own panel — **Board access (legacy)** (`BoardAccessManager`) — and
 neither sense ever writes the other's data. The legacy roster panel (`BoardPanel`) and its routes
@@ -1308,8 +1337,13 @@ record is independent of `user` rows.
 
 **Roles and access.** Roles are `visitor`, `homeowner`, and `board`; content visibility tiers are
 `public`, `homeowner`, and `board`. Access is enforced server-side and fail-closed: anonymous users
-resolve to visitor, unknown states resolve to the most restrictive behavior. A user's role is a
-column on the user record.
+resolve to visitor, unknown states resolve to the most restrictive behavior. `users.role` is still
+a column on the user record, but since the ADR 0022 phase 3f flip it is a **write-behind mirror,
+not the authority**: production runs `cutover_mode = derived`, so a caller's capabilities and
+content tier are derived per request from the party roster — Person Link, Ownerships and
+Representations, Board Terms, and Access Grants — and `users.role` is written only to keep the
+legacy read model and Better Auth sessions coherent. It is read for authorization nowhere outside
+`context.ts`'s `legacy` branch (pinned by `test/unit/authz-legacy-role.test.ts`).
 
 The board-only API is gated in **two** places, deliberately. `src/middleware.ts` rejects
 `/api/admin/*` before the route runs (503 while the operator write freeze is on for a mutating
