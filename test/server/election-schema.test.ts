@@ -10,7 +10,6 @@ import {
   ballots,
   meetings,
   properties,
-  boardPeople,
 } from '../../src/server/db/schema';
 import { people } from '../../src/server/db/roster-schema';
 

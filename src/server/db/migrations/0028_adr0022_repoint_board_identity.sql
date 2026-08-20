@@ -28,9 +28,11 @@
 -- The `__new` copy dance (0024/0026 precedent), not the 0027 DROP+CREATE: these
 -- tables are not provably empty everywhere, only in production. D1 supports
 -- PRAGMA defer_foreign_keys, NOT PRAGMA foreign_keys. No view references any of
--- these four tables (`audit_review_queue_v` reads `review_flags.impacted_motion_id`
--- without joining `motions`), so the drop-and-recreate-views step that 0024,
--- 0025, 0026, and 0027 each needed does not apply here.
+-- the tables rebuilt here (`audit_review_queue_v` reads
+-- `review_flags.impacted_motion_id` without joining `motions`), so the
+-- drop-and-recreate-views step that 0024, 0025, 0026, and 0027 each needed does
+-- not apply. A fifth table, `ballot_choices`, is rebuilt at the very end for an
+-- unrelated reason explained there.
 --
 -- `motions` is rebuilt LAST: six FKs point into it (`board_votes.motion_id`,
 -- `motion_eligibility.motion_id`, `member_votes.motion_id`,
@@ -104,3 +106,39 @@ DROP TABLE `motions`;--> statement-breakpoint
 ALTER TABLE `__new_motions` RENAME TO `motions`;--> statement-breakpoint
 CREATE INDEX `motions_meeting_id_idx` ON `motions` (`meeting_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `motions_meeting_sequence_unq` ON `motions` (`meeting_id`,`sequence`);
+--> statement-breakpoint
+-- `ballot_choices` is rebuilt for ONE reason: `candidate_id` moves from
+-- ON DELETE RESTRICT to NO ACTION. No column is added, removed, or renamed —
+-- the identity-unlinked shape ADR 0020 fixes is byte-for-byte what it was, and
+-- this table still carries no ballot, property, owner, proxy, caster, or
+-- timestamp column.
+--
+-- WHY. In SQLite, RESTRICT is checked IMMEDIATELY while NO ACTION is checked at
+-- the END OF THE STATEMENT. Both refuse to delete a candidate that retained
+-- choices still reference, which is the rule this FK exists to enforce. They
+-- differ only when the parent ELECTION is deleted, which cascades to
+-- `candidates` and `ballot_choices` alike: under RESTRICT, whichever cascade
+-- SQLite happens to run first decides whether the delete succeeds, and
+-- rebuilding `candidates` above is enough to flip that coin. Under NO ACTION
+-- both rows are gone by the time the check runs, so the election cascade
+-- always succeeds and a bare candidate delete is always refused.
+--
+-- The application never reaches the ambiguous case — DELETE /api/admin/elections
+-- removes only a draft, and a draft conducted election has no choices — but a
+-- schema whose behavior depends on table creation order is a trap for the next
+-- rebuild, and part 2 of #248 rebuilds four more tables. AGENTS.md already
+-- records this same RESTRICT-vs-NO-ACTION timing distinction for the
+-- `mover_owner_id` column that part 1 drops.
+CREATE TABLE `__new_ballot_choices` (
+	`id` text PRIMARY KEY NOT NULL,
+	`election_id` text NOT NULL,
+	`candidate_id` text NOT NULL,
+	`weight` integer NOT NULL,
+	FOREIGN KEY (`election_id`) REFERENCES `elections`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`candidate_id`) REFERENCES `candidates`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ballot_choices_weight_nonnegative" CHECK("weight" >= 0)
+);--> statement-breakpoint
+INSERT INTO `__new_ballot_choices`("id", "election_id", "candidate_id", "weight") SELECT "id", "election_id", "candidate_id", "weight" FROM `ballot_choices`;--> statement-breakpoint
+DROP TABLE `ballot_choices`;--> statement-breakpoint
+ALTER TABLE `__new_ballot_choices` RENAME TO `ballot_choices`;--> statement-breakpoint
+CREATE INDEX `ballot_choices_election_id_idx` ON `ballot_choices` (`election_id`);
