@@ -7,6 +7,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-08-20
+
+### Added
+
+- **A routine for closing out a day's work so nothing learned during it gets
+  lost.** A working session usually produces more than the changes to the site
+  itself: things learned about how the system behaves, decisions that belong on
+  the issue that prompted them, notes that belong in the private operations
+  folder, and leftover scratch files on the maintainer's own computer. None of
+  those live in the site's code, so nothing catches them when they are
+  forgotten. There is now a written end-of-session routine that walks through
+  each one in turn — record what was learned, bring the issue tracker up to
+  date, update the private operational notes, then tidy the local working copy
+  — and it is deliberately cautious: it never deletes anything without showing
+  the list first, never touches production data, and says plainly when a step
+  had nothing to record rather than inventing something. This is a maintainer
+  tool only; it changes nothing about the site itself.
+
 ## [0.14.1] - 2026-08-20
 
 ### Added
