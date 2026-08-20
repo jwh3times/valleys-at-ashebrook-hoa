@@ -7,13 +7,12 @@ import {
   boardAttendance,
   motions,
   boardVotes,
-  boardPeople,
 } from '../../src/server/db/schema';
 import { people } from '../../src/server/db/roster-schema';
 import {
   now,
   truncateAll,
-  seedPerson as seedPerson,
+  seedPerson,
   seedMeeting as seedMeetingRow,
 } from './fixtures';
 

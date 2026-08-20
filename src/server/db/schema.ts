@@ -666,9 +666,16 @@ export const ballotChoices = sqliteTable(
     electionId: text('election_id')
       .notNull()
       .references(() => elections.id, { onDelete: 'cascade' }),
+    // NO ACTION, not RESTRICT, and the difference is timing rather than rule
+    // (#248). Both refuse to delete a candidate that retained choices still
+    // reference. They diverge only when the parent ELECTION is deleted, which
+    // cascades to `candidates` and here alike: RESTRICT is checked IMMEDIATELY,
+    // so whichever cascade SQLite ran first decided whether the delete
+    // succeeded — a coin flip that rebuilding either table re-tosses. NO ACTION
+    // is checked at END OF STATEMENT, by which point both rows are gone.
     candidateId: text('candidate_id')
       .notNull()
-      .references(() => candidates.id, { onDelete: 'restrict' }),
+      .references(() => candidates.id, { onDelete: 'no action' }),
     weight: integer('weight').notNull(),
   },
   (t) => [

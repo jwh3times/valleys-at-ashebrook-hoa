@@ -9,7 +9,6 @@ import {
   motionEligibility,
   boardVotes,
   boardAttendance,
-  boardPeople,
   properties,
 } from '../../src/server/db/schema';
 import {
