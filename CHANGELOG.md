@@ -7,6 +7,31 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-08-20
+
+### Added
+
+- **A check that lists every part of the site still relying on the old
+  neighborhood records, so none of them is missed when those records are
+  finally removed.** The site changed over to a new way of storing who owns
+  what earlier this month, and the old tables are still sitting underneath,
+  due to be deleted in the last step of that changeover. Earlier this week one
+  part of the site was found to be quietly still reading the old tables, with
+  nothing to catch it — the check that would have caught it was looking at who
+  is allowed to do what, not at where information is read from. There is now a
+  written-down list of every place that still reads the old records, what has
+  to happen to each one, and a test that fails if someone adds a new one
+  without saying so. The list also fails if an entry is left behind after the
+  work is done, so it cannot quietly turn into a stale document that nobody
+  trusts.
+- The audit behind that list turned up something that had not been noticed:
+  twelve places in the meeting minutes, proxy, and election records point back
+  at the old records to say who acted — who moved a motion, who attended for a
+  home, who cast a ballot. Removing the old records without moving those links
+  first would, in several cases, quietly blank out who acted while leaving the
+  record itself looking complete. That is now written down as work that has to
+  happen first, rather than being discovered partway through the removal.
+
 ## [0.14.0] - 2026-08-20
 
 ### Added
