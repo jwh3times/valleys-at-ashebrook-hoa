@@ -7,6 +7,47 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-20
+
+### Added
+
+- **The site now checks its own records for damage every day, instead of only
+  when someone remembers to ask.** There is a set of seventeen checks that look
+  for records which should be impossible — one home owned by the same person
+  over two overlapping periods, a board term that outlived the ownership that
+  qualified it, a history entry with no record of what it was, a person with no
+  person record behind them. Until now those checks only ran when an operator
+  typed a command, which meant a problem introduced on a Tuesday could sit
+  undetected until somebody happened to look. They now also run automatically
+  as part of the daily overnight maintenance the site already performs. A
+  problem is written to the site's logs, naming only record identifiers and
+  never anyone's personal details, and the overnight run is marked as failed so
+  it is visible rather than buried.
+- Nothing is stored when a problem is found, and there is no new screen to
+  check. A genuine problem does not go away on its own, so it is reported again
+  the next night, and every night after, until it is fixed.
+
+### Changed
+
+- The seventeen checks now live in one place, shared by the daily automatic run
+  and the command an operator still runs by hand before and after a database
+  change. The two run in different ways and cannot share how they reach the
+  database, so they share the questions instead — which is what stops one of
+  them from quietly drifting into asking something different from the other. A
+  test refuses to let either side define a check of its own.
+- A check that cannot be run is now reported as a failure rather than as a
+  pass. This sounds obvious, but a check that succeeds and a check that fails
+  to run both return nothing, and "nothing" is what this system treats as good
+  news — so the distinction had to be made deliberately.
+
+## [0.13.6] - 2026-08-20
+
+### Changed
+
+- Updated the development-only Cloudflare Workers type definitions
+  (`@cloudflare/workers-types`) from `5.20260816.1` to `5.20260817.1`. No
+  runtime or user-visible effect.
+
 ## [0.13.5] - 2026-08-20
 
 ### Fixed

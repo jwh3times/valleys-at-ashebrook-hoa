@@ -316,17 +316,27 @@ npx wrangler deploy -c dist/server/wrangler.json
 ```
 
 The root `wrangler.toml` uses `main = "src/worker.ts"` so the custom Worker entrypoint can handle
-Astro SSR requests and the scheduled cleanup trigger.
+Astro SSR requests and the daily scheduled trigger.
 
 ## Scheduled Maintenance
 
-Wrangler config includes a daily cron trigger. It runs `cleanupVerificationState`, which keeps 30
-days of consumed/expired property-verification rows and resolved manual-approval rows (pending
-manual approvals are retained), plus the ADR 0022 phase 3c equivalents: pending Person
-Verification codes (`verification_codes`) age out after about a day past consumption/expiry, since
-a code is only ever useful for its ~10-minute TTL, and resolved (accepted/declined) verification
-review requests (`verification_review_requests`) age out after 30 days — open requests are
-retained.
+Wrangler config includes a daily cron trigger (`0 7 * * *`). It runs two jobs independently, so a
+failure in one does not hide a failure in the other:
+
+- `cleanupVerificationState`, which keeps 30 days of consumed/expired property-verification rows
+  and resolved manual-approval rows (pending manual approvals are retained), plus the ADR 0022
+  phase 3c equivalents: pending Person Verification codes (`verification_codes`) age out after
+  about a day past consumption/expiry, since a code is only ever useful for its ~10-minute TTL, and
+  resolved (accepted/declined) verification review requests (`verification_review_requests`) age
+  out after 30 days — open requests are retained.
+- The ADR 0022 invariant drift check (`runInvariants`, the same 17 checks `npm run
+verify:invariants` runs) — added by #240 so the phase-4 soak isn't running without automated
+  drift detection. A violation is logged (IDs and codes only, never a personal value) and fails the
+  cron invocation, which surfaces as a red run in Workers Logs/the Cloudflare dashboard; nothing is
+  stored, and a real violation re-fires every day until it's fixed.
+
+Neither job's failure blocks the other; if either fails, the invocation throws so the dashboard
+shows the run as failed.
 
 ## Security Headers
 

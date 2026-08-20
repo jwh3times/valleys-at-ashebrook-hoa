@@ -79,6 +79,27 @@ const CHOICE_PROSE_ONLY = new Map([
 ]);
 
 /**
+ * Modules that NAME the choice table without ever querying it. One: the
+ * invariant gate, whose `no_flag_references_ballot_choices` check is the third
+ * leg named in this file's header. It spells the table in a check name and an
+ * operator-facing meaning string — code, not prose, so the prose-only
+ * exemption above does not fit — while its SQL asks
+ * `pragma_table_info('review_flags')` about column NAMES and never reads a row.
+ *
+ * It arrived under this scan when #240 moved the check list out of
+ * `scripts/verify-invariants.ts` into `src/` to share it with the Worker's
+ * scheduled run. A blanket allow-list entry would be the widest hole in the
+ * file, so the mention is allowed and the query is separately denied below.
+ */
+const CHOICE_NAMED_NOT_QUERIED = new Map([
+  [
+    'server/db/invariants.ts',
+    "the `no_flag_references_ballot_choices` check's name and meaning; its " +
+      'SQL inspects review_flags column names and reads no choice row',
+  ],
+]);
+
+/**
  * The phase 3d machinery. These files produce every event, flag, and export
  * a transfer creates, and must stay clean forever — this is the deny-list the
  * whole file exists for.
@@ -130,6 +151,7 @@ describe('the ballot-secrecy boundary', () => {
     const allowed = new Set([
       ...CHOICE_CODE_ALLOWED.keys(),
       ...CHOICE_PROSE_ONLY.keys(),
+      ...CHOICE_NAMED_NOT_QUERIED.keys(),
     ]);
     const offenders: string[] = [];
     for (const file of sourceFiles(SRC)) {
@@ -153,6 +175,27 @@ describe('the ballot-secrecy boundary', () => {
       const code = stripComments(read(rel));
       for (const term of CHOICE_TERMS) {
         if (code.includes(term)) offenders.push(`${rel} names ${term} in code`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('lets the invariant gate name the choice table without querying it', () => {
+    // The narrow form of ITS exemption, mirroring the prose-only pin above:
+    // naming the table in a check name is the point, reading a row from it
+    // never is. A gate that learned to join choices to turnout would be a
+    // disclosure surface wearing the costume of a correctness check.
+    const offenders: string[] = [];
+    for (const rel of CHOICE_NAMED_NOT_QUERIED.keys()) {
+      const raw = read(rel);
+      for (const term of CHOICE_TERMS) {
+        for (const clause of ['FROM', 'JOIN', 'INTO', 'UPDATE']) {
+          if (new RegExp(String.raw`${clause}\s+${term}`, 'i').test(raw))
+            offenders.push(`${rel} queries ${term} (${clause})`);
+        }
+      }
+      for (const term of CANDIDATE_TERMS) {
+        if (raw.includes(term)) offenders.push(`${rel} mentions ${term}`);
       }
     }
     expect(offenders).toEqual([]);
