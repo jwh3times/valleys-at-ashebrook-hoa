@@ -1043,6 +1043,40 @@ Link, zero open review flags, `verify:invariants --remote` 17/17 under `derived`
 (#212) remains**: deleting the shadow layer (`shadow.ts`, `shadow-compare.ts`, the offline sweep)
 and the `role`/`propertyIds` compatibility aliases. The write freeze, the permission matrix, and
 the ballot-privacy suites are retained permanently per #206/#212, not retired with the migration.
+
+Phase 4 also owes a repointing precondition, per #246:
+`test/unit/legacy-roster-consumers.test.ts` declares every `src/` module reading one of the six
+tables phase 4 drops (`owners`, `user_property_links`, `property_verifications`,
+`manual_approval_queue`, `board_people`, and the legacy `board_terms` — `properties` is excluded,
+since phase 4 renames it to `lots` rather than dropping it), together with what phase 4 must do
+about it. It exists because of #233 — the AI pseudonymizer kept reading `owners` after the flip
+made the party roster authoritative, and nothing detected it, because the flip's checklist verified
+that AUTHORIZATION stopped reading the legacy model and never enumerated the non-authorization
+consumers. Unlike the import-only idiom `authz-legacy-role.test.ts` uses for `users.role`, this scan
+checks both imported Drizzle symbols AND raw SQL (`FROM`/`JOIN`/`INTO`/`UPDATE`/`TABLE` followed by
+the table name, comments stripped and URLs neutralised first) — an import-only scan would miss
+`server/roster/verification.ts`, whose `user_property_links` write-behind mirror is a raw `INSERT`
+with no Drizzle symbol imported. Each of its 18 declared modules carries one of five dispositions:
+`deleted-with-the-table` (five legacy surfaces #212 deletes outright, including `context.ts`'s
+`legacy` branch), `write-behind-mirror` (two modules whose write nothing reads for behavior),
+`already-dual-read` (`server/ai/assistant.ts`, the #233 fix — phase 4 drops only its legacy arm),
+`needs-repointing` (eight modules — the actual phase-4 work list), and
+`blocked-on-person-repointing` (two meeting-record modules that read `board_people` and wait on its
+Person repointing, already noted above). A declared entry whose module no longer reads a dropped
+table fails the suite as stale, so the list can't rot into a misleading audit. Separately, twelve FK
+columns keep `owners` and `board_people` alive past the drop regardless of this scan:
+`motions.mover_owner_id`/`second_owner_id`, `member_attendance.represented_by_owner_id`,
+`member_votes.cast_by_owner_id`, `ballots.cast_by_owner_id`, and
+`proxies.grantor_owner_id`/`holder_owner_id` reference `owners`; `board_attendance.person_id`,
+`motions.mover_person_id`/`second_person_id`, `board_votes.person_id`, and
+`candidates.board_person_id` reference `board_people` — every one in a table phase 4 keeps (the
+meeting, proxies, and elections records), so neither legacy table can drop until all twelve columns
+are repointed to the party roster. The `set null` columns
+(`member_attendance.represented_by_owner_id`, `member_votes.cast_by_owner_id`,
+`ballots.cast_by_owner_id`, `proxies.holder_owner_id`) are the
+more dangerous half: dropping the table would succeed and silently erase who acted from historical
+records rather than failing loudly.
+
 Phase 2 adds:
 
 - Eight read-only views (migration `0023`) reconstructing corrected audit history, typed event
