@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const handle = vi.hoisted(() => vi.fn());
-const cleanupVerificationState = vi.hoisted(() => vi.fn());
+const runScheduledJobs = vi.hoisted(() => vi.fn());
 
 vi.mock('@astrojs/cloudflare/handler', () => ({
   handle,
 }));
 
-vi.mock('../../src/server/cleanup/verification', () => ({
-  cleanupVerificationState,
+vi.mock('../../src/server/scheduled', () => ({
+  runScheduledJobs,
 }));
 
 import worker from '../../src/worker';
@@ -18,10 +18,14 @@ const ctx = {
   passThroughOnException: vi.fn(),
 } as unknown as ExecutionContext;
 
+// The entry point is deliberately a thin adapter: both jobs it triggers live
+// in modules the Workers test pool can import, which `src/worker.ts` itself is
+// not (it pulls Astro's build-time virtual config). So this file asserts
+// delegation only — `scheduled.test.ts` covers what the cron actually does.
 describe('custom Worker entrypoint', () => {
   beforeEach(() => {
     handle.mockReset();
-    cleanupVerificationState.mockReset();
+    runScheduledJobs.mockReset();
   });
 
   it('delegates fetch requests to the Astro handler', async () => {
@@ -34,15 +38,20 @@ describe('custom Worker entrypoint', () => {
     expect(handle).toHaveBeenCalledWith(request, env, ctx);
   });
 
-  it('runs verification cleanup on the scheduled trigger', async () => {
+  it('delegates the scheduled trigger to the scheduled jobs', async () => {
     const env = {} as Env;
-    cleanupVerificationState.mockResolvedValue({
-      verificationRows: 1,
-      manualApprovalRows: 2,
-    });
+    runScheduledJobs.mockResolvedValue(undefined);
 
     await worker.scheduled({} as ScheduledController, env, ctx);
 
-    expect(cleanupVerificationState).toHaveBeenCalledWith(env);
+    expect(runScheduledJobs).toHaveBeenCalledWith(env);
+  });
+
+  it('lets a failed scheduled job fail the invocation', async () => {
+    runScheduledJobs.mockRejectedValue(new Error('scheduled job failed: x'));
+
+    await expect(
+      worker.scheduled({} as ScheduledController, {} as Env, ctx),
+    ).rejects.toThrow('scheduled job failed: x');
   });
 });
