@@ -7,6 +7,53 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.13.5] - 2026-08-20
+
+### Fixed
+
+- **Resident names recorded in the new roster are now hidden from the AI
+  assistant again.** Before any document text reaches the AI provider, the site
+  swaps every resident's name, phone, email, and address for a realistic
+  stand-in. That list of things to hide was still being read from the old owner
+  records, which nothing writes to any more — so anyone added to the roster
+  after the recent changeover was missing from it, and their name could have
+  been sent out as-is if it appeared in a document. The list is now built from
+  the roster the site actually uses, together with the old records that still
+  exist, so people carried over and people newly recorded are protected the
+  same way. Names and contact details that have been erased from the roster
+  stay erased: they contribute nothing to the list rather than being brought
+  back. Former owners and old phone numbers are still hidden, because they
+  still appear in old documents.
+- Organization names are deliberately left out of that list, and the reason is
+  now written down where the next person will find it: names are matched word
+  by word, so an organization named after the neighborhood itself would cause
+  the neighborhood's own name to be replaced with an invented person's name
+  throughout every document excerpt. An organization's email and phone are
+  still hidden.
+
+### Security
+
+- `SECURITY.md` now describes what the site actually does here — which records
+  feed the hiding step, that it is deliberately not limited to current owners,
+  that erased entries are never resurrected, and the organization-name
+  exception and its one known gap.
+
+## [0.13.4] - 2026-08-19
+
+### Changed
+
+- Updated the development-only Cloudflare Workers type definitions
+  (`@cloudflare/workers-types`) from `5.20260815.1` to `5.20260816.1`. No
+  runtime or user-visible effect.
+
+## [0.13.3] - 2026-08-18
+
+### Changed
+
+- Updated the development-only Cloudflare Workers type definitions
+  (`@cloudflare/workers-types`) from `5.20260814.1` to `5.20260815.1`. No
+  runtime or user-visible effect.
+
 ## [0.13.2] - 2026-08-17
 
 ### Changed

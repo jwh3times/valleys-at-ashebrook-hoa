@@ -298,8 +298,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **The admin document assistant is board-only and pseudonymizes known PII before it leaves the
   Worker.** `POST /api/admin/assistant` is gated by `requireBoard` (fail-closed, same as every other
   admin endpoint). Answering a question sends retrieved document excerpts, the question, and recent
-  chat history to Anthropic; before any of that text is transmitted, every roster owner name and
-  property address is swapped for a realistic, consistent placeholder — including each individual
+  chat history to Anthropic; before any of that text is transmitted, every roster name, contact
+  value, and Lot address is swapped for a realistic, consistent placeholder — including each individual
   name token (so a resident's standalone first name or surname is also replaced, not just their full
   name) — except tokens that are common English words, which are left intact so ordinary document
   text is not garbled — and any email address found anywhere in the text is pseudonymized the same
@@ -308,10 +308,22 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   whether or not it matches the roster. Document titles are pseudonymized the same way and sent as
   part of each excerpt label; citations
   reference retrieved excerpts by index label and are resolved back to real documents server-side.
+  The dictionary is built from **both roster models** — Person names and Contact Methods from the
+  live party roster (`people`, `contact_methods`) and owner names, phones, and emails from the
+  legacy `owners` table, unioned with Lot addresses — so a resident recorded through the admin
+  Roster panel after the ADR 0022 flip is masked exactly like one carried over by the backfill. It
+  is deliberately not filtered by status, interval, void, or consolidation: a former owner or an
+  ended contact value still appears in old documents and must still be masked. A redacted name or
+  contact value arrives as a NULL and contributes nothing, so redaction is never undone by the
+  dictionary.
   This is **best-effort, not a guarantee**: it only catches PII matching a current roster entry or
   the email/phone patterns, so it does not cover non-resident names or other free text that doesn't
   match those patterns, and has narrow documented edge cases (for example, a roster value whose
   closing abbreviation period is glued directly to the next word with no separating space).
+  **Organization names are deliberately excluded** from the dictionary: name entries are matched
+  per token, so registering an organization named for the neighborhood itself would rewrite that
+  name into a surrogate person throughout every excerpt. An organization's contact methods are
+  still masked; a person's name embedded in an organization's legal name is not.
 - **The board-only report generator shares the assistant's pseudonymization and is also board-only
   end to end.** `POST /api/admin/reports` is gated by `requireBoard` the same as every other admin
   endpoint. For one of six curated templates, hand-tuned retrieval sub-queries are used directly;
