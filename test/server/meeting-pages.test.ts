@@ -26,10 +26,12 @@ import {
   memberAttendance,
   memberVotes,
 } from '../../src/server/db/schema';
+import { parties, people } from '../../src/server/db/roster-schema';
 import MeetingsPage from '../../src/pages/meetings.astro';
 import MeetingDetailPage from '../../src/pages/meetings/[id].astro';
 import NotFoundPage from '../../src/pages/404.astro';
 import { legacyAuthContext } from '../../src/server/authz/context';
+import { seedPeopleRows } from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -46,6 +48,9 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(boardPeople);
+  // #248: the meeting record's identities are roster Persons now.
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(owners);
   await db.delete(properties);
 });
@@ -231,7 +236,7 @@ describe('/meetings/[id]', () => {
       createdAt: now,
       updatedAt: now,
     });
-    await getDb(env).insert(boardPeople).values({
+    await seedPeopleRows({
       id: 'p1',
       fullName: 'A. Reyes',
       userId: null,
@@ -279,7 +284,7 @@ describe('/meetings/[id]', () => {
     // checked against two different quorum thresholds so both the "met" and
     // "not met" comparison branches are pinned, not just one.
     const db = getDb(env);
-    await db.insert(boardPeople).values([
+    await seedPeopleRows([
       {
         id: 'p1',
         fullName: 'A. Reyes',
@@ -376,7 +381,7 @@ describe('/meetings/[id]', () => {
     // a body it has no real attendance model for, even if stray attendance
     // rows exist (e.g. left over from the meeting being re-typed as member).
     const db = getDb(env);
-    await db.insert(boardPeople).values({
+    await seedPeopleRows({
       id: 'p1',
       fullName: 'A. Reyes',
       userId: null,

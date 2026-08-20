@@ -10,6 +10,13 @@ import {
 } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { users } from './auth-schema';
+// #248: the meeting, proxies, and elections records name WHO ACTED, and that
+// identity is now the party roster's Person. This makes the two schema modules
+// mutually dependent — roster-schema imports `properties`/`elections` from
+// here — which is safe only because every `references()` is a thunk Drizzle
+// calls after both modules have evaluated. Phase 4 (#212) is where the two
+// files should be relayered so the roster is unambiguously the foundation.
+import { people } from './roster-schema';
 
 // Re-export the Better-Auth-generated tables so one schema covers everything.
 export * from './auth-schema';
@@ -248,7 +255,7 @@ export const boardAttendance = sqliteTable(
       .references(() => meetings.id, { onDelete: 'cascade' }),
     personId: text('person_id')
       .notNull()
-      .references(() => boardPeople.id, { onDelete: 'restrict' }),
+      .references(() => people.partyId, { onDelete: 'restrict' }),
     present: integer('present', { mode: 'boolean' }).notNull(),
   },
   // One attendance row per person per meeting; also serves the per-meeting read.
@@ -269,35 +276,16 @@ export const motions = sqliteTable(
       .references((): AnySQLiteColumn => meetings.id, { onDelete: 'cascade' }),
     sequence: integer('sequence').notNull(),
     text: text('text').notNull(),
-    // A board meeting's mover is a board person. PR 3 adds nullable owner
-    // counterparts for member meetings; the parent meeting's `body` disambiguates.
-    moverPersonId: text('mover_person_id').references(() => boardPeople.id, {
+    // WHO MOVED AND SECONDED, for board and member motions alike. Until #248
+    // these were two parallel pairs — one referencing `board_people`, one
+    // referencing `owners` — disambiguated by the parent meeting's `body`.
+    // The party roster has ONE Person concept, so two FKs to the same table
+    // told apart only by a column on another table earned nothing; the owner
+    // pair (never written; see phase 3b) is gone and these are it.
+    moverPersonId: text('mover_person_id').references(() => people.partyId, {
       onDelete: 'restrict',
     }),
-    secondPersonId: text('second_person_id').references(() => boardPeople.id, {
-      onDelete: 'restrict',
-    }),
-    // A member meeting's mover is an owner, not a board person. The parent
-    // meeting's `body` disambiguates which pair is populated, so these stay
-    // nullable rather than forming a checked constraint.
-    //
-    // NOTE: drizzle-kit's SQLite `ALTER TABLE ADD COLUMN` generator drops the
-    // `onDelete` action — only its `CREATE TABLE` path emits FK actions. The
-    // migration this produced (0011) adds these two columns with a bare
-    // `REFERENCES owners(id)`, so the live database enforces SQLite's default
-    // `NO ACTION` here, not `RESTRICT`, even though this declaration says
-    // `restrict`. Do not trust this annotation as ground truth for these two
-    // columns. In practice it is behaviorally inert: every FK in this
-    // codebase is non-deferred (no `PRAGMA defer_foreign_keys` anywhere), and
-    // `NO ACTION` vs `RESTRICT` reject an in-use-row delete identically under
-    // non-deferred constraints. That equivalence would break if deferred
-    // constraints were ever introduced — see the "refuses to delete an owner
-    // who moved a motion" test in member-schema.test.ts, which pins today's
-    // actual (NO ACTION) behavior rather than the declared one.
-    moverOwnerId: text('mover_owner_id').references(() => owners.id, {
-      onDelete: 'restrict',
-    }),
-    secondOwnerId: text('second_owner_id').references(() => owners.id, {
+    secondPersonId: text('second_person_id').references(() => people.partyId, {
       onDelete: 'restrict',
     }),
     votingState: text('voting_state', {
@@ -350,7 +338,7 @@ export const boardVotes = sqliteTable(
       .references(() => motions.id, { onDelete: 'cascade' }),
     personId: text('person_id')
       .notNull()
-      .references(() => boardPeople.id, { onDelete: 'restrict' }),
+      .references(() => people.partyId, { onDelete: 'restrict' }),
     choice: text('choice', {
       enum: ['yes', 'no', 'abstain', 'recused', 'absent'],
     }).notNull(),
@@ -630,12 +618,14 @@ export const candidates = sqliteTable(
     electionId: text('election_id')
       .notNull()
       .references(() => elections.id, { onDelete: 'cascade' }),
-    // Required: a first-time candidate has no board_people row yet.
+    // Required: a first-time candidate need not be on the roster yet.
     fullName: text('full_name').notNull(),
-    // Nullable, and BACKFILLED BY CERTIFY when a winner had none — without
-    // that backfill a re-run mints a duplicate identity, violating ADR 0012's
-    // rule that a member who serves, leaves, and returns keeps one identity.
-    boardPersonId: text('board_person_id').references(() => boardPeople.id, {
+    // Nullable: a candidate is linked to a roster Person only when one exists.
+    // ADR 0012's rule that a member who serves, leaves, and returns keeps ONE
+    // identity is carried by the Party itself now, so certify no longer mints
+    // an identity here — phase 3b (#218) stopped writing this column, and #248
+    // repointed what remained at the party roster.
+    personId: text('person_id').references(() => people.partyId, {
       onDelete: 'restrict',
     }),
     statementMd: text('statement_md'),

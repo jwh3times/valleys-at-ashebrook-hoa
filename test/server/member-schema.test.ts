@@ -10,7 +10,14 @@ import {
   memberVotes,
   motions,
 } from '../../src/server/db/schema';
-import { now, truncateAll, seedProperty, seedMeeting } from './fixtures';
+import {
+  now,
+  truncateAll,
+  seedProperty,
+  seedMeeting,
+  seedPerson,
+} from './fixtures';
+import { people } from '../../src/server/db/roster-schema';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -108,8 +115,6 @@ describe('member meeting schema', () => {
       text: 'Adopt the assessment',
       moverPersonId: null,
       secondPersonId: null,
-      moverOwnerId: null,
-      secondOwnerId: null,
       outcome: 'passed',
       createdBy: 'u1',
       createdAt: now,
@@ -146,8 +151,6 @@ describe('member meeting schema', () => {
       text: 'X',
       moverPersonId: null,
       secondPersonId: null,
-      moverOwnerId: null,
-      secondOwnerId: null,
       outcome: 'passed',
       createdBy: 'u1',
       createdAt: now,
@@ -185,8 +188,6 @@ describe('member meeting schema', () => {
       text: 'X',
       moverPersonId: null,
       secondPersonId: null,
-      moverOwnerId: null,
-      secondOwnerId: null,
       outcome: 'passed',
       createdBy: 'u1',
       createdAt: now,
@@ -205,74 +206,56 @@ describe('member meeting schema', () => {
     expect((await db.select().from(memberVotes)).length).toBe(0);
   });
 
-  it('stores an owner as a motion mover for a member meeting', async () => {
+  it('stores a roster Person as a motion mover', async () => {
     const db = getDb(env);
-    await seedProperty('p1');
-    await db.insert(owners).values({
-      id: 'o1',
-      propertyId: 'p1',
-      fullName: 'A. Reyes',
-      createdAt: now,
-      updatedAt: now,
-    });
+    await seedPerson('pe1');
     await seedMeeting('m1');
     await db.insert(motions).values({
       id: 'mo1',
       meetingId: 'm1',
       sequence: 1,
       text: 'X',
-      moverPersonId: null,
+      moverPersonId: 'pe1',
       secondPersonId: null,
-      moverOwnerId: 'o1',
-      secondOwnerId: null,
       outcome: 'passed',
       createdBy: 'u1',
       createdAt: now,
       updatedAt: now,
     });
     const rows = await db.select().from(motions);
-    expect(rows[0].moverOwnerId).toBe('o1');
-    expect(rows[0].moverPersonId).toBeNull();
+    expect(rows[0].moverPersonId).toBe('pe1');
   });
 
-  // Pins the live database's actual delete-rejection behavior on
-  // motions.mover_owner_id. drizzle-kit's SQLite ALTER TABLE ADD COLUMN path
-  // drops the onDelete action from this migration, so the schema's declared
-  // 'restrict' is not literally what's enforced — the column lands with
-  // SQLite's default NO ACTION instead (see the comment on moverOwnerId in
-  // schema.ts). Under this codebase's non-deferred foreign keys, NO ACTION
-  // and RESTRICT reject an in-use-row delete identically, so this test
-  // should pass today regardless of which action is actually in force. If it
-  // ever starts failing, deferred constraints have likely been introduced
-  // somewhere and that equivalence no longer holds.
-  it('refuses to delete an owner who moved a motion', async () => {
+  // #248 replaced the pair of tests that used to live here, which pinned
+  // `motions.mover_owner_id` — a column added by ALTER TABLE, so drizzle-kit
+  // had dropped its ON DELETE action and the live database enforced SQLite's
+  // default NO ACTION rather than the declared RESTRICT. Those tests carried a
+  // long caveat explaining that NO ACTION and RESTRICT happen to reject an
+  // in-use delete identically under non-deferred constraints, and would only
+  // diverge if deferred constraints were ever introduced.
+  //
+  // The caveat is retired along with the column: the repointed FK was created
+  // through CREATE TABLE, which emits its action, so RESTRICT is now literally
+  // what the database enforces. This asserts the rejection without the asterisk.
+  it('refuses to delete a Person who moved a motion', async () => {
     const db = getDb(env);
-    await seedProperty('p1');
-    await db.insert(owners).values({
-      id: 'o1',
-      propertyId: 'p1',
-      fullName: 'A. Reyes',
-      createdAt: now,
-      updatedAt: now,
-    });
+    await seedPerson('pe1');
     await seedMeeting('m1');
     await db.insert(motions).values({
       id: 'mo1',
       meetingId: 'm1',
       sequence: 1,
       text: 'X',
-      moverPersonId: null,
+      moverPersonId: 'pe1',
       secondPersonId: null,
-      moverOwnerId: 'o1',
-      secondOwnerId: null,
       outcome: 'passed',
       createdBy: 'u1',
       createdAt: now,
       updatedAt: now,
     });
     await expect(
-      db.delete(owners).where(eq(owners.id, 'o1')),
+      db.delete(people).where(eq(people.partyId, 'pe1')),
     ).rejects.toThrow();
-    expect((await db.select().from(owners)).length).toBe(1);
+    expect((await db.select().from(people)).length).toBe(1);
   });
 });

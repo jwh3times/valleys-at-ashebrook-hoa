@@ -98,6 +98,12 @@ const NEW_MODEL_SURFACE = new Set([
   'pages/api/admin/verification-requests.ts',
   // Phase 3d (#220): transfer-time effects and the review-flag queue.
   'pages/api/admin/review-flags.ts',
+  // #248: the meeting and elections records name WHO ACTED, and that identity
+  // is the roster's Person now rather than the retired `board_people` row.
+  // These read `people`/`parties` to offer and validate that link — they write
+  // no roster row, and the roster remains the party surfaces' to write.
+  'pages/api/admin/meetings.ts',
+  'pages/api/admin/candidates.ts',
   // Phase 3e (#221): the two legacy role surfaces, re-pointed behind the
   // cutover flag. Their `derived` branch writes Access Grants and Person Link
   // endings; their `legacy` branch is unchanged.

@@ -9,10 +9,11 @@ import {
   boardVotes,
   boardPeople,
 } from '../../src/server/db/schema';
+import { people } from '../../src/server/db/roster-schema';
 import {
   now,
   truncateAll,
-  seedBoardPerson as seedPerson,
+  seedPerson as seedPerson,
   seedMeeting as seedMeetingRow,
 } from './fixtures';
 
@@ -182,9 +183,9 @@ describe('meeting schema', () => {
       choice: 'yes',
     });
     await expect(
-      db.delete(boardPeople).where(eq(boardPeople.id, 'p1')),
+      db.delete(people).where(eq(people.partyId, 'p1')),
     ).rejects.toThrow();
-    expect((await db.select().from(boardPeople)).length).toBe(1);
+    expect((await db.select().from(people)).length).toBe(1);
   });
 
   it('rejects a second vote from the same person on one motion', async () => {

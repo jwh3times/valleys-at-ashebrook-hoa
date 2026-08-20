@@ -192,8 +192,8 @@ const CONSUMERS = new Map<string, Consumer>([
       disposition: 'needs-repointing',
       reason:
         'proxy and member-lot reads resolve grantor and holder names from ' +
-        'owners; it also reads board_people for the meeting-record people ' +
-        'picker, so it appears in both work streams',
+        'owners. Its board_people half is gone: #248 repointed the ' +
+        'meeting-record name map at the party roster',
     },
   ],
   [
@@ -220,24 +220,11 @@ const CONSUMERS = new Map<string, Consumer>([
   ],
 
   // ---- Blocked on the meeting record Person repointing ------------------
-  [
-    'pages/api/admin/meetings.ts',
-    {
-      disposition: 'blocked-on-person-repointing',
-      reason:
-        'attendance, mover/second, and roll call reference board_people; ' +
-        'AGENTS.md already records that the meeting record keeps doing so ' +
-        'until its Person repointing',
-    },
-  ],
-  [
-    'pages/api/admin/candidates.ts',
-    {
-      disposition: 'blocked-on-person-repointing',
-      reason:
-        'candidates.board_person_id links a winner to a board_people identity',
-    },
-  ],
+  // EMPTY since #248 part 1, which repointed the meeting and elections records
+  // at `people(party_id)` and closed this category. Kept as a heading because
+  // the category is still meaningful: `board_people` survives until phase 4
+  // drops it, and a new reader of it belongs here rather than in the list
+  // above.
 ]);
 
 function sourceFiles(dir: string): string[] {

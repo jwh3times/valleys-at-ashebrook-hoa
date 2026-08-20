@@ -18,6 +18,7 @@ import {
   fetchAdminMeetings,
   fetchAdminMeeting,
 } from '../../src/server/content/reads';
+import { seedPeopleRows } from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -92,7 +93,7 @@ describe('meeting read helpers', () => {
 
   it('nests attendance and motions with derived tallies', async () => {
     const db = getDb(env);
-    await db.insert(boardPeople).values([
+    await seedPeopleRows([
       {
         id: 'p1',
         fullName: 'A. Reyes',
@@ -277,7 +278,7 @@ describe('meeting read helpers', () => {
 
   it('scopes attendance and motions to the requested meeting only', async () => {
     const db = getDb(env);
-    await db.insert(boardPeople).values([
+    await seedPeopleRows([
       {
         id: 'p1',
         fullName: 'A. Reyes',
@@ -352,7 +353,7 @@ describe('meeting read helpers', () => {
 
   it('returns an empty motions array for a meeting with no motions', async () => {
     const db = getDb(env);
-    await db.insert(boardPeople).values({
+    await seedPeopleRows({
       id: 'p1',
       fullName: 'A. Reyes',
       userId: null,
@@ -491,7 +492,7 @@ describe('meeting read helpers', () => {
 
     it('nests motions, attendance, and votes with derived tallies', async () => {
       const db = getDb(env);
-      await db.insert(boardPeople).values([
+      await seedPeopleRows([
         {
           id: 'p1',
           fullName: 'A. Reyes',

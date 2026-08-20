@@ -47,11 +47,17 @@ describe('meeting approval provenance migration', () => {
         timestamp,
         timestamp,
       ),
+      // #248: a roll-call vote names a roster Person, not the retired
+      // `board_people` identity.
       env.DATABASE.prepare(
-        `INSERT INTO board_people
-          (id, full_name, created_at, updated_at)
-         VALUES ('person-1', 'A. Reyes', ?, ?)`,
+        `INSERT INTO parties (id, kind, created_at, updated_at)
+         VALUES ('person-1', 'person', ?, ?)`,
       ).bind(timestamp, timestamp),
+      env.DATABASE.prepare(
+        `INSERT INTO people
+          (party_id, party_kind, full_name, name_normalized, updated_at)
+         VALUES ('person-1', 'person', 'A. Reyes', 'a. reyes', ?)`,
+      ).bind(timestamp),
     ]);
     await env.DATABASE.prepare(
       `INSERT INTO motions
