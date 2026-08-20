@@ -1,24 +1,16 @@
 import { handle } from '@astrojs/cloudflare/handler';
-import { cleanupVerificationState } from './server/cleanup/verification';
+import { runScheduledJobs } from './server/scheduled';
 
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return handle(request, env, ctx);
   },
 
-  async scheduled(
+  scheduled(
     _controller: ScheduledController,
     env: Env,
     _ctx: ExecutionContext,
   ) {
-    try {
-      const result = await cleanupVerificationState(env);
-      console.log(
-        `[cleanup] verification=${result.verificationRows} manual_approval=${result.manualApprovalRows} verification_codes=${result.verificationCodeRows} review_requests=${result.reviewRequestRows}`,
-      );
-    } catch (err) {
-      console.error('[cleanup] failed', err);
-      throw err;
-    }
+    return runScheduledJobs(env);
   },
 };
