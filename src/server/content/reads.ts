@@ -22,7 +22,6 @@ import {
   motions,
   motionEligibility,
   boardVotes,
-  boardPeople,
   properties,
   owners,
   memberAttendance,
@@ -34,6 +33,8 @@ import {
   ballots,
   proxies,
 } from '../db/schema';
+import { people } from '../db/roster-schema';
+import { personDisplayLabel } from '../../lib/format';
 import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
 import { tallyVotes } from '../../lib/types';
@@ -206,10 +207,19 @@ async function assembleMeetingDetail(
 ): Promise<MeetingDetail> {
   const id = m.id;
 
-  const people = await db
-    .select({ id: boardPeople.id, fullName: boardPeople.fullName })
-    .from(boardPeople);
-  const nameOf = new Map(people.map((p) => [p.id, p.fullName]));
+  // #248: board attendance, roll call, and mover/second name a party-roster
+  // Person. `people.full_name` is nullable under Roster Redaction, so the label
+  // goes through personDisplayLabel like every other Person read — a surface
+  // with its own fallback is a bug (see src/lib/format.ts).
+  const personRows = await db
+    .select({ partyId: people.partyId, fullName: people.fullName })
+    .from(people);
+  const nameOf = new Map(
+    personRows.map((p) => [
+      p.partyId,
+      personDisplayLabel(p.fullName, p.partyId),
+    ]),
+  );
 
   const attendanceRows = await db
     .select({
@@ -842,7 +852,7 @@ async function fetchCandidatesFor(
   return rows.map((c) => ({
     id: c.id,
     fullName: c.fullName,
-    boardPersonId: c.boardPersonId,
+    personId: c.personId,
     statementMd: c.statementMd,
     sequence: c.sequence,
     votes: c.votes,

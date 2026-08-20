@@ -14,6 +14,7 @@ import {
   boardPeople,
   boardTerms,
 } from '../../src/server/db/schema';
+import { parties, people } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
@@ -27,6 +28,8 @@ beforeEach(async () => {
   await db.delete(candidates);
   await db.delete(elections);
   await db.delete(boardPeople);
+  await db.delete(people);
+  await db.delete(parties);
 });
 
 const url = 'http://localhost/api/admin/candidates';
@@ -80,18 +83,27 @@ async function createCandidateRow(
       votes: null,
       won: false,
       withdrawn: false,
-      boardPersonId: null,
+      personId: null,
       createdAt: now,
       ...overrides,
     });
   return id;
 }
 
-async function createBoardPerson(fullName: string): Promise<string> {
+/** A roster Person — what `candidates.person_id` references since #248. */
+async function createPerson(fullName: string): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env)
-    .insert(boardPeople)
-    .values({ id, fullName, createdAt: now, updatedAt: now });
+  const db = getDb(env);
+  await db
+    .insert(parties)
+    .values({ id, kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(people).values({
+    partyId: id,
+    partyKind: 'person',
+    fullName,
+    nameNormalized: fullName.toLowerCase(),
+    updatedAt: now,
+  });
   return id;
 }
 
@@ -201,17 +213,17 @@ describe('candidates admin route — board', () => {
     }
   });
 
-  it('rejects a create with an unknown boardPersonId with 400', async () => {
+  it('rejects a create with an unknown personId with 400', async () => {
     const electionId = await createElection();
     const res = await POST(
       req(url, 'POST', {
         electionId,
         fullName: 'A',
-        boardPersonId: 'nope',
+        personId: 'nope',
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/unknown boardpersonid/i);
+    expect(await res.text()).toMatch(/unknown personid/i);
     const rows = await getDb(env)
       .select()
       .from(candidates)
@@ -219,19 +231,19 @@ describe('candidates admin route — board', () => {
     expect(rows.length).toBe(0);
   });
 
-  it('creates a candidate linked to an existing board person', async () => {
+  it('creates a candidate linked to an existing roster Person', async () => {
     const electionId = await createElection();
-    const personId = await createBoardPerson('Incumbent Person');
+    const personId = await createPerson('Incumbent Person');
     const res = await POST(
       req(url, 'POST', {
         electionId,
         fullName: 'Incumbent Person',
-        boardPersonId: personId,
+        personId: personId,
       }),
     );
     expect(res.status).toBe(201);
     const { id } = (await res.json()) as { id: string };
-    expect((await getCandidate(id)).boardPersonId).toBe(personId);
+    expect((await getCandidate(id)).personId).toBe(personId);
   });
 
   it('rejects a create carrying sequence, with 400', async () => {
@@ -340,12 +352,12 @@ describe('candidates admin route — board', () => {
     expect(await res.text()).toMatch(/no fields to update/i);
   });
 
-  it('PATCH rejects an unknown boardPersonId with 400', async () => {
+  it('PATCH rejects an unknown personId with 400', async () => {
     const electionId = await createElection();
     const id = await createCandidateRow(electionId, 1);
-    const res = await PATCH(req(url, 'PATCH', { id, boardPersonId: 'nope' }));
+    const res = await PATCH(req(url, 'PATCH', { id, personId: 'nope' }));
     expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/unknown boardpersonid/i);
+    expect(await res.text()).toMatch(/unknown personid/i);
   });
 
   it('PATCH rejects sequence with 400', async () => {
