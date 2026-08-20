@@ -113,6 +113,15 @@ npx wrangler d1 migrations list DATABASE --remote
 Before applying migrations that add referential integrity to an existing remote database, run the
 orphan audit in your private operations workflow and confirm every count is zero.
 
+**Migration `0028` is not safe in either order.** Every migration before it was written so merged
+code works against the schema whether or not the migration has run yet; `0028` breaks that, since it
+renames `candidates.board_person_id` to `candidates.person_id` and repoints several meeting/election
+identity columns off the legacy `board_people` onto the party roster, and the deployed code reads
+and writes only the new names. Run `npm run db:migrate:remote` for `0028` before or together with
+deploying the code that ships with it — not on the otherwise-safe any-time-before-the-next-freeze
+schedule above — or the admin meeting-record people picker and candidate-link write path will fail
+against the still-legacy schema.
+
 ## 5. Import the Owner Roster
 
 Homeowner verification uses the owner roster only to send one-time codes to contacts already on
