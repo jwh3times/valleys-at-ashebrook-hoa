@@ -152,7 +152,10 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   a static scan of `src/`; `test/server/ballot-privacy.test.ts`, a runtime proof that
   `ballot_choices` rows are byte-identical across a transfer) plus a `verify:invariants` check
   hold that boundary as a permanent gate on the discovery/flag/ledger/export machinery, not a
-  point-in-time review.
+  point-in-time review. As of #240, that invariant check reaches production two ways: on demand
+  as the operator-run `npm run verify:invariants`, and automatically every day on the Worker's
+  existing cron trigger (`src/server/db/invariants.ts`, shared by both), so a violation of this
+  boundary is caught the day it occurs rather than only when someone thinks to check.
 - **Live-vote eligibility and lifecycle history are immutable records.**
   `election_eligibility` and `motion_eligibility` are the record-date snapshots: they freeze every
   active property and its vote weight at first open, and every live ballot or motion vote stamps its

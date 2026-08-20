@@ -824,7 +824,11 @@ boolean`.
   draft status), `fetchMemberLots` (the caller's active lots and active owners), and
   `fetchMemberProxies` (lot-scoped granted/held lists with the ADR 0019 own-lot occasion exception
   and held-row tier redaction); these are not a public or complete tier-gated proxy register.
-- `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), and migrations.
+- `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), migrations, and
+  `invariants.ts` (`INVARIANT_CHECKS`, `runInvariants(env)`, `formatInvariantRun` — see the
+  invariant-gate paragraph below the **Data model** section).
+- `scheduled.ts`: `runScheduledJobs(env)`, the body of the Worker's daily `0 7 * * *` cron trigger —
+  see **Deploy** below.
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
   shared Person Link creation/ending machinery behind `/api/verify/unlink` and
@@ -1097,20 +1101,38 @@ Phase 2 adds:
   used by the backfill to detect cross-Party contact ambiguity that legacy data never normalized
   consistently enough to catch on its own.
 
-The operator-run `npm run verify:invariants` (`scripts/verify-invariants.ts`) runs 17 invariant
-queries with none pending — interval non-overlap on Ownerships/Representations/Board Terms/Office
-Assignments, party-subtype completeness, audit-event detail cardinality and causal order,
+The 17 invariant queries — none pending — are the shared source of truth in `src/server/db/
+invariants.ts` (`INVARIANT_CHECKS`): interval non-overlap on Ownerships/Representations/Board Terms/
+Office Assignments, party-subtype completeness, audit-event detail cardinality and causal order,
 redaction/review-flag completeness, a check that no `review_flags` column references ballot choices
 or candidates, and the two view-backed checks migration `0023` un-stubs
-(`audit_integrity_violations_v`, `board_eligibility_violations_v`) — against local or remote D1 via
-Wrangler, printing any violating rows and exiting non-zero. `audit_integrity_violations_v` sits
-exactly at D1's five-term compound-`SELECT` ceiling; a sixth check there needs a second view rather
-than a sixth branch. Each query retries up to 3 attempts (`scripts/wrangler-d1.ts`'s `withRetry`),
-absorbing an intermittent Node 26/Windows Wrangler libuv exit-crash after the query already
+(`audit_integrity_violations_v`, `board_eligibility_violations_v`). `audit_integrity_violations_v`
+sits exactly at D1's five-term compound-`SELECT` ceiling; a sixth check there needs a second view
+rather than a sixth branch. Two callers run them, and per #240 (decided by #206 — "the checks that
+gate a migration are exactly the checks that catch drift afterwards") they must never disagree
+about the set, so they cannot share an execution path (a Worker cannot spawn a subprocess) and
+share the queries instead, the same shared-source discipline `shadow-compare.ts` was built with:
+the operator-run `npm run verify:invariants` (`scripts/verify-invariants.ts`), which still owns the
+Wrangler-subprocess machinery and `--local`/`--remote` — that path is why the CLI, not the scheduled
+job, is what can point at remote D1 from a laptop — and `src/server/scheduled.ts`'s daily cron job
+(see **Deploy** below), which runs `runInvariants(env)` straight through the `DATABASE` binding.
+`runInvariants` executes every check sequentially (a daily background job has no latency budget,
+and `PRAGMA foreign_key_check` walks every table) and never throws for a violation — a check's
+`CheckResult.status` is `ok`/`violated`/`errored`/`pending`, `errored` deliberately distinct from
+`ok` because a failed query also returns zero rows and zero rows is this gate's GREEN — leaving the
+decision to the caller: the CLI exits non-zero and the scheduled job throws. `formatInvariantRun`
+renders IDs-and-codes-only log lines shared by both callers so a violation reads identically in
+Wrangler output and Workers Logs; nothing about a violation is stored, since a real one re-fires
+every day until fixed. The CLI's own query execution still retries up to 3 attempts
+(`scripts/wrangler-d1.ts`'s `withRetry`), absorbing an intermittent Node 26/Windows Wrangler libuv
+exit-crash after the query already
 succeeded; a deterministic failure — stdout carrying Wrangler's own `--json` error object — fails
 immediately instead of burning retries on a repeatable error, and a response shaped as anything
 other than exactly one statement result throws rather than being read as zero rows (this gate's
-green).
+green). `test/server/invariants.test.ts` runs all 17 checks through the real `DATABASE` binding
+(including `PRAGMA foreign_key_check` and both views) and pins `runScheduledJobs`'s throw on a
+violation; `test/unit/invariants-single-source.test.ts` is the anti-drift guard, asserting neither
+caller contains a `SELECT`/`PRAGMA` of its own and that the shared list stays non-trivial.
 
 `resolutions` (the resolutions book — standing rules the board adopts, per
 [ADR 0016](./docs/adr/0016-resolutions-supersession-chain.md)) is a durable record: amending one
@@ -1162,7 +1184,14 @@ migration: `test/unit/ballot-privacy-boundary.test.ts` statically scans `src/` f
 definition, the cast path, and conducted close's tally derivation, letting the two modules that
 prose-declare the rule (`transfer-effects.ts`, `audit-schema.ts`'s `review_flags` header) mention
 it only in comments, and hard-denying the phase 3d discovery/flag/ledger/export machinery any
-reference at all; `test/server/ballot-privacy.test.ts` is the runtime half, proving
+reference at all; a third allow-list category, `CHOICE_NAMED_NOT_QUERIED`, holds exactly
+`server/db/invariants.ts` — moving the check list into `src/` for #240 brought its
+`no_flag_references_ballot_choices` check under this scan for the first time, since it spells
+`ballot_choices` in its own check name and operator-facing meaning string (code, not prose, so the
+prose-only exemption doesn't fit), and a separate assertion denies that file any `FROM`/`JOIN`/
+`INTO`/`UPDATE` against the table or any `candidate_id`/`candidateId` mention, since its SQL only
+inspects `pragma_table_info('review_flags')` for column names and reads no choice row;
+`test/server/ballot-privacy.test.ts` is the runtime half, proving
 `ballot_choices` rows are byte-identical before and after a transfer and that the review-flag
 register exposes only the turnout row. `verify:invariants`'
 `no_flag_references_ballot_choices` is the third leg, checked live against D1.
@@ -1443,7 +1472,11 @@ Astro's copy in favor of `cloudflareTest`'s own), so the two configs can't drift
 "a Cloudflare plugin." This `test/unit` vs. `test/server` split matches the type-checking split
 described under Commands above: `test/unit/**` is checked by the Node-side `tsconfig.node.json`,
 while `test/server/**` — which imports `cloudflare:test` — stays in the Workers-side
-`tsconfig.json`.
+`tsconfig.json`. `src/worker.ts` itself cannot be imported by the Workers test pool: it imports
+Astro's Cloudflare handler, which resolves a build-time virtual module. That's why the cron body
+lives in `src/server/scheduled.ts` instead — `test/unit/scheduled.test.ts` exercises
+`runScheduledJobs` directly, and `test/unit/worker.test.ts` only asserts that `src/worker.ts`
+delegates to it.
 
 ## Deploy
 
@@ -1453,8 +1486,13 @@ npx wrangler deploy -c dist/server/wrangler.json
 ```
 
 The root `wrangler.toml` uses `main = "src/worker.ts"` so the Worker can expose both Astro SSR
-handling and the scheduled cleanup trigger. Manual deploys still use the adapter-emitted
-`dist/server/wrangler.json`.
+handling and the daily `0 7 * * *` scheduled trigger. `src/worker.ts` is a thin adapter — `fetch`
+delegates to Astro's `handle`, `scheduled` delegates to `src/server/scheduled.ts`'s
+`runScheduledJobs(env)`, which runs the verification-state retention sweep and the ADR 0022
+invariant drift check (`runInvariants`, see the invariant-gate paragraph above) independently, so a
+broken sweep can't hide an invariant violation or vice versa, and throws if either failed so a
+partial-success invocation still shows red in the dashboard. Manual deploys still use the
+adapter-emitted `dist/server/wrangler.json`.
 
 ## Commit & Pull Request Guidelines
 
