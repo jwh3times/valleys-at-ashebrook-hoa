@@ -1,5 +1,6 @@
 import { getDb } from '../db/client';
 import { owners, properties } from '../db/schema';
+import { contactMethods, people } from '../db/roster-schema';
 import { retrieve } from './search';
 import { type Source } from './sources';
 import { buildExcerptContext } from './context';
@@ -37,14 +38,45 @@ const SYSTEM_PROMPT = [
 ].join('\n');
 
 /**
- * Load the roster into PII entries (owners' names/phones/emails + property
- * addresses). This feeds ONLY the pseudonymization dictionary, so it is not
- * filtered to active status — former owners and inactive properties must
- * still be masked if their names or addresses appear in document excerpts.
+ * Load the roster into PII entries (names, phones, emails, and Lot addresses).
+ * This feeds ONLY the pseudonymization dictionary, so it is deliberately not
+ * filtered by status, interval, void, or consolidation — a former owner, an
+ * ended contact method, a voided row, and a consolidated duplicate must all
+ * still be masked if their values appear in document excerpts. Masking more
+ * than necessary degrades an excerpt's readability; masking less leaks
+ * resident PII to Anthropic, so every ambiguous case resolves toward masking.
+ *
+ * Both roster models are read and unioned. Since the ADR 0022 phase 3f flip
+ * the PARTY roster is the live one — `/api/admin/roster-parties` and
+ * `/api/admin/roster-contact-methods` write `people`/`contact_methods` with no
+ * legacy mirror, so reading `owners` alone silently misses every Person
+ * recorded after the flip (#233). The legacy tables are still read because
+ * they still hold rows the backfill left in place; ADR 0022 phase 4 (#212)
+ * drops them, and that is the change that makes the party-roster read the only
+ * source rather than the primary one.
+ *
+ * Redacted values need no special handling: Roster Redaction nulls the value
+ * and stamps its marker in the same mutation (`people_name_redaction_paired`,
+ * `contact_methods_value_redaction_paired`), so a redacted row arrives here as
+ * a NULL and is skipped — the dictionary must not resurrect a name the roster
+ * has erased.
+ *
+ * ORGANIZATION NAMES ARE DELIBERATELY EXCLUDED, and this is the one place the
+ * "resolve toward masking" rule is overridden. `buildPseudonymizer` tokenizes
+ * every `name` entry into per-word matchers, so an Organization recorded as
+ * "The Valleys at Ashebrook HOA" would register `Valleys` and `Ashebrook` as
+ * name matchers and rewrite the neighborhood's own name into a surrogate
+ * PERSON throughout every excerpt — corrupting the corpus rather than
+ * protecting anyone. Organization CONTACT METHODS are still masked above:
+ * an email or phone is matched literally, never tokenized, and an
+ * organization's contact is often a resident's personal address in practice.
+ * The residual gap is an Organization whose legal name embeds a person's name
+ * ("The Smith Family Trust"), which needs a non-tokenized name entry type to
+ * fix properly. See #233.
  */
 export async function loadRosterEntries(env: Env): Promise<PiiEntry[]> {
   const db = getDb(env);
-  const [ownerRows, propRows] = await Promise.all([
+  const [ownerRows, propRows, personRows, contactRows] = await Promise.all([
     db
       .select({
         fullName: owners.fullName,
@@ -53,15 +85,34 @@ export async function loadRosterEntries(env: Env): Promise<PiiEntry[]> {
       })
       .from(owners),
     db.select({ address: properties.address }).from(properties),
+    db.select({ fullName: people.fullName }).from(people),
+    db
+      .select({ channel: contactMethods.channel, value: contactMethods.value })
+      .from(contactMethods),
   ]);
+
   const entries: PiiEntry[] = [];
+  const seen = new Set<string>();
+  const add = (type: PiiEntry['type'], value: string | null): void => {
+    if (!value) return;
+    // The same person appears in both models after the backfill; a duplicate
+    // dictionary entry is harmless but pointless work at every surrogate tier.
+    const key = `${type}:${value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ type, value });
+  };
+
   for (const o of ownerRows) {
-    if (o.fullName) entries.push({ type: 'name', value: o.fullName });
-    if (o.phone) entries.push({ type: 'phone', value: o.phone });
-    if (o.email) entries.push({ type: 'email', value: o.email });
+    add('name', o.fullName);
+    add('phone', o.phone);
+    add('email', o.email);
   }
-  for (const p of propRows)
-    if (p.address) entries.push({ type: 'address', value: p.address });
+  for (const p of propRows) add('address', p.address);
+  for (const p of personRows) add('name', p.fullName);
+  for (const c of contactRows)
+    add(c.channel === 'email' ? 'email' : 'phone', c.value);
+
   return entries;
 }
 
