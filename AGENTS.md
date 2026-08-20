@@ -845,7 +845,13 @@ boolean`.
   (`buildExcerptContext`, shared by the assistant and the report generator: resolves chunks to real
   documents, drops orphan/empty chunks, and builds the pseudonymized, per-document
   `[Source N]`-numbered excerpt text), `anthropic.ts` (`getAnthropic`, Anthropic client + config
-  guard), `assistant.ts` (`answer`, `loadRosterEntries`, and the shared `claudeTextStream`/
+  guard), `assistant.ts` (`answer`, `loadRosterEntries` — the pseudonymization dictionary source,
+  unioning Person names and Contact Methods from the live party roster (`people`, `contact_methods`)
+  with owner names/phones/emails from the legacy `owners` table and `properties.address`, deduped
+  by `(type, value)`; unfiltered by status/interval/void/consolidation so a former owner or an
+  ended contact value already used in a document stays masked, redacted rows arrive `NULL` and are
+  skipped, and Organization names are deliberately excluded from tokenized name matching (their
+  contact methods are still masked) — see #233 and SECURITY.md — and the shared `claudeTextStream`/
   `ClaudeStream` streaming helpers; orchestrates retrieve -> pseudonymize -> Claude generation ->
   de-anonymized streamed output), and `report.ts` (`planSubQueries`, a small Claude Haiku call that
   expands a freeform topic into 3-6 retrieval sub-queries from the pseudonymized topic and returns
