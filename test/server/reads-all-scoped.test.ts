@@ -4,7 +4,7 @@ import * as reads from '../../src/server/content/reads';
 import {
   truncateAll,
   seedProperty,
-  seedOwner,
+  seedLotAuthority,
   seedMeeting,
   seedElection,
   seedProxy,
@@ -58,7 +58,7 @@ beforeEach(async () => {
   await truncateAll();
   const db = getDb(env);
   await seedProperty('p1');
-  await seedOwner('o1', 'p1');
+  await seedLotAuthority('o1', 'p1');
   await seedMeeting('m1', { visibility: 'board', status: 'draft' });
   await seedElection('e1', { visibility: 'board', status: 'draft' });
   await seedProxy('x1', { meetingId: 'm1' });

@@ -247,7 +247,7 @@ beforeEach(async () => {
       electionId: 'election-visible',
       propertyId: 'property-own',
       weight: 7,
-      castByOwnerId: 'owner-one',
+      castByPersonId: 'owner-one',
       recordedAt: now,
     },
     {
@@ -269,7 +269,7 @@ beforeEach(async () => {
     id: 'member-vote-held',
     motionId: 'motion-visible',
     propertyId: 'property-held',
-    castByOwnerId: null,
+    castByPersonId: null,
     weight: 3,
     choice: 'yes',
     proxyId: 'proxy-held-meeting',
@@ -308,7 +308,7 @@ describe('fetchOpenVotingFor', () => {
         address: '1 Ashebrook Lane',
         weight: 7,
         hasCast: true,
-        ownerOptions: [
+        personOptions: [
           { id: 'owner-one', fullName: 'Alex Owner' },
           { id: 'owner-two', fullName: 'Blair Owner' },
         ],
@@ -325,7 +325,7 @@ describe('fetchOpenVotingFor', () => {
         address: '2 Ashebrook Lane',
         weight: 3,
         hasCast: false,
-        ownerOptions: [],
+        personOptions: [],
         proxyOptions: [
           {
             id: 'proxy-held-election',
@@ -344,7 +344,7 @@ describe('fetchOpenVotingFor', () => {
         address: '3 Ashebrook Lane',
         weight: 4,
         hasCast: true,
-        ownerOptions: [],
+        personOptions: [],
         proxyOptions: [
           {
             id: 'proxy-meeting-only',
@@ -546,17 +546,17 @@ function motion(
 function proxy(
   id: string,
   propertyId: string,
-  grantorOwnerId: string,
+  grantorPersonId: string,
   holderName: string,
-  holderOwnerId: string,
+  holderPersonId: string,
   occasion: { meetingId: string } | { electionId: string },
 ) {
   return {
     id,
     propertyId,
-    grantorOwnerId,
+    grantorPersonId,
     holderName,
-    holderOwnerId,
+    holderPersonId,
     meetingId: 'meetingId' in occasion ? occasion.meetingId : null,
     electionId: 'electionId' in occasion ? occasion.electionId : null,
     createdBy: 'board-user',

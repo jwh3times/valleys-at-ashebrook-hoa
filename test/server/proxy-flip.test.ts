@@ -54,8 +54,8 @@ async function seedProperty(id: string) {
   await fx.seedProperty(id);
 }
 
-async function seedOwner(id: string, propertyId: string) {
-  await fx.seedOwner(id, propertyId);
+async function seedGrantor(id: string, propertyId: string) {
+  await fx.seedLotAuthority(id, propertyId);
 }
 
 async function seedMeeting(id: string) {
@@ -82,7 +82,7 @@ describe('setMemberAttendance with proxyId', () => {
   beforeEach(async () => {
     await seedProperty('p1');
     await seedProperty('p2');
-    await seedOwner('o1', 'p1');
+    await seedGrantor('o1', 'p1');
     await seedMeeting('m1');
     await seedMeeting('m2');
     await getDb(env)
@@ -142,7 +142,7 @@ describe('setMemberAttendance with proxyId', () => {
     expect(await res.text()).toBe('Proxy is for a different lot');
   });
 
-  it('rejects an entry carrying both proxyId and representedByOwnerId', async () => {
+  it('rejects an entry carrying both proxyId and representedByPersonId', async () => {
     const res = await meetingsPost(
       req(url, 'POST', {
         action: 'setMemberAttendance',
@@ -152,14 +152,14 @@ describe('setMemberAttendance with proxyId', () => {
             propertyId: 'p1',
             present: true,
             proxyId: 'px1',
-            representedByOwnerId: 'o1',
+            representedByPersonId: 'o1',
           },
         ],
       }),
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe(
-      'An entry cannot carry both proxyId and representedByOwnerId — who acted lives on the proxy record',
+      'An entry cannot carry both proxyId and representedByPersonId — who acted lives on the proxy record',
     );
   });
 });
@@ -168,7 +168,7 @@ describe('setMemberVotes with proxyId', () => {
   beforeEach(async () => {
     await seedProperty('p1');
     await seedProperty('p2');
-    await seedOwner('o1', 'p1');
+    await seedGrantor('o1', 'p1');
     await seedMeeting('m1');
     await seedMeeting('m2');
     await seedMotion('mo1', 'm1');
@@ -230,7 +230,7 @@ describe('setMemberVotes with proxyId', () => {
     expect(await res.text()).toBe('Proxy is for a different lot');
   });
 
-  it('rejects an entry carrying both proxyId and castByOwnerId', async () => {
+  it('rejects an entry carrying both proxyId and castByPersonId', async () => {
     const res = await motionsPost(
       req(motionsUrl, 'POST', {
         action: 'setMemberVotes',
@@ -240,14 +240,14 @@ describe('setMemberVotes with proxyId', () => {
             propertyId: 'p1',
             choice: 'yes',
             proxyId: 'px1',
-            castByOwnerId: 'o1',
+            castByPersonId: 'o1',
           },
         ],
       }),
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe(
-      'An entry cannot carry both proxyId and castByOwnerId — who acted lives on the proxy record',
+      'An entry cannot carry both proxyId and castByPersonId — who acted lives on the proxy record',
     );
   });
 });
@@ -256,7 +256,7 @@ describe('setBallots with proxyId', () => {
   beforeEach(async () => {
     await seedProperty('p1');
     await seedProperty('p2');
-    await seedOwner('o1', 'p1');
+    await seedGrantor('o1', 'p1');
     await seedMeeting('m1');
     await seedElection('e1', null);
     await seedElection('e2', 'm1');
@@ -322,7 +322,7 @@ describe('setBallots with proxyId', () => {
     expect(await res.text()).toBe('Proxy is for a different lot');
   });
 
-  it('rejects an entry carrying both proxyId and castByOwnerId', async () => {
+  it('rejects an entry carrying both proxyId and castByPersonId', async () => {
     const res = await electionsPost(
       req(electionsUrl, 'POST', {
         action: 'setBallots',
@@ -331,14 +331,14 @@ describe('setBallots with proxyId', () => {
           {
             propertyId: 'p1',
             proxyId: 'pxE',
-            castByOwnerId: 'o1',
+            castByPersonId: 'o1',
           },
         ],
       }),
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe(
-      'An entry cannot carry both proxyId and castByOwnerId — who acted lives on the proxy record',
+      'An entry cannot carry both proxyId and castByPersonId — who acted lives on the proxy record',
     );
   });
 
@@ -371,7 +371,7 @@ describe('setBallots with proxyId', () => {
 describe('proxyId public/admin exposure', () => {
   it('proxyId reaches the admin read but not the public read', async () => {
     await seedProperty('p1');
-    await seedOwner('o1', 'p1');
+    await seedGrantor('o1', 'p1');
     await seedMeeting('m1');
     await seedMotion('mo1', 'm1');
     await getDb(env)
@@ -413,7 +413,7 @@ describe('proxyId public/admin exposure', () => {
 describe('DELETE /api/admin/meetings with proxies', () => {
   beforeEach(async () => {
     await seedProperty('p1');
-    await seedOwner('o1', 'p1');
+    await seedGrantor('o1', 'p1');
   });
 
   it('cascades attendance, votes, and proxies for a draft meeting in one statement', async () => {
@@ -495,56 +495,56 @@ describe('DELETE /api/admin/meetings with proxies', () => {
 });
 
 describe('owner provenance across the three entry-set routes', () => {
-  // representedByOwnerId / cast_by_owner_id are real FKs to owners and D1
+  // representedByPersonId / cast_by_person_id are real FKs to owners and D1
   // enforces them, so before the shared guard an unknown id left the route as
   // a raw FOREIGN KEY error from inside the batch — an unhandled 500. Only
   // setBallots pre-checked it; these pin all three.
   beforeEach(async () => {
     await seedProperty('p1');
-    await seedOwner('o1', 'p1');
+    await seedGrantor('o1', 'p1');
     await seedMeeting('m1');
   });
 
-  it('rejects an unknown representedByOwnerId on setMemberAttendance with 400', async () => {
+  it('rejects an unknown representedByPersonId on setMemberAttendance with 400', async () => {
     const res = await meetingsPost(
       req(url, 'POST', {
         action: 'setMemberAttendance',
         meetingId: 'm1',
         entries: [
-          { propertyId: 'p1', present: true, representedByOwnerId: 'ghost' },
+          { propertyId: 'p1', present: true, representedByPersonId: 'ghost' },
         ],
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.text()).toBe('Unknown representedByOwnerId in entries');
+    expect(await res.text()).toBe('Unknown representedByPersonId in entries');
     expect(await getDb(env).select().from(memberAttendance)).toHaveLength(0);
   });
 
-  it('rejects an unknown castByOwnerId on setMemberVotes with 400', async () => {
+  it('rejects an unknown castByPersonId on setMemberVotes with 400', async () => {
     await seedMotion('mo1', 'm1');
     const res = await motionsPost(
       req(motionsUrl, 'POST', {
         action: 'setMemberVotes',
         motionId: 'mo1',
-        entries: [{ propertyId: 'p1', choice: 'yes', castByOwnerId: 'ghost' }],
+        entries: [{ propertyId: 'p1', choice: 'yes', castByPersonId: 'ghost' }],
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.text()).toBe('Unknown castByOwnerId in entries');
+    expect(await res.text()).toBe('Unknown castByPersonId in entries');
     expect(await getDb(env).select().from(memberVotes)).toHaveLength(0);
   });
 
-  it('rejects an unknown castByOwnerId on setBallots with 400', async () => {
+  it('rejects an unknown castByPersonId on setBallots with 400', async () => {
     await seedElection('e1');
     const res = await electionsPost(
       req(electionsUrl, 'POST', {
         action: 'setBallots',
         electionId: 'e1',
-        entries: [{ propertyId: 'p1', castByOwnerId: 'ghost' }],
+        entries: [{ propertyId: 'p1', castByPersonId: 'ghost' }],
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.text()).toBe('Unknown castByOwnerId in entries');
+    expect(await res.text()).toBe('Unknown castByPersonId in entries');
     expect(await getDb(env).select().from(ballots)).toHaveLength(0);
   });
 
@@ -559,7 +559,7 @@ describe('owner provenance across the three entry-set routes', () => {
         action: 'setMemberAttendance',
         meetingId: 'm1',
         entries: [
-          { propertyId: 'p1', present: true, representedByOwnerId: 'o1' },
+          { propertyId: 'p1', present: true, representedByPersonId: 'o1' },
         ],
       }),
     );
@@ -569,7 +569,7 @@ describe('owner provenance across the three entry-set routes', () => {
       req(motionsUrl, 'POST', {
         action: 'setMemberVotes',
         motionId: 'mo1',
-        entries: [{ propertyId: 'p1', choice: 'yes', castByOwnerId: 'o1' }],
+        entries: [{ propertyId: 'p1', choice: 'yes', castByPersonId: 'o1' }],
       }),
     );
     expect(votes.status).toBe(204);
@@ -578,7 +578,7 @@ describe('owner provenance across the three entry-set routes', () => {
       req(electionsUrl, 'POST', {
         action: 'setBallots',
         electionId: 'e1',
-        entries: [{ propertyId: 'p1', castByOwnerId: 'o1' }],
+        entries: [{ propertyId: 'p1', castByPersonId: 'o1' }],
       }),
     );
     expect(ballotsRes.status).toBe(204);
@@ -599,7 +599,7 @@ describe('owner provenance across the three entry-set routes', () => {
             propertyId: 'p1',
             present: true,
             proxyId: 'px1',
-            representedByOwnerId: 'o1',
+            representedByPersonId: 'o1',
           },
         ],
       }),
@@ -616,7 +616,7 @@ describe('owner provenance across the three entry-set routes', () => {
             propertyId: 'p1',
             choice: 'yes',
             proxyId: 'px1',
-            castByOwnerId: 'o1',
+            castByPersonId: 'o1',
           },
         ],
       }),

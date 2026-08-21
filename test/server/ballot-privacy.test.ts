@@ -245,7 +245,7 @@ async function castConductedBallot(): Promise<void> {
     electionId: 'elec-1',
     propertyId: 'lot-1',
     candidateIds: CANDIDATE_IDS,
-    castByOwnerId: 'own-1',
+    castByPersonId: 'own-1',
     proxyId: null,
   });
   expect(res.status).toBe(204);
@@ -402,7 +402,7 @@ describe('the member-motion vote reset beside a conducted ballot', () => {
           motionId: 'mot-1',
           propertyId: 'lot-1',
           choice: 'no',
-          castByOwnerId: 'own-1',
+          castByPersonId: 'own-1',
           proxyId: null,
         })
       ).status,

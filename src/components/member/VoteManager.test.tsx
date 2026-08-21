@@ -33,7 +33,7 @@ const election: OpenVotingItem = {
       address: '101 Example Street',
       weight: 1,
       hasCast: false,
-      ownerOptions: [{ id: 'o1', fullName: 'Owner One' }],
+      personOptions: [{ id: 'o1', fullName: 'Owner One' }],
       proxyOptions: [
         { id: 'px1', holderName: 'You', grantingAddress: '102 Example Street' },
       ],
@@ -54,7 +54,7 @@ const motion: OpenVotingItem = {
       address: '101 Example Street',
       weight: 1,
       hasCast: false,
-      ownerOptions: [{ id: 'o1', fullName: 'Owner One' }],
+      personOptions: [{ id: 'o1', fullName: 'Owner One' }],
       proxyOptions: [
         { id: 'px1', holderName: 'You', grantingAddress: '102 Example Street' },
       ],
@@ -92,7 +92,7 @@ describe('VoteManager', () => {
       electionId: 'e1',
       propertyId: 'p1',
       candidateIds: ['c1'],
-      castByOwnerId: 'o1',
+      castByPersonId: 'o1',
       proxyId: null,
     });
   });
@@ -156,7 +156,7 @@ describe('VoteManager', () => {
         electionId: 'e1',
         propertyId: 'p1',
         candidateIds: ['c1'],
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: 'px1',
       }),
     );
@@ -208,7 +208,7 @@ describe('VoteManager', () => {
         motionId: 'm1',
         propertyId: 'p1',
         choice: 'yes',
-        castByOwnerId: 'o1',
+        castByPersonId: 'o1',
         proxyId: null,
       }),
     );

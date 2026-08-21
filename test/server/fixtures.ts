@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:test';
+import { eq } from 'drizzle-orm';
 import { vi } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import {
@@ -28,7 +29,11 @@ import {
   ballots,
   proxies,
 } from '../../src/server/db/schema';
-import { parties, people } from '../../src/server/db/roster-schema';
+import {
+  parties,
+  people,
+  ownerships,
+} from '../../src/server/db/roster-schema';
 
 /**
  * Shared fixtures for the Workers/D1 test pool.
@@ -101,9 +106,11 @@ export function pauseNextBatch() {
  * The order is forced by the schema and is not arbitrary:
  *
  * - `member_attendance`, `member_votes` and `ballots` carry a `proxy_id` FK
- *   with NO ACTION (ADR 0018 — added by ALTER, so drizzle-kit dropped the
- *   action), so they must go before `proxies`.
- * - `proxies` references `owners` and `properties` with RESTRICT.
+ *   with NO ACTION (ADR 0018 — and, since migration 0029 rebuilt them, by
+ *   decision rather than drizzle-kit's ALTER trap), so they must go before
+ *   `proxies`.
+ * - `proxies` references `people` and `properties` with RESTRICT (#248 part 2;
+ *   it referenced `owners` until migration 0029).
  * - `candidates` and `board_terms` reference `board_people` with RESTRICT.
  * - `election_eligibility`, `motion_eligibility` and `ballots` reference
  *   `properties` with RESTRICT.
@@ -138,6 +145,12 @@ export async function truncateAll() {
   // references them. Only the Person subtype is cleared — a test that seeds
   // ownerships or contact methods against a Party is responsible for its own
   // roster teardown, as it was before this fixture touched the roster at all.
+  //
+  // #248 part 2: `ownerships` joins that set, because seedLotAuthority below
+  // writes one per (person, lot) pair and it references BOTH `parties` and
+  // `properties` with RESTRICT — so it goes after every table citing a Person
+  // and before both of its own parents.
+  await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
   // Roster: links and verifications cite properties.
@@ -192,6 +205,43 @@ export async function seedOwner(
       updatedAt: now,
       ...overrides,
     });
+}
+
+/**
+ * A roster Person holding Lot Authority over one Lot — the party-roster
+ * successor to `seedOwner` for everything the meeting, elections, and proxies
+ * records now name (#248 part 2, migration 0029).
+ *
+ * Seeds the Party, the Person, and a current Ownership. Pass
+ * `{ endDay: '2020-01-01' }` for a FORMER holder: the record-keeping pickers
+ * still offer them, but `proxyUseError` and the casting predicates refuse
+ * them, which is the distinction most of these suites are actually testing.
+ */
+export async function seedLotAuthority(
+  personId: string,
+  lotId: string,
+  overrides: { fullName?: string; startDay?: string | null; endDay?: string | null } = {},
+) {
+  const db = getDb(env);
+  const existing = await db
+    .select({ partyId: people.partyId })
+    .from(people)
+    .where(eq(people.partyId, personId));
+  if (existing.length === 0) {
+    await seedPerson(personId, {
+      fullName: overrides.fullName ?? `Person ${personId}`,
+      nameNormalized: (overrides.fullName ?? `Person ${personId}`).toLowerCase(),
+    });
+  }
+  await db.insert(ownerships).values({
+    id: `${personId}-${lotId}-own`,
+    ownerPartyId: personId,
+    lotId,
+    startDay: overrides.startDay === undefined ? null : overrides.startDay,
+    endDay: overrides.endDay ?? null,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 /**
@@ -364,7 +414,7 @@ export async function seedBallot(
       propertyId,
       weight: 1,
       proxyId: null,
-      castByOwnerId: null,
+      castByPersonId: null,
       recordedAt: now,
       ...overrides,
     });
@@ -379,9 +429,9 @@ export function proxyRow(id: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
     propertyId: 'p1',
-    grantorOwnerId: 'o1',
+    grantorPersonId: 'o1',
     holderName: 'Jane Q. Holder',
-    holderOwnerId: null,
+    holderPersonId: null,
     meetingId: null,
     electionId: null,
     createdBy: 'u1',
@@ -392,7 +442,7 @@ export function proxyRow(id: string, overrides: Record<string, unknown> = {}) {
 }
 
 /**
- * One owner authorising one holder for one lot at exactly one occasion. The
+ * One Person authorising one holder for one lot at exactly one occasion. The
  * caller must supply exactly one of `meetingId`/`electionId` — the
  * `proxies_one_occasion` CHECK rejects both or neither.
  */

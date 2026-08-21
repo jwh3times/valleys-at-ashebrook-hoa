@@ -262,7 +262,7 @@ function ballotInput(): CastBallotInput {
     electionId: 'election-open',
     propertyId: 'property-own',
     candidateIds: ['candidate-one', 'candidate-two'],
-    castByOwnerId: 'owner-own',
+    castByPersonId: 'owner-own',
     proxyId: null,
   };
 }
@@ -273,7 +273,7 @@ function motionInput(): CastMotionVoteInput {
     motionId: 'motion-open',
     propertyId: 'property-own',
     choice: 'yes',
-    castByOwnerId: 'owner-own',
+    castByPersonId: 'owner-own',
     proxyId: null,
   };
 }

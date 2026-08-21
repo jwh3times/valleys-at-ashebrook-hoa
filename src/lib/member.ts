@@ -5,16 +5,21 @@ import type { MemberProxyLists } from './types';
 
 export interface GrantProxyInput {
   propertyId: string;
-  grantorOwnerId: string;
-  holderOwnerId: string;
+  grantorPersonId: string;
+  holderPersonId: string;
   meetingId?: string | null;
   electionId?: string | null;
 }
 
-export interface OwnerLookupResult {
+/**
+ * The Persons who may act for one lot. The endpoint keeps its
+ * `/api/member/owner-lookup` path — #248 part 2 changed what it reads, not
+ * where it lives, and a URL rename is a separate, deploy-visible change.
+ */
+export interface LotPersonLookupResult {
   propertyId: string;
   address: string;
-  owners: { id: string; fullName: string }[];
+  persons: { id: string; fullName: string }[];
 }
 
 export async function fetchMyProxies(): Promise<MemberProxyLists> {
@@ -43,9 +48,9 @@ export async function revokeProxy(id: string): Promise<void> {
     throw new Error((await res.text()) || `Revoke failed: ${res.status}`);
 }
 
-export async function lookupOwners(
+export async function lookupLotPersons(
   address: string,
-): Promise<OwnerLookupResult> {
+): Promise<LotPersonLookupResult> {
   const res = await fetch('/api/member/owner-lookup', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

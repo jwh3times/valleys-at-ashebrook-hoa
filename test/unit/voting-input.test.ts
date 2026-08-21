@@ -9,7 +9,7 @@ describe('normalizeVoteAction', () => {
         electionId: ' election-1 ',
         propertyId: ' property-1 ',
         candidateIds: [' candidate-1 ', 'candidate-2'],
-        castByOwnerId: ' owner-1 ',
+        castByPersonId: ' owner-1 ',
       }),
     ).toEqual({
       ok: true,
@@ -18,7 +18,7 @@ describe('normalizeVoteAction', () => {
         electionId: 'election-1',
         propertyId: 'property-1',
         candidateIds: ['candidate-1', 'candidate-2'],
-        castByOwnerId: 'owner-1',
+        castByPersonId: 'owner-1',
         proxyId: null,
       },
     });
@@ -40,7 +40,7 @@ describe('normalizeVoteAction', () => {
         motionId: 'motion-1',
         propertyId: 'property-1',
         choice: 'abstain',
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: 'proxy-1',
       },
     });
@@ -59,14 +59,14 @@ describe('normalizeVoteAction', () => {
     ['electionId', { electionId: '   ' }],
     ['propertyId', { propertyId: '' }],
     ['candidateIds', { candidateIds: ['candidate-1', ' '] }],
-    ['castByOwnerId', { castByOwnerId: ' ', proxyId: null }],
+    ['castByPersonId', { castByPersonId: ' ', proxyId: null }],
   ])('rejects an empty ballot %s', (_label, override) => {
     const result = normalizeVoteAction({
       action: 'castBallot',
       electionId: 'election-1',
       propertyId: 'property-1',
       candidateIds: ['candidate-1'],
-      castByOwnerId: 'owner-1',
+      castByPersonId: 'owner-1',
       proxyId: null,
       ...override,
     });
@@ -76,14 +76,14 @@ describe('normalizeVoteAction', () => {
   it.each([
     ['motionId', { motionId: '   ' }],
     ['propertyId', { propertyId: '' }],
-    ['proxyId', { castByOwnerId: null, proxyId: ' ' }],
+    ['proxyId', { castByPersonId: null, proxyId: ' ' }],
   ])('rejects an empty motion-vote %s', (_label, override) => {
     const result = normalizeVoteAction({
       action: 'castMotionVote',
       motionId: 'motion-1',
       propertyId: 'property-1',
       choice: 'yes',
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: 'proxy-1',
       ...override,
     });
@@ -101,7 +101,7 @@ describe('normalizeVoteAction', () => {
         electionId: 'election-1',
         propertyId: 'property-1',
         candidateIds,
-        castByOwnerId: 'owner-1',
+        castByPersonId: 'owner-1',
       });
       expect(result.ok).toBe(false);
     }
@@ -115,7 +115,7 @@ describe('normalizeVoteAction', () => {
         motionId: 'motion-1',
         propertyId: 'property-1',
         choice,
-        castByOwnerId: 'owner-1',
+        castByPersonId: 'owner-1',
       });
       expect(result.ok).toBe(false);
     },
@@ -131,7 +131,7 @@ describe('normalizeVoteAction', () => {
               electionId: 'election-1',
               propertyId: 'property-1',
               candidateIds: ['candidate-1'],
-              castByOwnerId: 'owner-1',
+              castByPersonId: 'owner-1',
               proxyId: 'proxy-1',
             }
           : {
@@ -139,7 +139,7 @@ describe('normalizeVoteAction', () => {
               motionId: 'motion-1',
               propertyId: 'property-1',
               choice: 'yes',
-              castByOwnerId: 'owner-1',
+              castByPersonId: 'owner-1',
               proxyId: 'proxy-1',
             },
       );

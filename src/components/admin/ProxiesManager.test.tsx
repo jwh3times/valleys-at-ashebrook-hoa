@@ -17,6 +17,7 @@ const mocked = vi.mocked(admin);
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchProperties.mockResolvedValue([]);
+  mocked.fetchLotPeople.mockResolvedValue([]);
   mocked.fetchMeetings.mockResolvedValue([]);
   mocked.fetchElections.mockResolvedValue([]);
 });
@@ -26,11 +27,11 @@ function proxy(overrides: Partial<ProxyDetail> = {}): ProxyDetail {
     id: 'px1',
     propertyId: 'p1',
     address: '100 Main St',
-    grantorOwnerId: 'o1',
+    grantorPersonId: 'o1',
     grantorName: 'Jane Doe',
     holderName: 'Alice Holder',
-    holderOwnerId: null,
-    holderOwnerName: null,
+    holderPersonId: null,
+    holderPersonName: null,
     meetingId: null,
     electionId: null,
     ...overrides,
@@ -146,24 +147,16 @@ describe('ProxiesManager', () => {
     expect(screen.getByText(/bob holder/i)).toBeInTheDocument();
   });
 
-  it('creating a proxy posts propertyId, grantorOwnerId, holderName and the chosen occasion', async () => {
+  it('creating a proxy posts propertyId, grantorPersonId, holderName and the chosen occasion', async () => {
     mocked.fetchProxies.mockResolvedValue([]);
     mocked.fetchProperties.mockResolvedValue([
-      property({
-        id: 'p1',
-        address: '100 Main St',
-        owners: [
-          {
-            id: 'o1',
-            propertyId: 'p1',
-            fullName: 'Jane Doe',
-            phone: null,
-            email: null,
-            status: 'active',
-            notes: null,
-          },
-        ],
-      }),
+      property({ id: 'p1', address: '100 Main St' }),
+    ]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'p1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
     ]);
     mocked.fetchMeetings.mockResolvedValue([
       meeting({ id: 'm1', date: '2026-09-14', title: 'September meeting' }),
@@ -184,9 +177,9 @@ describe('ProxiesManager', () => {
     await waitFor(() =>
       expect(mocked.saveProxy).toHaveBeenCalledWith({
         propertyId: 'p1',
-        grantorOwnerId: 'o1',
+        grantorPersonId: 'o1',
         holderName: 'Alice Holder',
-        holderOwnerId: null,
+        holderPersonId: null,
         meetingId: 'm1',
         electionId: null,
       }),
@@ -248,39 +241,29 @@ describe('ProxiesManager', () => {
   });
 
   describe('inactive grantor warning', () => {
-    // The route accepts an inactive grantor on purpose (historical paper
-    // records), but the phase 3d grantor re-validation refuses the proxy
-    // wherever it would be used — the panel says so at entry time.
-    function grantorProperty() {
-      return property({
-        id: 'p1',
-        address: '100 Main St',
-        owners: [
-          {
-            id: 'o1',
-            propertyId: 'p1',
-            fullName: 'Jane Doe',
-            phone: null,
-            email: null,
-            status: 'active' as const,
-            notes: null,
-          },
-          {
-            id: 'o2',
-            propertyId: 'p1',
-            fullName: 'Prior Owner',
-            phone: null,
-            email: null,
-            status: 'inactive' as const,
-            notes: null,
-          },
-        ],
-      });
+    // The route accepts a grantor who no longer holds the lot on purpose
+    // (historical paper records), but the phase 3d grantor re-validation
+    // refuses the proxy wherever it would be used — the panel says so at entry
+    // time. #248 part 2: "no longer holds it" is now the roster's answer, so
+    // the picker offers former holders flagged `current: false`.
+    function grantorLotPeople() {
+      return [
+        {
+          lotId: 'p1',
+          persons: [
+            { id: 'o1', fullName: 'Jane Doe', current: true },
+            { id: 'o2', fullName: 'Prior Owner', current: false },
+          ],
+        },
+      ];
     }
 
     it('warns that the proxy would be born unusable when the grantor is inactive', async () => {
       mocked.fetchProxies.mockResolvedValue([]);
-      mocked.fetchProperties.mockResolvedValue([grantorProperty()]);
+      mocked.fetchProperties.mockResolvedValue([
+        property({ id: 'p1', address: '100 Main St' }),
+      ]);
+      mocked.fetchLotPeople.mockResolvedValue(grantorLotPeople());
       render(<ProxiesManager />);
       await screen.findByText(/no proxies recorded yet/i);
 
@@ -289,7 +272,7 @@ describe('ProxiesManager', () => {
 
       expect(
         await screen.findByText(
-          /is not currently an active owner of this lot/i,
+          /does not currently hold authority for this lot/i,
         ),
       ).toBeInTheDocument();
       // Entry is still allowed — the warning never disables the form.
@@ -300,7 +283,10 @@ describe('ProxiesManager', () => {
 
     it('does not warn when the grantor is an active owner', async () => {
       mocked.fetchProxies.mockResolvedValue([]);
-      mocked.fetchProperties.mockResolvedValue([grantorProperty()]);
+      mocked.fetchProperties.mockResolvedValue([
+        property({ id: 'p1', address: '100 Main St' }),
+      ]);
+      mocked.fetchLotPeople.mockResolvedValue(grantorLotPeople());
       render(<ProxiesManager />);
       await screen.findByText(/no proxies recorded yet/i);
 
@@ -314,26 +300,18 @@ describe('ProxiesManager', () => {
   });
 
   describe('edit affordance', () => {
-    // Owner requires the full seven-field shape (src/lib/types.ts:205).
-    function owner(id: string, fullName: string) {
-      return {
-        id,
-        propertyId: 'p1',
-        fullName,
-        phone: null,
-        email: null,
-        status: 'active' as const,
-        notes: null,
-      };
-    }
-
     function setupEditFixtures() {
       mocked.fetchProperties.mockResolvedValue([
-        property({
-          id: 'p1',
-          address: '100 Main St',
-          owners: [owner('o1', 'Jane Doe'), owner('o2', 'John Roe')],
-        }),
+        property({ id: 'p1', address: '100 Main St' }),
+      ]);
+      mocked.fetchLotPeople.mockResolvedValue([
+        {
+          lotId: 'p1',
+          persons: [
+            { id: 'o1', fullName: 'Jane Doe', current: true },
+            { id: 'o2', fullName: 'John Roe', current: true },
+          ],
+        },
       ]);
       mocked.fetchMeetings.mockResolvedValue([meeting({ id: 'm1' })]);
       mocked.fetchProxies.mockResolvedValue([
@@ -362,7 +340,9 @@ describe('ProxiesManager', () => {
       expect(screen.getByLabelText('Occasion type')).toBeDisabled();
       expect(screen.getByLabelText('Meeting')).toBeDisabled();
       expect(screen.getByLabelText('Property')).toBeDisabled();
-      expect(screen.getByLabelText('Grantor (owner)')).not.toBeDisabled();
+      expect(
+        screen.getByLabelText('Grantor (owner or representative)'),
+      ).not.toBeDisabled();
 
       await user.clear(screen.getByLabelText('Proxy holder name'));
       await user.type(
@@ -374,9 +354,9 @@ describe('ProxiesManager', () => {
       await waitFor(() =>
         expect(mocked.saveProxy).toHaveBeenCalledWith(
           {
-            grantorOwnerId: 'o1',
+            grantorPersonId: 'o1',
             holderName: 'Bob Carrier',
-            holderOwnerId: null,
+            holderPersonId: null,
           },
           'px1',
         ),

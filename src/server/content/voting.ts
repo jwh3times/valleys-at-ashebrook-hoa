@@ -16,10 +16,14 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  owners,
   proxies,
-  userPropertyLinks,
 } from '../db/schema';
+import {
+  authorityKey,
+  fetchLotAuthorityKeys,
+  lotAuthorityExists,
+} from '../roster/authority';
+import { associationDateIso } from '../../lib/format';
 import { proxyUseError } from './proxy-guards';
 import { resolveCastingAuthority } from './casting-authority';
 import { visibleTiers } from './visibility';
@@ -51,7 +55,7 @@ function requiredVoteId(
 
 function voteProvenanceId(
   raw: Record<string, unknown>,
-  key: 'castByOwnerId' | 'proxyId',
+  key: 'castByPersonId' | 'proxyId',
 ): { ok: true; value: string | null } | { ok: false; error: string } {
   const value = raw[key];
   if (value === undefined || value === null) return { ok: true, value: null };
@@ -68,13 +72,13 @@ export function normalizeVoteAction(raw: unknown): VoteActionResult {
 
   const propertyId = requiredVoteId(record, 'propertyId');
   if (!propertyId.ok) return propertyId;
-  const castByOwnerId = voteProvenanceId(record, 'castByOwnerId');
-  if (!castByOwnerId.ok) return castByOwnerId;
+  const castByPersonId = voteProvenanceId(record, 'castByPersonId');
+  if (!castByPersonId.ok) return castByPersonId;
   const proxyId = voteProvenanceId(record, 'proxyId');
   if (!proxyId.ok) return proxyId;
-  if ((castByOwnerId.value === null) === (proxyId.value === null))
+  if ((castByPersonId.value === null) === (proxyId.value === null))
     return normalizationFailure(
-      'Exactly one of castByOwnerId or proxyId is required',
+      'Exactly one of castByPersonId or proxyId is required',
     );
 
   if (action === 'castBallot') {
@@ -99,7 +103,7 @@ export function normalizeVoteAction(raw: unknown): VoteActionResult {
         electionId: electionId.value,
         propertyId: propertyId.value,
         candidateIds,
-        castByOwnerId: castByOwnerId.value,
+        castByPersonId: castByPersonId.value,
         proxyId: proxyId.value,
       },
     };
@@ -117,7 +121,7 @@ export function normalizeVoteAction(raw: unknown): VoteActionResult {
       motionId: motionId.value,
       propertyId: propertyId.value,
       choice,
-      castByOwnerId: castByOwnerId.value,
+      castByPersonId: castByPersonId.value,
       proxyId: proxyId.value,
     },
   };
@@ -148,20 +152,19 @@ async function ownCastingError(
   env: Env,
   ctx: AuthContext,
   propertyId: string,
-  ownerId: string,
+  personId: string,
 ): Promise<VoteWriteResult | null> {
   const db = getDb(env);
-  const ownerRows = await db
-    .select({ propertyId: owners.propertyId, status: owners.status })
-    .from(owners)
-    .where(eq(owners.id, ownerId))
-    .limit(1);
-  if (
-    ownerRows.length !== 1 ||
-    ownerRows[0].propertyId !== propertyId ||
-    ownerRows[0].status !== 'active'
-  ) {
-    return failure(400, 'castByOwnerId must be an active owner of this lot');
+  // #248 part 2: the named caster is a roster Person, and "may act for this
+  // lot" is the shared Lot Authority rule rather than `owners.status`. A live
+  // cast happens NOW, so today's Association Day is the exact question here.
+  const authority = await fetchLotAuthorityKeys(
+    db,
+    [propertyId],
+    associationDateIso(),
+  );
+  if (!authority.has(authorityKey(personId, propertyId))) {
+    return failure(400, 'castByPersonId must hold authority for this lot');
   }
 
   // Same definition the /vote read model uses, so the page and the cast
@@ -187,25 +190,30 @@ async function proxyCastingError(
   );
   if (scopeError) return failure(scopeError.status, scopeError.message);
 
+  // The caller holds this proxy when its holder Person holds Lot Authority
+  // over one of the caller's own verified lots — the same reach the legacy
+  // check expressed as "the holder is an active owner of a lot this account is
+  // linked to", now asked of the roster. `ownLots` is the snapshot-governed
+  // set `/vote` and the cast path share (see casting-authority.ts).
   const holderRows = await db
-    .select({ id: proxies.id })
+    .select({ holderPersonId: proxies.holderPersonId })
     .from(proxies)
-    .innerJoin(owners, eq(proxies.holderOwnerId, owners.id))
-    .innerJoin(
-      userPropertyLinks,
-      eq(userPropertyLinks.propertyId, owners.propertyId),
-    )
-    .where(
-      and(
-        eq(proxies.id, proxyId),
-        eq(owners.status, 'active'),
-        eq(userPropertyLinks.userId, ctx.userId),
-      ),
-    )
+    .where(eq(proxies.id, proxyId))
     .limit(1);
-  return holderRows.length === 1
-    ? null
-    : failure(403, 'Caller does not hold this proxy');
+  const holderPersonId = holderRows[0]?.holderPersonId ?? null;
+  if (holderPersonId === null)
+    return failure(403, 'Caller does not hold this proxy');
+  const { ownLots } = await resolveCastingAuthority(db, ctx.userId);
+  const callerLots = [...ownLots];
+  const holderAuthority = await fetchLotAuthorityKeys(
+    db,
+    callerLots,
+    associationDateIso(),
+  );
+  const holds = callerLots.some((lotId) =>
+    holderAuthority.has(authorityKey(holderPersonId, lotId)),
+  );
+  return holds ? null : failure(403, 'Caller does not hold this proxy');
 }
 
 async function electionPreflightError(
@@ -269,8 +277,8 @@ async function electionPreflightError(
   }
 
   const provenanceError =
-    input.castByOwnerId !== null
-      ? await ownCastingError(env, ctx, input.propertyId, input.castByOwnerId)
+    input.castByPersonId !== null
+      ? await ownCastingError(env, ctx, input.propertyId, input.castByPersonId)
       : await proxyCastingError(env, ctx, input.propertyId, input.proxyId!, {
           electionId: election.id,
           meetingId: election.meetingId,
@@ -339,8 +347,8 @@ async function motionPreflightError(
   const motion = motionRows[0];
 
   const provenanceError =
-    input.castByOwnerId !== null
-      ? await ownCastingError(env, ctx, input.propertyId, input.castByOwnerId)
+    input.castByPersonId !== null
+      ? await ownCastingError(env, ctx, input.propertyId, input.castByPersonId)
       : await proxyCastingError(env, ctx, input.propertyId, input.proxyId!, {
           meetingId: motion.meetingId,
         });
@@ -385,36 +393,50 @@ async function motionPreflightError(
 function electionAuthorityPredicate(
   input: CastBallotInput,
   ctx: AuthContext,
+  day: string,
 ): { sql: string; binds: unknown[] } {
-  if (input.castByOwnerId !== null) {
+  if (input.castByPersonId !== null) {
+    const acting = lotAuthorityExists(
+      { value: input.castByPersonId },
+      { column: 'ee.property_id' },
+      day,
+    );
     return {
-      sql: `EXISTS (
+      sql: `${acting.sql}
+      AND EXISTS (
         SELECT 1
-        FROM owners acting_owner
-        INNER JOIN user_property_links caller_link
-          ON caller_link.property_id = acting_owner.property_id
-        WHERE acting_owner.id = ?
-          AND acting_owner.property_id = ee.property_id
-          AND acting_owner.status = 'active'
+        FROM user_property_links caller_link
+        WHERE caller_link.property_id = ee.property_id
           AND caller_link.user_id = ?
       )`,
-      binds: [input.castByOwnerId, ctx.userId],
+      binds: [...acting.binds, ctx.userId],
     };
   }
-  // The grantor-currency EXISTS is the ADR 0022 phase-3d addition (#220 /
+  // The grantor-currency check is the ADR 0022 phase-3d addition (#220 /
   // #204): a proxy whose grantor no longer holds the lot confers nothing. For
-  // a live cast the occasion is NOW, so the legacy roster's current-state
-  // answer is exact "held Lot Authority at the occasion" semantics here — the
-  // approximation caveat in proxy-guards.ts applies only to back-entered
-  // record-keeping.
+  // a live cast the occasion is NOW, so today's Association Day is exact "held
+  // Lot Authority at the occasion" semantics here — the approximation caveat
+  // in proxy-guards.ts applies only to back-entered record-keeping.
+  //
+  // #248 part 2 re-keyed both sides to Persons: the holder reaches the caller
+  // through Lot Authority over a lot this account is verified for, which is
+  // what "the holder is an active owner of one of your lots" meant before.
+  const holder = lotAuthorityExists(
+    { column: 'selected_proxy.holder_person_id' },
+    { column: 'caller_link.property_id' },
+    day,
+  );
+  const grantor = lotAuthorityExists(
+    { column: 'selected_proxy.grantor_person_id' },
+    { column: 'selected_proxy.property_id' },
+    day,
+  );
   return {
     sql: `EXISTS (
       SELECT 1
       FROM proxies selected_proxy
-      INNER JOIN owners holder_owner
-        ON holder_owner.id = selected_proxy.holder_owner_id
       INNER JOIN user_property_links caller_link
-        ON caller_link.property_id = holder_owner.property_id
+        ON caller_link.user_id = ?
       WHERE selected_proxy.id = ?
         AND selected_proxy.property_id = ee.property_id
         AND (
@@ -424,63 +446,60 @@ function electionAuthorityPredicate(
             AND selected_proxy.meeting_id = election.meeting_id
           )
         )
-        AND holder_owner.status = 'active'
-        AND caller_link.user_id = ?
-        AND EXISTS (
-          SELECT 1
-          FROM owners grantor_owner
-          WHERE grantor_owner.id = selected_proxy.grantor_owner_id
-            AND grantor_owner.property_id = selected_proxy.property_id
-            AND grantor_owner.status = 'active'
-        )
+        AND ${holder.sql}
+        AND ${grantor.sql}
     )`,
-    binds: [input.proxyId, ctx.userId],
+    binds: [ctx.userId, input.proxyId, ...holder.binds, ...grantor.binds],
   };
 }
 
 function motionAuthorityPredicate(
   input: CastMotionVoteInput,
   ctx: AuthContext,
+  day: string,
 ): { sql: string; binds: unknown[] } {
-  if (input.castByOwnerId !== null) {
+  if (input.castByPersonId !== null) {
+    const acting = lotAuthorityExists(
+      { value: input.castByPersonId },
+      { column: 'me.property_id' },
+      day,
+    );
     return {
-      sql: `EXISTS (
+      sql: `${acting.sql}
+      AND EXISTS (
         SELECT 1
-        FROM owners acting_owner
-        INNER JOIN user_property_links caller_link
-          ON caller_link.property_id = acting_owner.property_id
-        WHERE acting_owner.id = ?
-          AND acting_owner.property_id = me.property_id
-          AND acting_owner.status = 'active'
+        FROM user_property_links caller_link
+        WHERE caller_link.property_id = me.property_id
           AND caller_link.user_id = ?
       )`,
-      binds: [input.castByOwnerId, ctx.userId],
+      binds: [...acting.binds, ctx.userId],
     };
   }
   // Same phase-3d grantor-currency re-check as the election predicate above;
-  // an open motion's cast happens now, so current status is exact.
+  // an open motion's cast happens now, so today's day is exact.
+  const holder = lotAuthorityExists(
+    { column: 'selected_proxy.holder_person_id' },
+    { column: 'caller_link.property_id' },
+    day,
+  );
+  const grantor = lotAuthorityExists(
+    { column: 'selected_proxy.grantor_person_id' },
+    { column: 'selected_proxy.property_id' },
+    day,
+  );
   return {
     sql: `EXISTS (
       SELECT 1
       FROM proxies selected_proxy
-      INNER JOIN owners holder_owner
-        ON holder_owner.id = selected_proxy.holder_owner_id
       INNER JOIN user_property_links caller_link
-        ON caller_link.property_id = holder_owner.property_id
+        ON caller_link.user_id = ?
       WHERE selected_proxy.id = ?
         AND selected_proxy.property_id = me.property_id
         AND selected_proxy.meeting_id = meeting.id
-        AND holder_owner.status = 'active'
-        AND caller_link.user_id = ?
-        AND EXISTS (
-          SELECT 1
-          FROM owners grantor_owner
-          WHERE grantor_owner.id = selected_proxy.grantor_owner_id
-            AND grantor_owner.property_id = selected_proxy.property_id
-            AND grantor_owner.status = 'active'
-        )
+        AND ${holder.sql}
+        AND ${grantor.sql}
     )`,
-    binds: [input.proxyId, ctx.userId],
+    binds: [ctx.userId, input.proxyId, ...holder.binds, ...grantor.binds],
   };
 }
 
@@ -494,12 +513,12 @@ export async function castElectionBallot(
 
   const ballotId = crypto.randomUUID();
   const recordedAt = Math.floor(Date.now() / 1000);
-  const authority = electionAuthorityPredicate(input, ctx);
+  const authority = electionAuthorityPredicate(input, ctx, associationDateIso());
   const candidatePlaceholders = input.candidateIds.map(() => '?').join(', ');
   const turnout = env.DATABASE.prepare(
     `INSERT INTO ballots (
        id, election_id, property_id, weight,
-       cast_by_owner_id, proxy_id, recorded_at
+       cast_by_person_id, proxy_id, recorded_at
      )
      SELECT ?, election.id, ee.property_id, ee.weight, ?, ?, ?
      FROM elections election
@@ -527,7 +546,7 @@ export async function castElectionBallot(
        )`,
   ).bind(
     ballotId,
-    input.castByOwnerId,
+    input.castByPersonId,
     input.proxyId,
     recordedAt,
     input.propertyId,
@@ -585,10 +604,10 @@ export async function castMotionVote(
   const preflightError = await motionPreflightError(env, ctx, input);
   if (preflightError) return preflightError;
 
-  const authority = motionAuthorityPredicate(input, ctx);
+  const authority = motionAuthorityPredicate(input, ctx, associationDateIso());
   const statement = env.DATABASE.prepare(
     `INSERT INTO member_votes (
-       id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id
+       id, motion_id, property_id, cast_by_person_id, weight, choice, proxy_id
      )
      SELECT ?, motion.id, me.property_id, ?, me.weight, ?, ?
      FROM motions motion
@@ -610,7 +629,7 @@ export async function castMotionVote(
        )`,
   ).bind(
     crypto.randomUUID(),
-    input.castByOwnerId,
+    input.castByPersonId,
     input.choice,
     input.proxyId,
     input.propertyId,

@@ -770,22 +770,22 @@ describe('elections admin route — board', () => {
     expect((await getBallotsFor(electionId)).length).toBe(0);
   });
 
-  it('setBallots rejects an unknown castByOwnerId with 400', async () => {
+  it('setBallots rejects an unknown castByPersonId with 400', async () => {
     const electionId = await createElection();
     const p1 = await createProperty('1 Oak St', 1);
     const res = await POST(
       req(url, 'POST', {
         action: 'setBallots',
         electionId,
-        entries: [{ propertyId: p1, castByOwnerId: 'nope' }],
+        entries: [{ propertyId: p1, castByPersonId: 'nope' }],
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/unknown castByOwnerId/i);
+    expect(await res.text()).toMatch(/unknown castByPersonId/i);
     expect((await getBallotsFor(electionId)).length).toBe(0);
   });
 
-  it('setBallots accepts a valid castByOwnerId', async () => {
+  it('setBallots accepts a valid castByPersonId', async () => {
     const electionId = await createElection();
     const p1 = await createProperty('1 Oak St', 1);
     const owner1 = await createOwner(p1);
@@ -793,12 +793,12 @@ describe('elections admin route — board', () => {
       req(url, 'POST', {
         action: 'setBallots',
         electionId,
-        entries: [{ propertyId: p1, castByOwnerId: owner1 }],
+        entries: [{ propertyId: p1, castByPersonId: owner1 }],
       }),
     );
     expect(res.status).toBe(204);
     const rows = await getBallotsFor(electionId);
-    expect(rows[0].castByOwnerId).toBe(owner1);
+    expect(rows[0].castByPersonId).toBe(owner1);
   });
 
   it('setBallots rejects the same propertyId twice with 409, not a raw D1 error', async () => {

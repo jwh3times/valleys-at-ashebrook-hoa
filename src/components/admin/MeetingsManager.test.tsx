@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchMeetingRosterPeople.mockResolvedValue([]);
   mocked.fetchProperties.mockResolvedValue([]);
+  mocked.fetchLotPeople.mockResolvedValue([]);
   mocked.fetchMeeting.mockResolvedValue(meetingDetail());
   mocked.fetchProxies.mockResolvedValue([]);
   mockedContent.fetchSiteSettings.mockResolvedValue({
@@ -533,6 +534,12 @@ describe('MeetingsManager', () => {
 
   it('shows the property-based editors for a member meeting, not the board ones', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -558,6 +565,12 @@ describe('MeetingsManager', () => {
 
   it('excludes inactive properties from the member attendance and vote editors', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -603,6 +616,12 @@ describe('MeetingsManager', () => {
     mocked.fetchMeetingRosterPeople.mockResolvedValue([
       { id: 'p1', fullName: 'A. Reyes' },
     ]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -626,6 +645,12 @@ describe('MeetingsManager', () => {
 
   it('submitting member attendance sends a row for every property, present or not', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -668,13 +693,13 @@ describe('MeetingsManager', () => {
         {
           propertyId: 'prop1',
           present: true,
-          representedByOwnerId: null,
+          representedByPersonId: null,
           proxyId: null,
         },
         {
           propertyId: 'prop2',
           present: false,
-          representedByOwnerId: null,
+          representedByPersonId: null,
           proxyId: null,
         },
       ]),
@@ -684,6 +709,12 @@ describe('MeetingsManager', () => {
 
   it('submitting member votes sends only the properties with an entered choice', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -734,7 +765,7 @@ describe('MeetingsManager', () => {
         {
           propertyId: 'prop1',
           choice: 'yes',
-          castByOwnerId: null,
+          castByPersonId: null,
           proxyId: null,
         },
       ]),
@@ -744,6 +775,12 @@ describe('MeetingsManager', () => {
 
   it('saving a member motion with no votes entered sends no vote rows', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -791,6 +828,12 @@ describe('MeetingsManager', () => {
     mocked.fetchMeetingRosterPeople.mockResolvedValue([
       { id: 'p1', fullName: 'A. Reyes' },
     ]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -820,6 +863,12 @@ describe('MeetingsManager', () => {
 
   it('shows the weighted live tally for a member motion, summed per choice across differently-weighted properties', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -877,8 +926,14 @@ describe('MeetingsManager', () => {
     expect(tally()).toMatch(/3 no/);
   });
 
-  it('submitting member votes sends the chosen castByOwnerId per property', async () => {
+  it('submitting member votes sends the chosen castByPersonId per property', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -887,17 +942,7 @@ describe('MeetingsManager', () => {
         status: 'active',
         notes: null,
         voteWeight: 1,
-        owners: [
-          {
-            id: 'o1',
-            propertyId: 'prop1',
-            fullName: 'Jane Doe',
-            phone: null,
-            email: null,
-            status: 'active',
-            notes: null,
-          },
-        ],
+        owners: [],
       },
       {
         id: 'prop2',
@@ -946,7 +991,7 @@ describe('MeetingsManager', () => {
         {
           propertyId: 'prop1',
           choice: 'abstain',
-          castByOwnerId: 'o1',
+          castByPersonId: 'o1',
           proxyId: null,
         },
       ]),
@@ -954,8 +999,14 @@ describe('MeetingsManager', () => {
     expect(await screen.findByText(/motion recorded/i)).toBeInTheDocument();
   });
 
-  it('selecting a proxy sends its id and clears representedByOwnerId', async () => {
+  it('selecting a proxy sends its id and clears representedByPersonId', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -964,17 +1015,7 @@ describe('MeetingsManager', () => {
         status: 'active',
         notes: null,
         voteWeight: 1,
-        owners: [
-          {
-            id: 'o1',
-            propertyId: 'prop1',
-            fullName: 'Jane Doe',
-            phone: null,
-            email: null,
-            status: 'active',
-            notes: null,
-          },
-        ],
+        owners: [],
       },
     ]);
     mocked.fetchProxies.mockResolvedValue([
@@ -982,11 +1023,11 @@ describe('MeetingsManager', () => {
         id: 'px1',
         propertyId: 'prop1',
         address: '12 Oak Lane',
-        grantorOwnerId: 'o1',
+        grantorPersonId: 'o1',
         grantorName: 'Jane Doe',
         holderName: 'Proxy Holder',
-        holderOwnerId: null,
-        holderOwnerName: null,
+        holderPersonId: null,
+        holderPersonName: null,
         meetingId: 'm2',
         electionId: null,
       },
@@ -1043,15 +1084,21 @@ describe('MeetingsManager', () => {
         {
           propertyId: 'prop1',
           present: true,
-          representedByOwnerId: null,
+          representedByPersonId: null,
           proxyId: 'px1',
         },
       ]),
     );
   });
 
-  it('selecting a proxy for a member vote sends its id and clears castByOwnerId', async () => {
+  it('selecting a proxy for a member vote sends its id and clears castByPersonId', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -1060,17 +1107,7 @@ describe('MeetingsManager', () => {
         status: 'active',
         notes: null,
         voteWeight: 1,
-        owners: [
-          {
-            id: 'o1',
-            propertyId: 'prop1',
-            fullName: 'Jane Doe',
-            phone: null,
-            email: null,
-            status: 'active',
-            notes: null,
-          },
-        ],
+        owners: [],
       },
     ]);
     mocked.fetchProxies.mockResolvedValue([
@@ -1078,11 +1115,11 @@ describe('MeetingsManager', () => {
         id: 'px1',
         propertyId: 'prop1',
         address: '12 Oak Lane',
-        grantorOwnerId: 'o1',
+        grantorPersonId: 'o1',
         grantorName: 'Jane Doe',
         holderName: 'Proxy Holder',
-        holderOwnerId: null,
-        holderOwnerName: null,
+        holderPersonId: null,
+        holderPersonName: null,
         meetingId: 'm2',
         electionId: null,
       },
@@ -1128,7 +1165,7 @@ describe('MeetingsManager', () => {
         {
           propertyId: 'prop1',
           choice: 'yes',
-          castByOwnerId: null,
+          castByPersonId: null,
           proxyId: 'px1',
         },
       ]),
@@ -1632,6 +1669,12 @@ describe('MeetingsManager', () => {
 
   it('clears a pre-open vote draft and reseeds from authoritative votes after close', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
@@ -1735,7 +1778,7 @@ describe('MeetingsManager', () => {
         {
           propertyId: 'prop1',
           choice: 'yes',
-          castByOwnerId: null,
+          castByPersonId: null,
           proxyId: null,
         },
       ]),
@@ -1744,6 +1787,12 @@ describe('MeetingsManager', () => {
 
   it('refuses to open the motion editor while voting is open', async () => {
     mocked.fetchMeetings.mockResolvedValue([memberMeeting]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'prop1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
+    ]);
     mocked.fetchProperties.mockResolvedValue([
       {
         id: 'prop1',
