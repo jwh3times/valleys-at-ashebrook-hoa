@@ -99,7 +99,12 @@ npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 CI (`.github/workflows/build.yml`) runs `types:worker:check`, `format:check`, `lint`,
 `sync:agents -- --check`, `lint:coercions`, `lint:migrations`, `check`, `test`, `test:server`, then
 `build` on every PR
-and push to `main`; run the relevant checks locally before pushing. On every
+and push to `main`; run the relevant checks locally before pushing. A grouped dependabot PR that
+fails an early gate (e.g. `types:worker:check` on a stale `worker-configuration.d.ts`) skips every
+later step, including the whole test suite — so a green-looking single blocker can hide a real
+test failure (like the better-auth 1.7 incompatibility recorded under **Server code** below)
+behind it; don't assume the first
+reported failure is the only one. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
 creates a GitHub release using the `package.json` major/minor release line. The project uses the
 third semver segment as a build number (`<major>.<minor>.<build>`). The first tag for a new line
@@ -726,7 +731,20 @@ boolean`.
 
 **Server code.** `src/server/` contains:
 
-- `auth/`: Better Auth config, Resend and Twilio senders.
+- `auth/`: Better Auth config, Resend and Twilio senders. **Better Auth cannot be upgraded past
+  1.6.x right now** — 1.7 throws `BetterAuthError("Secondary-storage rate limiting requires
+SecondaryStorage.increment.")` from `onRequestRateLimit` on every request whenever rate limiting
+  resolves to secondary storage and the adapter has no `increment`. This config enables
+  `rateLimit: { enabled: true, window: 60, max: 100 }` and passes the `KV` binding through to
+  `better-auth-cloudflare`, whose `createKVStorage` implements no `increment` — and 0.3.1 is that
+  package's latest published release, so there is no upstream fix to bump to. Verified against
+  1.7.0: 6 tests in `test/server/auth-handler.test.ts` and `test/server/admin-surface-closed.test.ts`
+  fail on 1.7.0 and pass on 1.6.29; in production this would break sign-in, sign-up, and password
+  reset, not just tests. The escape routes — supplying `rateLimit.customStorage` (checked before
+  the secondary-storage path) or wrapping the KV secondary storage with an `increment` — are each a
+  security-sensitive change to auth rate limiting and belong in their own reviewed change, not a
+  dependency bump. Dependabot will keep proposing better-auth 1.7.x; hold it at 1.6 until one of
+  those routes is deliberately taken.
 - `authz/`: `context.ts` is the single seam every guard, page, and route resolves its caller
   through. `getAuthContext(request, env, associationDay)` resolves the session, then reads
   `cutover-mode.ts`'s `getCutoverMode` (the uncached `cutover_settings.cutover_mode` singleton,
