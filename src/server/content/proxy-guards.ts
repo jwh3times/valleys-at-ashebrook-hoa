@@ -97,14 +97,34 @@ export function parseProvenance(
 }
 
 /**
+ * Which field a route reports an unknown Person under. The two provenance
+ * columns `parseProvenance` reads, plus the plain `personId` the BOARD
+ * roll-call actions carry — those name a Person directly rather than beside a
+ * proxy, so they are deliberately not `ProvenancePersonKey`s: widening that
+ * type instead would let `parseProvenance` be asked for a `personId` field,
+ * which no provenance payload has.
+ */
+export type PersonFieldName = ProvenancePersonKey | 'personId';
+
+/**
  * Rejects an entry set naming a Person that does not exist.
  *
- * `member_attendance.represented_by_person_id`,
- * `member_votes.cast_by_person_id` and `ballots.cast_by_person_id` are all real
- * FKs to `people(party_id)`, and D1 enforces them — so without this an unknown
- * id leaves the route as a raw FOREIGN KEY error from inside the batch, i.e. an
- * unhandled 500, rather than a 400. Only `setBallots` pre-checked it; the two
- * sibling routes writing the byte-identical field did not.
+ * Five entry-set columns across the meeting record and the elections record
+ * reference `people(party_id)`, and D1 enforces every one — so without this an
+ * unknown id leaves the route as a raw FOREIGN KEY error from inside the batch,
+ * i.e. an unhandled 500, rather than a 400:
+ *
+ * - `member_attendance.represented_by_person_id` (`setMemberAttendance`)
+ * - `member_votes.cast_by_person_id` (`setMemberVotes`)
+ * - `ballots.cast_by_person_id` (`setBallots`)
+ * - `board_attendance.person_id` (`setAttendance`)
+ * - `board_votes.person_id` (`setVotes`)
+ *
+ * The last two are NOT NULL and were the hole #234 reported: they reached the
+ * FK unchecked, so the admin UI could not tell "you sent a stale person id"
+ * from "the server broke". Both became `people(party_id)` FKs in #248 part 1;
+ * before that they referenced the retired `board_people`, which is why the
+ * check written for the provenance columns did not already cover them.
  *
  * Existence only, deliberately: whether that Person could plausibly have acted
  * for the lot is a judgement the board makes when entering a paper record,
@@ -115,7 +135,7 @@ export function parseProvenance(
 export async function personExistenceError(
   db: Db,
   personIds: (string | null)[],
-  personKey: ProvenancePersonKey,
+  personKey: PersonFieldName,
 ): Promise<{ status: 400; message: string } | null> {
   const ids = [...new Set(personIds.filter((id): id is string => id !== null))];
   if (ids.length === 0) return null;

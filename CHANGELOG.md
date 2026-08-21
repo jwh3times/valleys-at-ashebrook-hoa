@@ -7,6 +7,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-08-21
+
+### Fixed
+
+- **Saving a meeting's attendance or a roll-call vote that named a person or a
+  home no longer on record failed with a generic server error**, which reads as
+  "the site is broken" rather than "check what you sent". Three admin saves were
+  affected: the board attendance roll, the board roll-call vote, and the member
+  meeting attendance roll. Each now says what it could not find — an
+  unrecognised person, or the particular homes by name — so the board can fix
+  the entry instead of guessing. The equivalent saves for member votes and
+  ballots already did this; these three were missed, two of them because the
+  names they record only moved onto the neighbourhood roster in 0.15.0.
+- Those saves each replace the whole list rather than adding to it, and the new
+  check runs before anything is removed. A rejected save now leaves the
+  attendance or roll call already on record exactly as it was, instead of
+  clearing it.
+
 ## [0.16.1] - 2026-08-21
 
 ### Added

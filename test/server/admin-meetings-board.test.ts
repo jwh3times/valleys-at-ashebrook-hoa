@@ -466,6 +466,61 @@ describe('meetings admin route — board', () => {
     expect(res.status).toBe(404);
   });
 
+  // #234: person_id is a NOT NULL FK to people(party_id), so an unknown id
+  // used to reach D1 and come back as an unhandled 500 — which the panel
+  // cannot tell from a genuine server fault. The member and ballot actions
+  // already pre-checked their Person columns; this one did not.
+  it('setAttendance with an unknown personId returns 400, not a raw 500', async () => {
+    const id = await createMeeting();
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setAttendance',
+        meetingId: id,
+        entries: [{ personId: 'ghost', present: true }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('Unknown personId in entries');
+    const rows = await getDb(env)
+      .select()
+      .from(boardAttendance)
+      .where(eq(boardAttendance.meetingId, id));
+    expect(rows.length).toBe(0);
+  });
+
+  it('setAttendance leaves the existing roll intact when one entry is unknown', async () => {
+    const id = await createMeeting();
+    const p1 = await createPerson('A. Reyes');
+    const seeded = await POST(
+      req(url, 'POST', {
+        action: 'setAttendance',
+        meetingId: id,
+        entries: [{ personId: p1, present: true }],
+      }),
+    );
+    expect(seeded.status).toBe(204);
+
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setAttendance',
+        meetingId: id,
+        entries: [
+          { personId: p1, present: false },
+          { personId: 'ghost', present: true },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    // The guard runs before the delete, so the full replace never starts and
+    // the previously recorded roll survives unchanged.
+    const rows = await getDb(env)
+      .select()
+      .from(boardAttendance)
+      .where(eq(boardAttendance.meetingId, id));
+    expect(rows.length).toBe(1);
+    expect(rows[0].present).toBe(true);
+  });
+
   it('setAttendance on a member-body meeting returns 409', async () => {
     const id = await createMeeting({ body: 'member', kind: 'annual' });
     const p1 = await createPerson('A. Reyes');

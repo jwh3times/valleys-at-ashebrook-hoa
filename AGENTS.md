@@ -243,7 +243,15 @@ Markdown twins described below and never the human-readable originals.
   otherwise cascading its votes. `setAttendance`/`setMemberAttendance` and board `setVotes` each
   replace their full child set in one `db.batch()`. All four attendance/vote actions return
   `409` if the target meeting's or motion's `body` doesn't match the action — board attendance/votes
-  against a member meeting/motion, or vice versa, are refused; `setMemberVotes` also returns `400`
+  against a member meeting/motion, or vice versa, are refused; all four full-replacement actions
+  also pre-check every entry's referenced id before writing, so an unknown one is a readable `400`
+  rather than a raw D1 FOREIGN KEY error out of the batch (#234): `setAttendance` and `setVotes`
+  return `400 "Unknown personId in entries"` for an unknown `personId` (`board_attendance.person_id`
+  and `board_votes.person_id`, both NOT NULL FKs to `people(party_id)`, checked by the shared
+  `personExistenceError` guard described under Server code below); `setMemberAttendance` returns
+  `400 "Unknown lots in entries: <ids>"` naming every offending id (its own lot-existence check,
+  since — unlike its siblings — it stamps no weight, so nothing else resolves the lot); and
+  `setMemberVotes` also returns `400`
   for an unknown `propertyId`, since it stamps `memberVotes.weight` from `properties.vote_weight` at
   recording time and must resolve that weight to build a legal row. `setMemberAttendance`,
   `setMemberVotes`, and (on `/api/admin/elections`) `setBallots` each take a per-entry `proxyId`
@@ -817,7 +825,13 @@ boolean`.
   also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring),
   `proxy-guards.ts` (`proxyUseError`, the shared cross-row guard `setMemberAttendance`,
   `setMemberVotes`, and `setBallots` each call before writing a `proxyId`, plus
-  `parseProvenance`/`personExistenceError` for the acting-Person field beside it), `voting-state.ts`
+  `parseProvenance`/`personExistenceError` — the latter now shared by five entry-set columns
+  referencing `people(party_id)` (#234): the three acting-Person provenance columns beside a proxy
+  (`member_attendance.represented_by_person_id`, `member_votes.cast_by_person_id`,
+  `ballots.cast_by_person_id`), plus the two NOT NULL board roll-call columns
+  `board_attendance.person_id`/`board_votes.person_id` that `setAttendance`/`setVotes` check
+  directly by a plain `personId` field — `PersonFieldName` widens `ProvenancePersonKey` to admit
+  that fifth field name without letting `parseProvenance` itself be asked for it), `voting-state.ts`
   (the shared SQL predicate requiring both official mode and live voting to be literal JSON
   booleans `true` for database-conditioned open and cast transitions), `voting-reads.ts`
   (`fetchOpenVotingFor`, the server-only caller-specific projection of visible open occasions,
