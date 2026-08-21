@@ -20,7 +20,7 @@ import { fetchAdminElections } from '../../../server/content/reads';
 import {
   proxyUseError,
   parseProvenance,
-  ownerExistenceError,
+  personExistenceError,
 } from '../../../server/content/proxy-guards';
 import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
 import {
@@ -202,7 +202,7 @@ interface BallotEntry {
   propertyId: string;
   weight?: number;
   proxyId: string | null;
-  castByOwnerId: string | null;
+  castByPersonId: string | null;
 }
 
 /** Validate the raw `entries` payload for `setBallots`. */
@@ -227,13 +227,13 @@ function parseBallotEntries(
         return { ok: false, error: 'weight must be a positive integer' };
       parsedWeight = weight;
     }
-    const provenance = parseProvenance(record, 'castByOwnerId');
+    const provenance = parseProvenance(record, 'castByPersonId');
     if (!provenance.ok) return { ok: false, error: provenance.error };
     entries.push({
       propertyId,
       weight: parsedWeight,
       proxyId: provenance.value.proxyId,
-      castByOwnerId: provenance.value.ownerId,
+      castByPersonId: provenance.value.personId,
     });
   }
   return { ok: true, value: entries };
@@ -276,16 +276,18 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       status: proxyFailure.status,
     });
 
-  // castByOwnerId is a nullable FK to owners, so an unknown id would otherwise
+  // castByPersonId is a nullable FK to people, so an unknown id would otherwise
   // throw a raw D1 FOREIGN KEY error out of the insert below. Checked here for
   // the whole entry set rather than per entry, matching the two sibling routes.
-  const ownerFailure = await ownerExistenceError(
+  const personFailure = await personExistenceError(
     db,
-    parsedEntries.value.map((e) => e.castByOwnerId),
-    'castByOwnerId',
+    parsedEntries.value.map((e) => e.castByPersonId),
+    'castByPersonId',
   );
-  if (ownerFailure)
-    return new Response(ownerFailure.message, { status: ownerFailure.status });
+  if (personFailure)
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
 
   // Pre-checked so a repeated propertyId is a readable 409 instead of hitting
   // ballots_election_property_unq mid-batch as a raw D1 error.
@@ -309,7 +311,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     propertyId: string;
     weight: number;
     proxyId: string | null;
-    castByOwnerId: string | null;
+    castByPersonId: string | null;
   }[] = [];
   const now = Math.floor(Date.now() / 1000);
   for (const e of parsedEntries.value) {
@@ -331,7 +333,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       propertyId: e.propertyId,
       weight,
       proxyId: e.proxyId,
-      castByOwnerId: e.castByOwnerId,
+      castByPersonId: e.castByPersonId,
     });
   }
 
@@ -355,7 +357,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     children.push(
       env.DATABASE.prepare(
         `INSERT INTO ballots (
-           id, election_id, property_id, cast_by_owner_id, proxy_id,
+           id, election_id, property_id, cast_by_person_id, proxy_id,
            weight, recorded_at
          )
          SELECT ?, ?, ?, ?, ?, ?, ?
@@ -364,7 +366,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
         row.id,
         electionId,
         row.propertyId,
-        row.castByOwnerId,
+        row.castByPersonId,
         row.proxyId,
         row.weight,
         now,

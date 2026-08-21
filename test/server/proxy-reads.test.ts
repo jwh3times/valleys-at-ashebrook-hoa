@@ -6,7 +6,7 @@ import { fetchAdminProxies } from '../../src/server/content/reads';
 import {
   truncateAll,
   seedProperty,
-  seedOwner,
+  seedLotAuthority,
   seedMeeting,
   seedElection,
   proxyRow,
@@ -21,15 +21,15 @@ beforeEach(truncateAll);
 describe('fetchAdminProxies', () => {
   it('returns every proxy with resolved names, newest first', async () => {
     await seedProperty('p1');
-    await seedOwner('o1', 'p1');
-    await seedOwner('o2', 'p1');
+    await seedLotAuthority('o1', 'p1');
+    await seedLotAuthority('o2', 'p1');
     await seedMeeting('m1');
     await seedElection('e1');
     const db = getDb(env);
     await db.insert(proxies).values(
       proxyRow('x1', {
         meetingId: 'm1',
-        holderOwnerId: 'o2',
+        holderPersonId: 'o2',
         createdAt: new Date('2026-01-01'),
       }),
     );
@@ -45,15 +45,15 @@ describe('fetchAdminProxies', () => {
       id: 'x1',
       propertyId: 'p1',
       address: 'p1 Ashebrook Lane',
-      grantorOwnerId: 'o1',
-      grantorName: 'Owner o1',
+      grantorPersonId: 'o1',
+      grantorName: 'Person o1',
       holderName: 'Jane Q. Holder',
-      holderOwnerId: 'o2',
-      holderOwnerName: 'Owner o2',
+      holderPersonId: 'o2',
+      holderPersonName: 'Person o2',
       meetingId: 'm1',
       electionId: null,
     });
-    expect(rows[0].holderOwnerName).toBeNull();
+    expect(rows[0].holderPersonName).toBeNull();
     expect(rows[0].electionId).toBe('e1');
   });
 

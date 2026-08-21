@@ -1,21 +1,19 @@
 import type { APIRoute } from 'astro';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireMemberApi } from '../../../server/authz/member-guards';
 import { requirePropertyAccess, Forbidden } from '../../../server/authz/guards';
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
-import {
-  proxies,
-  meetings,
-  elections,
-  owners,
-} from '../../../server/db/schema';
+import { proxies, meetings, elections } from '../../../server/db/schema';
 import {
   duplicateProxyExists,
   proxyUseLabels,
 } from '../../../server/content/proxy-guards';
-import { getActiveOwnersForProperty } from '../../../server/roster/lookup';
+import {
+  fetchLotAuthority,
+  fetchPersonAuthority,
+} from '../../../server/roster/authority';
 import { fetchMemberProxies } from '../../../server/content/reads';
 import { visibleTiers } from '../../../server/content/visibility';
 import { associationDateIso } from '../../../lib/format';
@@ -37,15 +35,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const parsed = await readJson(request);
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
   const propertyId = stringField(parsed.value, 'propertyId');
-  const grantorOwnerId = stringField(parsed.value, 'grantorOwnerId');
-  const holderOwnerId = stringField(parsed.value, 'holderOwnerId');
+  const grantorPersonId = stringField(parsed.value, 'grantorPersonId');
+  const holderPersonId = stringField(parsed.value, 'holderPersonId');
   const meetingIdRaw = stringField(parsed.value, 'meetingId');
   const electionIdRaw = stringField(parsed.value, 'electionId');
   const meetingId = meetingIdRaw === '' ? null : meetingIdRaw;
   const electionId = electionIdRaw === '' ? null : electionIdRaw;
-  if (!propertyId || !grantorOwnerId || !holderOwnerId)
+  if (!propertyId || !grantorPersonId || !holderPersonId)
     return new Response(
-      'propertyId, grantorOwnerId, and holderOwnerId are required',
+      'propertyId, grantorPersonId, and holderPersonId are required',
       { status: 400 },
     );
   if ((meetingId === null) === (electionId === null))
@@ -65,20 +63,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const db = getDb(env);
-  // Grantor: self-selected identity, but only among the lot's ACTIVE owners
-  // (ADR 0019's lot-scoped trust model — control of the lot is proven,
-  // identity within it is asserted).
-  const lotOwners = await getActiveOwnersForProperty(db, propertyId);
-  if (!lotOwners.some((o) => o.id === grantorOwnerId))
-    return new Response('grantorOwnerId is not an active owner of this lot', {
-      status: 400,
-    });
+  const today = associationDateIso();
+  // Grantor: self-selected identity, but only among the Persons who currently
+  // hold Lot Authority here (ADR 0019's lot-scoped trust model — control of
+  // the lot is proven, identity within it is asserted). #248 part 2 moved this
+  // from the lot's ACTIVE owners to the roster's answer, which also lets an
+  // Organization's Representative sign for the entity's lot.
+  const lotPersons = await fetchLotAuthority(db, [propertyId], today);
+  if (!lotPersons.some((p) => p.personId === grantorPersonId))
+    return new Response(
+      'grantorPersonId does not hold authority for this lot',
+      { status: 400 },
+    );
 
   // Occasion: must exist AND sit inside the caller's visibility tiers —
   // failing either is the same 404, never confirming a board-only occasion
   // exists. Grantable = member-body + not yet past (meetings), non-terminal
   // + not yet past (elections). ISO dates compare lexically.
-  const today = associationDateIso();
   const tiers = visibleTiers(ctx.role);
   if (meetingId !== null) {
     const [m] = await db
@@ -123,19 +124,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return new Response('This occasion has already passed', { status: 409 });
   }
 
-  // Holder: must resolve to an ACTIVE owner (an online grant always carries
-  // holder_owner_id so the holder can act at /vote in PR 7c), and never the
-  // grantor themselves.
-  const holderRows = await db
-    .select({ id: owners.id, fullName: owners.fullName })
-    .from(owners)
-    .where(and(eq(owners.id, holderOwnerId), eq(owners.status, 'active')))
-    .limit(1);
-  if (holderRows.length === 0)
-    return new Response('Holder owner not found', { status: 404 });
-  if (holderOwnerId === grantorOwnerId)
+  // Holder: must be a Person who currently holds Lot Authority somewhere (an
+  // online grant always carries holder_person_id so the holder can act at
+  // /vote), and never the grantor themselves. The lot they hold authority over
+  // is deliberately not required to be this one — delegating to a neighbour is
+  // the ordinary case.
+  const [holder] = await fetchPersonAuthority(db, holderPersonId, today);
+  if (!holder) return new Response('Holder person not found', { status: 404 });
+  if (holderPersonId === grantorPersonId)
     return new Response(
-      'grantorOwnerId and holderOwnerId cannot be the same owner',
+      'grantorPersonId and holderPersonId cannot be the same person',
       { status: 400 },
     );
 
@@ -149,9 +147,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await db.insert(proxies).values({
     id,
     propertyId,
-    grantorOwnerId,
-    holderName: holderRows[0].fullName,
-    holderOwnerId,
+    grantorPersonId,
+    holderName: holder.fullName,
+    holderPersonId,
     meetingId,
     electionId,
     createdBy: ctx.userId,

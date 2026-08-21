@@ -356,6 +356,27 @@ export async function fetchMeetingRosterPeople(): Promise<
   );
 }
 
+/** Who may act for one lot, current holders and former ones alike. */
+export interface LotPeople {
+  lotId: string;
+  persons: { id: string; fullName: string; current: boolean }[];
+}
+
+/**
+ * Who may act for each lot — the roster's Lot Authority, grouped by lot, for
+ * the member attendance / member vote / ballot / proxy pickers (#248 part 2).
+ * Former holders are included with `current: false` so a past occasion can
+ * still be recorded; lots nobody has ever held are simply absent.
+ */
+export async function fetchLotPeople(): Promise<LotPeople[]> {
+  return adminRequest(
+    '/api/admin/meetings?roster=lot-people',
+    'GET',
+    undefined,
+    'Load lot people failed',
+  );
+}
+
 /** The party-roster people list (empty until the flip's backfill runs). */
 export async function fetchRosterPeople(): Promise<
   { partyId: string; displayName: string }[]
@@ -444,7 +465,7 @@ export async function setMemberAttendance(
   entries: {
     propertyId: string;
     present: boolean;
-    representedByOwnerId?: string | null;
+    representedByPersonId?: string | null;
     proxyId?: string | null;
   }[],
 ): Promise<void> {
@@ -524,7 +545,7 @@ export async function setMemberVotes(
   entries: {
     propertyId: string;
     choice: MemberVoteChoice;
-    castByOwnerId?: string | null;
+    castByPersonId?: string | null;
     proxyId?: string | null;
   }[],
 ): Promise<void> {
@@ -720,7 +741,7 @@ export async function setBallots(
     propertyId: string;
     weight?: number;
     proxyId?: string | null;
-    castByOwnerId?: string | null;
+    castByPersonId?: string | null;
   }[],
 ): Promise<void> {
   await adminRequest(

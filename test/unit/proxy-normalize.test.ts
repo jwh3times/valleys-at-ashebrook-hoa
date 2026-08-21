@@ -3,7 +3,7 @@ import { normalizeProxyInput } from '../../src/lib/types';
 
 const base = {
   propertyId: 'p1',
-  grantorOwnerId: 'o1',
+  grantorPersonId: 'o1',
   holderName: 'Jane Q. Holder',
   meetingId: 'm1',
 };
@@ -18,7 +18,7 @@ describe('normalizeProxyInput', () => {
       ok: true,
       value: {
         propertyId: 'p1',
-        grantorOwnerId: 'o1',
+        grantorPersonId: 'o1',
         holderName: 'Jane',
         meetingId: 'm1',
       },
@@ -27,7 +27,7 @@ describe('normalizeProxyInput', () => {
 
   it('rejects a create with neither occasion', () => {
     const r = normalizeProxyInput(
-      { propertyId: 'p1', grantorOwnerId: 'o1', holderName: 'J' },
+      { propertyId: 'p1', grantorPersonId: 'o1', holderName: 'J' },
       'create',
     );
     expect(r).toEqual({
@@ -54,16 +54,16 @@ describe('normalizeProxyInput', () => {
     expect(normalizeProxyInput({ meetingId: null }, 'patch').ok).toBe(false);
   });
 
-  it('rejects grantorOwnerId === holderOwnerId', () => {
-    const r = normalizeProxyInput({ ...base, holderOwnerId: 'o1' }, 'create');
+  it('rejects grantorPersonId === holderPersonId', () => {
+    const r = normalizeProxyInput({ ...base, holderPersonId: 'o1' }, 'create');
     expect(r).toEqual({
       ok: false,
-      error: 'grantorOwnerId and holderOwnerId cannot be the same owner',
+      error: 'grantorPersonId and holderPersonId cannot be the same person',
     });
   });
 
-  it('requires propertyId, grantorOwnerId, and holderName on create', () => {
-    for (const key of ['propertyId', 'grantorOwnerId', 'holderName']) {
+  it('requires propertyId, grantorPersonId, and holderName on create', () => {
+    for (const key of ['propertyId', 'grantorPersonId', 'holderName']) {
       const { [key]: _omitted, ...rest } = base as Record<string, unknown>;
       const r = normalizeProxyInput(rest, 'create');
       expect(r.ok).toBe(false);
@@ -73,12 +73,12 @@ describe('normalizeProxyInput', () => {
 
   it('allows a patch editing only holder fields', () => {
     const r = normalizeProxyInput(
-      { holderName: 'New Holder', holderOwnerId: null },
+      { holderName: 'New Holder', holderPersonId: null },
       'patch',
     );
     expect(r).toEqual({
       ok: true,
-      value: { holderName: 'New Holder', holderOwnerId: null },
+      value: { holderName: 'New Holder', holderPersonId: null },
     });
   });
 });

@@ -11,12 +11,12 @@ import { getDb } from '../../src/server/db/client';
 import {
   proxies,
   properties,
-  owners,
   meetings,
   elections,
   memberAttendance,
   ballots,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
@@ -34,7 +34,9 @@ beforeEach(async () => {
   await db.delete(proxies);
   await db.delete(elections);
   await db.delete(meetings);
-  await db.delete(owners);
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
 });
 
@@ -64,14 +66,41 @@ async function createProperty(
   return id;
 }
 
-async function createOwner(
+/**
+ * A roster Person holding a current Ownership of `propertyId` — who the
+ * proxies record names as grantor or holder since #248 part 2 repointed those
+ * columns from `owners` onto `people(party_id)`.
+ *
+ * `endDay` seeds a FORMER holder, which the route still accepts as a grantor
+ * (a historical paper proxy stays recordable) while every use of that proxy is
+ * refused.
+ */
+async function createPerson(
   propertyId: string,
   fullName = 'A. Reyes',
+  endDay: string | null = null,
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env)
-    .insert(owners)
-    .values({ id, propertyId, fullName, createdAt: now, updatedAt: now });
+  const db = getDb(env);
+  await db
+    .insert(parties)
+    .values({ id, kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(people).values({
+    partyId: id,
+    partyKind: 'person',
+    fullName,
+    nameNormalized: fullName.toLowerCase(),
+    updatedAt: now,
+  });
+  await db.insert(ownerships).values({
+    id: crypto.randomUUID(),
+    ownerPartyId: id,
+    lotId: propertyId,
+    startDay: null,
+    endDay,
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 
@@ -131,12 +160,12 @@ describe('proxies admin route — board', () => {
   // 1. POST happy path, meeting-scoped.
   it('POST creates a meeting-scoped proxy', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: '  Jane Q. Holder  ',
         meetingId,
       }),
@@ -148,7 +177,7 @@ describe('proxies admin route — board', () => {
     expect(row.holderName).toBe('Jane Q. Holder');
     expect(row.createdBy).toBe('b');
     expect(row.propertyId).toBe(propertyId);
-    expect(row.grantorOwnerId).toBe(grantorOwnerId);
+    expect(row.grantorPersonId).toBe(grantorPersonId);
     expect(row.meetingId).toBe(meetingId);
     expect(row.electionId).toBeNull();
   });
@@ -156,12 +185,12 @@ describe('proxies admin route — board', () => {
   // 2. POST happy path, election-scoped.
   it('POST creates an election-scoped proxy', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const electionId = await createElection();
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane Q. Holder',
         electionId,
       }),
@@ -176,9 +205,9 @@ describe('proxies admin route — board', () => {
   // 3. POST with neither/both occasions -> 400 from the normalizer.
   it('POST with neither occasion returns 400', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const res = await POST(
-      req(url, 'POST', { propertyId, grantorOwnerId, holderName: 'Jane' }),
+      req(url, 'POST', { propertyId, grantorPersonId, holderName: 'Jane' }),
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe(
@@ -188,13 +217,13 @@ describe('proxies admin route — board', () => {
 
   it('POST with both occasions returns 400', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const electionId = await createElection();
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId,
         electionId,
@@ -212,7 +241,7 @@ describe('proxies admin route — board', () => {
     const res = await POST(
       req(url, 'POST', {
         propertyId: 'nope',
-        grantorOwnerId: 'nope',
+        grantorPersonId: 'nope',
         holderName: 'Jane',
         meetingId,
       }),
@@ -221,45 +250,45 @@ describe('proxies admin route — board', () => {
     expect(await res.text()).toBe('Property not found');
   });
 
-  it('POST with unknown grantorOwnerId returns 404 Owner not found', async () => {
+  it('POST with unknown grantorPersonId returns 404 Person not found', async () => {
     const propertyId = await createProperty();
     const meetingId = await createMeeting();
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId: 'nope',
+        grantorPersonId: 'nope',
         holderName: 'Jane',
         meetingId,
       }),
     );
     expect(res.status).toBe(404);
-    expect(await res.text()).toBe('Owner not found');
+    expect(await res.text()).toBe('Person not found');
   });
 
-  it('POST with unknown holderOwnerId returns 404 Holder owner not found', async () => {
+  it('POST with unknown holderPersonId returns 404 Holder person not found', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
-        holderOwnerId: 'nope',
+        holderPersonId: 'nope',
         meetingId,
       }),
     );
     expect(res.status).toBe(404);
-    expect(await res.text()).toBe('Holder owner not found');
+    expect(await res.text()).toBe('Holder person not found');
   });
 
   it('POST with unknown meetingId returns 404 Meeting not found', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId: 'nope',
       }),
@@ -270,11 +299,11 @@ describe('proxies admin route — board', () => {
 
   it('POST with unknown electionId returns 404 Election not found', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         electionId: 'nope',
       }),
@@ -287,32 +316,72 @@ describe('proxies admin route — board', () => {
   it('POST with a grantor from another property returns 400', async () => {
     const propertyId = await createProperty('1 Oak St');
     const otherPropertyId = await createProperty('2 Oak St');
-    const grantorOwnerId = await createOwner(otherPropertyId);
+    const grantorPersonId = await createPerson(otherPropertyId);
     const meetingId = await createMeeting();
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId,
       }),
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe(
-      'grantorOwnerId does not belong to this property',
+      'grantorPersonId has never held authority for this property',
     );
   });
 
   // 7. Duplicate (same lot, same occasion); control: different occasion ok.
+  it('POST accepts a grantor who has since sold, so a paper proxy stays recordable', async () => {
+    // ADR 0018's model, which #248 part 2 preserves rather than tightening:
+    // entering a historical proxy is allowed, USING it is refused. The
+    // create-time question is deliberately the weaker one ("has ever held"),
+    // and the phase 3d re-validation in proxyUseError is what refuses the
+    // proxy at attendance, member votes, ballots, and the live cast.
+    const propertyId = await createProperty();
+    const formerHolder = await createPerson(
+      propertyId,
+      'Prior Owner',
+      '2020-01-01',
+    );
+    const meetingId = await createMeeting();
+    const res = await POST(
+      req(url, 'POST', {
+        propertyId,
+        grantorPersonId: formerHolder,
+        holderName: 'Jane',
+        meetingId,
+      }),
+    );
+    expect(res.status).toBe(201);
+
+    // Control: a Person who has never held this lot is still a data-entry
+    // error, so the weaker question has not become no question at all.
+    const stranger = await createPerson(await createProperty('9 Elsewhere St'));
+    const refused = await POST(
+      req(url, 'POST', {
+        propertyId,
+        grantorPersonId: stranger,
+        holderName: 'Jane',
+        electionId: await createElection(),
+      }),
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toBe(
+      'grantorPersonId has never held authority for this property',
+    );
+  });
+
   it('POST rejects a duplicate proxy for the same lot and occasion, control allows a different occasion', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const otherMeetingId = await createMeeting();
     const first = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId,
       }),
@@ -321,7 +390,7 @@ describe('proxies admin route — board', () => {
     const dup = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane Again',
         meetingId,
       }),
@@ -333,7 +402,7 @@ describe('proxies admin route — board', () => {
     const control = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane Third',
         meetingId: otherMeetingId,
       }),
@@ -341,17 +410,17 @@ describe('proxies admin route — board', () => {
     expect(control.status).toBe(201);
   });
 
-  // 8. PATCH edits holderName/holderOwnerId/grantorOwnerId.
-  it('PATCH edits holderName, holderOwnerId, and grantorOwnerId, advancing updatedAt', async () => {
+  // 8. PATCH edits holderName/holderPersonId/grantorPersonId.
+  it('PATCH edits holderName, holderPersonId, and grantorPersonId, advancing updatedAt', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId, 'Original Grantor');
-    const newGrantorOwnerId = await createOwner(propertyId, 'New Grantor');
-    const holderOwnerId = await createOwner(propertyId, 'Holder Owner');
+    const grantorPersonId = await createPerson(propertyId, 'Original Grantor');
+    const newGrantorPersonId = await createPerson(propertyId, 'New Grantor');
+    const holderPersonId = await createPerson(propertyId, 'Holder Owner');
     const meetingId = await createMeeting();
     const createRes = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Old Name',
         meetingId,
       }),
@@ -369,27 +438,27 @@ describe('proxies admin route — board', () => {
       req(url, 'PATCH', {
         id,
         holderName: '  New Name  ',
-        holderOwnerId,
-        grantorOwnerId: newGrantorOwnerId,
+        holderPersonId,
+        grantorPersonId: newGrantorPersonId,
       }),
     );
     expect(res.status).toBe(204);
     const row = await getProxy(id);
     expect(row.holderName).toBe('New Name');
-    expect(row.holderOwnerId).toBe(holderOwnerId);
-    expect(row.grantorOwnerId).toBe(newGrantorOwnerId);
+    expect(row.holderPersonId).toBe(holderPersonId);
+    expect(row.grantorPersonId).toBe(newGrantorPersonId);
     expect(row.updatedAt.getTime()).toBeGreaterThan(past.getTime());
   });
 
   // 9. PATCH carrying meetingId/electionId/propertyId -> 400 'not editable'.
   it('PATCH rejects meetingId, electionId, and propertyId as not editable', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const createRes = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId,
       }),
@@ -415,15 +484,15 @@ describe('proxies admin route — board', () => {
     expect(await resProperty.text()).toMatch(/propertyId is not editable/);
   });
 
-  // 10. PATCH setting holderOwnerId equal to the stored grantor.
-  it('PATCH rejects holderOwnerId equal to the stored grantorOwnerId', async () => {
+  // 10. PATCH setting holderPersonId equal to the stored grantor.
+  it('PATCH rejects holderPersonId equal to the stored grantorPersonId', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const createRes = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId,
       }),
@@ -431,14 +500,14 @@ describe('proxies admin route — board', () => {
     const { id } = (await createRes.json()) as { id: string };
 
     const res = await PATCH(
-      req(url, 'PATCH', { id, holderOwnerId: grantorOwnerId }),
+      req(url, 'PATCH', { id, holderPersonId: grantorPersonId }),
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe(
-      'grantorOwnerId and holderOwnerId cannot be the same owner',
+      'grantorPersonId and holderPersonId cannot be the same person',
     );
     const row = await getProxy(id);
-    expect(row.holderOwnerId).toBeNull();
+    expect(row.holderPersonId).toBeNull();
   });
 
   // 11. PATCH/DELETE unknown id -> 404 'Proxy not found'.
@@ -457,12 +526,12 @@ describe('proxies admin route — board', () => {
   // 12. DELETE of an unused proxy.
   it('DELETE removes an unused proxy', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const createRes = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId,
       }),
@@ -479,13 +548,13 @@ describe('proxies admin route — board', () => {
   // then success once cleared.
   it('DELETE refuses an in-use proxy, naming what uses it, then succeeds once cleared', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     const electionId = await createElection();
     const createRes = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Jane',
         meetingId,
       }),
@@ -536,12 +605,12 @@ describe('proxies admin route — board', () => {
 
   it('POST rejects a proxy against a board meeting with 409, control member meeting still 201', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const boardMeetingId = await createMeeting({ body: 'board' });
     const res = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Alice Holder',
         meetingId: boardMeetingId,
         electionId: null,
@@ -556,7 +625,7 @@ describe('proxies admin route — board', () => {
     const ok = await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Alice Holder',
         meetingId: memberMeetingId,
         electionId: null,
@@ -567,12 +636,12 @@ describe('proxies admin route — board', () => {
 
   it('GET returns proxies via fetchAdminProxies', async () => {
     const propertyId = await createProperty();
-    const grantorOwnerId = await createOwner(propertyId);
+    const grantorPersonId = await createPerson(propertyId);
     const meetingId = await createMeeting();
     await POST(
       req(url, 'POST', {
         propertyId,
-        grantorOwnerId,
+        grantorPersonId,
         holderName: 'Listed Holder',
         meetingId,
       }),

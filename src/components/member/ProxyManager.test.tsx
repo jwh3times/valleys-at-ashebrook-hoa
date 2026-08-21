@@ -31,7 +31,7 @@ const lots: MemberLot[] = [
     id: 'p1',
     address: '1 Oak St',
     unit: null,
-    owners: [
+    persons: [
       { id: 'o1', fullName: 'Jane Doe' },
       { id: 'o1c', fullName: 'Co Owner' },
     ],
@@ -62,11 +62,11 @@ function proxyDetail(
     id: 'px1',
     propertyId: 'p1',
     address: '1 Oak St',
-    grantorOwnerId: 'o1',
+    grantorPersonId: 'o1',
     grantorName: 'Jane Doe',
     holderName: 'John Roe',
-    holderOwnerId: 'o2',
-    holderOwnerName: 'John Roe',
+    holderPersonId: 'o2',
+    holderPersonName: 'John Roe',
     meetingId: 'm1',
     electionId: null,
     occasionTitle: 'Annual meeting',
@@ -89,10 +89,10 @@ describe('ProxyManager', () => {
 
   it('looks up the holder by address and grants with the full payload', async () => {
     const user = userEvent.setup();
-    mocked.lookupOwners.mockResolvedValue({
+    mocked.lookupLotPersons.mockResolvedValue({
       propertyId: 'p2',
       address: '2 Oak St',
-      owners: [{ id: 'o2', fullName: 'John Roe' }],
+      persons: [{ id: 'o2', fullName: 'John Roe' }],
     });
     mocked.grantProxy.mockResolvedValue();
     render(<ProxyManager lots={lots} occasions={occasions} />);
@@ -105,7 +105,7 @@ describe('ProxyManager', () => {
       '2 Oak St',
     );
     await user.click(screen.getByRole('button', { name: 'Find owner' }));
-    await waitFor(() => expect(mocked.lookupOwners).toHaveBeenCalled());
+    await waitFor(() => expect(mocked.lookupLotPersons).toHaveBeenCalled());
     await user.selectOptions(
       await screen.findByLabelText('Proxy holder'),
       'o2',
@@ -115,8 +115,8 @@ describe('ProxyManager', () => {
     await waitFor(() =>
       expect(mocked.grantProxy).toHaveBeenCalledWith({
         propertyId: 'p1',
-        grantorOwnerId: 'o1',
-        holderOwnerId: 'o2',
+        grantorPersonId: 'o1',
+        holderPersonId: 'o2',
         meetingId: 'm1',
         electionId: null,
       }),
@@ -127,7 +127,9 @@ describe('ProxyManager', () => {
 
   it('surfaces a lookup failure without crashing the form', async () => {
     const user = userEvent.setup();
-    mocked.lookupOwners.mockRejectedValue(new Error('No matching property'));
+    mocked.lookupLotPersons.mockRejectedValue(
+      new Error('No matching property'),
+    );
     render(<ProxyManager lots={lots} occasions={occasions} />);
     await user.type(
       await screen.findByLabelText("Holder's street address"),
@@ -141,10 +143,10 @@ describe('ProxyManager', () => {
 
   it('invalidates a selected holder when the address is edited', async () => {
     const user = userEvent.setup();
-    mocked.lookupOwners.mockResolvedValue({
+    mocked.lookupLotPersons.mockResolvedValue({
       propertyId: 'p2',
       address: '2 Oak St',
-      owners: [{ id: 'o2', fullName: 'John Roe' }],
+      persons: [{ id: 'o2', fullName: 'John Roe' }],
     });
     mocked.grantProxy.mockResolvedValue();
     render(<ProxyManager lots={lots} occasions={occasions} />);
@@ -169,11 +171,11 @@ describe('ProxyManager', () => {
 
   it('invalidates a selected holder when a later lookup fails', async () => {
     const user = userEvent.setup();
-    mocked.lookupOwners
+    mocked.lookupLotPersons
       .mockResolvedValueOnce({
         propertyId: 'p2',
         address: '2 Oak St',
-        owners: [{ id: 'o2', fullName: 'John Roe' }],
+        persons: [{ id: 'o2', fullName: 'John Roe' }],
       })
       .mockRejectedValueOnce(new Error('No matching property'));
     mocked.grantProxy.mockResolvedValue();
@@ -202,8 +204,8 @@ describe('ProxyManager', () => {
 
   it('ignores a successful lookup response after its address becomes stale', async () => {
     const user = userEvent.setup();
-    const pending = deferred<member.OwnerLookupResult>();
-    mocked.lookupOwners.mockReturnValue(pending.promise);
+    const pending = deferred<member.LotPersonLookupResult>();
+    mocked.lookupLotPersons.mockReturnValue(pending.promise);
     render(<ProxyManager lots={lots} occasions={occasions} />);
 
     const address = await screen.findByLabelText("Holder's street address");
@@ -216,7 +218,7 @@ describe('ProxyManager', () => {
       pending.resolve({
         propertyId: 'p2',
         address: '2 Oak St',
-        owners: [{ id: 'o2', fullName: 'John Roe' }],
+        persons: [{ id: 'o2', fullName: 'John Roe' }],
       });
       await pending.promise;
     });
@@ -239,7 +241,7 @@ describe('ProxyManager', () => {
           // findByText ambiguous.
           grantorName: 'Pat Smith',
           holderName: 'Jane Doe',
-          holderOwnerId: 'o1',
+          holderPersonId: 'o1',
         }),
       ],
     });
@@ -256,10 +258,10 @@ describe('ProxyManager', () => {
 
   it('grants an election proxy with only electionId set', async () => {
     const user = userEvent.setup();
-    mocked.lookupOwners.mockResolvedValue({
+    mocked.lookupLotPersons.mockResolvedValue({
       propertyId: 'p2',
       address: '2 Oak St',
-      owners: [{ id: 'o2', fullName: 'John Roe' }],
+      persons: [{ id: 'o2', fullName: 'John Roe' }],
     });
     mocked.grantProxy.mockResolvedValue();
     render(<ProxyManager lots={lots} occasions={occasions} />);
@@ -281,8 +283,8 @@ describe('ProxyManager', () => {
     await waitFor(() =>
       expect(mocked.grantProxy).toHaveBeenCalledWith({
         propertyId: 'p1',
-        grantorOwnerId: 'o1',
-        holderOwnerId: 'o2',
+        grantorPersonId: 'o1',
+        holderPersonId: 'o2',
         meetingId: null,
         electionId: 'e1',
       }),
@@ -306,10 +308,10 @@ describe('ProxyManager', () => {
 
   it('keeps the lot selected and clears the occasion after a successful grant', async () => {
     const user = userEvent.setup();
-    mocked.lookupOwners.mockResolvedValue({
+    mocked.lookupLotPersons.mockResolvedValue({
       propertyId: 'p2',
       address: '2 Oak St',
-      owners: [{ id: 'o2', fullName: 'John Roe' }],
+      persons: [{ id: 'o2', fullName: 'John Roe' }],
     });
     mocked.grantProxy.mockResolvedValue();
     render(<ProxyManager lots={lots} occasions={occasions} />);

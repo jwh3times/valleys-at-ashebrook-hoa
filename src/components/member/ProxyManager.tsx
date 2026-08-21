@@ -3,9 +3,9 @@ import {
   fetchMyProxies,
   grantProxy,
   revokeProxy,
-  lookupOwners,
+  lookupLotPersons,
 } from '../../lib/member';
-import type { OwnerLookupResult } from '../../lib/member';
+import type { LotPersonLookupResult } from '../../lib/member';
 import type {
   MemberLot,
   MemberProxyDetail,
@@ -20,10 +20,10 @@ interface Props {
 
 const emptyForm = {
   propertyId: '',
-  grantorOwnerId: '',
+  grantorPersonId: '',
   occasionKey: '', // `${kind}:${id}` — one select for both occasion kinds
   holderAddress: '',
-  holderOwnerId: '',
+  holderPersonId: '',
 };
 
 export default function ProxyManager({ lots, occasions }: Props) {
@@ -35,14 +35,13 @@ export default function ProxyManager({ lots, occasions }: Props) {
   const [form, setForm] = useState(() => ({
     ...emptyForm,
     propertyId: lots.length === 1 ? lots[0].id : '',
-    grantorOwnerId:
-      lots.length === 1 && lots[0].owners.length === 1
-        ? lots[0].owners[0].id
+    grantorPersonId:
+      lots.length === 1 && lots[0].persons.length === 1
+        ? lots[0].persons[0].id
         : '',
   }));
-  const [holderResult, setHolderResult] = useState<OwnerLookupResult | null>(
-    null,
-  );
+  const [holderResult, setHolderResult] =
+    useState<LotPersonLookupResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -69,9 +68,9 @@ export default function ProxyManager({ lots, occasions }: Props) {
   }, []);
 
   const grantorOptions =
-    lots.find((l) => l.id === form.propertyId)?.owners ?? [];
+    lots.find((l) => l.id === form.propertyId)?.persons ?? [];
   const holderSelectionIsCurrent =
-    holderResult?.owners.some((o) => o.id === form.holderOwnerId) ?? false;
+    holderResult?.persons.some((p) => p.id === form.holderPersonId) ?? false;
 
   async function runLookup() {
     const requestId = ++lookupRequestId.current;
@@ -79,17 +78,17 @@ export default function ProxyManager({ lots, occasions }: Props) {
     setBusy(true);
     setMsg(null);
     try {
-      const result = await lookupOwners(holderAddress);
+      const result = await lookupLotPersons(holderAddress);
       if (requestId !== lookupRequestId.current) return;
       setHolderResult(result);
       setForm((f) => ({
         ...f,
-        holderOwnerId: result.owners.length === 1 ? result.owners[0].id : '',
+        holderPersonId: result.persons.length === 1 ? result.persons[0].id : '',
       }));
     } catch (e) {
       if (requestId !== lookupRequestId.current) return;
       setHolderResult(null);
-      setForm((f) => ({ ...f, holderOwnerId: '' }));
+      setForm((f) => ({ ...f, holderPersonId: '' }));
       setMsg(e instanceof Error ? e.message : 'Lookup failed');
     } finally {
       setBusy(false);
@@ -98,7 +97,7 @@ export default function ProxyManager({ lots, occasions }: Props) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!holderResult?.owners.some((o) => o.id === form.holderOwnerId)) {
+    if (!holderResult?.persons.some((p) => p.id === form.holderPersonId)) {
       setMsg('Find and choose a proxy holder before granting.');
       return;
     }
@@ -108,8 +107,8 @@ export default function ProxyManager({ lots, occasions }: Props) {
     try {
       await grantProxy({
         propertyId: form.propertyId,
-        grantorOwnerId: form.grantorOwnerId,
-        holderOwnerId: form.holderOwnerId,
+        grantorPersonId: form.grantorPersonId,
+        holderPersonId: form.holderPersonId,
         meetingId: kind === 'meeting' ? occasionId : null,
         electionId: kind === 'election' ? occasionId : null,
       });
@@ -177,7 +176,7 @@ export default function ProxyManager({ lots, occasions }: Props) {
                   setForm({
                     ...form,
                     propertyId: e.target.value,
-                    grantorOwnerId: '',
+                    grantorPersonId: '',
                   })
                 }
               >
@@ -194,11 +193,11 @@ export default function ProxyManager({ lots, occasions }: Props) {
               <label htmlFor="pm-grantor">You are</label>
               <select
                 id="pm-grantor"
-                value={form.grantorOwnerId}
+                value={form.grantorPersonId}
                 required
                 disabled={!form.propertyId}
                 onChange={(e) =>
-                  setForm({ ...form, grantorOwnerId: e.target.value })
+                  setForm({ ...form, grantorPersonId: e.target.value })
                 }
               >
                 <option value="">— choose your name —</option>
@@ -245,7 +244,7 @@ export default function ProxyManager({ lots, occasions }: Props) {
                   setForm((f) => ({
                     ...f,
                     holderAddress: e.target.value,
-                    holderOwnerId: '',
+                    holderPersonId: '',
                   }));
                 }}
               />
@@ -263,14 +262,14 @@ export default function ProxyManager({ lots, occasions }: Props) {
                 <label htmlFor="pm-holder">Proxy holder</label>
                 <select
                   id="pm-holder"
-                  value={form.holderOwnerId}
+                  value={form.holderPersonId}
                   required
                   onChange={(e) =>
-                    setForm({ ...form, holderOwnerId: e.target.value })
+                    setForm({ ...form, holderPersonId: e.target.value })
                   }
                 >
                   <option value="">— choose —</option>
-                  {holderResult.owners.map((o) => (
+                  {holderResult.persons.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.fullName} — {holderResult.address}
                     </option>

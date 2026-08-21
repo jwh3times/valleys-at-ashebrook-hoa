@@ -5,7 +5,7 @@ import { proxies } from '../../src/server/db/schema';
 import {
   truncateAll,
   seedProperty,
-  seedOwner,
+  seedLotAuthority,
   seedMeeting,
   seedElection,
   proxyRow,
@@ -45,7 +45,7 @@ describe('proxies schema', () => {
   beforeEach(async () => {
     await seedProperty('p1');
     await seedProperty('p2');
-    await seedOwner('o1', 'p1');
+    await seedLotAuthority('o1', 'p1');
     await seedMeeting('m1');
     await seedMeeting('m2');
     await seedElection('e1');

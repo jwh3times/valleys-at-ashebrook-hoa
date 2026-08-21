@@ -152,31 +152,14 @@ const CONSUMERS = new Map<string, Consumer>([
 
   // ---- THE PHASE-4 WORK LIST: live behavior on a doomed table -----------
   [
-    'server/content/proxy-guards.ts',
-    {
-      disposition: 'needs-repointing',
-      reason:
-        'proxyUseError re-validates a proxy grantor against owners.status in ' +
-        'BOTH cutover modes — a deliberate current-state approximation (#220, ' +
-        'decided by #204), documented in the module header',
-    },
-  ],
-  [
     'server/content/voting.ts',
     {
       disposition: 'needs-repointing',
       reason:
-        'the atomic cast re-checks own-lot and held-proxy authority by ' +
-        'joining owners and user_property_links inside the mutation SQL',
-    },
-  ],
-  [
-    'server/content/voting-reads.ts',
-    {
-      disposition: 'needs-repointing',
-      reason:
-        'the caller-specific open-voting projection resolves active owners of ' +
-        'the caller lots into valid provenance options',
+        "the atomic cast re-checks the CALLER's claim on the lot by joining " +
+        'user_property_links inside the mutation SQL. Its owners half is gone: ' +
+        '#248 part 2 moved who-may-act to the roster (roster/authority.ts), ' +
+        'leaving only the account-to-lot link phase 4 replaces with person_links',
     },
   ],
   [
@@ -186,38 +169,15 @@ const CONSUMERS = new Map<string, Consumer>([
       reason: 'the verified lots of a caller, read from user_property_links',
     },
   ],
-  [
-    'server/content/reads.ts',
-    {
-      disposition: 'needs-repointing',
-      reason:
-        'proxy and member-lot reads resolve grantor and holder names from ' +
-        'owners. Its board_people half is gone: #248 repointed the ' +
-        'meeting-record name map at the party roster',
-    },
-  ],
-  [
-    'server/roster/lookup.ts',
-    {
-      disposition: 'needs-repointing',
-      reason: 'the active owners of a lot, behind the member address lookup',
-    },
-  ],
-  [
-    'pages/api/admin/proxies.ts',
-    {
-      disposition: 'needs-repointing',
-      reason:
-        'the board proxies record validates grantor and holder against owners',
-    },
-  ],
-  [
-    'pages/api/member/proxies.ts',
-    {
-      disposition: 'needs-repointing',
-      reason: 'the homeowner proxy grant flow picks grantor and holder owners',
-    },
-  ],
+
+  // The two entries above are what #248 left behind, and they are the same
+  // entry twice: an ACCOUNT's claim on a lot, read from `user_property_links`.
+  // Part 2 repointed six modules off `owners` onto the party roster
+  // (proxy-guards, voting-reads, content/reads, roster/lookup, and both proxy
+  // routes), which is why they are no longer listed. What survives is not a
+  // roster question at all — the roster says who may act for a lot, while
+  // `user_property_links` says which lots this LOGIN was verified for, and
+  // phase 4 answers that from `person_links` instead.
 
   // ---- Blocked on the meeting record Person repointing ------------------
   // EMPTY since #248 part 1, which repointed the meeting and elections records

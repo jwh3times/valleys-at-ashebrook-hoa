@@ -20,7 +20,6 @@ import {
   seedElection,
   seedMeeting,
   seedMotion,
-  seedOwner,
   seedProperty,
   truncateAll,
 } from './fixtures';
@@ -167,14 +166,13 @@ async function seedPerson(id: string) {
 }
 
 /**
- * One Lot the seller both owns in the new model (what the transfer ends) and
- * owns in the legacy roster (what the cast path's authority SQL reads), with
- * the caller verified for it.
+ * One Lot the seller owns — one Ownership, which is both what the transfer
+ * ends and what the cast path's authority SQL reads since #248 part 2 moved
+ * that question onto the roster — with the caller verified for it.
  */
 async function seedVotingLot() {
   const db = getDb(env);
   await seedProperty('lot-1');
-  await seedOwner('own-1', 'lot-1');
   await seedPerson('per-1');
   await db.insert(ownerships).values({
     id: 'osh-1',
@@ -245,7 +243,7 @@ async function castConductedBallot(): Promise<void> {
     electionId: 'elec-1',
     propertyId: 'lot-1',
     candidateIds: CANDIDATE_IDS,
-    castByOwnerId: 'own-1',
+    castByPersonId: 'per-1',
     proxyId: null,
   });
   expect(res.status).toBe(204);
@@ -402,7 +400,7 @@ describe('the member-motion vote reset beside a conducted ballot', () => {
           motionId: 'mot-1',
           propertyId: 'lot-1',
           choice: 'no',
-          castByOwnerId: 'own-1',
+          castByPersonId: 'per-1',
           proxyId: null,
         })
       ).status,

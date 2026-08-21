@@ -19,9 +19,9 @@ import {
   motions,
   memberVotes,
   properties,
-  owners,
   settings,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { pauseNextBatch } from './fixtures';
 import { legacyAuthContext } from '../../src/server/authz/context';
@@ -36,7 +36,11 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(settings);
 });
@@ -124,14 +128,32 @@ async function createProperty(
   return id;
 }
 
-async function createOwner(
+async function createPerson(
   propertyId: string,
   fullName: string,
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env)
-    .insert(owners)
-    .values({ id, propertyId, fullName, createdAt: now, updatedAt: now });
+  const db = getDb(env);
+  // #248 part 2: the record names a roster Person holding Lot Authority.
+  await db
+    .insert(parties)
+    .values({ id, kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(people).values({
+    partyId: id,
+    partyKind: 'person',
+    fullName,
+    nameNormalized: fullName.toLowerCase(),
+    updatedAt: now,
+  });
+  await db.insert(ownerships).values({
+    id: `${id}-own`,
+    ownerPartyId: id,
+    lotId: propertyId,
+    startDay: null,
+    endDay: null,
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 
@@ -239,7 +261,7 @@ describe('motions admin route — member votes', () => {
     const id = await createMotion(meetingId);
     const p1 = await createProperty('1 Oak St', 2);
     const p2 = await createProperty('2 Oak St', 1);
-    const owner1 = await createOwner(p1, 'A. Reyes');
+    const owner1 = await createPerson(p1, 'A. Reyes');
     const res = await POST(
       req(url, 'POST', {
         action: 'setMemberVotes',
@@ -248,7 +270,7 @@ describe('motions admin route — member votes', () => {
           {
             propertyId: p1,
             choice: 'yes',
-            castByOwnerId: owner1,
+            castByPersonId: owner1,
           },
           { propertyId: p2, choice: 'no' },
         ],
@@ -263,12 +285,12 @@ describe('motions admin route — member votes', () => {
     const row1 = rows.find((r) => r.propertyId === p1);
     expect(row1?.choice).toBe('yes');
     expect(row1?.weight).toBe(2);
-    expect(row1?.castByOwnerId).toBe(owner1);
+    expect(row1?.castByPersonId).toBe(owner1);
     expect(row1?.proxyId).toBeNull();
     const row2 = rows.find((r) => r.propertyId === p2);
     expect(row2?.choice).toBe('no');
     expect(row2?.weight).toBe(1);
-    expect(row2?.castByOwnerId).toBeNull();
+    expect(row2?.castByPersonId).toBeNull();
     expect(row2?.proxyId).toBeNull();
   });
 
@@ -314,7 +336,7 @@ describe('motions admin route — member votes', () => {
       expect.objectContaining({
         choice: 'yes',
         weight: 0,
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: null,
       }),
     );
@@ -717,7 +739,7 @@ describe('motions admin route — member votes', () => {
       id: crypto.randomUUID(),
       motionId: id,
       propertyId,
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: null,
       weight: 2,
       choice: 'yes',
@@ -904,7 +926,7 @@ describe('motions admin route — member votes', () => {
         id: crypto.randomUUID(),
         motionId: id,
         propertyId,
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: null,
         weight: 2,
         choice: 'yes',

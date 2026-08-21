@@ -18,7 +18,6 @@ import {
   seedElection,
   seedMeeting,
   seedMotion,
-  seedOwner,
   seedProperty,
   seedProxy,
   truncateAll,
@@ -80,12 +79,14 @@ const CLEAR = [
   'person_verifications',
   'representation_lots',
   'representations',
-  'ownerships',
   'contact_methods',
   'organizations',
-  'people',
-  'parties',
 ];
+
+// `ownerships`, `people`, and `parties` are deliberately NOT in the list above:
+// the proxies record cites a Person since #248 part 2, so they can only be
+// cleared once the app tables are, which is what truncateAll() does — and it
+// already clears all three in the right order.
 
 beforeEach(async () => {
   const db = getDb(env);
@@ -180,10 +181,9 @@ async function integrityClean() {
 }
 
 /** A lot with one recorded Person owner and one legacy owner row (the latter
- * only because `proxies.grantor_owner_id` still points at the legacy roster). */
+ * only because `proxies.grantor_person_id` still points at the legacy roster). */
 async function seedTransferrableLot() {
   await seedProperty('lot-1');
-  await seedOwner('own-1', 'lot-1');
   await seedPerson('per-1');
   await seedOwnership('osh-1', 'per-1', 'lot-1');
 }
@@ -473,7 +473,7 @@ describe('forward pass and idempotency', () => {
     // Granted just now AND pending: two passes reach it, one flag results.
     await seedProxy('px-1', {
       propertyId: 'lot-1',
-      grantorOwnerId: 'own-1',
+      grantorPersonId: 'per-1',
       meetingId: 'mtg-next',
     });
 
@@ -494,7 +494,7 @@ describe('forward pass and idempotency', () => {
     await seedMeeting('mtg-next', { body: 'member', date: day(7) });
     await seedProxy('px-1', {
       propertyId: 'lot-1',
-      grantorOwnerId: 'own-1',
+      grantorPersonId: 'per-1',
       meetingId: 'mtg-next',
     });
     await seedPerson('per-2');
@@ -528,7 +528,7 @@ describe('flags never freeze the record they reference', () => {
     await seedMeeting('mtg-next', { body: 'member', date: day(7) });
     await seedProxy('px-1', {
       propertyId: 'lot-1',
-      grantorOwnerId: 'own-1',
+      grantorPersonId: 'per-1',
       meetingId: 'mtg-next',
     });
     expect(
@@ -588,7 +588,7 @@ describe('void', () => {
     await seedMeeting('mtg-next', { body: 'member', date: day(7) });
     await seedProxy('px-1', {
       propertyId: 'lot-1',
-      grantorOwnerId: 'own-1',
+      grantorPersonId: 'per-1',
       meetingId: 'mtg-next',
     });
     const db = getDb(env);

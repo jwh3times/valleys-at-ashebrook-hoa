@@ -7,6 +7,48 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-08-21
+
+### Changed
+
+- **Records of who acted for a home — who attended a member meeting, who cast a
+  vote or a ballot, and who granted or holds a proxy — now name a resident from
+  the neighborhood roster, instead of the older separate list of owners.** This
+  is the other half of the change made in 0.15.0 for meeting minutes and
+  election records, and it finishes moving the site off that older list.
+- **The people offered for those records are now whoever actually holds the
+  home**, which the roster answers the same way it answers who may serve on the
+  board: an owner, or the named representative of a company that owns a home.
+  A representative could not be recorded at all before, because the older list
+  had no way to say that a company owns a home and a particular person acts for
+  it.
+- Someone who used to hold a home is still offered when recording a past
+  meeting or a paper proxy — a meeting held last spring was attended by
+  whoever lived there then — and is now labelled as no longer holding it. A
+  proxy from such a person can still be written down for the paper record, and
+  is still refused wherever it would be used, exactly as before.
+- The proxy form's grantor field reads "Grantor (owner or representative)", and
+  the warning when the chosen person no longer holds the home now says so in
+  those words.
+- The address lookup a homeowner uses to find a proxy holder returns the same
+  thing it always did — names and nothing else, never phone numbers or email
+  addresses — but reads them from the roster, so a company's representative can
+  now be named as a holder.
+
+### Fixed
+
+- Four of the five records above could have lost the name of who acted without
+  any warning, once the older list of owners is eventually removed: the
+  database was set up to quietly blank the name rather than refuse. They now
+  point at the roster, so the name is kept and the removal cannot silently
+  erase it.
+
+### Security
+
+- `SECURITY.md` records that a proxy's grantor is re-checked against the roster
+  rather than the older owner list every time the proxy is used. The check is
+  unchanged in what it refuses; only where it reads from has moved.
+
 ## [0.15.3] - 2026-08-21
 
 ### Changed

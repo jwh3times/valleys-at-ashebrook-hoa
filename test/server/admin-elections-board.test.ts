@@ -15,10 +15,10 @@ import {
   ballotChoices,
   ballots,
   properties,
-  owners,
   meetings,
   settings,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { pauseNextBatch } from './fixtures';
 import { legacyAuthContext } from '../../src/server/authz/context';
@@ -34,7 +34,11 @@ beforeEach(async () => {
   await db.delete(electionEligibility);
   await db.delete(candidates);
   await db.delete(elections);
-  await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(meetings);
   await db.delete(settings);
@@ -135,14 +139,32 @@ async function createMeeting(
   return id;
 }
 
-async function createOwner(
+async function createPerson(
   propertyId: string,
   fullName = 'A. Reyes',
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env)
-    .insert(owners)
-    .values({ id, propertyId, fullName, createdAt: now, updatedAt: now });
+  const db = getDb(env);
+  // #248 part 2: the record names a roster Person holding Lot Authority.
+  await db
+    .insert(parties)
+    .values({ id, kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(people).values({
+    partyId: id,
+    partyKind: 'person',
+    fullName,
+    nameNormalized: fullName.toLowerCase(),
+    updatedAt: now,
+  });
+  await db.insert(ownerships).values({
+    id: `${id}-own`,
+    ownerPartyId: id,
+    lotId: propertyId,
+    startDay: null,
+    endDay: null,
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 
@@ -770,35 +792,35 @@ describe('elections admin route — board', () => {
     expect((await getBallotsFor(electionId)).length).toBe(0);
   });
 
-  it('setBallots rejects an unknown castByOwnerId with 400', async () => {
+  it('setBallots rejects an unknown castByPersonId with 400', async () => {
     const electionId = await createElection();
     const p1 = await createProperty('1 Oak St', 1);
     const res = await POST(
       req(url, 'POST', {
         action: 'setBallots',
         electionId,
-        entries: [{ propertyId: p1, castByOwnerId: 'nope' }],
+        entries: [{ propertyId: p1, castByPersonId: 'nope' }],
       }),
     );
     expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/unknown castByOwnerId/i);
+    expect(await res.text()).toMatch(/unknown castByPersonId/i);
     expect((await getBallotsFor(electionId)).length).toBe(0);
   });
 
-  it('setBallots accepts a valid castByOwnerId', async () => {
+  it('setBallots accepts a valid castByPersonId', async () => {
     const electionId = await createElection();
     const p1 = await createProperty('1 Oak St', 1);
-    const owner1 = await createOwner(p1);
+    const owner1 = await createPerson(p1);
     const res = await POST(
       req(url, 'POST', {
         action: 'setBallots',
         electionId,
-        entries: [{ propertyId: p1, castByOwnerId: owner1 }],
+        entries: [{ propertyId: p1, castByPersonId: owner1 }],
       }),
     );
     expect(res.status).toBe(204);
     const rows = await getBallotsFor(electionId);
-    expect(rows[0].castByOwnerId).toBe(owner1);
+    expect(rows[0].castByPersonId).toBe(owner1);
   });
 
   it('setBallots rejects the same propertyId twice with 409, not a raw D1 error', async () => {

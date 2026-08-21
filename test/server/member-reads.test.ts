@@ -12,6 +12,7 @@ import {
   elections,
   proxies,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import {
   fetchAdminMeeting,
   fetchMeetingFor,
@@ -38,6 +39,11 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
 });
 
@@ -51,8 +57,8 @@ async function seedProperty(
   });
 }
 
-async function seedOwner(id: string, propertyId: string, fullName: string) {
-  await fx.seedOwner(id, propertyId, { fullName });
+async function seedPersonFor(id: string, propertyId: string, fullName: string) {
+  await fx.seedLotAuthority(id, propertyId, { fullName });
 }
 
 async function seedMeeting(id: string, body: 'board' | 'member' = 'member') {
@@ -63,14 +69,14 @@ async function seedProxy(
   id: string,
   propertyId: string,
   meetingId: string,
-  grantorOwnerId: string,
+  grantorPersonId: string,
 ) {
   await getDb(env).insert(proxies).values({
     id,
     propertyId,
-    grantorOwnerId,
+    grantorPersonId,
     holderName: 'Jane Q. Holder',
-    holderOwnerId: null,
+    holderPersonId: null,
     meetingId,
     electionId: null,
     createdBy: 'u1',
@@ -106,7 +112,7 @@ describe('member meeting assembly', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
 
     const detail = await fetchAdminMeeting(env, 'm1');
@@ -129,7 +135,7 @@ describe('member meeting assembly', () => {
     const db = getDb(env);
     await seedProperty('p1');
     await seedProperty('p2');
-    await seedOwner('o1', 'p1', 'A. Reyes');
+    await seedPersonFor('o1', 'p1', 'A. Reyes');
     await seedMeeting('m1');
     await seedProxy('px1', 'p1', 'm1', 'o1');
     await db.insert(memberAttendance).values([
@@ -138,7 +144,7 @@ describe('member meeting assembly', () => {
         meetingId: 'm1',
         propertyId: 'p1',
         present: true,
-        representedByOwnerId: 'o1',
+        representedByPersonId: 'o1',
         proxyId: 'px1',
       },
       {
@@ -146,7 +152,7 @@ describe('member meeting assembly', () => {
         meetingId: 'm1',
         propertyId: 'p2',
         present: true,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
     ]);
 
@@ -202,7 +208,7 @@ describe('member meeting assembly', () => {
         id: 'v1',
         motionId: 'mo1',
         propertyId: 'p1',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 3,
         choice: 'yes',
       },
@@ -210,7 +216,7 @@ describe('member meeting assembly', () => {
         id: 'v2',
         motionId: 'mo1',
         propertyId: 'p2',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 5,
         choice: 'yes',
       },
@@ -252,7 +258,7 @@ describe('member meeting assembly', () => {
         id: 'v1',
         motionId: 'mo1',
         propertyId: 'p1',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 1,
         choice: 'yes',
       },
@@ -260,7 +266,7 @@ describe('member meeting assembly', () => {
         id: 'v2',
         motionId: 'mo2',
         propertyId: 'p2',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 1,
         choice: 'no',
       },
@@ -290,14 +296,14 @@ describe('member meeting assembly', () => {
         meetingId: 'm1',
         propertyId: 'p1',
         present: true,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
       {
         id: 'a2',
         meetingId: 'm2',
         propertyId: 'p2',
         present: false,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
     ]);
 
@@ -350,7 +356,7 @@ describe('member meeting assembly', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     // seedMeeting always creates a 'draft' meeting — the member-assembly
     // additions in this file must not have loosened fetchMeetingFor's
@@ -384,22 +390,21 @@ async function seedOccasionProperty(
     });
 }
 
-async function seedOccasionOwner(
+/**
+ * A Person holding Lot Authority over `propertyId`. `status: 'inactive'` seeds
+ * a FORMER holder instead — #248 part 2 makes that an ended Ownership interval
+ * rather than an `owners.status` flag.
+ */
+async function seedOccasionPerson(
   id: string,
   propertyId: string,
   fullName: string,
   status = 'active',
 ) {
-  await getDb(env)
-    .insert(owners)
-    .values({
-      id,
-      propertyId,
-      fullName,
-      status: status as 'active' | 'inactive',
-      createdAt: now,
-      updatedAt: now,
-    });
+  await fx.seedLotAuthority(id, propertyId, {
+    fullName,
+    ...(status === 'active' ? {} : { endDay: '2020-01-01' }),
+  });
 }
 
 async function seedOccasionMeeting(overrides: Record<string, unknown>) {
@@ -449,7 +454,7 @@ async function seedOccasionProxy(overrides: Record<string, unknown>) {
     .values({
       id,
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'Holder Name',
       createdBy: 'u1',
       createdAt: now,
@@ -510,15 +515,15 @@ describe('fetchUpcomingOccasionsFor', () => {
 });
 
 describe('fetchMemberLots', () => {
-  it('returns the given active lots with their active owners only', async () => {
+  it('returns the given active lots with the Persons who may act for them', async () => {
     await seedOccasionProperty('p1', '1 Ashebrook Lane');
     await seedOccasionProperty('p2', '2 Ashebrook Lane');
-    await seedOccasionOwner('o1', 'p1', 'Jane Doe');
-    await seedOccasionOwner('o2', 'p1', 'Old Owner', 'inactive');
+    await seedOccasionPerson('o1', 'p1', 'Jane Doe');
+    await seedOccasionPerson('o2', 'p1', 'Old Owner', 'inactive');
     const out = await fetchMemberLots(env, ['p1']);
     expect(out).toHaveLength(1);
     expect(out[0].address).toBe('1 Ashebrook Lane');
-    expect(out[0].owners).toEqual([{ id: 'o1', fullName: 'Jane Doe' }]);
+    expect(out[0].persons).toEqual([{ id: 'o1', fullName: 'Jane Doe' }]);
   });
 
   it('returns [] for an empty id list', async () => {
@@ -530,25 +535,25 @@ describe('fetchMemberProxies', () => {
   it('splits granted (my lots) from held (naming me as holder), resolving occasion title and date', async () => {
     await seedOccasionProperty('p1', '1 Ashebrook Lane');
     await seedOccasionProperty('p2', '2 Ashebrook Lane');
-    await seedOccasionOwner('o1', 'p1', 'Jane Doe');
-    await seedOccasionOwner('o2', 'p2', 'John Roe');
+    await seedOccasionPerson('o1', 'p1', 'Jane Doe');
+    await seedOccasionPerson('o2', 'p2', 'John Roe');
     const m1 = await seedOccasionMeeting({ id: 'm1', title: 'Annual' });
     // Granted by my lot p1 to John (another lot's owner):
     await seedOccasionProxy({
       id: 'pxG',
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'John Roe',
-      holderOwnerId: 'o2',
+      holderPersonId: 'o2',
       meetingId: m1,
     });
     // Held by me (o1 of p1) for John's lot p2:
     await seedOccasionProxy({
       id: 'pxH',
       propertyId: 'p2',
-      grantorOwnerId: 'o2',
+      grantorPersonId: 'o2',
       holderName: 'Jane Doe',
-      holderOwnerId: 'o1',
+      holderPersonId: 'o1',
       meetingId: m1,
     });
     const out = await fetchMemberProxies(env, 'homeowner', ['p1']);
@@ -563,13 +568,13 @@ describe('fetchMemberProxies', () => {
   it("never returns other lots' proxies and returns empty lists for no lots", async () => {
     await seedOccasionProperty('p1', '1 Ashebrook Lane');
     await seedOccasionProperty('p2', '2 Ashebrook Lane');
-    await seedOccasionOwner('o1', 'p1', 'Jane Doe');
-    await seedOccasionOwner('o2', 'p2', 'John Roe');
+    await seedOccasionPerson('o1', 'p1', 'Jane Doe');
+    await seedOccasionPerson('o2', 'p2', 'John Roe');
     const m1 = await seedOccasionMeeting({ id: 'm1' });
     await seedOccasionProxy({
       id: 'pxOther',
       propertyId: 'p2',
-      grantorOwnerId: 'o2',
+      grantorPersonId: 'o2',
       holderName: 'Somebody Else',
       meetingId: m1,
     });
