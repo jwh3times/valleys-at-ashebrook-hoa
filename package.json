@@ -23,6 +23,7 @@
     "format:check": "prettier --check .",
     "lint": "oxlint .",
     "lint:coercions": "node --experimental-strip-types scripts/check-coercions.ts",
+    "lint:migrations": "node --experimental-strip-types scripts/check-migration-files.ts",
     "lint:fix": "oxlint --fix .",
     "ocr:scanned": "node --experimental-strip-types scripts/ocr-scanned.ts",
     "postinstall": "npm ci --prefix vendor/astro-check-ts6 --ignore-scripts --no-audit --no-fund",

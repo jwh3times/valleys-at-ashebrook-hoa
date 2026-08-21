@@ -19,6 +19,12 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   against an old database. It now stops and says which changes are missing,
   with instructions to update first. This happened on 2026-08-21 and was
   noticed only by chance.
+- **A stray or misnumbered database-change file is now caught before it can
+  reach the live site.** The tool that applies these changes runs every file in
+  one folder, in name order — so a scratch file left there would be applied to
+  the real database as though someone had meant it. A new automated check
+  rejects files that are not named to the pattern, two files claiming the same
+  position, and a gap left by a deleted one.
 
 ### Changed
 
@@ -26,6 +32,11 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   from an up-to-date copy, and how to confirm afterwards that the database is
   sound — including the check that catches a change which left records
   pointing at something no longer there.
+- Two long-standing notes in the maintainer documentation were wrong and are
+  corrected: one about which file decides that a database change runs, and one
+  promising that an automatic change-generator still works here. It has not
+  worked since the roster rebuild earlier this month, and the notes now say so
+  plainly rather than sending the next person down a misleading path.
 
 ## [0.16.0] - 2026-08-21
 

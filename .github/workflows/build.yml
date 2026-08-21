@@ -43,6 +43,7 @@ jobs:
       # Fails on `Number(x) || <default>`, which silently rewrites a typed zero
       # because Number('') and Number('0') are both 0. Has bitten twice.
       - run: npm run lint:coercions
+      - run: npm run lint:migrations
       - run: npm run check
       - run: npm test
       # Worker/D1 integration tests (vitest-pool-workers) — exercises the API
