@@ -212,6 +212,76 @@ describe('meetings admin route — member attendance', () => {
     expect(rows.length).toBe(0);
   });
 
+  // #234: property_id is a NOT NULL FK to properties, and unlike its two
+  // siblings this action stamps no weight, so nothing else resolved the lot
+  // and an unknown id reached D1 as an unhandled 500. The inactive-lot check
+  // below it does not cover this — that one is scoped to lots marked present
+  // and reports nothing at all for an id matching no row.
+  it('setMemberAttendance with an unknown propertyId returns 400, not a raw 500', async () => {
+    const id = await createMeeting();
+    const res = await postMeeting(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: id,
+        entries: [{ propertyId: 'ghost', present: true }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('Unknown lots in entries: ghost');
+    const rows = await getDb(env)
+      .select()
+      .from(memberAttendance)
+      .where(eq(memberAttendance.meetingId, id));
+    expect(rows.length).toBe(0);
+  });
+
+  it('setMemberAttendance reports an unknown lot marked absent, not only present ones', async () => {
+    // The gap the inactive-lot check cannot close: it only inspects lots
+    // marked present, so an absent unknown lot would fall straight through it.
+    const id = await createMeeting();
+    const res = await postMeeting(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: id,
+        entries: [{ propertyId: 'ghost', present: false }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('Unknown lots in entries: ghost');
+  });
+
+  it('setMemberAttendance leaves the existing roll intact when one lot is unknown', async () => {
+    const id = await createMeeting();
+    const p1 = await createProperty('1 Oak St');
+    const seeded = await postMeeting(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: id,
+        entries: [{ propertyId: p1, present: true }],
+      }),
+    );
+    expect(seeded.status).toBe(204);
+
+    const res = await postMeeting(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: id,
+        entries: [
+          { propertyId: p1, present: false },
+          { propertyId: 'ghost', present: true },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    // The guard runs before the delete, so the full replace never starts.
+    const rows = await getDb(env)
+      .select()
+      .from(memberAttendance)
+      .where(eq(memberAttendance.meetingId, id));
+    expect(rows.length).toBe(1);
+    expect(rows[0].present).toBe(true);
+  });
+
   it('setMemberAttendance on a nonexistent meeting returns 404', async () => {
     const p1 = await createProperty('1 Oak St');
     const res = await postMeeting(
