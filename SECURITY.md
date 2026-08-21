@@ -303,8 +303,9 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Owner names, emails, and phone numbers live only in the D1 database — never in committed files.
   Contact data delivers the one-time verification code to the contact already on file and also
   contributes matching values to the AI pseudonymizer described below; it is never returned by the
-  proxy holder lookup. Active owner names and opaque IDs support the official-mode proxy
-  grant/holder workflow described above. Public docs describe the purpose and high-level handling;
+  proxy holder lookup. Names and opaque IDs of Persons who currently hold Lot Authority support
+  the official-mode proxy grant/holder workflow described above. Public docs describe the purpose
+  and high-level handling;
   deployment-specific removal, erasure, backup, and retention runbooks belong under `private/`.
 - **The admin document assistant is board-only and pseudonymizes known PII before it leaves the
   Worker.** `POST /api/admin/assistant` is gated by `requireBoard` (fail-closed, same as every other

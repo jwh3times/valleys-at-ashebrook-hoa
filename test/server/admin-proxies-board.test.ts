@@ -328,11 +328,51 @@ describe('proxies admin route — board', () => {
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe(
-      'grantorPersonId does not hold authority for this property',
+      'grantorPersonId has never held authority for this property',
     );
   });
 
   // 7. Duplicate (same lot, same occasion); control: different occasion ok.
+  it('POST accepts a grantor who has since sold, so a paper proxy stays recordable', async () => {
+    // ADR 0018's model, which #248 part 2 preserves rather than tightening:
+    // entering a historical proxy is allowed, USING it is refused. The
+    // create-time question is deliberately the weaker one ("has ever held"),
+    // and the phase 3d re-validation in proxyUseError is what refuses the
+    // proxy at attendance, member votes, ballots, and the live cast.
+    const propertyId = await createProperty();
+    const formerHolder = await createPerson(
+      propertyId,
+      'Prior Owner',
+      '2020-01-01',
+    );
+    const meetingId = await createMeeting();
+    const res = await POST(
+      req(url, 'POST', {
+        propertyId,
+        grantorPersonId: formerHolder,
+        holderName: 'Jane',
+        meetingId,
+      }),
+    );
+    expect(res.status).toBe(201);
+
+    // Control: a Person who has never held this lot is still a data-entry
+    // error, so the weaker question has not become no question at all.
+    const stranger = await createPerson(await createProperty('9 Elsewhere St'));
+    const refused = await POST(
+      req(url, 'POST', {
+        propertyId,
+        grantorPersonId: stranger,
+        holderName: 'Jane',
+        electionId: await createElection(),
+      }),
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toBe(
+      'grantorPersonId has never held authority for this property',
+    );
+  });
+
   it('POST rejects a duplicate proxy for the same lot and occasion, control allows a different occasion', async () => {
     const propertyId = await createProperty();
     const grantorPersonId = await createPerson(propertyId);
