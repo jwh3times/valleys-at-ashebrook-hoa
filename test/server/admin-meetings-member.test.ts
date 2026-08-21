@@ -24,6 +24,7 @@ import {
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { legacyAuthContext } from '../../src/server/authz/context';
+import { seedPeopleRows } from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -367,7 +368,7 @@ describe('ADR 0015 server backstops for the member record', () => {
   it('refuses a board mover or second on a member motion', async () => {
     const meetingId = await createMeeting();
     const personId = crypto.randomUUID();
-    await getDb(env).insert(boardPeople).values({
+    await seedPeopleRows({
       id: personId,
       fullName: 'B. Ortiz',
       userId: null,
@@ -394,7 +395,7 @@ describe('ADR 0015 server backstops for the member record', () => {
     // board people being unusable.
     const meetingId = await createMeeting({ body: 'board' });
     const personId = crypto.randomUUID();
-    await getDb(env).insert(boardPeople).values({
+    await seedPeopleRows({
       id: personId,
       fullName: 'B. Ortiz',
       userId: null,

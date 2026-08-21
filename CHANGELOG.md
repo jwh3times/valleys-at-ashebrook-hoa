@@ -7,7 +7,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [0.14.2] - 2026-08-20
+## [0.15.1] - 2026-08-20
 
 ### Added
 
@@ -24,6 +24,43 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   the list first, never touches production data, and says plainly when a step
   had nothing to record rather than inventing something. This is a maintainer
   tool only; it changes nothing about the site itself.
+
+## [0.15.0] - 2026-08-20
+
+### Changed
+
+- **Meeting minutes and election records now name a resident from the
+  neighborhood roster, instead of a separate list of board members kept only
+  for that purpose.** Attendance, who moved and seconded a motion, roll-call
+  votes, and the link from an election candidate to a person all used to point
+  at an older, separate record of board members. That record was never filled
+  in after the roster changeover, so the pickers the board used to record a
+  meeting were simply empty. They now offer the residents already on the
+  roster. A resident whose name has been erased shows the same durable
+  stand-in label used everywhere else, and someone recorded twice and since
+  merged is no longer offered at all.
+- The candidate field that read "Link to board member" now reads "Link to a
+  resident", which is what it does.
+- Motions used to carry two separate slots for who moved them — one for board
+  meetings, one for member meetings — told apart by which kind of meeting they
+  belonged to. There is one kind of person now, so there is one slot. Nothing
+  was ever recorded in the discarded one.
+
+### Fixed
+
+- Deleting an election with recorded votes could succeed or fail depending on
+  internal database ordering that nothing in the code controlled. It now
+  behaves the same way every time: the election and its votes are removed
+  together, while deleting a candidate who still has votes recorded against
+  them is refused, exactly as before. Nothing about how votes are stored
+  changed, and the separation that keeps a vote from being traced back to a
+  home is untouched.
+
+### Security
+
+- `SECURITY.md` no longer says board meeting records are unaffected by the
+  roster changeover — as of this release they name a roster resident like
+  everything else.
 
 ## [0.14.1] - 2026-08-20
 

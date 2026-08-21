@@ -89,8 +89,6 @@ async function seedMotion(id: string, meetingId: string, sequence = 1) {
       text: `Motion ${id}`,
       moverPersonId: null,
       secondPersonId: null,
-      moverOwnerId: null,
-      secondOwnerId: null,
       outcome: 'passed',
       createdBy: 'u1',
       createdAt: now,
