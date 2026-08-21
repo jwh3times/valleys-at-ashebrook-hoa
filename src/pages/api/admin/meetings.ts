@@ -87,6 +87,19 @@ async function setAttendance(db: Db, body: unknown): Promise<Response> {
   // produce a meeting with both kinds of attendance and an incoherent quorum.
   if (existing[0].body !== 'board')
     return new Response('Meeting is not a board meeting', { status: 409 });
+  // person_id is a NOT NULL FK to people(party_id), so an unknown id would
+  // otherwise throw a raw D1 FOREIGN KEY error out of the batch below — a 500
+  // the panel cannot tell from a genuine server fault (#234). Checked for the
+  // whole entry set, matching the member and ballot actions.
+  const personFailure = await personExistenceError(
+    db,
+    parsedEntries.value.map((e) => e.personId),
+    'personId',
+  );
+  if (personFailure)
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
   const rows = parsedEntries.value.map((e) => ({
     id: crypto.randomUUID(),
     meetingId,
@@ -109,6 +122,32 @@ interface MemberAttendanceEntry {
   present: boolean;
   representedByPersonId: string | null;
   proxyId: string | null;
+}
+
+/**
+ * The lots in `propertyIds` that do not exist.
+ *
+ * `member_attendance.property_id` is a NOT NULL FK to `properties`, so an
+ * unknown id reaches D1 as a raw FOREIGN KEY error rather than a 400 (#234).
+ * The sibling actions get this for free — `setMemberVotes` and `setBallots`
+ * each resolve a weight per lot and already fail the entry on a miss — but
+ * this action stamps no weight, so nothing else asks the question.
+ *
+ * Chunked: this is a full replace and the Meetings panel submits EVERY lot, so
+ * a large member meeting legitimately exceeds D1's bound-parameter limit. One
+ * bound parameter per id and no other predicate, so the default size applies.
+ */
+async function unknownLots(db: Db, propertyIds: string[]): Promise<string[]> {
+  const ids = [...new Set(propertyIds)];
+  if (ids.length === 0) return [];
+  const found = await chunkedIn(ids, (batch) =>
+    db
+      .select({ id: properties.id })
+      .from(properties)
+      .where(inArray(properties.id, batch)),
+  );
+  const known = new Set(found.map((r) => r.id));
+  return ids.filter((id) => !known.has(id));
 }
 
 /** Validate the raw `entries` payload for `setMemberAttendance`. */
@@ -182,6 +221,18 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
   if (personFailure)
     return new Response(personFailure.message, {
       status: personFailure.status,
+    });
+
+  // Before the inactive check below, which asks a narrower question: it is
+  // scoped to lots marked present and reports nothing for an id that matches
+  // no row at all, so an unknown lot would fall through it to the FK.
+  const unknown = await unknownLots(
+    db,
+    parsedEntries.value.map((e) => e.propertyId),
+  );
+  if (unknown.length > 0)
+    return new Response(`Unknown lots in entries: ${unknown.join(', ')}`, {
+      status: 400,
     });
 
   // ADR 0015 makes `status = 'inactive'` the sanctioned way to pull a lot out
