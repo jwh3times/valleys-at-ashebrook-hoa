@@ -107,6 +107,16 @@ describe('live voting schema', () => {
     expect(motionIndexColumns).toEqual(['motion_id', 'property_id']);
   });
 
+  // `ballot_choices.candidate_id` reads NO ACTION rather than RESTRICT since
+  // #248, and the change is timing, not rule. Both refuse to delete a candidate
+  // that retained choices still reference. They differ only when the parent
+  // ELECTION is deleted, cascading to `candidates` and `ballot_choices` alike:
+  // RESTRICT is checked immediately, so whichever cascade SQLite happened to
+  // run first decided the outcome — and rebuilding either table re-tosses that
+  // coin, which is exactly what #248's rebuild of `candidates` did. NO ACTION
+  // is checked at end of statement, when both rows are already gone. The test
+  // above ("cascades choices and electorate snapshots with their parent") is
+  // the behavior this buys; this one pins the mechanism.
   it('pins the live voting foreign-key delete actions', async () => {
     const choices = await pragmaRows('PRAGMA foreign_key_list(ballot_choices)');
     const electionSnapshot = await pragmaRows(
@@ -126,7 +136,7 @@ describe('live voting schema', () => {
         .sort((a, b) => String(a.from).localeCompare(String(b.from)));
 
     expect(foreignKeys(choices)).toEqual([
-      { from: 'candidate_id', table: 'candidates', onDelete: 'RESTRICT' },
+      { from: 'candidate_id', table: 'candidates', onDelete: 'NO ACTION' },
       { from: 'election_id', table: 'elections', onDelete: 'CASCADE' },
     ]);
     expect(foreignKeys(electionSnapshot)).toEqual([

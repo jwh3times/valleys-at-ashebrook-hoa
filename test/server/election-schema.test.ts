@@ -10,8 +10,8 @@ import {
   ballots,
   meetings,
   properties,
-  boardPeople,
 } from '../../src/server/db/schema';
+import { people } from '../../src/server/db/roster-schema';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -40,11 +40,8 @@ async function seedProperty(
   await fx.seedProperty(id, overrides);
 }
 
-async function seedBoardPerson(
-  id: string,
-  overrides: Record<string, unknown> = {},
-) {
-  await fx.seedBoardPerson(id, overrides);
+async function seedPerson(id: string, overrides: Record<string, unknown> = {}) {
+  await fx.seedPerson(id, overrides);
 }
 
 describe('elections schema', () => {
@@ -78,7 +75,7 @@ describe('elections schema', () => {
         id: 'c1',
         electionId: 'does-not-exist',
         fullName: 'Jane Doe',
-        boardPersonId: null,
+        personId: null,
         statementMd: null,
         sequence: 1,
         votes: null,
@@ -96,7 +93,7 @@ describe('elections schema', () => {
       id: 'c1',
       electionId: 'e1',
       fullName: 'Jane Doe',
-      boardPersonId: null,
+      personId: null,
       statementMd: null,
       sequence: 1,
       votes: null,
@@ -143,15 +140,15 @@ describe('elections schema', () => {
     ).rejects.toThrow();
   });
 
-  it('refuses to delete a board person linked to a candidate', async () => {
+  it('refuses to delete a Person linked to a candidate', async () => {
     const db = getDb(env);
     await seedElection('e1');
-    await seedBoardPerson('bp1');
+    await seedPerson('bp1');
     await db.insert(candidates).values({
       id: 'c1',
       electionId: 'e1',
       fullName: 'Jane Doe',
-      boardPersonId: 'bp1',
+      personId: 'bp1',
       statementMd: null,
       sequence: 1,
       votes: null,
@@ -160,7 +157,7 @@ describe('elections schema', () => {
       createdAt: now,
     });
     await expect(
-      db.delete(boardPeople).where(eq(boardPeople.id, 'bp1')),
+      db.delete(people).where(eq(people.partyId, 'bp1')),
     ).rejects.toThrow();
   });
 
@@ -243,7 +240,7 @@ describe('elections schema', () => {
       id: 'c1',
       electionId: 'e1',
       fullName: 'Not Recorded',
-      boardPersonId: null,
+      personId: null,
       statementMd: null,
       sequence: 1,
       votes: null,
@@ -255,7 +252,7 @@ describe('elections schema', () => {
       id: 'c2',
       electionId: 'e1',
       fullName: 'Recorded Zero',
-      boardPersonId: null,
+      personId: null,
       statementMd: null,
       sequence: 2,
       votes: 0,

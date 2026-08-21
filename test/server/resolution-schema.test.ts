@@ -113,8 +113,6 @@ describe('resolutions schema', () => {
       text: 'Adopt R-2026-01',
       moverPersonId: null,
       secondPersonId: null,
-      moverOwnerId: null,
-      secondOwnerId: null,
       outcome: 'passed',
       createdBy: 'u1',
       createdAt: now,

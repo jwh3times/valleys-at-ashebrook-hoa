@@ -107,8 +107,9 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   existing `visibility` tier (`public`/`homeowner`/`board`) is the only gate — a board member who
   sets a member meeting's visibility to `public` is warned about the address exposure directly on
   the admin panel's visibility control. Board meetings are unaffected: `board_attendance`/
-  `board_votes` reference `board_people`, not addresses, and a board meeting's roll call has always
-  named board members, never homeowners.
+  `board_votes` reference a party-roster Person (`people`, repointed from the legacy `board_people`
+  by #248), not addresses, and a board meeting's roll call has always named board members, never
+  homeowners.
 - **A proxy's grantor is re-validated as a currently active owner every time the proxy is used, not
   only when it is granted.** The ADR 0022 phase 3d grantor re-validation (#220, decided by #204)
   adds a check to the shared `proxyUseError` guard behind `setMemberAttendance`, `setMemberVotes`,
