@@ -7,6 +7,26 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-08-21
+
+### Changed
+
+- Routine updates to four supporting tools the site is built with, and a
+  regenerated type file that has to be refreshed by hand whenever those tools
+  change. No change to how the site behaves.
+
+### Security
+
+- **A proposed update to the sign-in library was held back because it would
+  have broken signing in, signing up, and resetting a password on the live
+  site.** The newer version requires a counting feature from the storage it
+  rate-limits against, and the Cloudflare storage adapter this site uses does
+  not offer one — its most recent release still does not. The failure happens
+  on every affected request rather than at start-up, so it would have shown up
+  as visitors simply being unable to sign in. The four updates bundled
+  alongside it were safe and are included; the sign-in library stays on the
+  version currently running until the gap upstream is closed.
+
 ## [0.16.2] - 2026-08-21
 
 ### Fixed
