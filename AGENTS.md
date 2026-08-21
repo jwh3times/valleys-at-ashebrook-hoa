@@ -57,6 +57,7 @@ npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run db:generate       # generate Drizzle migration files
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to production D1 — the ONLY path; deploys do not run migrations
+                          # (refuses from a checkout behind origin/main; see the stale-checkout note below)
 npm run auth:generate     # regenerate Better Auth schema from config
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
@@ -1478,7 +1479,22 @@ ledger rather than assumed. Migrations `0023` through `0027` were applied to pro
 the observation that falsified the deploys-apply-migrations doctrine below. Migration `0028` was applied to
 production manually (`db:migrate:remote`) on 2026-08-21, immediately after the change that needs it
 merged — the deployment-ordering hazard immediately below is why it could not wait. Migration
-`0029` carries the same hazard and the same rule: apply it before or with its deploy.
+`0029` was applied the same way on 2026-08-21, but only on the SECOND attempt; the first is the
+stale-checkout trap recorded below.
+
+**`db:migrate:remote` reads the LOCAL migrations directory, so a stale checkout reports success.**
+The first `0029` attempt ran from a checkout that predated the merge. Having no `0029` file on
+disk, wrangler compared what it had against `d1_migrations`, found nothing unapplied, and printed
+`✅ No migrations to apply!` — true of that disk, and indistinguishable from the message a
+correctly-applied database produces. Workers Builds had already deployed the merged code, so
+production served the new application against the old schema, with the member attendance, member
+vote, ballot, and proxy surfaces failing, while the operator's terminal said everything was fine.
+The only tell was npm's own banner printing `@0.15.0` when the merge had minted `0.16.0`. A
+`git pull` and a re-run applied it (26 commands: the file's 25 statements plus wrangler's
+`d1_migrations` insert), and `verify:invariants --remote` was 17/17 including
+`PRAGMA foreign_key_check`. `scripts/check-migrations-current.ts` now refuses the apply from a
+checkout behind `origin/main`, naming the migrations it lacks, so the silent no-op becomes a loud
+refusal; `MIGRATE_ALLOW_BEHIND=1` is the documented override.
 
 **Committed migrations do NOT reach production on their own.** Deploys never apply D1
 migrations. This doctrine previously said the opposite, inferred from `0016`-`0022` landing at one
