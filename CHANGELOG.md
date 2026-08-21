@@ -7,6 +7,19 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-08-21
+
+### Changed
+
+- **Two internal working notes are no longer stored in the public repository.**
+  The folder they live in is meant to be kept out of it, but these two files
+  had been committed before that rule existed, and the rule only applies to
+  files that were never committed in the first place — so they stayed visible
+  while the other twenty-seven notes beside them were correctly excluded. They
+  are now excluded too. The files themselves are untouched and remain where the
+  maintainer keeps them; only their presence in the published repository
+  changed.
+
 ## [0.15.2] - 2026-08-20
 
 ### Fixed
