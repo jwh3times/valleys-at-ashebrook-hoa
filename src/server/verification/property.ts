@@ -1,13 +1,11 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
+import type { Db } from '../db/client';
 import { sendEmail, sendSms } from '../auth/senders';
 import { SITE_NAME } from '../../lib/site';
 import { maskEmail } from '../../lib/format';
 import { normalizeName } from '../roster/normalize';
-import {
-  findActivePropertyByAddress,
-  getActiveOwnersForProperty,
-} from '../roster/lookup';
+import { findActivePropertyByAddress } from '../roster/lookup';
 import {
   generateCode,
   hashCode,
@@ -15,7 +13,12 @@ import {
   MAX_ATTEMPTS,
   CODE_TTL_MS,
 } from './codes';
-import { propertyVerifications, userPropertyLinks, users } from '../db/schema';
+import {
+  owners,
+  propertyVerifications,
+  userPropertyLinks,
+  users,
+} from '../db/schema';
 import {
   checkPropertyRateLimit,
   recordVerificationSend,
@@ -37,6 +40,23 @@ import {
 // reported as an outcome code so the route can map it to the uniform response
 // (D2); the applicant-visible review request is now an explicit action
 // (`POST /api/verify/review`).
+/**
+ * The active `owners` rows for a lot.
+ *
+ * Lived in `roster/lookup.ts` until #248 part 2, when the member surfaces that
+ * shared it moved to the party roster's Lot Authority (`roster/authority.ts`)
+ * and this became its only caller. It is deliberately still the LEGACY read:
+ * this whole module is the `cutover_mode = legacy` backend and must stay
+ * bit-for-bit what it was, contact fan-out included. Phase 4 (#212) deletes it
+ * with the table.
+ */
+async function getActiveOwnersForProperty(db: Db, propertyId: string) {
+  return db
+    .select()
+    .from(owners)
+    .where(and(eq(owners.propertyId, propertyId), eq(owners.status, 'active')));
+}
+
 export type PropertyVerificationOutcome =
   | { ok: true }
   | {

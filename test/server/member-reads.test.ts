@@ -63,14 +63,14 @@ async function seedProxy(
   id: string,
   propertyId: string,
   meetingId: string,
-  grantorOwnerId: string,
+  grantorPersonId: string,
 ) {
   await getDb(env).insert(proxies).values({
     id,
     propertyId,
-    grantorOwnerId,
+    grantorPersonId,
     holderName: 'Jane Q. Holder',
-    holderOwnerId: null,
+    holderPersonId: null,
     meetingId,
     electionId: null,
     createdBy: 'u1',
@@ -106,7 +106,7 @@ describe('member meeting assembly', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
 
     const detail = await fetchAdminMeeting(env, 'm1');
@@ -138,7 +138,7 @@ describe('member meeting assembly', () => {
         meetingId: 'm1',
         propertyId: 'p1',
         present: true,
-        representedByOwnerId: 'o1',
+        representedByPersonId: 'o1',
         proxyId: 'px1',
       },
       {
@@ -146,7 +146,7 @@ describe('member meeting assembly', () => {
         meetingId: 'm1',
         propertyId: 'p2',
         present: true,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
     ]);
 
@@ -202,7 +202,7 @@ describe('member meeting assembly', () => {
         id: 'v1',
         motionId: 'mo1',
         propertyId: 'p1',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 3,
         choice: 'yes',
       },
@@ -210,7 +210,7 @@ describe('member meeting assembly', () => {
         id: 'v2',
         motionId: 'mo1',
         propertyId: 'p2',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 5,
         choice: 'yes',
       },
@@ -252,7 +252,7 @@ describe('member meeting assembly', () => {
         id: 'v1',
         motionId: 'mo1',
         propertyId: 'p1',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 1,
         choice: 'yes',
       },
@@ -260,7 +260,7 @@ describe('member meeting assembly', () => {
         id: 'v2',
         motionId: 'mo2',
         propertyId: 'p2',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 1,
         choice: 'no',
       },
@@ -290,14 +290,14 @@ describe('member meeting assembly', () => {
         meetingId: 'm1',
         propertyId: 'p1',
         present: true,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
       {
         id: 'a2',
         meetingId: 'm2',
         propertyId: 'p2',
         present: false,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
     ]);
 
@@ -350,7 +350,7 @@ describe('member meeting assembly', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     // seedMeeting always creates a 'draft' meeting — the member-assembly
     // additions in this file must not have loosened fetchMeetingFor's
@@ -449,7 +449,7 @@ async function seedOccasionProxy(overrides: Record<string, unknown>) {
     .values({
       id,
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'Holder Name',
       createdBy: 'u1',
       createdAt: now,
@@ -518,7 +518,7 @@ describe('fetchMemberLots', () => {
     const out = await fetchMemberLots(env, ['p1']);
     expect(out).toHaveLength(1);
     expect(out[0].address).toBe('1 Ashebrook Lane');
-    expect(out[0].owners).toEqual([{ id: 'o1', fullName: 'Jane Doe' }]);
+    expect(out[0].persons).toEqual([{ id: 'o1', fullName: 'Jane Doe' }]);
   });
 
   it('returns [] for an empty id list', async () => {
@@ -537,18 +537,18 @@ describe('fetchMemberProxies', () => {
     await seedOccasionProxy({
       id: 'pxG',
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'John Roe',
-      holderOwnerId: 'o2',
+      holderPersonId: 'o2',
       meetingId: m1,
     });
     // Held by me (o1 of p1) for John's lot p2:
     await seedOccasionProxy({
       id: 'pxH',
       propertyId: 'p2',
-      grantorOwnerId: 'o2',
+      grantorPersonId: 'o2',
       holderName: 'Jane Doe',
-      holderOwnerId: 'o1',
+      holderPersonId: 'o1',
       meetingId: m1,
     });
     const out = await fetchMemberProxies(env, 'homeowner', ['p1']);
@@ -569,7 +569,7 @@ describe('fetchMemberProxies', () => {
     await seedOccasionProxy({
       id: 'pxOther',
       propertyId: 'p2',
-      grantorOwnerId: 'o2',
+      grantorPersonId: 'o2',
       holderName: 'Somebody Else',
       meetingId: m1,
     });

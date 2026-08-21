@@ -1013,11 +1013,12 @@ export interface BallotRow {
   address: string;
   weight: number;
   viaProxy: boolean;
-  castByOwnerId: string | null;
+  castByPersonId: string | null;
   proxyId: string | null;
 }
 
-export interface VotingOwnerOption {
+/** A roster Person who may act for a lot — see server/roster/authority.ts. */
+export interface VotingPersonOption {
   id: string;
   fullName: string;
 }
@@ -1033,7 +1034,7 @@ export interface VotingLot {
   address: string;
   weight: number;
   hasCast: boolean;
-  ownerOptions: VotingOwnerOption[];
+  personOptions: VotingPersonOption[];
   proxyOptions: VotingProxyOption[];
 }
 
@@ -1064,7 +1065,7 @@ export interface CastBallotInput {
   electionId: string;
   propertyId: string;
   candidateIds: string[];
-  castByOwnerId: string | null;
+  castByPersonId: string | null;
   proxyId: string | null;
 }
 
@@ -1073,7 +1074,7 @@ export interface CastMotionVoteInput {
   motionId: string;
   propertyId: string;
   choice: 'yes' | 'no' | 'abstain';
-  castByOwnerId: string | null;
+  castByPersonId: string | null;
   proxyId: string | null;
 }
 
@@ -1252,25 +1253,29 @@ export function normalizeVoteWeight(
 
 // --- Proxies (paper proxy assignments recorded against a meeting or an
 // election) ---------------------------------------------------------------
+//
+// Grantor and holder are roster Persons (#248 part 2, migration 0029). They
+// referenced the legacy `owners` table until then, which is why the fields
+// read `*PersonId` rather than `*OwnerId`.
 
 export interface ProxyDetail {
   id: string;
   propertyId: string;
   address: string;
-  grantorOwnerId: string;
+  grantorPersonId: string;
   grantorName: string;
   holderName: string;
-  holderOwnerId: string | null;
-  holderOwnerName: string | null;
+  holderPersonId: string | null;
+  holderPersonName: string | null;
   meetingId: string | null;
   electionId: string | null;
 }
 
 export interface ProxyInput {
   propertyId?: string;
-  grantorOwnerId?: string;
+  grantorPersonId?: string;
   holderName?: string;
-  holderOwnerId?: string | null;
+  holderPersonId?: string | null;
   meetingId?: string | null;
   electionId?: string | null;
 }
@@ -1331,16 +1336,16 @@ export function normalizeProxyInput(
       return fail('Exactly one of meetingId or electionId is required');
   }
 
-  const grantorOwnerId = coreString(
+  const grantorPersonId = coreString(
     r,
-    'grantorOwnerId',
+    'grantorPersonId',
     INPUT_LIMITS.propertyId,
-    'grantorOwnerId',
+    'grantorPersonId',
     mode,
   );
-  if (!grantorOwnerId.ok) return grantorOwnerId;
-  if (grantorOwnerId.value !== undefined)
-    out.grantorOwnerId = grantorOwnerId.value;
+  if (!grantorPersonId.ok) return grantorPersonId;
+  if (grantorPersonId.value !== undefined)
+    out.grantorPersonId = grantorPersonId.value;
 
   const holderName = coreString(
     r,
@@ -1352,24 +1357,24 @@ export function normalizeProxyInput(
   if (!holderName.ok) return holderName;
   if (holderName.value !== undefined) out.holderName = holderName.value;
 
-  const holderOwnerId = nullableString(
+  const holderPersonId = nullableString(
     r,
-    'holderOwnerId',
+    'holderPersonId',
     INPUT_LIMITS.propertyId,
-    'holderOwnerId',
+    'holderPersonId',
   );
-  if (!holderOwnerId.ok) return holderOwnerId;
-  if (holderOwnerId.value !== undefined)
-    out.holderOwnerId = holderOwnerId.value;
+  if (!holderPersonId.ok) return holderPersonId;
+  if (holderPersonId.value !== undefined)
+    out.holderPersonId = holderPersonId.value;
 
   // A proxy to yourself is a data-entry error. When a patch changes only one
   // side, the route re-checks against the stored row (Task 5).
   if (
-    out.grantorOwnerId != null &&
-    out.holderOwnerId != null &&
-    out.grantorOwnerId === out.holderOwnerId
+    out.grantorPersonId != null &&
+    out.holderPersonId != null &&
+    out.grantorPersonId === out.holderPersonId
   )
-    return fail('grantorOwnerId and holderOwnerId cannot be the same owner');
+    return fail('grantorPersonId and holderPersonId cannot be the same person');
 
   return { ok: true, value: out };
 }
@@ -1406,5 +1411,6 @@ export interface MemberLot {
   id: string;
   address: string;
   unit: string | null;
-  owners: { id: string; fullName: string }[]; // ACTIVE owners only
+  /** Persons currently holding Lot Authority — Ownership or Representation. */
+  persons: { id: string; fullName: string }[];
 }

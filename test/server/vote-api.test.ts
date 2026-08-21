@@ -164,23 +164,23 @@ beforeEach(async () => {
   await db.insert(proxies).values([
     proxy('proxy-election', 'property-proxy', 'owner-proxy-grantor', {
       electionId: 'election-open',
-      holderOwnerId: 'owner-own',
+      holderPersonId: 'owner-own',
     }),
     proxy('proxy-meeting', 'property-proxy', 'owner-proxy-grantor', {
       meetingId: 'meeting-open',
-      holderOwnerId: 'owner-own',
+      holderPersonId: 'owner-own',
     }),
     proxy('proxy-wrong-scope', 'property-proxy', 'owner-proxy-grantor', {
       meetingId: 'meeting-other',
-      holderOwnerId: 'owner-own',
+      holderPersonId: 'owner-own',
     }),
     proxy('proxy-unheld', 'property-unheld', 'owner-unheld-grantor', {
       electionId: 'election-open',
-      holderOwnerId: 'owner-holder-unlinked',
+      holderPersonId: 'owner-holder-unlinked',
     }),
     proxy('proxy-unheld-closed', 'property-unheld', 'owner-unheld-grantor', {
       electionId: 'election-closed',
-      holderOwnerId: 'owner-holder-unlinked',
+      holderPersonId: 'owner-holder-unlinked',
     }),
   ]);
   await setVotingSettings(true, true);
@@ -252,7 +252,7 @@ describe('POST /api/vote ballot casting', () => {
       electionId: 'election-open',
       propertyId: 'property-own',
       weight: 7,
-      castByOwnerId: 'owner-own',
+      castByPersonId: 'owner-own',
       proxyId: null,
     });
 
@@ -287,7 +287,7 @@ describe('POST /api/vote ballot casting', () => {
       ...validBallot(),
       propertyId: 'property-proxy',
       candidateIds: ['candidate-one'],
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId,
     });
     expect(response.status).toBe(204);
@@ -299,7 +299,7 @@ describe('POST /api/vote ballot casting', () => {
     expect(ballotRows[0]).toMatchObject({
       propertyId: 'property-proxy',
       weight: 3,
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId,
     });
   });
@@ -332,7 +332,7 @@ describe('POST /api/vote ballot casting', () => {
           ...validBallot(),
           electionId: 'election-closed',
           candidateIds: ['candidate-closed'],
-          castByOwnerId: 'owner-proxy-grantor',
+          castByPersonId: 'owner-proxy-grantor',
         })
       ).status,
     ).toBe(400);
@@ -340,7 +340,7 @@ describe('POST /api/vote ballot casting', () => {
       (
         await callVote({
           ...validBallot(),
-          castByOwnerId: 'owner-inactive',
+          castByPersonId: 'owner-inactive',
         })
       ).status,
     ).toBe(400);
@@ -376,7 +376,7 @@ describe('POST /api/vote ballot casting', () => {
         await callVote({
           ...validBallot(),
           propertyId: 'property-no-snapshot',
-          castByOwnerId: 'owner-no-snapshot',
+          castByPersonId: 'owner-no-snapshot',
         })
       ).status,
     ).toBe(403);
@@ -385,7 +385,7 @@ describe('POST /api/vote ballot casting', () => {
         await callVote({
           ...validBallot(),
           propertyId: 'property-proxy',
-          castByOwnerId: 'owner-proxy-grantor',
+          castByPersonId: 'owner-proxy-grantor',
         })
       ).status,
     ).toBe(403);
@@ -397,7 +397,7 @@ describe('POST /api/vote ballot casting', () => {
         await callVote({
           ...validBallot(),
           propertyId: 'property-proxy',
-          castByOwnerId: null,
+          castByPersonId: null,
           proxyId: 'proxy-wrong-scope',
         })
       ).status,
@@ -412,7 +412,7 @@ describe('POST /api/vote ballot casting', () => {
           electionId: 'election-closed',
           propertyId: 'property-unheld',
           candidateIds: ['candidate-closed'],
-          castByOwnerId: null,
+          castByPersonId: null,
           proxyId: 'proxy-unheld-closed',
         })
       ).status,
@@ -455,7 +455,7 @@ describe('POST /api/vote motion casting', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       propertyId: 'property-own',
-      castByOwnerId: 'owner-own',
+      castByPersonId: 'owner-own',
       proxyId: null,
       choice: 'yes',
       weight: 5,
@@ -467,7 +467,7 @@ describe('POST /api/vote motion casting', () => {
       ...validMotionVote(),
       propertyId: 'property-proxy',
       choice: 'abstain',
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: 'proxy-meeting',
     });
     expect(response.status).toBe(204);
@@ -477,7 +477,7 @@ describe('POST /api/vote motion casting', () => {
       .where(eq(memberVotes.motionId, 'motion-open'));
     expect(rows[0]).toMatchObject({
       propertyId: 'property-proxy',
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: 'proxy-meeting',
       choice: 'abstain',
       weight: 2,
@@ -520,7 +520,7 @@ function validBallot() {
     electionId: 'election-open',
     propertyId: 'property-own',
     candidateIds: ['candidate-one', 'candidate-two'],
-    castByOwnerId: 'owner-own',
+    castByPersonId: 'owner-own',
     proxyId: null,
   };
 }
@@ -531,7 +531,7 @@ function validMotionVote() {
     motionId: 'motion-open',
     propertyId: 'property-own',
     choice: 'yes',
-    castByOwnerId: 'owner-own',
+    castByPersonId: 'owner-own',
     proxyId: null,
   };
 }
@@ -712,17 +712,17 @@ function motionEligibilityRow(
 function proxy(
   id: string,
   propertyId: string,
-  grantorOwnerId: string,
+  grantorPersonId: string,
   occasion:
-    | { meetingId: string; holderOwnerId: string }
-    | { electionId: string; holderOwnerId: string },
+    | { meetingId: string; holderPersonId: string }
+    | { electionId: string; holderPersonId: string },
 ) {
   return {
     id,
     propertyId,
-    grantorOwnerId,
+    grantorPersonId,
     holderName: `Holder ${id}`,
-    holderOwnerId: occasion.holderOwnerId,
+    holderPersonId: occasion.holderPersonId,
     meetingId: 'meetingId' in occasion ? occasion.meetingId : null,
     electionId: 'electionId' in occasion ? occasion.electionId : null,
     createdBy: 'board-user',

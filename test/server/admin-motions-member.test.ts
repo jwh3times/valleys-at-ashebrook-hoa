@@ -248,7 +248,7 @@ describe('motions admin route — member votes', () => {
           {
             propertyId: p1,
             choice: 'yes',
-            castByOwnerId: owner1,
+            castByPersonId: owner1,
           },
           { propertyId: p2, choice: 'no' },
         ],
@@ -263,12 +263,12 @@ describe('motions admin route — member votes', () => {
     const row1 = rows.find((r) => r.propertyId === p1);
     expect(row1?.choice).toBe('yes');
     expect(row1?.weight).toBe(2);
-    expect(row1?.castByOwnerId).toBe(owner1);
+    expect(row1?.castByPersonId).toBe(owner1);
     expect(row1?.proxyId).toBeNull();
     const row2 = rows.find((r) => r.propertyId === p2);
     expect(row2?.choice).toBe('no');
     expect(row2?.weight).toBe(1);
-    expect(row2?.castByOwnerId).toBeNull();
+    expect(row2?.castByPersonId).toBeNull();
     expect(row2?.proxyId).toBeNull();
   });
 
@@ -314,7 +314,7 @@ describe('motions admin route — member votes', () => {
       expect.objectContaining({
         choice: 'yes',
         weight: 0,
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: null,
       }),
     );
@@ -717,7 +717,7 @@ describe('motions admin route — member votes', () => {
       id: crypto.randomUUID(),
       motionId: id,
       propertyId,
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: null,
       weight: 2,
       choice: 'yes',
@@ -904,7 +904,7 @@ describe('motions admin route — member votes', () => {
         id: crypto.randomUUID(),
         motionId: id,
         propertyId,
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: null,
         weight: 2,
         choice: 'yes',

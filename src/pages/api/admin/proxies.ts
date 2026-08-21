@@ -11,10 +11,15 @@ import type { Db } from '../../../server/db/client';
 import {
   proxies,
   properties,
-  owners,
   meetings,
   elections,
 } from '../../../server/db/schema';
+import { people } from '../../../server/db/roster-schema';
+import {
+  authorityKey,
+  fetchLotAuthorityKeys,
+} from '../../../server/roster/authority';
+import { associationDateIso } from '../../../lib/format';
 import { normalizeProxyInput } from '../../../lib/types';
 import { fetchAdminProxies } from '../../../server/content/reads';
 import {
@@ -43,48 +48,58 @@ async function checkExists(
 }
 
 /**
- * 404 if holderOwnerId is present but does not exist. holderOwnerId is
- * optional — a holder need not be an owner at all — so absence is not
- * checked here.
+ * 404 if holderPersonId is present but names no roster Person. The link is
+ * optional — a holder need not hold authority anywhere, or be on the roster at
+ * all — so absence is not checked here.
  */
-async function checkHolderOwnerExists(
+async function checkHolderPersonExists(
   db: Db,
-  holderOwnerId: string | null | undefined,
+  holderPersonId: string | null | undefined,
 ): Promise<Response | null> {
-  if (holderOwnerId == null) return null;
+  if (holderPersonId == null) return null;
   const rows = await db
-    .select({ id: owners.id })
-    .from(owners)
-    .where(eq(owners.id, holderOwnerId))
+    .select({ id: people.partyId })
+    .from(people)
+    .where(eq(people.partyId, holderPersonId))
     .limit(1);
   if (rows.length === 0)
-    return new Response('Holder owner not found', { status: 404 });
+    return new Response('Holder person not found', { status: 404 });
   return null;
 }
 
 /**
- * 400/404 unless grantorOwnerId exists and belongs to the given property.
- * Owners belong to exactly one lot (owners.property_id), and a proxy is
- * granted BY an owner FOR their lot — a grantor from another lot is a
- * data-entry error, caught here rather than surfacing as a coherent-looking
- * but wrong record.
+ * 400/404 unless grantorPersonId names a roster Person who holds Lot Authority
+ * over the given lot. A proxy is granted BY someone entitled to act for the
+ * lot FOR that lot — a grantor with no authority there is a data-entry error,
+ * caught here rather than surfacing as a coherent-looking but wrong record.
+ *
+ * Before #248 part 2 this compared `owners.property_id`; it now asks the
+ * shared Lot Authority rule (roster/authority.ts), so an Organization's
+ * Representative may sign for the entity's lot — which the legacy shape could
+ * not express at all.
  */
-async function checkGrantorBelongs(
+async function checkGrantorHoldsAuthority(
   db: Db,
-  grantorOwnerId: string,
+  grantorPersonId: string,
   propertyId: string,
 ): Promise<Response | null> {
   const rows = await db
-    .select({ id: owners.id, propertyId: owners.propertyId })
-    .from(owners)
-    .where(eq(owners.id, grantorOwnerId))
+    .select({ id: people.partyId })
+    .from(people)
+    .where(eq(people.partyId, grantorPersonId))
     .limit(1);
   if (rows.length === 0)
-    return new Response('Owner not found', { status: 404 });
-  if (rows[0].propertyId !== propertyId)
-    return new Response('grantorOwnerId does not belong to this property', {
-      status: 400,
-    });
+    return new Response('Person not found', { status: 404 });
+  const authority = await fetchLotAuthorityKeys(
+    db,
+    [propertyId],
+    associationDateIso(),
+  );
+  if (!authority.has(authorityKey(grantorPersonId, propertyId)))
+    return new Response(
+      'grantorPersonId does not hold authority for this property',
+      { status: 400 },
+    );
   return null;
 }
 
@@ -132,7 +147,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const db = getDb(env);
 
   // Every FK this route can write gets a readable failure — propertyId,
-  // grantorOwnerId, holderOwnerId, meetingId, electionId. Checked in this
+  // grantorPersonId, holderPersonId, meetingId, electionId. Checked in this
   // order so each unknown id gets its own message rather than one FK check
   // masking its neighbour.
   const propertyMissing = await checkExists(
@@ -142,13 +157,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     'Property',
   );
   if (propertyMissing) return propertyMissing;
-  const grantorProblem = await checkGrantorBelongs(
+  const grantorProblem = await checkGrantorHoldsAuthority(
     db,
-    input.grantorOwnerId!,
+    input.grantorPersonId!,
     input.propertyId!,
   );
   if (grantorProblem) return grantorProblem;
-  const holderMissing = await checkHolderOwnerExists(db, input.holderOwnerId);
+  const holderMissing = await checkHolderPersonExists(db, input.holderPersonId);
   if (holderMissing) return holderMissing;
   const meetingProblem = await checkMeetingIsMember(db, input.meetingId);
   if (meetingProblem) return meetingProblem;
@@ -181,9 +196,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await db.insert(proxies).values({
     id,
     propertyId: input.propertyId!,
-    grantorOwnerId: input.grantorOwnerId!,
+    grantorPersonId: input.grantorPersonId!,
     holderName: input.holderName!,
-    holderOwnerId: input.holderOwnerId ?? null,
+    holderPersonId: input.holderPersonId ?? null,
     meetingId: input.meetingId ?? null,
     electionId: input.electionId ?? null,
     createdBy: ctx?.userId ?? 'unknown',
@@ -217,39 +232,42 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return new Response('Proxy not found', { status: 404 });
   const current = existing[0];
 
-  if (input.grantorOwnerId !== undefined) {
-    const grantorProblem = await checkGrantorBelongs(
+  if (input.grantorPersonId !== undefined) {
+    const grantorProblem = await checkGrantorHoldsAuthority(
       db,
-      input.grantorOwnerId,
+      input.grantorPersonId,
       current.propertyId,
     );
     if (grantorProblem) return grantorProblem;
   }
-  if (input.holderOwnerId !== undefined) {
-    const holderMissing = await checkHolderOwnerExists(db, input.holderOwnerId);
+  if (input.holderPersonId !== undefined) {
+    const holderMissing = await checkHolderPersonExists(
+      db,
+      input.holderPersonId,
+    );
     if (holderMissing) return holderMissing;
   }
   // Re-check grantor !== holder against the EFFECTIVE values — the
   // normalizer can only compare keys present in the same payload, so a patch
-  // that carries only holderOwnerId (equal to the stored grantor) or only
-  // grantorOwnerId (equal to the stored holder) would otherwise slip through.
-  const effectiveGrantor = input.grantorOwnerId ?? current.grantorOwnerId;
+  // that carries only holderPersonId (equal to the stored grantor) or only
+  // grantorPersonId (equal to the stored holder) would otherwise slip through.
+  const effectiveGrantor = input.grantorPersonId ?? current.grantorPersonId;
   const effectiveHolder =
-    input.holderOwnerId !== undefined
-      ? input.holderOwnerId
-      : current.holderOwnerId;
+    input.holderPersonId !== undefined
+      ? input.holderPersonId
+      : current.holderPersonId;
   if (effectiveHolder != null && effectiveGrantor === effectiveHolder)
     return new Response(
-      'grantorOwnerId and holderOwnerId cannot be the same owner',
+      'grantorPersonId and holderPersonId cannot be the same person',
       { status: 400 },
     );
 
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (input.holderName !== undefined) set.holderName = input.holderName;
-  if (input.holderOwnerId !== undefined)
-    set.holderOwnerId = input.holderOwnerId;
-  if (input.grantorOwnerId !== undefined)
-    set.grantorOwnerId = input.grantorOwnerId;
+  if (input.holderPersonId !== undefined)
+    set.holderPersonId = input.holderPersonId;
+  if (input.grantorPersonId !== undefined)
+    set.grantorPersonId = input.grantorPersonId;
   await db.update(proxies).set(set).where(eq(proxies.id, id));
   return new Response(null, { status: 204 });
 };

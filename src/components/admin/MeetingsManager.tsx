@@ -16,8 +16,10 @@ import {
   setMemberVotes,
   fetchMeetingRosterPeople,
   fetchProperties,
+  fetchLotPeople,
   fetchProxies,
 } from '../../lib/admin';
+import type { LotPeople } from '../../lib/admin';
 import { fetchSiteSettings } from '../../lib/content';
 import {
   MEETING_BODIES,
@@ -99,16 +101,16 @@ const emptyMotion = {
 /** Per-property attendance draft for a member meeting. */
 interface MemberAttendanceFormRow {
   present: boolean;
-  representedByOwnerId: string;
-  /** Empty string = no proxy. Picking a proxy clears representedByOwnerId. */
+  representedByPersonId: string;
+  /** Empty string = no proxy. Picking a proxy clears representedByPersonId. */
   proxyId: string;
 }
 
 /** Per-property vote draft for a member meeting's motion. */
 interface MemberVoteFormRow {
   choice: MemberVoteChoice;
-  castByOwnerId: string;
-  /** Empty string = no proxy. Picking a proxy clears castByOwnerId. */
+  castByPersonId: string;
+  /** Empty string = no proxy. Picking a proxy clears castByPersonId. */
   proxyId: string;
 }
 
@@ -126,18 +128,26 @@ function personIdByName(
 }
 
 /**
- * Same reverse lookup as personIdByName, but for a property's owners:
- * MemberAttendanceRow/MemberVoteRow (the same shapes the public read
- * returns) carry the representing/casting owner's name, not id.
+ * Same reverse lookup as personIdByName, but for the Persons who may act for
+ * one lot: MemberAttendanceRow/MemberVoteRow (the same shapes the public read
+ * returns) carry the representing/casting Person's name, not id.
  */
-function ownerIdByPropertyAndName(
-  propertyId: string,
+function personIdByLotAndName(
+  lotId: string,
   name: string | null,
-  properties: PropertyWithOwners[],
+  lotPeople: LotPeople[],
 ): string | null {
   if (!name) return null;
-  const property = properties.find((p) => p.id === propertyId);
-  return property?.owners.find((o) => o.fullName === name)?.id ?? null;
+  const lot = lotPeople.find((l) => l.lotId === lotId);
+  return lot?.persons.find((p) => p.fullName === name)?.id ?? null;
+}
+
+/**
+ * The Persons offerable for one lot — current holders and former ones alike,
+ * since a past meeting was attended by whoever held the lot then.
+ */
+function personsForLot(lotId: string, lotPeople: LotPeople[]) {
+  return lotPeople.find((l) => l.lotId === lotId)?.persons ?? [];
 }
 
 export default function MeetingsManager() {
@@ -189,6 +199,22 @@ export default function MeetingsManager() {
       });
   }, [setMsg]);
 
+  // Who may act for each lot, for the member attendance and member vote
+  // pickers. Separate from `properties` (which supplies addresses and weights)
+  // because #248 part 2 moved that answer from the lot's legacy owner rows to
+  // the roster's Lot Authority.
+  const [lotPeople, setLotPeople] = useState<LotPeople[]>([]);
+  useEffect(() => {
+    fetchLotPeople()
+      .then(setLotPeople)
+      .catch((err: unknown) => {
+        const message =
+          (err as { message?: string } | null)?.message ??
+          'could not load who may act for each lot.';
+        setMsg('Error: ' + message);
+      });
+  }, [setMsg]);
+
   // Recorded proxies back the attendance/vote proxy pickers below — loaded
   // once alongside people/properties, independent of useAdminResource.
   const [proxyList, setProxyList] = useState<ProxyDetail[]>([]);
@@ -227,7 +253,7 @@ export default function MeetingsManager() {
     {},
   );
   // Member-meeting twin of attendanceForm, keyed by propertyId instead of
-  // personId, carrying the extra representedByOwnerId/proxyId fields the
+  // personId, carrying the extra representedByPersonId/proxyId fields the
   // property-based editor needs.
   const [memberAttendanceForm, setMemberAttendanceForm] = useState<
     Record<string, MemberAttendanceFormRow>
@@ -260,11 +286,11 @@ export default function MeetingsManager() {
               a.propertyId,
               {
                 present: a.present,
-                representedByOwnerId:
-                  ownerIdByPropertyAndName(
+                representedByPersonId:
+                  personIdByLotAndName(
                     a.propertyId,
                     a.representedByName,
-                    properties,
+                    lotPeople,
                   ) ?? '',
                 proxyId: a.proxyId ?? '',
               },
@@ -285,15 +311,15 @@ export default function MeetingsManager() {
     return () => {
       cancelled = true;
     };
-    // Re-run when the expanded meeting changes, and also when `properties`
-    // resolves: ownerIdByPropertyAndName reads `properties` via closure, so
-    // without this dependency, expanding a meeting before fetchProperties()
-    // resolves would close over the initial empty array, resolve every
-    // representedByOwnerId to '', and a subsequent save would write null
-    // over every recorded representative. Re-running once properties
-    // arrives re-derives memberAttendanceForm correctly; refetching the
-    // same meeting detail again is a harmless extra request.
-  }, [expandedId, properties, setMsg]);
+    // Re-run when the expanded meeting changes, and also when `lotPeople`
+    // resolves: personIdByLotAndName reads it via closure, so without this
+    // dependency, expanding a meeting before fetchLotPeople() resolves would
+    // close over the initial empty array, resolve every
+    // representedByPersonId to '', and a subsequent save would write null
+    // over every recorded representative. Re-running once the list arrives
+    // re-derives memberAttendanceForm correctly; refetching the same meeting
+    // detail again is a harmless extra request.
+  }, [expandedId, lotPeople, setMsg]);
 
   async function reloadDetail(meetingId: string) {
     const d = await fetchMeeting(meetingId);
@@ -386,12 +412,8 @@ export default function MeetingsManager() {
           v.propertyId,
           {
             choice: v.choice,
-            castByOwnerId:
-              ownerIdByPropertyAndName(
-                v.propertyId,
-                v.castByName,
-                properties,
-              ) ?? '',
+            castByPersonId:
+              personIdByLotAndName(v.propertyId, v.castByName, lotPeople) ?? '',
             proxyId: v.proxyId ?? '',
           },
         ]),
@@ -470,7 +492,7 @@ export default function MeetingsManager() {
           return {
             propertyId: p.id,
             present: !!row?.present,
-            representedByOwnerId: row?.representedByOwnerId || null,
+            representedByPersonId: row?.representedByPersonId || null,
             proxyId: row?.proxyId || null,
           };
         });
@@ -550,7 +572,7 @@ export default function MeetingsManager() {
               ([propertyId, row]) => ({
                 propertyId,
                 choice: row.choice,
-                castByOwnerId: row.castByOwnerId || null,
+                castByPersonId: row.castByPersonId || null,
                 proxyId: row.proxyId || null,
               }),
             );
@@ -984,8 +1006,8 @@ export default function MeetingsManager() {
                                       ...prev,
                                       [p.id]: {
                                         present: e.target.checked,
-                                        representedByOwnerId:
-                                          prev[p.id]?.representedByOwnerId ??
+                                        representedByPersonId:
+                                          prev[p.id]?.representedByPersonId ??
                                           '',
                                         proxyId: prev[p.id]?.proxyId ?? '',
                                       },
@@ -995,7 +1017,7 @@ export default function MeetingsManager() {
                                 {p.address}
                                 {p.unit ? ` ${p.unit}` : ''}
                               </label>
-                              {p.owners.length > 0 && (
+                              {personsForLot(p.id, lotPeople).length > 0 && (
                                 <div
                                   style={{
                                     display: 'flex',
@@ -1012,21 +1034,21 @@ export default function MeetingsManager() {
                                   </label>
                                   <select
                                     id={`member-attendance-rep-${m.id}-${p.id}`}
-                                    value={row?.representedByOwnerId ?? ''}
+                                    value={row?.representedByPersonId ?? ''}
                                     disabled={busy || !!row?.proxyId}
                                     onChange={(e) =>
                                       setMemberAttendanceForm((prev) => ({
                                         ...prev,
                                         [p.id]: {
                                           present: prev[p.id]?.present ?? false,
-                                          representedByOwnerId: e.target.value,
+                                          representedByPersonId: e.target.value,
                                           proxyId: prev[p.id]?.proxyId ?? '',
                                         },
                                       }))
                                     }
                                   >
                                     <option value="">— none —</option>
-                                    {p.owners.map((o) => (
+                                    {personsForLot(p.id, lotPeople).map((o) => (
                                       <option key={o.id} value={o.id}>
                                         {o.fullName}
                                       </option>
@@ -1055,9 +1077,9 @@ export default function MeetingsManager() {
                                       // Mutual exclusion, mirrored from the
                                       // server: picking a proxy clears the
                                       // represented-by owner.
-                                      representedByOwnerId: proxyId
+                                      representedByPersonId: proxyId
                                         ? ''
-                                        : (prev[p.id]?.representedByOwnerId ??
+                                        : (prev[p.id]?.representedByPersonId ??
                                           ''),
                                       proxyId,
                                     },
@@ -1283,8 +1305,8 @@ export default function MeetingsManager() {
                                         else
                                           next[p.id] = {
                                             choice: value as MemberVoteChoice,
-                                            castByOwnerId:
-                                              prev[p.id]?.castByOwnerId ?? '',
+                                            castByPersonId:
+                                              prev[p.id]?.castByPersonId ?? '',
                                             proxyId: prev[p.id]?.proxyId ?? '',
                                           };
                                         return next;
@@ -1298,7 +1320,7 @@ export default function MeetingsManager() {
                                       </option>
                                     ))}
                                   </select>
-                                  {p.owners.length > 0 && (
+                                  {personsForLot(p.id, lotPeople).length > 0 && (
                                     <div
                                       style={{
                                         display: 'flex',
@@ -1314,7 +1336,7 @@ export default function MeetingsManager() {
                                       </label>
                                       <select
                                         id={`member-vote-cast-by-${m.id}-${p.id}`}
-                                        value={row?.castByOwnerId ?? ''}
+                                        value={row?.castByPersonId ?? ''}
                                         disabled={busy || !!row?.proxyId}
                                         onChange={(e) =>
                                           setMemberVoteForm((prev) => ({
@@ -1322,7 +1344,7 @@ export default function MeetingsManager() {
                                             [p.id]: {
                                               choice:
                                                 prev[p.id]?.choice ?? 'abstain',
-                                              castByOwnerId: e.target.value,
+                                              castByPersonId: e.target.value,
                                               proxyId:
                                                 prev[p.id]?.proxyId ?? '',
                                             },
@@ -1330,7 +1352,7 @@ export default function MeetingsManager() {
                                         }
                                       >
                                         <option value="">— none —</option>
-                                        {p.owners.map((o) => (
+                                        {personsForLot(p.id, lotPeople).map((o) => (
                                           <option key={o.id} value={o.id}>
                                             {o.fullName}
                                           </option>
@@ -1359,9 +1381,9 @@ export default function MeetingsManager() {
                                           // Mutual exclusion, mirrored from
                                           // the server: picking a proxy
                                           // clears the cast-by owner.
-                                          castByOwnerId: proxyId
+                                          castByPersonId: proxyId
                                             ? ''
-                                            : (prev[p.id]?.castByOwnerId ?? ''),
+                                            : (prev[p.id]?.castByPersonId ?? ''),
                                           proxyId,
                                         },
                                       }))

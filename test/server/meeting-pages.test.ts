@@ -430,14 +430,14 @@ describe('/meetings/[id]', () => {
         meetingId: 'member-quorum-met',
         propertyId: 'p1',
         present: true,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
       {
         id: 'ma2',
         meetingId: 'member-quorum-met',
         propertyId: 'p2',
         present: false,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
     ]);
     const container = await makeContainer();
@@ -467,14 +467,14 @@ describe('/meetings/[id]', () => {
         meetingId: 'member-quorum-not-met',
         propertyId: 'p1',
         present: true,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
       {
         id: 'ma4',
         meetingId: 'member-quorum-not-met',
         propertyId: 'p2',
         present: false,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       },
     ]);
     const notMetHtml = await container.renderToString(MeetingDetailPage, {
@@ -536,7 +536,7 @@ describe('/meetings/[id]', () => {
         id: 'mv1',
         motionId: 'mmo1',
         propertyId: 'p1',
-        castByOwnerId: 'o1',
+        castByPersonId: 'o1',
         weight: 2,
         choice: 'yes',
       },
@@ -544,7 +544,7 @@ describe('/meetings/[id]', () => {
         id: 'mv2',
         motionId: 'mmo1',
         propertyId: 'p2',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 1,
         choice: 'no',
       },
@@ -561,7 +561,7 @@ describe('/meetings/[id]', () => {
         meetingId: 'member-motion',
         propertyId: 'p2',
         present: true,
-        representedByOwnerId: 'o2',
+        representedByPersonId: 'o2',
       },
     ]);
     const container = await makeContainer();

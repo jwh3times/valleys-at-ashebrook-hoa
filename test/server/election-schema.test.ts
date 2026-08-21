@@ -115,7 +115,7 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      castByOwnerId: null,
+      castByPersonId: null,
       recordedAt: now,
     });
     await db.delete(elections).where(eq(elections.id, 'e1'));
@@ -132,7 +132,7 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      castByOwnerId: null,
+      castByPersonId: null,
       recordedAt: now,
     });
     await expect(
@@ -193,7 +193,7 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      castByOwnerId: null,
+      castByPersonId: null,
       recordedAt: now,
     });
     await expect(
@@ -202,7 +202,7 @@ describe('elections schema', () => {
         electionId: 'e1',
         propertyId: 'p1',
         weight: 1,
-        castByOwnerId: null,
+        castByPersonId: null,
         recordedAt: now,
       }),
     ).rejects.toThrow();
@@ -218,7 +218,7 @@ describe('elections schema', () => {
       electionId: 'e1',
       propertyId: 'p1',
       weight: 1,
-      castByOwnerId: null,
+      castByPersonId: null,
       recordedAt: now,
     });
     await db.insert(ballots).values({
@@ -226,7 +226,7 @@ describe('elections schema', () => {
       electionId: 'e2',
       propertyId: 'p1',
       weight: 1,
-      castByOwnerId: null,
+      castByPersonId: null,
       recordedAt: now,
     });
     const rows = await db.select().from(ballots);

@@ -26,6 +26,7 @@ const mockedContent = vi.mocked(content);
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchProperties.mockResolvedValue([]);
+  mocked.fetchLotPeople.mockResolvedValue([]);
   mocked.fetchMeetingRosterPeople.mockResolvedValue([]);
   mocked.fetchRosterPeople.mockResolvedValue([]);
   mocked.fetchProxies.mockResolvedValue([]);
@@ -406,7 +407,7 @@ describe('ElectionsManager', () => {
             address: '100 Main St',
             weight: 2,
             viaProxy: false,
-            castByOwnerId: null,
+            castByPersonId: null,
             proxyId: null,
           },
         ],
@@ -913,27 +914,21 @@ describe('ElectionsManager', () => {
     );
   });
 
-  it('recording ballots calls setBallots with weight and castByOwnerId per checked property', async () => {
+  it('recording ballots calls setBallots with weight and castByPersonId per checked property', async () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
     mocked.fetchProperties.mockResolvedValue([
-      property({ id: 'p1', address: '100 Main St', owners: [] }),
-      property({
-        id: 'p2',
-        address: '200 Oak St',
-        owners: [
-          {
-            id: 'o2',
-            propertyId: 'p2',
-            fullName: 'Owner Two',
-            phone: null,
-            email: null,
-            status: 'active',
-            notes: null,
-          },
-        ],
-      }),
+      property({ id: 'p1', address: '100 Main St' }),
+      property({ id: 'p2', address: '200 Oak St' }),
+    ]);
+    // Who may act for each lot is the roster's answer now (#248 part 2), not
+    // the lot's legacy owner rows: p1 has nobody, p2 has one Person.
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'p2',
+        persons: [{ id: 'o2', fullName: 'Owner Two', current: true }],
+      },
     ]);
     mocked.setBallots.mockResolvedValue(undefined);
     render(<ElectionsManager />);
@@ -943,11 +938,12 @@ describe('ElectionsManager', () => {
     await screen.findByText('Board Election 2026');
 
     await userEvent.click(screen.getByRole('button', { name: /details/i }));
-    // p1: returned a ballot, weight left untouched, no owner to cast by.
+    // p1: returned a ballot, weight left untouched, nobody to cast by.
     await userEvent.click(
       screen.getByLabelText(/ballot returned — 100 main st/i),
     );
-    // p2: returned a ballot, weight explicitly overridden, cast by its owner.
+    // p2: returned a ballot, weight explicitly overridden, cast by the Person
+    // holding the lot.
     // proxyId is not yet settable through this form — see Task 6's picker —
     // so it always sends null here.
     await userEvent.click(
@@ -971,13 +967,13 @@ describe('ElectionsManager', () => {
           propertyId: 'p1',
           weight: undefined,
           proxyId: null,
-          castByOwnerId: null,
+          castByPersonId: null,
         },
         {
           propertyId: 'p2',
           weight: 3,
           proxyId: null,
-          castByOwnerId: 'o2',
+          castByPersonId: 'o2',
         },
       ]),
     );
@@ -1016,37 +1012,29 @@ describe('ElectionsManager', () => {
     ).toBeInTheDocument();
   });
 
-  it('selecting a proxy for a ballot sends its id and clears castByOwnerId', async () => {
+  it('selecting a proxy for a ballot sends its id and clears castByPersonId', async () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
     mocked.fetchProperties.mockResolvedValue([
-      property({
-        id: 'p1',
-        address: '100 Main St',
-        owners: [
-          {
-            id: 'o1',
-            propertyId: 'p1',
-            fullName: 'Jane Doe',
-            phone: null,
-            email: null,
-            status: 'active',
-            notes: null,
-          },
-        ],
-      }),
+      property({ id: 'p1', address: '100 Main St' }),
+    ]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'p1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
     ]);
     mocked.fetchProxies.mockResolvedValue([
       {
         id: 'px1',
         propertyId: 'p1',
         address: '100 Main St',
-        grantorOwnerId: 'o1',
+        grantorPersonId: 'o1',
         grantorName: 'Jane Doe',
         holderName: 'Proxy Holder',
-        holderOwnerId: null,
-        holderOwnerName: null,
+        holderPersonId: null,
+        holderPersonName: null,
         meetingId: null,
         electionId: 'e1',
       },
@@ -1085,7 +1073,7 @@ describe('ElectionsManager', () => {
           propertyId: 'p1',
           weight: undefined,
           proxyId: 'px1',
-          castByOwnerId: null,
+          castByPersonId: null,
         },
       ]),
     );
@@ -1108,11 +1096,11 @@ describe('ElectionsManager', () => {
         id: 'px1',
         propertyId: 'p1',
         address: '100 Main St',
-        grantorOwnerId: 'o1',
+        grantorPersonId: 'o1',
         grantorName: 'Jane Doe',
         holderName: 'Proxy Holder',
-        holderOwnerId: null,
-        holderOwnerName: null,
+        holderPersonId: null,
+        holderPersonName: null,
         // Scoped ONLY to the meeting the election was held at — not to the
         // election id itself — which is the fallback branch this test pins.
         meetingId: 'm1',
@@ -1153,32 +1141,24 @@ describe('ElectionsManager', () => {
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
     mocked.fetchProperties.mockResolvedValue([
-      property({
-        id: 'p1',
-        address: '100 Main St',
-        owners: [
-          {
-            id: 'o1',
-            propertyId: 'p1',
-            fullName: 'Jane Doe',
-            phone: null,
-            email: null,
-            status: 'active',
-            notes: null,
-          },
-        ],
-      }),
+      property({ id: 'p1', address: '100 Main St' }),
+    ]);
+    mocked.fetchLotPeople.mockResolvedValue([
+      {
+        lotId: 'p1',
+        persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
+      },
     ]);
     mocked.fetchProxies.mockResolvedValue([
       {
         id: 'px1',
         propertyId: 'p1',
         address: '100 Main St',
-        grantorOwnerId: 'o1',
+        grantorPersonId: 'o1',
         grantorName: 'Jane Doe',
         holderName: 'Proxy Holder',
-        holderOwnerId: null,
-        holderOwnerName: null,
+        holderPersonId: null,
+        holderPersonName: null,
         meetingId: null,
         electionId: 'e1',
       },

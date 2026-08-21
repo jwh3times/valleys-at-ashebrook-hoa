@@ -60,21 +60,21 @@ export default function VoteManager({ items }: { items: OpenVotingItem[] }) {
   );
 }
 
-type Provenance = { castByOwnerId: string | null; proxyId: string | null };
+type Provenance = { castByPersonId: string | null; proxyId: string | null };
 
 function defaultProvenance(lot: VotingLot): Provenance {
-  if (lot.ownerOptions[0])
-    return { castByOwnerId: lot.ownerOptions[0].id, proxyId: null };
-  return { castByOwnerId: null, proxyId: lot.proxyOptions[0]?.id ?? null };
+  if (lot.personOptions[0])
+    return { castByPersonId: lot.personOptions[0].id, proxyId: null };
+  return { castByPersonId: null, proxyId: lot.proxyOptions[0]?.id ?? null };
 }
 
 function provenanceSummary(lot: VotingLot, provenance: Provenance): string {
-  if (provenance.castByOwnerId !== null) {
-    const owner = lot.ownerOptions.find(
-      (option) => option.id === provenance.castByOwnerId,
+  if (provenance.castByPersonId !== null) {
+    const person = lot.personOptions.find(
+      (option) => option.id === provenance.castByPersonId,
     );
-    return owner
-      ? `Voting as ${owner.fullName}`
+    return person
+      ? `Voting as ${person.fullName}`
       : 'Voting authority unavailable';
   }
   const proxy = lot.proxyOptions.find(
@@ -97,39 +97,42 @@ function ProvenancePicker({
   disabled: boolean;
 }) {
   const id = useId();
-  const selectingOwner = value.castByOwnerId !== null;
+  const selectingPerson = value.castByPersonId !== null;
   return (
     <fieldset className="vote-provenance" disabled={disabled}>
       <legend>Voting authority</legend>
-      {lot.ownerOptions.length > 0 && (
+      {lot.personOptions.length > 0 && (
         <label>
           <input
             type="radio"
             name={`${id}-authority`}
-            checked={selectingOwner}
+            checked={selectingPerson}
             onChange={() =>
-              onChange({ castByOwnerId: lot.ownerOptions[0].id, proxyId: null })
+              onChange({
+                castByPersonId: lot.personOptions[0].id,
+                proxyId: null,
+              })
             }
           />
-          Vote as an owner
+          Vote as an owner or representative
         </label>
       )}
-      {lot.ownerOptions.length > 1 && selectingOwner && (
-        <label className="sr-only" htmlFor={`${id}-owner`}>
-          Owner casting this ballot
+      {lot.personOptions.length > 1 && selectingPerson && (
+        <label className="sr-only" htmlFor={`${id}-person`}>
+          Person casting this ballot
         </label>
       )}
-      {lot.ownerOptions.length > 1 && selectingOwner && (
+      {lot.personOptions.length > 1 && selectingPerson && (
         <select
-          id={`${id}-owner`}
-          value={value.castByOwnerId ?? ''}
+          id={`${id}-person`}
+          value={value.castByPersonId ?? ''}
           onChange={(event) =>
-            onChange({ castByOwnerId: event.target.value, proxyId: null })
+            onChange({ castByPersonId: event.target.value, proxyId: null })
           }
         >
-          {lot.ownerOptions.map((owner) => (
-            <option key={owner.id} value={owner.id}>
-              {owner.fullName}
+          {lot.personOptions.map((person) => (
+            <option key={person.id} value={person.id}>
+              {person.fullName}
             </option>
           ))}
         </select>
@@ -141,7 +144,7 @@ function ProvenancePicker({
             name={`${id}-authority`}
             checked={value.proxyId === proxy.id}
             onChange={() =>
-              onChange({ castByOwnerId: null, proxyId: proxy.id })
+              onChange({ castByPersonId: null, proxyId: proxy.id })
             }
           />
           Vote by proxy for {proxy.grantingAddress}
@@ -279,7 +282,7 @@ function ElectionBallot({
             busy ||
             backgroundBlocked ||
             candidateIds.length === 0 ||
-            (provenance.proxyId === null && provenance.castByOwnerId === null)
+            (provenance.proxyId === null && provenance.castByPersonId === null)
           }
           onClick={openReview}
         >
@@ -407,7 +410,7 @@ function MotionBallot({
             busy ||
             backgroundBlocked ||
             choice === null ||
-            (provenance.proxyId === null && provenance.castByOwnerId === null)
+            (provenance.proxyId === null && provenance.castByPersonId === null)
           }
           onClick={openReview}
         >

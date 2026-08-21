@@ -60,11 +60,11 @@ describe('member meeting schema', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: 'o1',
+      representedByPersonId: 'o1',
     });
     const rows = await db.select().from(memberAttendance);
     expect(rows.length).toBe(1);
-    expect(rows[0].representedByOwnerId).toBe('o1');
+    expect(rows[0].representedByPersonId).toBe('o1');
     expect(rows[0].proxyId).toBeNull();
   });
 
@@ -76,10 +76,10 @@ describe('member meeting schema', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     const rows = await getDb(env).select().from(memberAttendance);
-    expect(rows[0].representedByOwnerId).toBeNull();
+    expect(rows[0].representedByPersonId).toBeNull();
   });
 
   it('rejects a second attendance row for the same property at one meeting', async () => {
@@ -91,7 +91,7 @@ describe('member meeting schema', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     await expect(
       db.insert(memberAttendance).values({
@@ -99,7 +99,7 @@ describe('member meeting schema', () => {
         meetingId: 'm1',
         propertyId: 'p1',
         present: false,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       }),
     ).rejects.toThrow();
   });
@@ -124,7 +124,7 @@ describe('member meeting schema', () => {
       id: 'v1',
       motionId: 'mo1',
       propertyId: 'p1',
-      castByOwnerId: null,
+      castByPersonId: null,
       weight: 1,
       choice: 'yes',
     });
@@ -133,7 +133,7 @@ describe('member meeting schema', () => {
         id: 'v2',
         motionId: 'mo1',
         propertyId: 'p1',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 1,
         choice: 'no',
       }),
@@ -160,7 +160,7 @@ describe('member meeting schema', () => {
       id: 'v1',
       motionId: 'mo1',
       propertyId: 'p1',
-      castByOwnerId: null,
+      castByPersonId: null,
       weight: 1,
       choice: 'yes',
     });
@@ -179,7 +179,7 @@ describe('member meeting schema', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     await db.insert(motions).values({
       id: 'mo1',
@@ -197,7 +197,7 @@ describe('member meeting schema', () => {
       id: 'v1',
       motionId: 'mo1',
       propertyId: 'p1',
-      castByOwnerId: null,
+      castByPersonId: null,
       weight: 1,
       choice: 'yes',
     });
