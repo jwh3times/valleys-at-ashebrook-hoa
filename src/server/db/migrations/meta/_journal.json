@@ -197,6 +197,13 @@
       "when": 1786859482930,
       "tag": "0027_adr0022_review_flag_motion",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1786945882930,
+      "tag": "0028_adr0022_repoint_board_identity",
+      "breakpoints": true
     }
   ]
 }

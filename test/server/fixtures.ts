@@ -28,6 +28,7 @@ import {
   ballots,
   proxies,
 } from '../../src/server/db/schema';
+import { parties, people } from '../../src/server/db/roster-schema';
 
 /**
  * Shared fixtures for the Workers/D1 test pool.
@@ -132,6 +133,13 @@ export async function truncateAll() {
   await db.delete(elections);
   await db.delete(meetings);
   await db.delete(boardPeople);
+  // #248: board attendance, roll call, movers, and candidate links now cite
+  // `people`, which cites `parties`. Both go after every table above that
+  // references them. Only the Person subtype is cleared — a test that seeds
+  // ownerships or contact methods against a Party is responsible for its own
+  // roster teardown, as it was before this fixture touched the roster at all.
+  await db.delete(people);
+  await db.delete(parties);
   // Roster: links and verifications cite properties.
   await db.delete(propertyVerifications);
   await db.delete(manualApprovalQueue);
@@ -186,20 +194,66 @@ export async function seedOwner(
     });
 }
 
-export async function seedBoardPerson(
+/**
+ * Seed several roster Persons from the `{ id, fullName }` shape the meeting
+ * record's fixtures already used for `board_people`.
+ *
+ * #248 repointed those records at `people(party_id)`; this exists so the
+ * repointing did not require rewriting every seeding block in the meeting and
+ * motion suites. Extra legacy keys (`userId`, timestamps) are accepted and
+ * ignored, which is why the row type carries an index signature.
+ */
+type SeedPersonRow = {
+  id: string;
+  fullName?: string | null;
+  [key: string]: unknown;
+};
+
+export async function seedPeopleRows(input: SeedPersonRow | SeedPersonRow[]) {
+  const rows = Array.isArray(input) ? input : [input];
+  const db = getDb(env);
+  await db.insert(parties).values(
+    rows.map((r) => ({
+      id: r.id,
+      kind: 'person' as const,
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
+  await db.insert(people).values(
+    rows.map((r) => ({
+      partyId: r.id,
+      partyKind: 'person',
+      fullName: r.fullName ?? `Person ${r.id}`,
+      nameNormalized: (r.fullName ?? `Person ${r.id}`).toLowerCase(),
+      updatedAt: now,
+    })),
+  );
+}
+
+/**
+ * A roster Person, usable as the identity behind board attendance, a roll-call
+ * vote, a motion's mover or second, and a candidate link — all repointed from
+ * the retired `board_people` table onto `people(party_id)` by #248.
+ *
+ * `id` is the PARTY id, so a test that seeds `bp1` still refers to it as `bp1`.
+ */
+export async function seedPerson(
   id: string,
   overrides: Record<string, unknown> = {},
 ) {
-  await getDb(env)
-    .insert(boardPeople)
-    .values({
-      id,
-      fullName: `Person ${id}`,
-      userId: null,
-      createdAt: now,
-      updatedAt: now,
-      ...overrides,
-    });
+  const db = getDb(env);
+  await db
+    .insert(parties)
+    .values({ id, kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(people).values({
+    partyId: id,
+    partyKind: 'person',
+    fullName: `Person ${id}`,
+    nameNormalized: `person ${id}`,
+    updatedAt: now,
+    ...overrides,
+  });
 }
 
 /**
@@ -285,7 +339,7 @@ export async function seedCandidate(
       id,
       electionId,
       fullName: `Candidate ${id}`,
-      boardPersonId: null,
+      personId: null,
       statementMd: null,
       sequence: 0,
       votes: null,

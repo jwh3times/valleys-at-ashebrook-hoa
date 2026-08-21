@@ -48,7 +48,7 @@ function candidate(
   return {
     id: 'c1',
     fullName: 'Alice',
-    boardPersonId: null,
+    personId: null,
     statementMd: null,
     sequence: 1,
     votes: null,
@@ -874,7 +874,7 @@ describe('ElectionsManager', () => {
     await waitFor(() =>
       expect(mocked.saveCandidate).toHaveBeenCalledWith(
         'e1',
-        { fullName: 'Alice', statementMd: null, boardPersonId: null },
+        { fullName: 'Alice', statementMd: null, personId: null },
         undefined,
       ),
     );
@@ -907,7 +907,7 @@ describe('ElectionsManager', () => {
     await waitFor(() =>
       expect(mocked.saveCandidate).toHaveBeenCalledWith(
         'e1',
-        { fullName: 'Alice Updated', statementMd: null, boardPersonId: null },
+        { fullName: 'Alice Updated', statementMd: null, personId: null },
         'c1',
       ),
     );

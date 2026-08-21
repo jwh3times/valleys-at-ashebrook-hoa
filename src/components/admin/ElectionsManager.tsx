@@ -62,7 +62,7 @@ const emptyElection = {
   source: 'recorded' as ElectionSource,
 };
 
-const emptyCandidate = { fullName: '', statementMd: '', boardPersonId: '' };
+const emptyCandidate = { fullName: '', statementMd: '', personId: '' };
 
 /** Per-property ballot draft, keyed by propertyId. */
 interface BallotFormRow {
@@ -340,7 +340,7 @@ export default function ElectionsManager() {
         const data: CandidateInput = {
           fullName: candidateForm.fullName,
           statementMd: candidateForm.statementMd || null,
-          boardPersonId: candidateForm.boardPersonId || null,
+          personId: candidateForm.personId || null,
         };
         await saveCandidate(electionId, data, editingCandidateId ?? undefined);
         resetCandidate();
@@ -355,7 +355,7 @@ export default function ElectionsManager() {
     setCandidateForm({
       fullName: c.fullName,
       statementMd: c.statementMd ?? '',
-      boardPersonId: c.boardPersonId ?? '',
+      personId: c.personId ?? '',
     });
     setMsg('');
   }
@@ -895,18 +895,16 @@ export default function ElectionsManager() {
                                     />
                                   </div>
                                   <div className="field" style={{ margin: 0 }}>
-                                    <label
-                                      htmlFor={`candidate-board-person-${e.id}`}
-                                    >
-                                      Link to board member (optional)
+                                    <label htmlFor={`candidate-person-${e.id}`}>
+                                      Link to a resident (optional)
                                     </label>
                                     <select
-                                      id={`candidate-board-person-${e.id}`}
-                                      value={candidateForm.boardPersonId}
+                                      id={`candidate-person-${e.id}`}
+                                      value={candidateForm.personId}
                                       onChange={(evt) =>
                                         setCandidateForm({
                                           ...candidateForm,
-                                          boardPersonId: evt.target.value,
+                                          personId: evt.target.value,
                                         })
                                       }
                                     >

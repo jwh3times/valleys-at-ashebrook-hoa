@@ -18,6 +18,7 @@ import {
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { legacyAuthContext } from '../../src/server/authz/context';
+import { seedPeopleRows } from './fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -62,9 +63,13 @@ async function createMeeting(overrides: Record<string, unknown> = {}) {
 async function createPerson(fullName: string): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date();
-  await getDb(env)
-    .insert(boardPeople)
-    .values({ id, fullName, userId: null, createdAt: now, updatedAt: now });
+  await seedPeopleRows({
+    id,
+    fullName,
+    userId: null,
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 

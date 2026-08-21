@@ -1,11 +1,12 @@
 import type { APIRoute } from 'astro';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { requireBoard } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import type { Db } from '../../../server/db/client';
-import { candidates, elections, boardPeople } from '../../../server/db/schema';
+import { candidates, elections } from '../../../server/db/schema';
+import { people, parties } from '../../../server/db/roster-schema';
 import { normalizeCandidateInput } from '../../../lib/types';
 
 export const prerender = false;
@@ -36,25 +37,35 @@ async function loadElectionStatus(
 }
 
 /**
- * 400 Response if `boardPersonId` is non-null and does not exist, else
- * null. boardPersonId is a nullable FK to board_people (ON DELETE
- * RESTRICT) — without this pre-check, an unknown id would surface as a raw
- * D1 foreign key error out of the insert/update below, the same failure
- * mode elections.ts's setBallots already guards against for
- * castByOwnerId.
+ * 400 Response if `personId` is non-null and names no roster Person, else null.
+ * `personId` is a nullable FK to `people(party_id)` (ON DELETE RESTRICT) —
+ * without this pre-check an unknown id would surface as a raw D1 foreign key
+ * error out of the insert/update below, the same failure mode elections.ts's
+ * setBallots already guards against for its own actor column.
+ *
+ * Repointed from `board_people` by #248. A consolidated Party is refused for
+ * the same reason the meeting-record picker does not offer one: it is a
+ * duplicate that already names its survivor, so recording a candidacy against
+ * it would attach the fact to an identity the roster has superseded.
  */
-async function checkBoardPersonExists(
+async function checkPersonExists(
   db: Db,
-  boardPersonId: string | null | undefined,
+  personId: string | null | undefined,
 ): Promise<Response | null> {
-  if (!boardPersonId) return null;
+  if (!personId) return null;
   const rows = await db
-    .select({ id: boardPeople.id })
-    .from(boardPeople)
-    .where(eq(boardPeople.id, boardPersonId))
+    .select({ id: people.partyId })
+    .from(people)
+    .innerJoin(parties, eq(parties.id, people.partyId))
+    .where(
+      and(
+        eq(people.partyId, personId),
+        isNull(parties.consolidatedIntoPartyId),
+      ),
+    )
     .limit(1);
   if (rows.length === 0)
-    return new Response('Unknown boardPersonId', { status: 400 });
+    return new Response('Unknown personId', { status: 400 });
   return null;
 }
 
@@ -81,11 +92,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
         status: 409,
       },
     );
-  const boardPersonCheck = await checkBoardPersonExists(
-    db,
-    result.value.boardPersonId,
-  );
-  if (boardPersonCheck) return boardPersonCheck;
+  const personCheck = await checkPersonExists(db, result.value.personId);
+  if (personCheck) return personCheck;
 
   const existing = await db
     .select({ sequence: candidates.sequence })
@@ -97,7 +105,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const id = crypto.randomUUID();
   const created = await env.DATABASE.prepare(
     `INSERT INTO candidates (
-       id, election_id, full_name, board_person_id, statement_md, sequence,
+       id, election_id, full_name, person_id, statement_md, sequence,
        votes, won, withdrawn, created_at
      )
      SELECT ?, ?, ?, ?, ?, ?, NULL, 0, ?, ?
@@ -110,7 +118,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       id,
       electionId,
       result.value.fullName!,
-      result.value.boardPersonId ?? null,
+      result.value.personId ?? null,
       result.value.statementMd ?? null,
       sequence,
       result.value.withdrawn ? 1 : 0,
@@ -195,19 +203,15 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     );
   if (election.status === 'certified' || election.status === 'void')
     return new Response(CERTIFIED_OR_VOID('this candidate'), { status: 409 });
-  const boardPersonCheck = await checkBoardPersonExists(
-    db,
-    input.boardPersonId,
-  );
-  if (boardPersonCheck) return boardPersonCheck;
+  const personCheck = await checkPersonExists(db, input.personId);
+  if (personCheck) return personCheck;
   // A candidate is not moved between elections via PATCH — CandidateInput
   // has no electionId field at all, so a caller supplying one has it
   // silently ignored here, the same treatment motions.ts gives a PATCH that
   // supplies meetingId.
   const set: Record<string, unknown> = {};
   if (input.fullName !== undefined) set.fullName = input.fullName;
-  if (input.boardPersonId !== undefined)
-    set.boardPersonId = input.boardPersonId;
+  if (input.personId !== undefined) set.personId = input.personId;
   if (input.statementMd !== undefined) set.statementMd = input.statementMd;
   if (input.withdrawn !== undefined) set.withdrawn = input.withdrawn;
   const electionStillEditable =
