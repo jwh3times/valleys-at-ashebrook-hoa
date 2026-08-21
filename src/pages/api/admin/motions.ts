@@ -267,7 +267,9 @@ async function setMemberVotes(
     'castByPersonId',
   );
   if (personFailure)
-    return new Response(personFailure.message, { status: personFailure.status });
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
 
   // Once first-open eligibility exists, every correction uses that immutable
   // electorate and its frozen weights. Before first open, preserve the

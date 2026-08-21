@@ -513,7 +513,11 @@ export async function castElectionBallot(
 
   const ballotId = crypto.randomUUID();
   const recordedAt = Math.floor(Date.now() / 1000);
-  const authority = electionAuthorityPredicate(input, ctx, associationDateIso());
+  const authority = electionAuthorityPredicate(
+    input,
+    ctx,
+    associationDateIso(),
+  );
   const candidatePlaceholders = input.candidateIds.map(() => '?').join(', ');
   const turnout = env.DATABASE.prepare(
     `INSERT INTO ballots (

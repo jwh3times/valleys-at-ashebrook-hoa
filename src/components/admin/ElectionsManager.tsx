@@ -1189,14 +1189,15 @@ export default function ElectionsManager() {
                                                   proxyId:
                                                     prev[p.id]?.proxyId ?? '',
                                                   castByPersonId:
-                                                    prev[p.id]?.castByPersonId ??
-                                                    '',
+                                                    prev[p.id]
+                                                      ?.castByPersonId ?? '',
                                                 },
                                               }))
                                             }
                                             placeholder={String(p.voteWeight)}
                                           />
-                                          {personsForLot(p.id, lotPeople).length > 0 && (
+                                          {personsForLot(p.id, lotPeople)
+                                            .length > 0 && (
                                             <>
                                               <label
                                                 htmlFor={`ballot-cast-by-${e.id}-${p.id}`}
@@ -1205,7 +1206,9 @@ export default function ElectionsManager() {
                                               </label>
                                               <select
                                                 id={`ballot-cast-by-${e.id}-${p.id}`}
-                                                value={row?.castByPersonId ?? ''}
+                                                value={
+                                                  row?.castByPersonId ?? ''
+                                                }
                                                 disabled={
                                                   busy || !!row?.proxyId
                                                 }
@@ -1231,7 +1234,10 @@ export default function ElectionsManager() {
                                                 <option value="">
                                                   — none —
                                                 </option>
-                                                {personsForLot(p.id, lotPeople).map((o) => (
+                                                {personsForLot(
+                                                  p.id,
+                                                  lotPeople,
+                                                ).map((o) => (
                                                   <option
                                                     key={o.id}
                                                     value={o.id}

@@ -40,9 +40,8 @@ export default function ProxyManager({ lots, occasions }: Props) {
         ? lots[0].persons[0].id
         : '',
   }));
-  const [holderResult, setHolderResult] = useState<LotPersonLookupResult | null>(
-    null,
-  );
+  const [holderResult, setHolderResult] =
+    useState<LotPersonLookupResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,8 +83,7 @@ export default function ProxyManager({ lots, occasions }: Props) {
       setHolderResult(result);
       setForm((f) => ({
         ...f,
-        holderPersonId:
-          result.persons.length === 1 ? result.persons[0].id : '',
+        holderPersonId: result.persons.length === 1 ? result.persons[0].id : '',
       }));
     } catch (e) {
       if (requestId !== lookupRequestId.current) return;

@@ -9,11 +9,7 @@ import {
   meetings,
   proxies,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
 import ProxiesPage from '../../src/pages/proxies.astro';
 import NotFoundPage from '../../src/pages/404.astro';

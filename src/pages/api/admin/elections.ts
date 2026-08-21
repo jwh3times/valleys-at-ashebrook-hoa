@@ -285,7 +285,9 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     'castByPersonId',
   );
   if (personFailure)
-    return new Response(personFailure.message, { status: personFailure.status });
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
 
   // Pre-checked so a repeated propertyId is a readable 409 instead of hitting
   // ballots_election_property_unq mid-batch as a raw D1 error.

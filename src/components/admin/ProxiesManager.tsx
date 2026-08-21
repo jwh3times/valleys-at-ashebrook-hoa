@@ -92,9 +92,7 @@ export default function ProxiesManager() {
   // connection to the lot whose proxy they hold, so this list is not scoped.
   const allPersons = [
     ...new Map(
-      lotPeople
-        .flatMap((l) => l.persons)
-        .map((p) => [p.id, p] as const),
+      lotPeople.flatMap((l) => l.persons).map((p) => [p.id, p] as const),
     ).values(),
   ];
 
@@ -106,7 +104,8 @@ export default function ProxiesManager() {
   const selectedGrantor = grantorOptions.find(
     (p) => p.id === form.grantorPersonId,
   );
-  const grantorInactive = selectedGrantor !== undefined && !selectedGrantor.current;
+  const grantorInactive =
+    selectedGrantor !== undefined && !selectedGrantor.current;
 
   function resetForm() {
     setForm(emptyProxy);
@@ -271,7 +270,9 @@ export default function ProxiesManager() {
             </select>
           </div>
           <div className="field" style={{ margin: 0 }}>
-            <label htmlFor="proxy-grantor">Grantor (owner or representative)</label>
+            <label htmlFor="proxy-grantor">
+              Grantor (owner or representative)
+            </label>
             <select
               id="proxy-grantor"
               value={form.grantorPersonId}

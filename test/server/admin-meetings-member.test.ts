@@ -21,11 +21,7 @@ import {
   settings,
   boardPeople,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { legacyAuthContext } from '../../src/server/authz/context';
 import { seedPeopleRows } from './fixtures';

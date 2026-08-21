@@ -156,7 +156,7 @@ const CONSUMERS = new Map<string, Consumer>([
     {
       disposition: 'needs-repointing',
       reason:
-        'the atomic cast re-checks the CALLER\'s claim on the lot by joining ' +
+        "the atomic cast re-checks the CALLER's claim on the lot by joining " +
         'user_property_links inside the mutation SQL. Its owners half is gone: ' +
         '#248 part 2 moved who-may-act to the roster (roster/authority.ts), ' +
         'leaving only the account-to-lot link phase 4 replaces with person_links',

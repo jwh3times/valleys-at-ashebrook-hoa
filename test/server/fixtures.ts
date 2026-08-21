@@ -29,11 +29,7 @@ import {
   ballots,
   proxies,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 
 /**
  * Shared fixtures for the Workers/D1 test pool.
@@ -220,7 +216,11 @@ export async function seedOwner(
 export async function seedLotAuthority(
   personId: string,
   lotId: string,
-  overrides: { fullName?: string; startDay?: string | null; endDay?: string | null } = {},
+  overrides: {
+    fullName?: string;
+    startDay?: string | null;
+    endDay?: string | null;
+  } = {},
 ) {
   const db = getDb(env);
   const existing = await db
@@ -230,7 +230,9 @@ export async function seedLotAuthority(
   if (existing.length === 0) {
     await seedPerson(personId, {
       fullName: overrides.fullName ?? `Person ${personId}`,
-      nameNormalized: (overrides.fullName ?? `Person ${personId}`).toLowerCase(),
+      nameNormalized: (
+        overrides.fullName ?? `Person ${personId}`
+      ).toLowerCase(),
     });
   }
   await db.insert(ownerships).values({

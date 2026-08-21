@@ -113,14 +113,21 @@ npx wrangler d1 migrations list DATABASE --remote
 Before applying migrations that add referential integrity to an existing remote database, run the
 orphan audit in your private operations workflow and confirm every count is zero.
 
-**Migration `0028` is not safe in either order.** Every migration before it was written so merged
-code works against the schema whether or not the migration has run yet; `0028` breaks that, since it
-renames `candidates.board_person_id` to `candidates.person_id` and repoints several meeting/election
-identity columns off the legacy `board_people` onto the party roster, and the deployed code reads
-and writes only the new names. Run `npm run db:migrate:remote` for `0028` before or together with
-deploying the code that ships with it — not on the otherwise-safe any-time-before-the-next-freeze
-schedule above — or the admin meeting-record people picker and candidate-link write path will fail
-against the still-legacy schema.
+**Migrations `0028` and `0029` are not safe in either order.** Every migration before them was
+written so merged code works against the schema whether or not the migration has run yet; these two
+break that, since they rename columns the deployed code reads and writes.
+
+- `0028` renames `candidates.board_person_id` to `candidates.person_id` and repoints several
+  meeting/election identity columns off the legacy `board_people` onto the party roster.
+- `0029` renames `member_attendance.represented_by_owner_id`, `member_votes.cast_by_owner_id`,
+  `ballots.cast_by_owner_id`, and `proxies.grantor_owner_id`/`holder_owner_id` to their
+  `*_person_id` forms, repointing them off the legacy `owners` table onto the party roster.
+
+Run `npm run db:migrate:remote` for either one before or together with deploying the code that
+ships with it — not on the otherwise-safe any-time-before-the-next-freeze schedule above. Skipping
+that ordering breaks the admin meeting-record people picker and the candidate-link write path for
+`0028`, and the member attendance, member vote, ballot, and proxy surfaces for `0029`, until the
+migration runs.
 
 ## 5. Import the Owner Roster
 

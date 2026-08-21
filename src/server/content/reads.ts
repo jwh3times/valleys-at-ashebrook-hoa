@@ -1193,9 +1193,9 @@ export async function fetchMemberProxies(
   const db = getDb(env);
   const myPersonIds = [
     ...new Set(
-      (
-        await fetchLotAuthority(db, propertyIds, associationDateIso())
-      ).map((h) => h.personId),
+      (await fetchLotAuthority(db, propertyIds, associationDateIso())).map(
+        (h) => h.personId,
+      ),
     ),
   ];
   const rows = await db

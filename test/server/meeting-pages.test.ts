@@ -26,11 +26,7 @@ import {
   memberAttendance,
   memberVotes,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import MeetingsPage from '../../src/pages/meetings.astro';
 import MeetingDetailPage from '../../src/pages/meetings/[id].astro';
 import NotFoundPage from '../../src/pages/404.astro';
@@ -114,11 +110,7 @@ async function seedProperty(
   });
 }
 
-async function seedPersonFor(
-  id: string,
-  propertyId: string,
-  fullName: string,
-) {
+async function seedPersonFor(id: string, propertyId: string, fullName: string) {
   await fx.seedLotAuthority(id, propertyId, { fullName });
 }
 

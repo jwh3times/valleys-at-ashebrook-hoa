@@ -21,11 +21,7 @@ import {
   proxies,
   userPropertyLinks,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   fetchElectionsFor,
@@ -100,18 +96,14 @@ beforeEach(async () => {
     method: 'otp_email',
   });
   await seedPersons([
-      person('owner-one', 'property-own', 'Alex Owner'),
-      person('owner-two', 'property-own', 'Blair Owner'),
-      person('owner-inactive', 'property-own', 'Inactive Owner', 'inactive'),
-      person('grantor-held', 'property-held', 'Casey Grantor'),
-      person('grantor-meeting', 'property-meeting', 'Dana Grantor'),
-      person('grantor-no-snapshot', 'property-no-snapshot', 'Emery Grantor'),
-      person(
-        'grantor-unrepresented',
-        'property-unrepresented',
-        'Finley Grantor',
-      ),
-    ]);
+    person('owner-one', 'property-own', 'Alex Owner'),
+    person('owner-two', 'property-own', 'Blair Owner'),
+    person('owner-inactive', 'property-own', 'Inactive Owner', 'inactive'),
+    person('grantor-held', 'property-held', 'Casey Grantor'),
+    person('grantor-meeting', 'property-meeting', 'Dana Grantor'),
+    person('grantor-no-snapshot', 'property-no-snapshot', 'Emery Grantor'),
+    person('grantor-unrepresented', 'property-unrepresented', 'Finley Grantor'),
+  ]);
   await db
     .insert(meetings)
     .values([
