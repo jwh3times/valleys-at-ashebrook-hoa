@@ -743,8 +743,10 @@ SecondaryStorage.increment.")` from `onRequestRateLimit` on every request whenev
   reset, not just tests. The escape routes — supplying `rateLimit.customStorage` (checked before
   the secondary-storage path) or wrapping the KV secondary storage with an `increment` — are each a
   security-sensitive change to auth rate limiting and belong in their own reviewed change, not a
-  dependency bump. Dependabot will keep proposing better-auth 1.7.x; hold it at 1.6 until one of
-  those routes is deliberately taken.
+  dependency bump. `.github/dependabot.yml` therefore IGNORES better-auth minor and major updates,
+  so 1.7.x is no longer re-proposed into the `npm-minor-and-patch` group (where it blocked four
+  safe bumps in #255); 1.6.x PATCHES still come through, so a fix on the current line is not
+  suppressed. Remove that ignore entry, and this note, once one of those routes is taken (#260).
 - `authz/`: `context.ts` is the single seam every guard, page, and route resolves its caller
   through. `getAuthContext(request, env, associationDay)` resolves the session, then reads
   `cutover-mode.ts`'s `getCutoverMode` (the uncached `cutover_settings.cutover_mode` singleton,
