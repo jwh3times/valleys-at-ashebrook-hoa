@@ -20,12 +20,16 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  owners,
   properties,
   settings,
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
+import {
+  parties,
+  people,
+  ownerships,
+} from '../../src/server/db/roster-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
@@ -50,7 +54,11 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(userPropertyLinks);
-  await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(settings);
   await db.delete(users);
@@ -85,11 +93,23 @@ beforeEach(async () => {
     verifiedAt: now,
     method: 'board_manual',
   });
-  await db.insert(owners).values({
-    id: 'owner-own',
-    propertyId: 'property-own',
+  // #248 part 2: the caster is a roster Person holding a current Ownership.
+  await db
+    .insert(parties)
+    .values({ id: 'owner-own', kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(people).values({
+    partyId: 'owner-own',
+    partyKind: 'person',
     fullName: 'Home Owner',
-    status: 'active',
+    nameNormalized: 'home owner',
+    updatedAt: now,
+  });
+  await db.insert(ownerships).values({
+    id: 'owner-own-own',
+    ownerPartyId: 'owner-own',
+    lotId: 'property-own',
+    startDay: null,
+    endDay: null,
     createdAt: now,
     updatedAt: now,
   });

@@ -26,7 +26,11 @@ import {
   memberAttendance,
   memberVotes,
 } from '../../src/server/db/schema';
-import { parties, people } from '../../src/server/db/roster-schema';
+import {
+  parties,
+  people,
+  ownerships,
+} from '../../src/server/db/roster-schema';
 import MeetingsPage from '../../src/pages/meetings.astro';
 import MeetingDetailPage from '../../src/pages/meetings/[id].astro';
 import NotFoundPage from '../../src/pages/404.astro';
@@ -48,10 +52,12 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(boardPeople);
-  // #248: the meeting record's identities are roster Persons now.
+  await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(owners);
   await db.delete(properties);
 });
 
@@ -108,8 +114,12 @@ async function seedProperty(
   });
 }
 
-async function seedOwner(id: string, propertyId: string, fullName: string) {
-  await fx.seedOwner(id, propertyId, { fullName });
+async function seedPersonFor(
+  id: string,
+  propertyId: string,
+  fullName: string,
+) {
+  await fx.seedLotAuthority(id, propertyId, { fullName });
 }
 
 describe('/meetings', () => {
@@ -510,8 +520,8 @@ describe('/meetings/[id]', () => {
     const db = getDb(env);
     await seedProperty('p1', { weight: 2, status: 'active' });
     await seedProperty('p2', { weight: 1, status: 'active' });
-    await seedOwner('o1', 'p1', 'A. Reyes');
-    await seedOwner('o2', 'p2', 'B. Ortiz');
+    await seedPersonFor('o1', 'p1', 'A. Reyes');
+    await seedPersonFor('o2', 'p2', 'B. Ortiz');
     await seedMeeting({
       id: 'member-motion',
       status: 'approved',

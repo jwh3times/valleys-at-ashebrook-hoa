@@ -3,7 +3,12 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { POST } from '../../src/pages/api/member/owner-lookup';
 import { getDb } from '../../src/server/db/client';
-import { settings, properties, owners } from '../../src/server/db/schema';
+import { settings, properties } from '../../src/server/db/schema';
+import {
+  parties,
+  people,
+  ownerships,
+} from '../../src/server/db/roster-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
@@ -15,7 +20,11 @@ const now = new Date();
 
 beforeEach(async () => {
   const db = getDb(env);
-  await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(settings).where(eq(settings.key, 'site'));
   await db.insert(settings).values({
@@ -31,21 +40,46 @@ beforeEach(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  await db.insert(owners).values([
+  // #248 part 2: the lookup answers with the Persons who may act for the lot,
+  // so these are roster Ownerships. 'o2b' is a FORMER holder — an ended
+  // interval, where the legacy shape used owners.status — and must stay out of
+  // the answer.
+  await db.insert(parties).values([
+    { id: 'o2', kind: 'person', createdAt: now, updatedAt: now },
+    { id: 'o2b', kind: 'person', createdAt: now, updatedAt: now },
+  ]);
+  await db.insert(people).values([
     {
-      id: 'o2',
-      propertyId: 'p2',
+      partyId: 'o2',
+      partyKind: 'person',
       fullName: 'John Roe',
-      phone: '+15550001111',
-      email: 'john@example.com',
+      nameNormalized: 'john roe',
+      updatedAt: now,
+    },
+    {
+      partyId: 'o2b',
+      partyKind: 'person',
+      fullName: 'Gone Owner',
+      nameNormalized: 'gone owner',
+      updatedAt: now,
+    },
+  ]);
+  await db.insert(ownerships).values([
+    {
+      id: 'o2-own',
+      ownerPartyId: 'o2',
+      lotId: 'p2',
+      startDay: null,
+      endDay: null,
       createdAt: now,
       updatedAt: now,
     },
     {
-      id: 'o2b',
-      propertyId: 'p2',
-      fullName: 'Gone Owner',
-      status: 'inactive',
+      id: 'o2b-own',
+      ownerPartyId: 'o2b',
+      lotId: 'p2',
+      startDay: null,
+      endDay: '2020-01-01',
       createdAt: now,
       updatedAt: now,
     },
@@ -81,14 +115,14 @@ describe('POST /api/member/owner-lookup', () => {
     expect(res.status).toBe(200);
   });
 
-  it("returns the matched lot's ACTIVE owner names and ids only — no phone, no email", async () => {
+  it("returns the Persons who may act for the matched lot, names and ids only — no phone, no email", async () => {
     const res = await call(jane, { address: '2 Oak St' });
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toEqual({
       propertyId: 'p2',
       address: '2 Oak St.',
-      owners: [{ id: 'o2', fullName: 'John Roe' }],
+      persons: [{ id: 'o2', fullName: 'John Roe' }],
     });
     // Belt and braces: the serialized payload must not carry contact data.
     expect(JSON.stringify(body)).not.toMatch(/555|example\.com/);
@@ -117,10 +151,22 @@ describe('POST /api/member/owner-lookup', () => {
       createdAt: now,
       updatedAt: now,
     });
-    await db.insert(owners).values({
-      id: 'o3',
-      propertyId: 'p3',
+    await db
+      .insert(parties)
+      .values({ id: 'o3', kind: 'person', createdAt: now, updatedAt: now });
+    await db.insert(people).values({
+      partyId: 'o3',
+      partyKind: 'person',
       fullName: 'Still Active Owner',
+      nameNormalized: 'still active owner',
+      updatedAt: now,
+    });
+    await db.insert(ownerships).values({
+      id: 'o3-own',
+      ownerPartyId: 'o3',
+      lotId: 'p3',
+      startDay: null,
+      endDay: null,
       createdAt: now,
       updatedAt: now,
     });

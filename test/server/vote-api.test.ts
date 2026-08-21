@@ -14,13 +14,17 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  owners,
   properties,
   proxies,
   settings,
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
+import {
+  parties,
+  people,
+  ownerships,
+} from '../../src/server/db/roster-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
@@ -47,7 +51,11 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(userPropertyLinks);
-  await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(settings);
   await db.delete(users);
@@ -76,20 +84,21 @@ beforeEach(async () => {
       link('link-own', 'property-own'),
       link('link-no-snapshot', 'property-no-snapshot'),
     ]);
-  await db
-    .insert(owners)
-    .values([
-      owner('owner-own', 'property-own', 'Active Caller'),
-      owner('owner-inactive', 'property-own', 'Inactive Caller', 'inactive'),
-      owner('owner-proxy-grantor', 'property-proxy', 'Proxy Grantor'),
-      owner('owner-unheld-grantor', 'property-unheld', 'Unheld Grantor'),
-      owner(
-        'owner-holder-unlinked',
-        'property-holder-unlinked',
-        'Unlinked Holder',
-      ),
-      owner('owner-no-snapshot', 'property-no-snapshot', 'No Snapshot Owner'),
-    ]);
+  // #248 part 2: who may act for a lot is the roster's Lot Authority, so these
+  // are Persons with Ownerships. 'owner-inactive' is a FORMER holder — an ended
+  // interval, where the legacy shape used owners.status.
+  await seedPersons([
+    person('owner-own', 'property-own', 'Active Caller'),
+    person('owner-inactive', 'property-own', 'Former Caller', 'inactive'),
+    person('owner-proxy-grantor', 'property-proxy', 'Proxy Grantor'),
+    person('owner-unheld-grantor', 'property-unheld', 'Unheld Grantor'),
+    person(
+      'owner-holder-unlinked',
+      'property-holder-unlinked',
+      'Unlinked Holder',
+    ),
+    person('owner-no-snapshot', 'property-no-snapshot', 'No Snapshot Owner'),
+  ]);
   await db
     .insert(meetings)
     .values([
@@ -602,20 +611,58 @@ function link(id: string, propertyId: string) {
   };
 }
 
-function owner(
+interface PersonSpec {
+  id: string;
+  propertyId: string;
+  fullName: string;
+  endDay: string | null;
+}
+
+/** `'inactive'` seeds a FORMER holder: an Ownership that has already ended. */
+function person(
   id: string,
   propertyId: string,
   fullName: string,
   status: 'active' | 'inactive' = 'active',
-) {
+): PersonSpec {
   return {
     id,
     propertyId,
     fullName,
-    status,
-    createdAt: now,
-    updatedAt: now,
+    endDay: status === 'active' ? null : '2020-01-01',
   };
+}
+
+async function seedPersons(specs: PersonSpec[]) {
+  const db = getDb(env);
+  await db.insert(parties).values(
+    specs.map((p) => ({
+      id: p.id,
+      kind: 'person' as const,
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
+  await db.insert(people).values(
+    specs.map((p) => ({
+      partyId: p.id,
+      partyKind: 'person',
+      fullName: p.fullName,
+      nameNormalized: p.fullName.toLowerCase(),
+      updatedAt: now,
+    })),
+  );
+  await db.insert(ownerships).values(
+    specs.map((p) => ({
+      id: `${p.id}-own`,
+      ownerPartyId: p.id,
+      lotId: p.propertyId,
+      startDay: null,
+      endDay: p.endDay,
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
 }
 
 function meeting(
