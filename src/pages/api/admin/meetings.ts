@@ -180,7 +180,9 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     'representedByPersonId',
   );
   if (personFailure)
-    return new Response(personFailure.message, { status: personFailure.status });
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
 
   // ADR 0015 makes `status = 'inactive'` the sanctioned way to pull a lot out
   // of member voting, and totalActiveWeight — the quorum denominator — sums

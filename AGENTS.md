@@ -172,9 +172,9 @@ Markdown twins described below and never the human-readable originals.
   `new URL(request.url).origin` (`403`), `application/json` media type (`415`), authenticated
   session (`401`), then `homeowner`-or-higher role (`403`). Only then are the action and resource
   resolved. Out-of-tier or unknown occasions are masked as `404`; own-lot or occasion-scoped
-  held-proxy authority — a held-proxy cast also re-checks the proxy's grantor is still a currently
-  active owner of the lot (the ADR 0022 phase 3d grantor re-validation, #220/#204, exact at-the-
-  occasion semantics for a live cast) — frozen-snapshot eligibility and weight, open state, both
+  held-proxy authority — a held-proxy cast also re-checks that the proxy's grantor still holds Lot
+  Authority over the lot (the ADR 0022 phase 3d grantor re-validation, #220/#204, asked of the
+  party roster since #248 part 2, and exact at-the-occasion semantics for a live cast) — frozen-snapshot eligibility and weight, open state, both
   feature flags, and
   one cast per lot are re-checked inside the mutation SQL. Election turnout and identity-unlinked
   retained choices are a single checked D1 batch, and a race with close, pause, authority change,
@@ -247,10 +247,11 @@ Markdown twins described below and never the human-readable originals.
   `proxyUseError` guard (`src/server/content/proxy-guards.ts`) — unknown `proxyId` is `400`, a proxy
   for a different lot or scoped to a different occasion is `409` (a meeting-scoped proxy also
   covers an election held at that meeting; a standalone election accepts only its own), a proxy
-  whose grantor is not currently an active owner of the proxy's lot is `409` (the ADR 0022 phase 3d
-  grantor re-validation, #220/#204 — a current-state approximation of "held Lot Authority at the
-  occasion", read from the legacy roster in both cutover modes; see the module comment) — and an
-  entry carrying both `proxyId` and `representedByOwnerId`/`castByOwnerId` is `400`, since who acted
+  whose grantor does not currently hold Lot Authority over the proxy's lot is `409` (the ADR 0022
+  phase 3d grantor re-validation, #220/#204 — still a current-day approximation of "held Lot
+  Authority at the occasion", but asked of the party roster since #248 part 2 rather than of
+  `owners.status`; see the module comment) — and an entry carrying both `proxyId` and
+  `representedByPersonId`/`castByPersonId` is `400`, since who acted
   lives on the canonical proxy row, never beside it. All verbs on both routes are
   `requireBoard`-gated.
 - Board-only resolutions book (standing rules the board adopts; a durable record — amending one
@@ -324,7 +325,7 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   An optional `personId` links a candidate to a party-roster Person — repointed from the retired
   `board_people`/`board_person_id` identity by #248 — and is pre-checked against `people` (rejecting
   an unknown id or one whose Party is consolidated with a readable `400`) before it can reach the
-  FK, the same avoid-a-raw-D1-error pattern `setBallots`'s `castByOwnerId` check uses.
+  FK, the same avoid-a-raw-D1-error pattern `setBallots`'s `castByPersonId` check uses.
   The homeowner cast path is `POST /api/vote`, reached only through the feature-gated `/vote` page
   for verified callers. The page renders selection-free receipts that contain only the item title
   and lot address. Its labeled review modal summarizes the pending selection and provenance, moves
@@ -358,17 +359,21 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   `/api/member/owner-lookup` supports `POST`. Every handler calls `requireMemberApi`, while
   middleware independently gates `/api/member/*`: `officialMode` off returns `404`, then anonymous
   is `401` and callers below `homeowner` are `403`; board callers pass the rank check. `GET` returns
-  only proxies granted for the caller's verified lots plus proxies naming an active owner of those
-  lots as holder. Own-lot rows retain occasion title/date even above the caller's tier; held rows
-  for another lot redact those fields above tier. `POST` requires one caller-controlled lot, an
-  active owner of that lot selected as grantor, a different active owner as holder, and exactly one
+  only proxies granted for the caller's verified lots plus proxies naming a Person with authority
+  over one of those lots as holder. Own-lot rows retain occasion title/date even above the caller's
+  tier; held rows for another lot redact those fields above tier. `POST` requires one
+  caller-controlled lot, a Person currently holding Lot Authority there as grantor, a different
+  Person holding authority somewhere as holder, and exactly one
   visible upcoming member meeting or non-terminal election. Both the picker read and write path
   expose only minimal scheduled-occasion metadata at the occasion's visibility tier even while its
   record remains draft; dates use the `America/New_York` association day. `DELETE` is limited to
   the caller's lots and refuses both past occasions and proxies already cited by attendance, votes,
-  or ballots. The address lookup resolves one typed active-property address to active owner names
-  and opaque IDs only (never contact data); verified homeowners can repeat such lookups, an accepted
-  disclosure documented with the lot-control/self-asserted-owner trust model in
+  or ballots. The address lookup resolves one typed active-property address to the names and opaque
+  IDs of the Persons who may act for it (never contact data) — repointed from the lot's active
+  `owners` rows by #248 part 2, which also makes an Organization's Representative nameable where
+  the legacy shape could only offer the entity; the route keeps its `owner-lookup` path, since #248
+  changed what it reads rather than where it lives. Verified homeowners can repeat such lookups, an
+  accepted disclosure documented with the lot-control/self-asserted-owner trust model in
   [ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md).
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
@@ -628,13 +633,17 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
 
 - `src/lib/content.ts` handles public reads from `/api/content/*` endpoints.
 - `src/lib/member.ts` handles the official-mode homeowner proxy API: `fetchMyProxies`,
-  `grantProxy`, `revokeProxy`, and `lookupOwners`, with the write/lookup request shapes kept beside
-  those helpers.
+  `grantProxy`, `revokeProxy`, and `lookupLotPersons` (over the unchanged `/api/member/owner-lookup`
+  path), with the write/lookup request shapes kept beside those helpers.
 - `src/lib/admin.ts` handles board writes to `/api/admin/*` endpoints, typed document duplicate
   errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
   `fetchReport`, `deleteReport`), the meeting-record people-picker and party-roster reads that
   replaced the retired board-roster helpers (`fetchMeetingRosterPeople` — the flat `{id,
-fullName}` list from `GET /api/admin/meetings?roster=people` — plus `fetchRosterPeople` and
+fullName}` list from `GET /api/admin/meetings?roster=people` — plus `fetchLotPeople`, the per-lot
+  Lot Authority list from `GET /api/admin/meetings?roster=lot-people` that backs the member
+  attendance, member vote, ballot, and proxy pickers (#248 part 2; former holders included and
+  flagged `current: false`, so a past occasion stays recordable and the Proxies panel can warn that
+  a grantor's proxy would be born unusable), and `fetchRosterPeople` and
   `fetchRosterLots` over `GET /api/admin/roster`), meeting-record helpers
   (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
   `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
@@ -799,7 +808,8 @@ boolean`.
   `viaProxy` — always present — is derived as `proxyId !== null` rather than a stored flag. `content/`
   also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring),
   `proxy-guards.ts` (`proxyUseError`, the shared cross-row guard `setMemberAttendance`,
-  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`), `voting-state.ts`
+  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`, plus
+  `parseProvenance`/`personExistenceError` for the acting-Person field beside it), `voting-state.ts`
   (the shared SQL predicate requiring both official mode and live voting to be literal JSON
   booleans `true` for database-conditioned open and cast transitions), `voting-reads.ts`
   (`fetchOpenVotingFor`, the server-only caller-specific projection of visible open occasions,
@@ -829,10 +839,12 @@ boolean`.
   [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) and
   [ADR 0020](./docs/adr/0020-digital-ballot-box.md). `reads.ts` also has
   `fetchAdminProxies(env)`, the board-only complete-register read: it returns every `ProxyDetail`
-  with its property address and grantor/holder owner names resolved, the same
+  with its property address and grantor/holder Person names resolved (through `personNameMap`, the
+  shared `personDisplayLabel` map this file also builds the meeting record's names from), the same
   full-detail-on-list shape as `fetchAdminResolutions`/`fetchAdminElections`. Homeowner proxy reads
   use `fetchUpcomingOccasionsFor` (minimal tier-filtered scheduled-event metadata regardless of
-  draft status), `fetchMemberLots` (the caller's active lots and active owners), and
+  draft status), `fetchMemberLots` (the caller's active lots and the Persons who may act for them),
+  and
   `fetchMemberProxies` (lot-scoped granted/held lists with the ADR 0019 own-lot occasion exception
   and held-row tier redaction); these are not a public or complete tier-gated proxy register.
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), migrations, and
@@ -848,8 +860,17 @@ boolean`.
   transfer-time effects engine behind `/api/admin/roster-ownerships` and
   `/api/admin/roster-representations` (see the HTTP endpoints entry above and **Data model**
   below) — all four join the phase 3b roster writer machinery
-  described below. `verification/property.ts` is the unchanged-shape legacy backend (minus its
-  three retired auto-enqueue paths) and `verification/rate-limit.ts` holds the shared KV throttles
+  described below. `roster/authority.ts` is the #248 part 2 addition and the only definition of
+  "this Person holds Lot Authority over this Lot" — Ownership, or Representation of an owning
+  Organization, mirroring `board-consequences.ts`'s `qualifiesGuard` — exposed both as Drizzle
+  readers (`fetchLotAuthority`, `fetchPersonAuthority`, `fetchLotAuthorityHistory`,
+  `hasEverHeldLotAuthority`) and as the raw-SQL `lotAuthorityExists` fragment the casting
+  predicates embed; a `day` of `null` asks "did this authority EVER exist", which is what lets the
+  board's pickers still offer a former owner for a past occasion while every USE of that authority
+  is refused. `verification/property.ts` is the unchanged-shape legacy backend (minus its
+  three retired auto-enqueue paths, and now holding the `getActiveOwnersForProperty` reader that
+  moved out of `roster/lookup.ts` when the member surfaces left the legacy roster — it is the only
+  caller left) and `verification/rate-limit.ts` holds the shared KV throttles
   both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
@@ -922,10 +943,11 @@ and freezes each active property's non-negative weight at first open for unchang
 `board_people` by #248; `choice`:
 `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
 `member_attendance` is one present/absent row per meeting per `properties` row, unique per pair,
-with nullable `represented_by_owner_id` and a nullable `proxy_id` referencing `proxies` (see below;
+with nullable `represented_by_person_id` (referencing `people(party_id)` on delete-set-null,
+repointed from `owners` by #248 part 2) and a nullable `proxy_id` referencing `proxies` (see below;
 carries no `ON DELETE` action, deliberately); `member_votes` is one vote per
 motion per `properties` row — that uniqueness is what enforces one vote per lot — with nullable
-`cast_by_owner_id` and the same nullable, actionless `proxy_id`, a `weight` column snapshotting
+`cast_by_person_id` (the same Person FK) and the same nullable, actionless `proxy_id`, a `weight` column snapshotting
 `properties.vote_weight` as stamped from the current property before first open or from the
 immutable `motion_eligibility` record-date row afterward (so correcting a property's weight later
 cannot rewrite a past live-voting tally), and `choice` restricted to `yes`/`no`/`abstain`
@@ -1022,11 +1044,14 @@ under **HTTP endpoints** above), the `roster/transfer-effects.ts` engine wired i
 `/api/admin/roster-ownerships`'s `end`/`void` and `/api/admin/roster-representations`'s
 `end`/`void`/`correctScope`, and the board's `GET`+`POST /api/admin/review-flags` queue. Unlike
 phases 1-3c, this one took effect immediately when it shipped — a live behavior change ahead of
-the flip rather than one gated behind `cutover_mode`: proxy
-grantor re-validation reads the LEGACY roster in both cutover modes (see `proxy-guards.ts`'s
-module comment), so a proxy whose grantor has since become an inactive owner is refused today,
-and an Ownership `end` reached through `/api/admin/roster-ownerships` resets any open
-member-motion vote for the departing Lot in the shared, legacy-read `member_votes` table. Migration
+the flip rather than one gated behind `cutover_mode`: proxy grantor re-validation refused a stale
+proxy from the day it landed, and an Ownership `end` reached through
+`/api/admin/roster-ownerships` resets any open member-motion vote for the departing Lot. Its one
+compromise is now gone: the grantor check read the LEGACY roster in both cutover modes, because a
+proxy named an `owners` row and nothing mapped one to a Party. #248 part 2 re-keyed proxies to
+Persons, so the check asks the roster itself through `roster/authority.ts` — the approximation that
+survives is only the DAY it asks about (today, not the occasion's), which `proxy-guards.ts`'s
+module comment records along with what would now be needed to close it. Migration
 `0027` (below) rebuilds `review_flags` — created empty by migration `0020`, given its first writer
 here. **Phase 3 part e (the writable board-service, roster, and Person-Link admin surface, #221;
 decided by #200/#205) is also now built**: `/api/admin/roles` and `/api/admin/members` are
@@ -1039,7 +1064,7 @@ retired in their favor (its read-only `GET /api/admin/roster-preview` route surv
 `MembersManager` also gained the verification-review queue — closing the gap where
 `verification_review_requests` rows had been invisible to the board since v0.10.0 — and the
 correction-requests queue; the legacy manual-approval queue keeps rendering only while it still
-holds pending rows. `ProxiesManager` now warns when a chosen grantor is an inactive owner, the same
+holds pending rows. `ProxiesManager` now warns when a chosen grantor no longer holds the lot, the same
 proxy the phase 3d grantor re-validation above would refuse at use. These surfaces are now safe to
 use: the caveat that stood here — writable in code but erasable by the phase-2 clean-replace
 backfill rehearsal — was dissolved by phase 3f's authoritative backfill, which is insert-once and
@@ -1073,11 +1098,16 @@ consumers. Unlike the import-only idiom `authz-legacy-role.test.ts` uses for `us
 checks both imported Drizzle symbols AND raw SQL (`FROM`/`JOIN`/`INTO`/`UPDATE`/`TABLE` followed by
 the table name, comments stripped and URLs neutralised first) — an import-only scan would miss
 `server/roster/verification.ts`, whose `user_property_links` write-behind mirror is a raw `INSERT`
-with no Drizzle symbol imported. Each of its 16 declared modules carries one of five dispositions:
+with no Drizzle symbol imported. Each of its 10 declared modules carries one of five dispositions:
 `deleted-with-the-table` (five legacy surfaces #212 deletes outright, including `context.ts`'s
 `legacy` branch), `write-behind-mirror` (two modules whose write nothing reads for behavior),
 `already-dual-read` (`server/ai/assistant.ts`, the #233 fix — phase 4 drops only its legacy arm),
-`needs-repointing` (eight modules — the actual phase-4 work list), and
+`needs-repointing` (down from eight modules to two — `content/voting.ts` and
+`content/casting-authority.ts`, after #248 part 2 repointed the other six off `owners` — and the
+pair that remains is the same question twice: an ACCOUNT's claim on a lot, read from
+`user_property_links`. That is not a roster question at all, which is why the roster work did not
+close it: the roster says who may act for a lot, `user_property_links` says which lots this LOGIN
+was verified for, and phase 4 answers that from `person_links`), and
 `blocked-on-person-repointing`, now EMPTY: #248 (part 1 of 2) repointed both modules the category
 used to hold (`pages/api/admin/meetings.ts`, `pages/api/admin/candidates.ts`) at the party roster
 and closed it, kept as a heading rather than deleted since `board_people` survives until phase 4
@@ -1092,15 +1122,27 @@ the parallel `motions.mover_owner_id`/`second_owner_id` pair outright rather tha
 since it referenced `owners`, was never written (phase 3b), measured 0 rows in production, and the
 party roster has one Person concept for both board and member motions where legacy needed two FKs
 told apart only by the parent meeting's `body`. `board_people` itself now has no referencing FK left
-in a table phase 4 keeps. Five FK columns still keep `owners` alive past the drop, regardless of the
-scan above: `member_attendance.represented_by_owner_id`, `member_votes.cast_by_owner_id`,
-`ballots.cast_by_owner_id`, and `proxies.grantor_owner_id`/`holder_owner_id` — every one in a table
-phase 4 keeps (the meeting, proxies, and elections records), so `owners` cannot drop until all five
-are repointed. That repointing is part 2 of #248, and unblocks #212's step 3. The `set null` columns
-(`member_attendance.represented_by_owner_id`, `member_votes.cast_by_owner_id`,
-`ballots.cast_by_owner_id`, `proxies.holder_owner_id`) are the
-more dangerous half: dropping the table would succeed and silently erase who acted from historical
-records rather than failing loudly.
+in a table phase 4 keeps.
+
+**#248 part 2 (migration `0029`) closed the `owners` half the same way**, and with it the whole
+twelve-column list: `member_attendance.represented_by_person_id`,
+`member_votes.cast_by_person_id`, `ballots.cast_by_person_id`, and
+`proxies.grantor_person_id`/`holder_person_id` all reference `people(party_id)` now, so **no table
+phase 4 keeps references `owners` or `board_people` any more** and #212's steps 3 and 4 are
+unblocked. Four of the five were `set null` — the dangerous half, where dropping the parent would
+have SUCCEEDED and silently erased who acted from historical records rather than failing loudly.
+All five measured 0 non-null values in production on 2026-08-20, before the #212 exercise checklist
+(which is what fills them) had run, so it was a pure schema change; the migration's mapping
+branches exist for a database where that is not true.
+
+"Who may act for a lot" moved with those columns and now has ONE definition,
+`src/server/roster/authority.ts` — Ownership held by the Person, or Representation of an
+Organization that owns the Lot — mirroring `board-consequences.ts`'s `qualifiesGuard` so Lot
+Authority means the same thing to a board term, a proxy, and a cast. It carries the rule twice on
+purpose, for ADR 0020's two layers: a Drizzle reader for preflights and pickers, and a raw-SQL
+`lotAuthorityExists` fragment for the mutation-boundary predicates that re-check inside the INSERT.
+`test/server/lot-authority.test.ts` runs both over the same fixtures and fails on a divergence,
+which is the failure this arrangement is otherwise exposed to.
 
 Phase 2 adds:
 
@@ -1228,7 +1270,8 @@ server-assigned `sequence` unique per election, a nullable `votes` (`NULL` = not
 `withdrawn`; it deliberately carries no `updated_at`. `ballots` references `elections` on
 delete-cascade and `properties` on delete-restrict, is unique per `(election_id, property_id)`, and
 records only turnout: a `weight` snapshot, nullable actionless `proxy_id`, nullable
-`cast_by_owner_id` referencing `owners` on delete-set-null, and `recorded_at`.
+`cast_by_person_id` referencing `people(party_id)` on delete-set-null (repointed from `owners` by
+#248 part 2), and `recorded_at`.
 `ballot_choices` is the identity-unlinked retained digital ballot box: `id`, `election_id` on
 delete-cascade, `candidate_id` on delete-`no action` (changed from `restrict` by #248's `candidates`
 rebuild — RESTRICT is checked immediately and NO ACTION at end-of-statement, and only the latter
@@ -1266,22 +1309,29 @@ delete-set-null, but as of phase 3b nothing writes it: certification's provenanc
 `proxies` (the proxies record — either entered from paper by the board or granted online by a
 homeowner for a lot they control, per
 [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md) and
-[ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md)): one owner
-(`grantor_owner_id`, referencing `owners` on delete-restrict) authorising one named holder
-(`holder_name`, required — a holder need not be an owner) to act for one lot (`property_id`,
+[ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md)): one Person
+(`grantor_person_id`, referencing `people(party_id)` on delete-restrict — repointed from `owners`
+by #248 part 2) authorising one named holder
+(`holder_name`, required — a holder need not hold authority anywhere) to act for one lot
+(`property_id`,
 referencing `properties` on delete-restrict) at exactly one occasion, a nullable `meeting_id` or
 `election_id` (each referencing its table on delete-cascade), never both, never neither — enforced
 by a schema `CHECK` (`proxies_one_occasion`) rather than left to application code alone, so it holds
 even against a direct write that bypasses the route. A unique index per occasion kind
 (`proxies_property_meeting_unq`, `proxies_property_election_unq`) enforces one proxy per lot per
 occasion, the same NULLs-are-distinct trick `resolutions_supersedes_unq` already relies on. An
-optional `holder_owner_id` (referencing `owners` on delete-set-null) is recorded when the holder
-happens to be an owner, plus `created_by`/`created_at`/`updated_at`. `member_attendance.proxy_id`,
+optional `holder_person_id` (referencing `people(party_id)` on delete-set-null) is recorded when
+the holder is on the roster, plus `created_by`/`created_at`/`updated_at`. `member_attendance.proxy_id`,
 `member_votes.proxy_id`, and `ballots.proxy_id` each reference `proxies.id` but carry no `ON DELETE`
-action at all — they were added by `ALTER TABLE` against tables that predate this feature, and
-drizzle-kit silently drops any `ON DELETE` action on an ALTER-added FK column, the same trap already
-on record for `properties.vote_weight` and `board_terms.election_id`; `proxy-schema.test.ts` pins
-that the generated SQL carries none. Because that FK can't enforce a refusal itself, `DELETE
+action at all. That began as the drizzle-kit trap — they were added by `ALTER TABLE` against tables
+that predate this feature, and drizzle-kit silently drops any `ON DELETE` action on an ALTER-added
+FK column, the same trap on record for `properties.vote_weight` and `board_terms.election_id`;
+`proxy-schema.test.ts` pins that the generated `0014` SQL carries none. Since migration `0029`
+rebuilt all three tables it is a DECISION: NO ACTION is re-declared on purpose, because deletion is
+the whole revocation model (the route pre-checks instead) and because NO ACTION's
+end-of-statement timing keeps a meeting or election delete — which cascades into `proxies` and the
+citing table alike — independent of which cascade SQLite runs first, the same RESTRICT coin-flip
+`0028` fixed on `ballot_choices`. Because that FK can't enforce a refusal itself, `DELETE
 /api/admin/proxies` pre-checks all three citing tables and returns `409` naming which of
 `attendance`/`votes`/`ballots` still reference the proxy; an uncited proxy is simply deleted —
 deletion is the entire revocation model, there is no `revoked_at`. `viaProxy` on
@@ -1401,7 +1451,18 @@ rebuilt last, since six FKs point into it. A legacy identity that cannot be mapp
 `people.party_id` (the backfill's `derivedId` mapping is a JS digest SQL cannot compute) is dropped
 rather than invented — nullable columns become `NULL`, and the two `NOT NULL` columns
 (`board_attendance.person_id`, `board_votes.person_id`) drop the row — though this measured a no-op
-in the strictest sense, since all five tables held 0 rows in production on 2026-08-20. See the ADR
+in the strictest sense, since all five tables held 0 rows in production on 2026-08-20. Migration
+`0029` (#248 part 2 of 2) does the same for the `owners` half, rebuilding `member_attendance`,
+`member_votes`, `ballots`, and `proxies` so
+`represented_by_person_id`/`cast_by_person_id`/`grantor_person_id`/`holder_person_id` reference
+`people(party_id)`, each keeping its ON DELETE action bit-for-bit. `proxies` is rebuilt LAST, since
+the other three cite it — the same reasoning that put `motions` last in `0028` — and their
+`proxy_id` FKs are recreated deliberately actionless (see the `proxies` paragraph above). It
+follows `0028`'s identity rule: a value is carried over only when it already resolves to a Person,
+so the four nullable columns become `NULL` and `proxies.grantor_person_id`, being `NOT NULL`, drops
+the row rather than fabricate a grantor — and each citing table's rebuild nulls any `proxy_id`
+whose proxy row this same file drops, so no dangling reference survives the deferred FK check. See
+the ADR
 0022
 paragraph above for what these tables and views are and what now reads them (the phase-2 shadow
 layer, the board-only roster-preview panel, the operator write freeze, `cutover-mode.ts`, and — as
@@ -1412,7 +1473,8 @@ ledger rather than assumed. Migrations `0023` through `0027` were applied to pro
 (`db:migrate:remote`) on 2026-08-17, after sitting unapplied for days under deployed v0.12.0 code —
 the observation that falsified the deploys-apply-migrations doctrine below. Migration `0028` was applied to
 production manually (`db:migrate:remote`) on 2026-08-21, immediately after the change that needs it
-merged — the deployment-ordering hazard immediately below is why it could not wait.
+merged — the deployment-ordering hazard immediately below is why it could not wait. Migration
+`0029` carries the same hazard and the same rule: apply it before or with its deploy.
 
 **Committed migrations do NOT reach production on their own.** Deploys never apply D1
 migrations. This doctrine previously said the opposite, inferred from `0016`-`0022` landing at one
@@ -1422,8 +1484,8 @@ observation was almost certainly a manual catch-up misread as the deploy's work.
 the operator running `npm run db:migrate:remote`, which applies any unapplied files and is safe to
 re-run (Wrangler tracks applied files in D1 and skips them).
 
-**Migration `0028` breaks the safe-in-either-order rule the next paragraph describes, and is the
-first migration in this project to do so.** Every migration through `0027` was written so that code
+**Migrations `0028` and `0029` break the safe-in-either-order rule the next paragraph describes,
+and are the first two migrations in this project to do so.** Every migration through `0027` was written so that code
 merged before or after its application worked against either schema shape, which is exactly why
 merged code running ahead of the production schema for days (as `0023`-`0027` just did) is
 tolerable. `0028` is not that: it renames `candidates.board_person_id` to `candidates.person_id` and
@@ -1436,10 +1498,17 @@ meeting-record people picker and the candidate-link write path failed against th
 schema until the operator ran `npm run db:migrate:remote` minutes later, on 2026-08-21. The
 standing rule this leaves behind: a migration of this kind is applied before or together with its
 change's deploy, never on the otherwise safe any-time-before-the-next-freeze schedule the rest of
-this section describes. #248 part 2 and phase 4's `properties` → `lots` rename are both of this
-kind.
+this section describes.
 
-Two consequences worth internalising, migration `0028` aside. Merged code can run **ahead of the
+`0029` is the second of the kind and was written knowing it: it renames four columns the merged
+code reads and writes (`represented_by_owner_id` → `represented_by_person_id`, both
+`cast_by_owner_id` → `cast_by_person_id`, `grantor_owner_id` → `grantor_person_id`,
+`holder_owner_id` → `holder_person_id`), so the member attendance, member vote, ballot, and proxy
+surfaces fail against the pre-`0029` schema exactly as the meeting-record picker did against the
+pre-`0028` one. Treat the merge and `db:migrate:remote` as ONE operator step, ideally under the
+write freeze. Phase 4's `properties` → `lots` rename is the next of this kind.
+
+Two consequences worth internalising, migrations `0028` and `0029` aside. Merged code can run **ahead of the
 production schema** for
 days, so a schema change and the code that depends on it must be safe in either order — which is
 the whole reason ADR 0022 phase 1 is behaviorally inert. And schema parity is a **standing

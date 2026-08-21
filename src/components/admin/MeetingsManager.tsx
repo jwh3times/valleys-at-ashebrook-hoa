@@ -1320,7 +1320,8 @@ export default function MeetingsManager() {
                                       </option>
                                     ))}
                                   </select>
-                                  {personsForLot(p.id, lotPeople).length > 0 && (
+                                  {personsForLot(p.id, lotPeople).length >
+                                    0 && (
                                     <div
                                       style={{
                                         display: 'flex',
@@ -1352,11 +1353,13 @@ export default function MeetingsManager() {
                                         }
                                       >
                                         <option value="">— none —</option>
-                                        {personsForLot(p.id, lotPeople).map((o) => (
-                                          <option key={o.id} value={o.id}>
-                                            {o.fullName}
-                                          </option>
-                                        ))}
+                                        {personsForLot(p.id, lotPeople).map(
+                                          (o) => (
+                                            <option key={o.id} value={o.id}>
+                                              {o.fullName}
+                                            </option>
+                                          ),
+                                        )}
                                       </select>
                                     </div>
                                   )}
@@ -1383,7 +1386,8 @@ export default function MeetingsManager() {
                                           // clears the cast-by owner.
                                           castByPersonId: proxyId
                                             ? ''
-                                            : (prev[p.id]?.castByPersonId ?? ''),
+                                            : (prev[p.id]?.castByPersonId ??
+                                              ''),
                                           proxyId,
                                         },
                                       }))

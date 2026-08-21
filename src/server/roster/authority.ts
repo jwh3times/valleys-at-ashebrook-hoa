@@ -66,7 +66,8 @@ async function queryAuthority(
 ): Promise<LotAuthorityHolder[]> {
   const lotIds = filter.lotIds;
   if (lotIds !== undefined && lotIds.length === 0) return [];
-  const lotFilter = lotIds === undefined ? undefined : inArray(ownerships.lotId, lotIds);
+  const lotFilter =
+    lotIds === undefined ? undefined : inArray(ownerships.lotId, lotIds);
   // `day === null` asks "did this authority EVER exist", dropping the interval
   // comparison while keeping the voided filter — a voided row was recorded in
   // error and never granted anything. Used by the board's record-keeping

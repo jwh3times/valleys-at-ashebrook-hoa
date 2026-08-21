@@ -80,7 +80,9 @@ describe.each(KEYS)('parseProvenance (%s)', (personKey) => {
 
   it('ignores the sibling person key', () => {
     const other: ProvenancePersonKey =
-      personKey === 'castByPersonId' ? 'representedByPersonId' : 'castByPersonId';
+      personKey === 'castByPersonId'
+        ? 'representedByPersonId'
+        : 'castByPersonId';
     // A payload naming the OTHER route's column must not satisfy this one,
     // and must not trip the mutual exclusion either.
     const result = parseProvenance({ proxyId: 'x1', [other]: 'o1' }, personKey);

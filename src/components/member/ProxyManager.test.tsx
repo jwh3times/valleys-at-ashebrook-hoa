@@ -127,7 +127,9 @@ describe('ProxyManager', () => {
 
   it('surfaces a lookup failure without crashing the form', async () => {
     const user = userEvent.setup();
-    mocked.lookupLotPersons.mockRejectedValue(new Error('No matching property'));
+    mocked.lookupLotPersons.mockRejectedValue(
+      new Error('No matching property'),
+    );
     render(<ProxyManager lots={lots} occasions={occasions} />);
     await user.type(
       await screen.findByLabelText("Holder's street address"),

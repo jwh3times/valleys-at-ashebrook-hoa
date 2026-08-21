@@ -11,11 +11,7 @@ import {
   proxies,
   memberAttendance,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
 import { legacyAuthContext } from '../../src/server/authz/context';
 

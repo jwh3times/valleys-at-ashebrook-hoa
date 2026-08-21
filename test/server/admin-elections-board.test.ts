@@ -18,11 +18,7 @@ import {
   meetings,
   settings,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { pauseNextBatch } from './fixtures';
 import { legacyAuthContext } from '../../src/server/authz/context';

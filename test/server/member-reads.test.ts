@@ -12,11 +12,7 @@ import {
   elections,
   proxies,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import {
   fetchAdminMeeting,
   fetchMeetingFor,
@@ -61,11 +57,7 @@ async function seedProperty(
   });
 }
 
-async function seedPersonFor(
-  id: string,
-  propertyId: string,
-  fullName: string,
-) {
+async function seedPersonFor(id: string, propertyId: string, fullName: string) {
   await fx.seedLotAuthority(id, propertyId, { fullName });
 }
 

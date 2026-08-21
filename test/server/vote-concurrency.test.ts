@@ -25,11 +25,7 @@ import {
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
@@ -94,9 +90,12 @@ beforeEach(async () => {
     method: 'board_manual',
   });
   // #248 part 2: the caster is a roster Person holding a current Ownership.
-  await db
-    .insert(parties)
-    .values({ id: 'owner-own', kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(parties).values({
+    id: 'owner-own',
+    kind: 'person',
+    createdAt: now,
+    updatedAt: now,
+  });
   await db.insert(people).values({
     partyId: 'owner-own',
     partyKind: 'person',

@@ -20,11 +20,7 @@ import {
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {

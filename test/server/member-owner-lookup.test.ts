@@ -4,11 +4,7 @@ import { eq } from 'drizzle-orm';
 import { POST } from '../../src/pages/api/member/owner-lookup';
 import { getDb } from '../../src/server/db/client';
 import { settings, properties } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
@@ -115,7 +111,7 @@ describe('POST /api/member/owner-lookup', () => {
     expect(res.status).toBe(200);
   });
 
-  it("returns the Persons who may act for the matched lot, names and ids only — no phone, no email", async () => {
+  it('returns the Persons who may act for the matched lot, names and ids only — no phone, no email', async () => {
     const res = await call(jane, { address: '2 Oak St' });
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;

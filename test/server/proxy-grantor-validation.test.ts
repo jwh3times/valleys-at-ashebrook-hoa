@@ -74,16 +74,6 @@ function req(url: string, body: unknown) {
   } as never;
 }
 
-function patchReq(url: string, body: unknown) {
-  return {
-    request: new Request(url, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  } as never;
-}
-
 async function callVote(body: unknown, ctx: AuthContext): Promise<Response> {
   return votePost({
     request: new Request(voteUrl, {

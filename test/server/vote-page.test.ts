@@ -18,11 +18,7 @@ import {
   settings,
   userPropertyLinks,
 } from '../../src/server/db/schema';
-import {
-  parties,
-  people,
-  ownerships,
-} from '../../src/server/db/roster-schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { users } from '../../src/server/db/auth-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
