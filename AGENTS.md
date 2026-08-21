@@ -187,9 +187,12 @@ Markdown twins described below and never the human-readable originals.
   `/api/admin/board-terms` were **retired by phase 3b (#218), not ported**: the identity layer
   moved to the party roster and `board_service_terms` (see the ADR 0022 roster routes below), and
   porting the legacy routes would have kept two identity layers alive. The legacy `board_people`
-  table itself survives — the meeting record still references it until its Person repointing — so
-  the record-keeping pickers (attendance, mover/second, roll call, the candidate link) read a flat
-  `{id, fullName}` list from `GET /api/admin/meetings?roster=people` instead. The legacy "The
+  table itself survives — `board_terms.person_id` still references it — but #248 (part 1 of 2, an
+  ADR 0022 phase 4 precondition) repointed the meeting and elections records off it onto the party
+  roster (migration `0028`), so
+  the record-keeping pickers (attendance, mover/second, roll call, the candidate link) now read a
+  flat `{id, fullName}` list of `people` — excluding consolidated parties, names rendered through
+  `personDisplayLabel` — from `GET /api/admin/meetings?roster=people` instead. The legacy "The
   Board" editor stayed retired; the writable board-service surface is now the phase-3e (#221)
   **Board** panel (`BoardServicePanel`), which writes `board_service_terms`/
   `board_office_assignments` through `/api/admin/board-service` (see the ADR 0022 roster routes
@@ -305,7 +308,7 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   (`qualifiesGuard` — the person currently owns or represents the lot) and both non-overlap
   directions, plus an optional `board_office_assignments` row; `candidates.won` is set and the
   election moves to `certified`. It writes NO legacy `board_people`/`board_terms` rows, backfills
-  no `candidates.board_person_id`, and creates NO Access Grant — Board Access is never implicit.
+  no `candidates.person_id`, and creates NO Access Grant — Board Access is never implicit.
   A winner qualifying nowhere is a hard `409` naming them (the escape is recording the Ownership
   or Representation first), and per-winner `assertInBatch` guards make the whole certification
   roll back rather than commit with a term or an explicitly requested office missing.
@@ -318,6 +321,10 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   supports `POST`/`PATCH`/`DELETE`, `requireBoard`-gated; `sequence` is server-assigned, candidates
   can be added or deleted only while the election is a draft, and conducted candidates become
   immutable after open except that a not-yet-withdrawn candidate may be withdrawn once while open.
+  An optional `personId` links a candidate to a party-roster Person — repointed from the retired
+  `board_people`/`board_person_id` identity by #248 — and is pre-checked against `people` (rejecting
+  an unknown id or one whose Party is consolidated with a readable `400`) before it can reach the
+  FK, the same avoid-a-raw-D1-error pattern `setBallots`'s `castByOwnerId` check uses.
   The homeowner cast path is `POST /api/vote`, reached only through the feature-gated `/vote` page
   for verified callers. The page renders selection-free receipts that contain only the item title
   and lot address. Its labeled review modal summarizes the pending selection and provenance, moves
@@ -775,6 +782,10 @@ boolean`.
   reachable only through the board-only `fetchAdminMeetings`/`fetchAdminMeeting`; a shared
   `assembleMeetingDetail` builds the attendance/motions/roll-call body for both pairs and carries no
   status or tier logic itself — see [ADR 0014](./docs/adr/0014-meeting-record-status-gate.md).
+  Its board-side name map is built from `people` (the party roster) rather than the retired
+  `board_people` identity as of #248 (ADR 0022 phase 4 precondition, part 1 of 2), with every label
+  routed through `personDisplayLabel` so a redacted Person renders its durable-ID fallback the same
+  way every other Person read does.
   `assembleMeetingDetail` also assembles the member side — `MeetingDetail.memberAttendance`,
   per-motion `MotionDetail.memberVotes`/`memberTally`, and `totalActiveWeight`, a `SUM(vote_weight)`
   aggregate over ACTIVE properties that is the member quorum denominator, computed unconditionally
@@ -891,18 +902,24 @@ column that decides which voter model applies), `kind` (`regular`/`special`/`ann
 delete-set-null, `quorum_required`, `status` (`draft`/`approved`, default `draft`), `visibility`
 (default `board`), approval provenance `approved_at`/`approved_by`/`approved_by_motion_id` (the
 last references `motions` on delete-set-null), and `created_by`; `board_attendance` is one
-present/absent row per meeting per `board_people` row,
+present/absent row per meeting per `people(party_id)` row (repointed from `board_people` by #248,
+ADR 0022 phase 4's precondition — see the legacy-FK-columns paragraph under Phase 4 below),
 unique per pair; `motions` records one motion per meeting with a server-assigned `sequence` unique
-per meeting, board mover/second referencing `board_people` on delete-restrict, plus nullable
-`mover_owner_id`/`second_owner_id` referencing `owners` — pre-placed for a later phase; nothing
-writes them yet, and the mover/second pickers are hidden on member meetings — and a board-entered
+per meeting and board mover/second referencing `people(party_id)` on delete-restrict. Until #248
+this was two parallel pairs — `mover_person_id`/`second_person_id` referencing `board_people` for
+board motions, plus `mover_owner_id`/`second_owner_id` referencing `owners` for member motions,
+told apart only by the parent meeting's `body` — but the owner pair was never written (phase 3b)
+and measured 0 rows in production, so #248 dropped it and repointed the person pair at the party
+roster's single Person concept; the mover/second pickers stay hidden on member meetings, and a
+board-entered
 `outcome` (`passed`/`failed`/`withdrawn`/`tabled`). Member motions also carry `voting_state`
 (`none`/`open`/`closed`) and a monotonic `voting_revision`: every open, close, and successful
 member vote-set replacement advances the revision, so a stale correction cannot overwrite an
 intervening live session even when the lifecycle state returns to `closed`; `motion_eligibility`
 is unique per `(motion_id, property_id)`, cascades with its motion, restricts property deletion,
 and freezes each active property's non-negative weight at first open for unchanged reuse on reopen.
-`board_votes` is one roll-call vote per motion per `board_people` row (`choice`:
+`board_votes` is one roll-call vote per motion per `people(party_id)` row (repointed from
+`board_people` by #248; `choice`:
 `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
 `member_attendance` is one present/absent row per meeting per `properties` row, unique per pair,
 with nullable `represented_by_owner_id` and a nullable `proxy_id` referencing `proxies` (see below;
@@ -1056,22 +1073,30 @@ consumers. Unlike the import-only idiom `authz-legacy-role.test.ts` uses for `us
 checks both imported Drizzle symbols AND raw SQL (`FROM`/`JOIN`/`INTO`/`UPDATE`/`TABLE` followed by
 the table name, comments stripped and URLs neutralised first) — an import-only scan would miss
 `server/roster/verification.ts`, whose `user_property_links` write-behind mirror is a raw `INSERT`
-with no Drizzle symbol imported. Each of its 18 declared modules carries one of five dispositions:
+with no Drizzle symbol imported. Each of its 16 declared modules carries one of five dispositions:
 `deleted-with-the-table` (five legacy surfaces #212 deletes outright, including `context.ts`'s
 `legacy` branch), `write-behind-mirror` (two modules whose write nothing reads for behavior),
 `already-dual-read` (`server/ai/assistant.ts`, the #233 fix — phase 4 drops only its legacy arm),
 `needs-repointing` (eight modules — the actual phase-4 work list), and
-`blocked-on-person-repointing` (two meeting-record modules that read `board_people` and wait on its
-Person repointing, already noted above). A declared entry whose module no longer reads a dropped
-table fails the suite as stale, so the list can't rot into a misleading audit. Separately, twelve FK
-columns keep `owners` and `board_people` alive past the drop regardless of this scan:
-`motions.mover_owner_id`/`second_owner_id`, `member_attendance.represented_by_owner_id`,
-`member_votes.cast_by_owner_id`, `ballots.cast_by_owner_id`, and
-`proxies.grantor_owner_id`/`holder_owner_id` reference `owners`; `board_attendance.person_id`,
-`motions.mover_person_id`/`second_person_id`, `board_votes.person_id`, and
-`candidates.board_person_id` reference `board_people` — every one in a table phase 4 keeps (the
-meeting, proxies, and elections records), so neither legacy table can drop until all twelve columns
-are repointed to the party roster. The `set null` columns
+`blocked-on-person-repointing`, now EMPTY: #248 (part 1 of 2) repointed both modules the category
+used to hold (`pages/api/admin/meetings.ts`, `pages/api/admin/candidates.ts`) at the party roster
+and closed it, kept as a heading rather than deleted since `board_people` survives until phase 4
+drops it and a future reader of it belongs here. A declared entry whose module no longer reads a
+dropped table fails the suite as stale, so the list can't rot into a misleading audit.
+
+#248 (part 1 of 2) also closed the `board_people` half of the twelve legacy FK columns this same
+paragraph used to enumerate: migration `0028` repointed the five that referenced it —
+`board_attendance.person_id`, `motions.mover_person_id`/`second_person_id`, `board_votes.person_id`,
+and `candidates.person_id` (renamed from `board_person_id`) — onto `people(party_id)`, and dropped
+the parallel `motions.mover_owner_id`/`second_owner_id` pair outright rather than repointing it,
+since it referenced `owners`, was never written (phase 3b), measured 0 rows in production, and the
+party roster has one Person concept for both board and member motions where legacy needed two FKs
+told apart only by the parent meeting's `body`. `board_people` itself now has no referencing FK left
+in a table phase 4 keeps. Five FK columns still keep `owners` alive past the drop, regardless of the
+scan above: `member_attendance.represented_by_owner_id`, `member_votes.cast_by_owner_id`,
+`ballots.cast_by_owner_id`, and `proxies.grantor_owner_id`/`holder_owner_id` — every one in a table
+phase 4 keeps (the meeting, proxies, and elections records), so `owners` cannot drop until all five
+are repointed. That repointing is part 2 of #248, and unblocks #212's step 3. The `set null` columns
 (`member_attendance.represented_by_owner_id`, `member_votes.cast_by_owner_id`,
 `ballots.cast_by_owner_id`, `proxies.holder_owner_id`) are the
 more dangerous half: dropping the table would succeed and silently erase who acted from historical
@@ -1194,8 +1219,10 @@ certification provenance `certified_at`/`certified_by`, and `created_by`.
 `election_eligibility` is unique per `(election_id, property_id)`, cascades with its election,
 restricts property deletion, and stores the non-negative property weight frozen when a conducted
 election first opens. `candidates` references `elections` on delete-cascade, with a nullable
-`board_person_id` referencing `board_people` on delete-restrict (backfilled by `certify` for a
-winner who had none, so a returning board member keeps one identity across terms per ADR 0012), a
+`person_id` referencing `people(party_id)` on delete-restrict (repointed from
+`board_person_id`/`board_people` by #248 — ADR 0022 phase 4's precondition; identity continuity
+across terms for a returning board member is now carried by the Party itself, not backfilled by
+`certify`, per ADR 0012), a
 server-assigned `sequence` unique per election, a nullable `votes` (`NULL` = not yet recorded,
 `0` = recorded as zero — and always `NULL` while a conducted election is open), `won`, and
 `withdrawn`; it deliberately carries no `updated_at`. `ballots` references `elections` on
@@ -1203,8 +1230,11 @@ delete-cascade and `properties` on delete-restrict, is unique per `(election_id,
 records only turnout: a `weight` snapshot, nullable actionless `proxy_id`, nullable
 `cast_by_owner_id` referencing `owners` on delete-set-null, and `recorded_at`.
 `ballot_choices` is the identity-unlinked retained digital ballot box: `id`, `election_id` on
-delete-cascade, `candidate_id` on delete-restrict, and non-negative `weight`, indexed only by
-election. It deliberately has no ballot/property/owner/proxy/caster/timestamp/shared-receipt field
+delete-cascade, `candidate_id` on delete-`no action` (changed from `restrict` by #248's `candidates`
+rebuild — RESTRICT is checked immediately and NO ACTION at end-of-statement, and only the latter
+makes a deleted election's cascade into both `candidates` and `ballot_choices` order-independent;
+a bare candidate delete is refused identically either way), and non-negative `weight`, indexed only
+by election. It deliberately has no ballot/property/owner/proxy/caster/timestamp/shared-receipt field
 or other explicit identity/correlation column; none may be added, and supported reads never join a
 choice to a turnout row. This is not mathematical anonymity: because turnout and choice rows retain
 the same snapshotted weight, a rare or unique weight may identify or narrow a property's
@@ -1355,7 +1385,24 @@ revocation model and `setMemberAttendance`/`setMemberVotes`/`setBallots` are ful
 corrections, so a flag must survive the referenced record's deletion with its source event and
 ledger context intact rather than freezing that record in place. `audit_review_queue_v` (which
 references the table) is dropped first and recreated at the end with the new `motion` impacted
-kind, the `0024`/`0025`/`0026` view precedent. See the ADR 0022
+kind, the `0024`/`0025`/`0026` view precedent. Migration `0028`
+(ADR 0022 phase 4 precondition, #248 part 1 of 2) repoints five FK columns off the legacy
+`board_people` onto `people(party_id)` — `board_attendance.person_id`,
+`motions.mover_person_id`/`second_person_id`, `board_votes.person_id`, and `candidates.person_id`
+(renamed from `board_person_id`) — and drops the parallel `motions.mover_owner_id`/`second_owner_id`
+pair outright, since nothing ever wrote it (phase 3b). In the same file, and for an unrelated
+reason, `ballot_choices.candidate_id` moves from `ON DELETE RESTRICT` to `NO ACTION`: RESTRICT is
+checked immediately while NO ACTION is checked at end-of-statement, and only the latter makes an
+election delete — which cascades to `candidates` and `ballot_choices` alike — independent of which
+cascade SQLite happens to run first; a bare candidate delete is refused identically either way. All
+five rebuilt tables use the `__new`-copy-and-rename dance (the `0024`/`0026` precedent, not `0027`'s
+DROP+CREATE), since they are only provably empty in production, not everywhere; `motions` is
+rebuilt last, since six FKs point into it. A legacy identity that cannot be mapped to a
+`people.party_id` (the backfill's `derivedId` mapping is a JS digest SQL cannot compute) is dropped
+rather than invented — nullable columns become `NULL`, and the two `NOT NULL` columns
+(`board_attendance.person_id`, `board_votes.person_id`) drop the row — though this measured a no-op
+in the strictest sense, since all five tables held 0 rows in production on 2026-08-20. See the ADR
+0022
 paragraph above for what these tables and views are and what now reads them (the phase-2 shadow
 layer, the board-only roster-preview panel, the operator write freeze, `cutover-mode.ts`, and — as
 of phase 3b/3c/3d — the roster/board-service/access/person-link/verification/review-flag routes;
@@ -1363,7 +1410,9 @@ legacy authorization itself still reads none of the roster tables). Migrations `
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
 ledger rather than assumed. Migrations `0023` through `0027` were applied to production manually
 (`db:migrate:remote`) on 2026-08-17, after sitting unapplied for days under deployed v0.12.0 code —
-the observation that falsified the deploys-apply-migrations doctrine below.
+the observation that falsified the deploys-apply-migrations doctrine below. Migration `0028` is not
+yet applied to production as of this writing; see the deployment-ordering hazard immediately below
+before it is.
 
 **Committed migrations do NOT reach production on their own.** Deploys never apply D1
 migrations. This doctrine previously said the opposite, inferred from `0016`-`0022` landing at one
@@ -1373,7 +1422,22 @@ observation was almost certainly a manual catch-up misread as the deploy's work.
 the operator running `npm run db:migrate:remote`, which applies any unapplied files and is safe to
 re-run (Wrangler tracks applied files in D1 and skips them).
 
-Two consequences worth internalising. Merged code can run **ahead of the production schema** for
+**Migration `0028` breaks the safe-in-either-order rule the next paragraph describes, and is the
+first migration in this project to do so.** Every migration through `0027` was written so that code
+merged before or after its application worked against either schema shape, which is exactly why
+merged code running ahead of the production schema for days (as `0023`-`0027` just did) is
+tolerable. `0028` is not that: it renames `candidates.board_person_id` to `candidates.person_id` and
+repoints `board_attendance.person_id`/`board_votes.person_id`/`motions.mover_person_id`/
+`motions.second_person_id` off `board_people` onto `people(party_id)`, and the merged application
+code (`GET /api/admin/meetings?roster=people`, `/api/admin/candidates`,
+`assembleMeetingDetail` in `src/server/content/reads.ts`) reads and writes only the new column and
+table. If this code deploys before migration `0028` is applied, the admin meeting-record people
+picker and the candidate-link write path fail against the still-legacy schema. The operator must
+run `npm run db:migrate:remote` before or together with this change's deploy, not on the otherwise
+safe any-time-before-the-next-freeze schedule the rest of this section describes.
+
+Two consequences worth internalising, migration `0028` aside. Merged code can run **ahead of the
+production schema** for
 days, so a schema change and the code that depends on it must be safe in either order — which is
 the whole reason ADR 0022 phase 1 is behaviorally inert. And schema parity is a **standing
 pre-freeze check**: before any write freeze, backfill, or other schema-dependent operation,
@@ -1390,15 +1454,20 @@ in code or copy is the mistake this table exists to prevent. Use these words in 
 | Term              | Is                                                                     | Lives in                                                                                                                                    | Has history?                                                                                   |
 | ----------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | **board admin**   | An access level. Grants admin writes _and_ the top content tier.       | `access_grants` (a live `board` or `system_admin` grant) since the phase 3f flip; `user.role = 'board'` is now only its write-behind mirror | The grant has an interval, so ending one is recorded; the mirror column is current-state only. |
-| **board member**  | A person who serves on the board. What motions and votes reference.    | `board_people`                                                                                                                              | Yes — the record is the point.                                                                 |
+| **board member**  | A person who serves on the board.                                      | `board_people`                                                                                                                              | Yes — the record is the point.                                                                 |
 | **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms`                                                                                                                               | Yes — a person may hold several, with gaps.                                                    |
 
 Sign-in access still has its own panel — **Board access (legacy)** (`BoardAccessManager`) — and
 neither sense ever writes the other's data. The legacy roster panel (`BoardPanel`) and its routes
 were retired by phase 3b (#218): board service is now recorded in `board_service_terms` through
-`/api/admin/board-service`, the meeting record keeps referencing `board_people` through its
-Person repointing, and the writable Board surface is the phase-3e (#221) **Board** panel
-(`BoardServicePanel`). A board member
+`/api/admin/board-service`, and the writable Board surface is the phase-3e (#221) **Board** panel
+(`BoardServicePanel`). The meeting and elections records no longer name a `board_people` identity
+at all — #248 (part 1 of 2, an ADR 0022 phase 4 precondition) repointed `board_attendance`,
+`board_votes`, `motions`' mover/second, and `candidates` onto the party roster's Person, so
+attendance, roll call, mover/second, and a candidate's optional resident link now name whoever is
+on the roster, not specifically a **board member** in this table's sense; `board_people` survives
+only as the still-independent record of service that row describes, referenced by `board_terms`
+and (for now) nothing else in a table phase 4 keeps. A board member
 need not be a board admin, and a board admin need not be a board member. The content
 visibility tier `board` is a fourth use of the word and follows the access sense: it means "visible
 to a board admin". See [ADR 0012](./docs/adr/0012-board-record-as-structured-rows.md) for why the

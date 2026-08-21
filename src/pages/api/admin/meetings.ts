@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -11,7 +11,6 @@ import type { Db } from '../../../server/db/client';
 import {
   meetings,
   boardAttendance,
-  boardPeople,
   memberAttendance,
   motions,
   motionEligibility,
@@ -21,6 +20,8 @@ import {
   ballots,
   properties,
 } from '../../../server/db/schema';
+import { people, parties } from '../../../server/db/roster-schema';
+import { personDisplayLabel } from '../../../lib/format';
 import { normalizeMeetingInput } from '../../../lib/types';
 import {
   proxyUseError,
@@ -322,18 +323,29 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const url = new URL(request.url);
-  // The meeting record still references legacy `board_people` until its
-  // Person repointing (#203's "the meeting record points at Person" — a later
-  // phase). `/api/admin/board-people` was retired by #218, so the
-  // record-keeping pickers (attendance rolls, mover/second, roll-call, the
-  // candidate link) read the flat list they need from the surface that owns
-  // the record.
+  // The record-keeping pickers (attendance rolls, mover/second, roll-call, the
+  // candidate link) read a flat identity list from the surface that owns the
+  // record. #248 repointed it at the party roster: the meeting record now
+  // names a Person, not the retired `board_people` identity, closing the
+  // repointing #203 deferred and unblocking #212's drop of that table.
+  //
+  // A consolidated Party is a duplicate that already points at its survivor,
+  // so offering it would invite recording a fact against an identity the
+  // roster has superseded. Redacted names render their durable-ID fallback.
   if (url.searchParams.get('roster') === 'people') {
     const rows = await getDb(env)
-      .select({ id: boardPeople.id, fullName: boardPeople.fullName })
-      .from(boardPeople)
-      .orderBy(boardPeople.fullName);
-    return Response.json(rows);
+      .select({ id: people.partyId, fullName: people.fullName })
+      .from(people)
+      .innerJoin(parties, eq(parties.id, people.partyId))
+      .where(isNull(parties.consolidatedIntoPartyId));
+    return Response.json(
+      rows
+        .map((r) => ({
+          id: r.id,
+          fullName: personDisplayLabel(r.fullName, r.id),
+        }))
+        .sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    );
   }
   const id = url.searchParams.get('id');
   if (id) {

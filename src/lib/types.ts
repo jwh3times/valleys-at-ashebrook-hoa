@@ -962,7 +962,9 @@ export const ELECTION_SOURCES = ['recorded', 'conducted'] as const;
 export interface CandidateSummary {
   id: string;
   fullName: string;
-  boardPersonId: string | null;
+  /** The roster Person this candidate is, when one is recorded. Repointed from
+   * the retired `board_people` identity by #248. */
+  personId: string | null;
   statementMd: string | null;
   sequence: number;
   votes: number | null;
@@ -1090,7 +1092,7 @@ export interface ElectionInput {
 
 export interface CandidateInput {
   fullName?: string;
-  boardPersonId?: string | null;
+  personId?: string | null;
   statementMd?: string | null;
   withdrawn?: boolean;
 }
@@ -1203,15 +1205,14 @@ export function normalizeCandidateInput(
   if (!fullName.ok) return fullName;
   if (fullName.value !== undefined) out.fullName = fullName.value;
 
-  const boardPersonId = nullableString(
+  const personId = nullableString(
     r,
-    'boardPersonId',
+    'personId',
     INPUT_LIMITS.personId,
-    'boardPersonId',
+    'personId',
   );
-  if (!boardPersonId.ok) return boardPersonId;
-  if (boardPersonId.value !== undefined)
-    out.boardPersonId = boardPersonId.value;
+  if (!personId.ok) return personId;
+  if (personId.value !== undefined) out.personId = personId.value;
 
   const statementMd = nullableString(
     r,
