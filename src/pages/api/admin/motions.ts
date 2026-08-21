@@ -164,6 +164,19 @@ async function setVotes(db: Db, body: unknown): Promise<Response> {
   // silently produce a motion with an incoherent electorate.
   if (lookup.body !== 'board')
     return new Response('Motion is not on a board meeting', { status: 409 });
+  // person_id is a NOT NULL FK to people(party_id), so an unknown id would
+  // otherwise throw a raw D1 FOREIGN KEY error out of the batch below — a 500
+  // the panel cannot tell from a genuine server fault (#234). Checked for the
+  // whole entry set, matching setMemberVotes below.
+  const personFailure = await personExistenceError(
+    db,
+    parsedEntries.value.map((e) => e.personId),
+    'personId',
+  );
+  if (personFailure)
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
   const rows = parsedEntries.value.map((e) => ({
     id: crypto.randomUUID(),
     motionId,

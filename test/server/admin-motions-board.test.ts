@@ -291,6 +291,59 @@ describe('motions admin route — board', () => {
     expect(rows.length).toBe(0);
   });
 
+  // #234, the sibling of setAttendance's hole: board_votes.person_id is a
+  // NOT NULL FK to people(party_id) and was reaching D1 unchecked.
+  it('setVotes with an unknown personId returns 400, not a raw 500', async () => {
+    const meetingId = await createMeeting();
+    const id = await createMotion(meetingId);
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setVotes',
+        motionId: id,
+        entries: [{ personId: 'ghost', choice: 'yes' }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe('Unknown personId in entries');
+    const rows = await getDb(env)
+      .select()
+      .from(boardVotes)
+      .where(eq(boardVotes.motionId, id));
+    expect(rows.length).toBe(0);
+  });
+
+  it('setVotes leaves the existing roll call intact when one entry is unknown', async () => {
+    const meetingId = await createMeeting();
+    const id = await createMotion(meetingId);
+    const p1 = await createPerson('A. Reyes');
+    const seeded = await POST(
+      req(url, 'POST', {
+        action: 'setVotes',
+        motionId: id,
+        entries: [{ personId: p1, choice: 'yes' }],
+      }),
+    );
+    expect(seeded.status).toBe(204);
+
+    const res = await POST(
+      req(url, 'POST', {
+        action: 'setVotes',
+        motionId: id,
+        entries: [
+          { personId: p1, choice: 'no' },
+          { personId: 'ghost', choice: 'yes' },
+        ],
+      }),
+    );
+    expect(res.status).toBe(400);
+    const rows = await getDb(env)
+      .select()
+      .from(boardVotes)
+      .where(eq(boardVotes.motionId, id));
+    expect(rows.length).toBe(1);
+    expect(rows[0].choice).toBe('yes');
+  });
+
   it('setVotes rejects an invalid choice with 400 and writes nothing', async () => {
     const meetingId = await createMeeting();
     const id = await createMotion(meetingId);
