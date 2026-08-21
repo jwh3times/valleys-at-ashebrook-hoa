@@ -129,6 +129,31 @@ that ordering breaks the admin meeting-record people picker and the candidate-li
 `0028`, and the member attendance, member vote, ballot, and proxy surfaces for `0029`, until the
 migration runs.
 
+**Pull `main` before you apply.** `wrangler d1 migrations apply` reads migrations from your LOCAL
+disk, so a checkout that predates the merge has nothing to offer and reports:
+
+```
+✅ No migrations to apply!
+```
+
+That is true of the disk and indistinguishable from a database that is already current — while the
+merged code is deployed and running against the old schema. It happened with `0029` on 2026-08-21.
+`npm run db:migrate:remote` now runs `scripts/check-migrations-current.ts` first and refuses when
+the checkout is behind `origin/main`, naming the migrations it lacks; set `MIGRATE_ALLOW_BEHIND=1`
+to apply anyway (a deliberate older tree, or an unreachable network). Belt and braces, check npm's
+banner: the version it prints is your checkout's, and it should match the release the merge minted.
+
+Afterwards, confirm the schema is sound rather than assuming it:
+
+```bash
+npx wrangler d1 migrations list DATABASE --remote   # nothing unapplied
+npm run verify:invariants -- --remote               # 17/17, incl. PRAGMA foreign_key_check
+```
+
+The invariant run is what catches a botched table rebuild — a row left pointing at a parent that no
+longer exists — which a migration that rebuilds tables under `PRAGMA defer_foreign_keys` can
+otherwise leave behind silently.
+
 ## 5. Import the Owner Roster
 
 Homeowner verification uses the owner roster only to send one-time codes to contacts already on

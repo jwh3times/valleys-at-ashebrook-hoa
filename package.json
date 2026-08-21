@@ -14,7 +14,7 @@
     "corpus:import": "node --experimental-strip-types scripts/import-corpus.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply ashebrook-hoa --local",
-    "db:migrate:remote": "wrangler d1 migrations apply ashebrook-hoa --remote",
+    "db:migrate:remote": "node --experimental-strip-types scripts/check-migrations-current.ts && wrangler d1 migrations apply ashebrook-hoa --remote",
     "deploy": "astro build && wrangler deploy -c dist/server/wrangler.json",
     "dev": "astro dev",
     "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts",
