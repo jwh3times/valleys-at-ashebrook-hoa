@@ -25,7 +25,7 @@ import type { VoteChoice, MemberVoteChoice } from '../../../lib/types';
 import {
   proxyUseError,
   parseProvenance,
-  ownerExistenceError,
+  personExistenceError,
 } from '../../../server/content/proxy-guards';
 import { LIVE_VOTING_ENABLED_SQL } from '../../../server/content/voting-state';
 import { chunkedIn, D1_MAX_BOUND_PARAMS } from '../../../server/db/chunked';
@@ -184,7 +184,7 @@ async function setVotes(db: Db, body: unknown): Promise<Response> {
 interface MemberVoteEntry {
   propertyId: string;
   choice: MemberVoteChoice;
-  castByOwnerId: string | null;
+  castByPersonId: string | null;
   proxyId: string | null;
 }
 
@@ -214,12 +214,12 @@ function parseMemberVoteEntries(
         error: 'Each vote entry needs a propertyId and a valid choice',
       };
     }
-    const provenance = parseProvenance(record, 'castByOwnerId');
+    const provenance = parseProvenance(record, 'castByPersonId');
     if (!provenance.ok) return { ok: false, error: provenance.error };
     entries.push({
       propertyId,
       choice: choice as MemberVoteChoice,
-      castByOwnerId: provenance.value.ownerId,
+      castByPersonId: provenance.value.personId,
       proxyId: provenance.value.proxyId,
     });
   }
@@ -261,13 +261,15 @@ async function setMemberVotes(
     return new Response(proxyFailure.message, {
       status: proxyFailure.status,
     });
-  const ownerFailure = await ownerExistenceError(
+  const personFailure = await personExistenceError(
     db,
-    parsedEntries.value.map((e) => e.castByOwnerId),
-    'castByOwnerId',
+    parsedEntries.value.map((e) => e.castByPersonId),
+    'castByPersonId',
   );
-  if (ownerFailure)
-    return new Response(ownerFailure.message, { status: ownerFailure.status });
+  if (personFailure)
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
 
   // Once first-open eligibility exists, every correction uses that immutable
   // electorate and its frozen weights. Before first open, preserve the
@@ -319,7 +321,7 @@ async function setMemberVotes(
     id: string;
     motionId: string;
     propertyId: string;
-    castByOwnerId: string | null;
+    castByPersonId: string | null;
     proxyId: string | null;
     weight: number;
     choice: MemberVoteChoice;
@@ -332,7 +334,7 @@ async function setMemberVotes(
       id: crypto.randomUUID(),
       motionId,
       propertyId: e.propertyId,
-      castByOwnerId: e.castByOwnerId,
+      castByPersonId: e.castByPersonId,
       proxyId: e.proxyId,
       weight,
       choice: e.choice,
@@ -385,20 +387,20 @@ async function setMemberVotes(
       database
         .prepare(
           `WITH replacement
-             (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id) AS (
+             (id, motion_id, property_id, cast_by_person_id, weight, choice, proxy_id) AS (
              SELECT
                json_extract(value, '$.id'),
                json_extract(value, '$.motionId'),
                json_extract(value, '$.propertyId'),
-               json_extract(value, '$.castByOwnerId'),
+               json_extract(value, '$.castByPersonId'),
                json_extract(value, '$.weight'),
                json_extract(value, '$.choice'),
                json_extract(value, '$.proxyId')
              FROM json_each(?)
            )
            INSERT INTO member_votes
-             (id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id)
-           SELECT id, motion_id, property_id, cast_by_owner_id, weight, choice, proxy_id
+             (id, motion_id, property_id, cast_by_person_id, weight, choice, proxy_id)
+           SELECT id, motion_id, property_id, cast_by_person_id, weight, choice, proxy_id
            FROM replacement
            WHERE changes() = 1`,
         )

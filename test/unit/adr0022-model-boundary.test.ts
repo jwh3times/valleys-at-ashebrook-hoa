@@ -21,8 +21,15 @@ import { join, relative } from 'node:path';
 //     WRITES the ledger — the #217-decided Access Event — and it is called
 //     only from the derived serving path, never from shadow.)
 //
-//  2. NO MEMBER OR PUBLIC CONTENT READ touches the new tables. Tier-filtered
-//     reads stay on the legacy roster until the flip.
+//  2. CONTENT READS REACH THE ROSTER ONLY WHERE DECLARED. This began as "no
+//     content read touches the new tables at all", which held while the legacy
+//     roster was authoritative. #248 part 2 ended that: the meeting, elections,
+//     and proxies records now name a party-roster Person as who acted, so the
+//     content layer must ask the roster who may act for a lot. What replaces
+//     the blanket rule is narrower and still load-bearing — a declared list of
+//     content modules, each limited to the IDENTITY AND AUTHORITY tables. A
+//     content read of access_grants, the audit ledger, or the cutover flags is
+//     as wrong today as it was in phase 1.
 //
 //  3. THE NEW-MODEL SURFACE IS A DECLARED INVENTORY. Phase 3b retired the
 //     phase-2 claim that nothing writes the new roster through a route — the
@@ -59,6 +66,51 @@ const ALLOWED = new Set([
   // was retired by phase 3e in favor of the five writable panels.)
   'pages/api/admin/roster-preview.ts',
 ]);
+
+/**
+ * Content modules that legitimately reach the party roster, and what for.
+ *
+ * #248 part 2 (migration 0029) repointed `member_attendance`, `member_votes`,
+ * `ballots`, and `proxies` off the legacy `owners` table onto
+ * `people(party_id)`. Answering "who may act for this lot" is therefore a
+ * roster question now, and these are the modules that ask it. They read
+ * IDENTITY AND AUTHORITY only — see ROSTER_TABLES_ALLOWED_IN_CONTENT.
+ */
+const ROSTER_READING_CONTENT = new Map([
+  [
+    'proxy-guards.ts',
+    'the phase-3d grantor re-validation, which asks whether a proxy grantor ' +
+      'still holds the lot',
+  ],
+  [
+    'voting.ts',
+    "the cast path's preflight and its mutation-boundary authority predicate",
+  ],
+  [
+    'voting-reads.ts',
+    'the provenance options offered for a caller lot at /vote',
+  ],
+  [
+    'reads.ts',
+    'the Person names on member attendance, member votes, ballots and ' +
+      'proxies, and the member lot pickers',
+  ],
+]);
+
+/**
+ * What a declared content module may name. Identity and authority — never
+ * access, never the ledger, never the cutover flags.
+ */
+const ROSTER_TABLES_ALLOWED_IN_CONTENT = new Set([
+  'parties',
+  'ownerships',
+  'representations',
+]);
+
+/** Does this module reach the roster indirectly, via an import? */
+function importsRoster(text: string): boolean {
+  return /from '[^']*(db\/roster-schema|roster\/authority)'/.test(text);
+}
 
 /**
  * The phase 3b (#218) inventory: routes that operate the new roster, and the
@@ -104,6 +156,10 @@ const NEW_MODEL_SURFACE = new Set([
   // no roster row, and the roster remains the party surfaces' to write.
   'pages/api/admin/meetings.ts',
   'pages/api/admin/candidates.ts',
+  // #248 part 2: the proxies record names a Person as grantor and holder, so
+  // the board route pre-checks that Person exists and the member route offers
+  // the lot's authority holders. Neither writes a roster row.
+  'pages/api/admin/proxies.ts',
   // Phase 3e (#221): the two legacy role surfaces, re-pointed behind the
   // cutover flag. Their `derived` branch writes Access Grants and Person Link
   // endings; their `legacy` branch is unchanged.
@@ -118,6 +174,9 @@ const NEW_MODEL_SURFACE = new Set([
   'server/roster/identity.ts',
   'server/roster/bootstrap.ts',
   'server/roster/transfer-effects.ts',
+  // #248 part 2: the single definition of "this Person holds Lot Authority
+  // over this Lot", shared by the content guards and the casting SQL.
+  'server/roster/authority.ts',
 ]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
@@ -203,16 +262,44 @@ describe('the ADR 0022 model boundary', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps content reads on the legacy roster', () => {
+  it('lets only declared content modules reach the roster, for identity only', () => {
+    // The narrowed form of rule 2. An undeclared content module reaching the
+    // roster — directly or through roster/authority.ts — is the quiet leak
+    // this catches; so is a declared one wandering from identity into access
+    // or the audit ledger.
     const offenders: string[] = [];
     for (const file of sourceFiles(join(SRC, 'server', 'content'))) {
       const rel = relativePath(file);
+      const name = rel.slice('server/content/'.length);
       const text = readFileSync(file, 'utf8');
-      for (const table of NEW_TABLES) {
-        if (text.includes(table)) offenders.push(`${rel} reads ${table}`);
+      const declared = ROSTER_READING_CONTENT.has(name);
+      const named = NEW_TABLES.filter((table) => text.includes(table));
+      if (!declared) {
+        for (const table of named) offenders.push(`${rel} reads ${table}`);
+        if (importsRoster(text))
+          offenders.push(`${rel} imports the roster without being declared`);
+        continue;
+      }
+      for (const table of named) {
+        if (!ROSTER_TABLES_ALLOWED_IN_CONTENT.has(table))
+          offenders.push(`${rel} reads ${table}, which is not identity`);
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('keeps the declared content list honest as modules are repointed', () => {
+    // The anti-rot half, matching legacy-roster-consumers.test.ts: a module
+    // listed here that no longer reaches the roster tells a future reader
+    // there is a boundary to respect where there is none.
+    const stale: string[] = [];
+    for (const name of ROSTER_READING_CONTENT.keys()) {
+      const text = readFileSync(join(SRC, 'server', 'content', name), 'utf8');
+      const reaches =
+        importsRoster(text) || NEW_TABLES.some((t) => text.includes(t));
+      if (!reaches) stale.push(`${name} no longer reaches the roster`);
+    }
+    expect(stale).toEqual([]);
   });
 
   it('confines the new roster to the declared route and module inventory', () => {

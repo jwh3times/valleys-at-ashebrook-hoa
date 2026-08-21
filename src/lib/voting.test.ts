@@ -15,7 +15,7 @@ describe('voting write helpers', () => {
         electionId: 'e1',
         propertyId: 'p1',
         candidateIds: ['c1', 'c2'],
-        castByOwnerId: 'o1',
+        castByPersonId: 'o1',
         proxyId: null,
       }),
     ).rejects.toThrow('Ballot is closed');
@@ -27,7 +27,7 @@ describe('voting write helpers', () => {
         electionId: 'e1',
         propertyId: 'p1',
         candidateIds: ['c1', 'c2'],
-        castByOwnerId: 'o1',
+        castByPersonId: 'o1',
         proxyId: null,
       }),
     });
@@ -43,7 +43,7 @@ describe('voting write helpers', () => {
       motionId: 'm1',
       propertyId: 'p1',
       choice: 'yes',
-      castByOwnerId: 'o1',
+      castByPersonId: 'o1',
       proxyId: null,
     });
     expect(fetchMock).toHaveBeenCalledWith('/api/vote', {
@@ -54,7 +54,7 @@ describe('voting write helpers', () => {
         motionId: 'm1',
         propertyId: 'p1',
         choice: 'yes',
-        castByOwnerId: 'o1',
+        castByPersonId: 'o1',
         proxyId: null,
       }),
     });
@@ -71,7 +71,7 @@ describe('voting write helpers', () => {
         motionId: 'm1',
         propertyId: 'p1',
         choice: 'yes',
-        castByOwnerId: 'o1',
+        castByPersonId: 'o1',
         proxyId: null,
       }),
     ).rejects.toThrow('Voting request failed (200)');

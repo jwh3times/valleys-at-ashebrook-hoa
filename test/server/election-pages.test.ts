@@ -136,7 +136,7 @@ describe('/elections', () => {
         address: '111 Secret Ballot Lane',
         weight: 1,
         viaProxy: false,
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: null,
       },
     ]);

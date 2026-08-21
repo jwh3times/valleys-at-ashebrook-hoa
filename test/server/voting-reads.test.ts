@@ -17,11 +17,11 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  owners,
   properties,
   proxies,
   userPropertyLinks,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   fetchElectionsFor,
@@ -60,8 +60,12 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(owners);
   await db.delete(userPropertyLinks);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(users);
 
@@ -91,21 +95,15 @@ beforeEach(async () => {
     verifiedAt: now,
     method: 'otp_email',
   });
-  await db
-    .insert(owners)
-    .values([
-      owner('owner-one', 'property-own', 'Alex Owner'),
-      owner('owner-two', 'property-own', 'Blair Owner'),
-      owner('owner-inactive', 'property-own', 'Inactive Owner', 'inactive'),
-      owner('grantor-held', 'property-held', 'Casey Grantor'),
-      owner('grantor-meeting', 'property-meeting', 'Dana Grantor'),
-      owner('grantor-no-snapshot', 'property-no-snapshot', 'Emery Grantor'),
-      owner(
-        'grantor-unrepresented',
-        'property-unrepresented',
-        'Finley Grantor',
-      ),
-    ]);
+  await seedPersons([
+    person('owner-one', 'property-own', 'Alex Owner'),
+    person('owner-two', 'property-own', 'Blair Owner'),
+    person('owner-inactive', 'property-own', 'Inactive Owner', 'inactive'),
+    person('grantor-held', 'property-held', 'Casey Grantor'),
+    person('grantor-meeting', 'property-meeting', 'Dana Grantor'),
+    person('grantor-no-snapshot', 'property-no-snapshot', 'Emery Grantor'),
+    person('grantor-unrepresented', 'property-unrepresented', 'Finley Grantor'),
+  ]);
   await db
     .insert(meetings)
     .values([
@@ -247,7 +245,7 @@ beforeEach(async () => {
       electionId: 'election-visible',
       propertyId: 'property-own',
       weight: 7,
-      castByOwnerId: 'owner-one',
+      castByPersonId: 'owner-one',
       recordedAt: now,
     },
     {
@@ -269,7 +267,7 @@ beforeEach(async () => {
     id: 'member-vote-held',
     motionId: 'motion-visible',
     propertyId: 'property-held',
-    castByOwnerId: null,
+    castByPersonId: null,
     weight: 3,
     choice: 'yes',
     proxyId: 'proxy-held-meeting',
@@ -308,7 +306,7 @@ describe('fetchOpenVotingFor', () => {
         address: '1 Ashebrook Lane',
         weight: 7,
         hasCast: true,
-        ownerOptions: [
+        personOptions: [
           { id: 'owner-one', fullName: 'Alex Owner' },
           { id: 'owner-two', fullName: 'Blair Owner' },
         ],
@@ -325,7 +323,7 @@ describe('fetchOpenVotingFor', () => {
         address: '2 Ashebrook Lane',
         weight: 3,
         hasCast: false,
-        ownerOptions: [],
+        personOptions: [],
         proxyOptions: [
           {
             id: 'proxy-held-election',
@@ -344,7 +342,7 @@ describe('fetchOpenVotingFor', () => {
         address: '3 Ashebrook Lane',
         weight: 4,
         hasCast: true,
-        ownerOptions: [],
+        personOptions: [],
         proxyOptions: [
           {
             id: 'proxy-meeting-only',
@@ -449,20 +447,62 @@ function property(id: string, address: string, voteWeight: number) {
   };
 }
 
-function owner(
+interface PersonSpec {
+  id: string;
+  propertyId: string;
+  fullName: string;
+  endDay: string | null;
+}
+
+/**
+ * A Person holding Lot Authority (#248 part 2). `'inactive'` seeds a FORMER
+ * holder — an ended Ownership interval, where the legacy shape used
+ * `owners.status`.
+ */
+function person(
   id: string,
   propertyId: string,
   fullName: string,
   status: 'active' | 'inactive' = 'active',
-) {
+): PersonSpec {
   return {
     id,
     propertyId,
     fullName,
-    status,
-    createdAt: now,
-    updatedAt: now,
+    endDay: status === 'active' ? null : '2020-01-01',
   };
+}
+
+async function seedPersons(specs: PersonSpec[]) {
+  const db = getDb(env);
+  await db.insert(parties).values(
+    specs.map((p) => ({
+      id: p.id,
+      kind: 'person' as const,
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
+  await db.insert(people).values(
+    specs.map((p) => ({
+      partyId: p.id,
+      partyKind: 'person',
+      fullName: p.fullName,
+      nameNormalized: p.fullName.toLowerCase(),
+      updatedAt: now,
+    })),
+  );
+  await db.insert(ownerships).values(
+    specs.map((p) => ({
+      id: `${p.id}-own`,
+      ownerPartyId: p.id,
+      lotId: p.propertyId,
+      startDay: null,
+      endDay: p.endDay,
+      createdAt: now,
+      updatedAt: now,
+    })),
+  );
 }
 
 function meeting(
@@ -546,17 +586,17 @@ function motion(
 function proxy(
   id: string,
   propertyId: string,
-  grantorOwnerId: string,
+  grantorPersonId: string,
   holderName: string,
-  holderOwnerId: string,
+  holderPersonId: string,
   occasion: { meetingId: string } | { electionId: string },
 ) {
   return {
     id,
     propertyId,
-    grantorOwnerId,
+    grantorPersonId,
     holderName,
-    holderOwnerId,
+    holderPersonId,
     meetingId: 'meetingId' in occasion ? occasion.meetingId : null,
     electionId: 'electionId' in occasion ? occasion.electionId : null,
     createdBy: 'board-user',

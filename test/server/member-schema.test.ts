@@ -4,7 +4,6 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import {
   properties,
-  owners,
   meetings,
   memberAttendance,
   memberVotes,
@@ -16,6 +15,7 @@ import {
   seedProperty,
   seedMeeting,
   seedPerson,
+  seedLotAuthority,
 } from './fixtures';
 import { people } from '../../src/server/db/roster-schema';
 
@@ -47,24 +47,18 @@ describe('member meeting schema', () => {
   it('records member attendance per property with an optional representative', async () => {
     const db = getDb(env);
     await seedProperty('p1');
-    await db.insert(owners).values({
-      id: 'o1',
-      propertyId: 'p1',
-      fullName: 'A. Reyes',
-      createdAt: now,
-      updatedAt: now,
-    });
+    await seedLotAuthority('o1', 'p1', { fullName: 'A. Reyes' });
     await seedMeeting('m1');
     await db.insert(memberAttendance).values({
       id: 'a1',
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: 'o1',
+      representedByPersonId: 'o1',
     });
     const rows = await db.select().from(memberAttendance);
     expect(rows.length).toBe(1);
-    expect(rows[0].representedByOwnerId).toBe('o1');
+    expect(rows[0].representedByPersonId).toBe('o1');
     expect(rows[0].proxyId).toBeNull();
   });
 
@@ -76,10 +70,10 @@ describe('member meeting schema', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     const rows = await getDb(env).select().from(memberAttendance);
-    expect(rows[0].representedByOwnerId).toBeNull();
+    expect(rows[0].representedByPersonId).toBeNull();
   });
 
   it('rejects a second attendance row for the same property at one meeting', async () => {
@@ -91,7 +85,7 @@ describe('member meeting schema', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     await expect(
       db.insert(memberAttendance).values({
@@ -99,7 +93,7 @@ describe('member meeting schema', () => {
         meetingId: 'm1',
         propertyId: 'p1',
         present: false,
-        representedByOwnerId: null,
+        representedByPersonId: null,
       }),
     ).rejects.toThrow();
   });
@@ -124,7 +118,7 @@ describe('member meeting schema', () => {
       id: 'v1',
       motionId: 'mo1',
       propertyId: 'p1',
-      castByOwnerId: null,
+      castByPersonId: null,
       weight: 1,
       choice: 'yes',
     });
@@ -133,7 +127,7 @@ describe('member meeting schema', () => {
         id: 'v2',
         motionId: 'mo1',
         propertyId: 'p1',
-        castByOwnerId: null,
+        castByPersonId: null,
         weight: 1,
         choice: 'no',
       }),
@@ -160,7 +154,7 @@ describe('member meeting schema', () => {
       id: 'v1',
       motionId: 'mo1',
       propertyId: 'p1',
-      castByOwnerId: null,
+      castByPersonId: null,
       weight: 1,
       choice: 'yes',
     });
@@ -179,7 +173,7 @@ describe('member meeting schema', () => {
       meetingId: 'm1',
       propertyId: 'p1',
       present: true,
-      representedByOwnerId: null,
+      representedByPersonId: null,
     });
     await db.insert(motions).values({
       id: 'mo1',
@@ -197,7 +191,7 @@ describe('member meeting schema', () => {
       id: 'v1',
       motionId: 'mo1',
       propertyId: 'p1',
-      castByOwnerId: null,
+      castByPersonId: null,
       weight: 1,
       choice: 'yes',
     });

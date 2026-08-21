@@ -10,7 +10,7 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
 import { POST as meetingsPost } from '../../src/pages/api/admin/meetings';
 import { POST as motionsPost } from '../../src/pages/api/admin/motions';
 import { POST as electionsPost } from '../../src/pages/api/admin/elections';
-import { PATCH as ownersPatch } from '../../src/pages/api/admin/owners';
+
 import { POST as votePost } from '../../src/pages/api/vote';
 import { legacyAuthContext } from '../../src/server/authz/context';
 import type { AuthContext } from '../../src/server/authz/guards';
@@ -22,12 +22,12 @@ import {
   memberAttendance,
   memberVotes,
   motionEligibility,
-  owners,
   proxies,
   settings,
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
+import { ownerships } from '../../src/server/db/roster-schema';
 import { associationDateIso } from '../../src/lib/format';
 import * as fx from './fixtures';
 
@@ -40,7 +40,6 @@ const GRANTOR_REFUSAL = 'Proxy grantor no longer holds authority for this lot';
 const meetingsUrl = 'http://localhost/api/admin/meetings';
 const motionsUrl = 'http://localhost/api/admin/motions';
 const electionsUrl = 'http://localhost/api/admin/elections';
-const ownersUrl = 'http://localhost/api/admin/owners';
 const voteUrl = 'http://localhost/api/vote';
 
 const now = fx.now;
@@ -75,16 +74,6 @@ function req(url: string, body: unknown) {
   } as never;
 }
 
-function patchReq(url: string, body: unknown) {
-  return {
-    request: new Request(url, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  } as never;
-}
-
 async function callVote(body: unknown, ctx: AuthContext): Promise<Response> {
   return votePost({
     request: new Request(voteUrl, {
@@ -99,11 +88,28 @@ async function callVote(body: unknown, ctx: AuthContext): Promise<Response> {
   } as never);
 }
 
-async function deactivateGrantor(ownerId: string): Promise<number> {
-  const response = await ownersPatch(
-    patchReq(ownersUrl, { id: ownerId, status: 'inactive' }),
-  );
-  return response.status;
+/**
+ * End the grantor's Ownership — the transfer this suite is about — and answer
+ * how many rows moved.
+ *
+ * Before #248 part 2 this flipped `owners.status` through the legacy Owners
+ * route. Authority now lives on the roster, and the transfer is written
+ * directly rather than through `/api/admin/roster-ownerships` on purpose: that
+ * route's own behavior (its audit correlation and the transfer-effects engine)
+ * is transfer-effects.test.ts's subject, while THIS suite is about what the
+ * proxy guards do once authority is gone, however it went. Writing the state
+ * directly also makes the interleaving tests below a test of the casting
+ * predicate rather than of another route's batch.
+ *
+ * `endDay` is today: an Ownership confers nothing on its own end day
+ * (`day < end_day`), so the grantor's authority is gone immediately.
+ */
+async function endGrantorOwnership(personId: string): Promise<number> {
+  const result = await getDb(env)
+    .update(ownerships)
+    .set({ endDay: associationDateIso(), updatedAt: new Date() })
+    .where(eq(ownerships.ownerPartyId, personId));
+  return result.meta.changes;
 }
 
 beforeEach(async () => {
@@ -159,12 +165,15 @@ beforeEach(async () => {
       method: 'board_manual',
     },
   ]);
-  await fx.seedOwner('owner-holder', 'property-own');
-  await fx.seedOwner('owner-grantor', 'property-proxy');
+  await fx.seedLotAuthority('owner-holder', 'property-own');
+  await fx.seedLotAuthority('owner-grantor', 'property-proxy');
   // The seller held property-buyer when the election opened; the buyer owns it
-  // now. Both rows exist, only one is active.
-  await fx.seedOwner('owner-seller', 'property-buyer', { status: 'inactive' });
-  await fx.seedOwner('owner-buyer', 'property-buyer');
+  // now. Both Ownerships exist, only one is current — #248 part 2 makes that
+  // an ended interval rather than an `owners.status` flag.
+  await fx.seedLotAuthority('owner-seller', 'property-buyer', {
+    endDay: '2020-01-01',
+  });
+  await fx.seedLotAuthority('owner-buyer', 'property-buyer');
 
   // Live-voting occasion: an open conducted election held at a draft member
   // meeting that also carries an open motion.
@@ -197,8 +206,8 @@ beforeEach(async () => {
   ]);
   await fx.seedProxy('proxy-live-meeting', {
     propertyId: 'property-proxy',
-    grantorOwnerId: 'owner-grantor',
-    holderOwnerId: 'owner-holder',
+    grantorPersonId: 'owner-grantor',
+    holderPersonId: 'owner-holder',
     meetingId: 'meeting-live',
     createdBy: 'board-user',
   });
@@ -219,15 +228,15 @@ beforeEach(async () => {
   });
   await fx.seedProxy('proxy-record-meeting', {
     propertyId: 'property-proxy',
-    grantorOwnerId: 'owner-grantor',
-    holderOwnerId: 'owner-holder',
+    grantorPersonId: 'owner-grantor',
+    holderPersonId: 'owner-holder',
     meetingId: 'meeting-record',
     createdBy: 'board-user',
   });
   await fx.seedProxy('proxy-record-election', {
     propertyId: 'property-proxy',
-    grantorOwnerId: 'owner-grantor',
-    holderOwnerId: 'owner-holder',
+    grantorPersonId: 'owner-grantor',
+    holderPersonId: 'owner-holder',
     electionId: 'election-record',
     createdBy: 'board-user',
   });
@@ -255,7 +264,7 @@ describe('grantor re-validation on the record-keeping routes', () => {
   });
 
   it('setMemberAttendance refuses a proxy whose grantor is no longer active', async () => {
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
     const response = await meetingsPost(
       req(meetingsUrl, {
         action: 'setMemberAttendance',
@@ -295,7 +304,7 @@ describe('grantor re-validation on the record-keeping routes', () => {
   });
 
   it('setMemberVotes refuses a proxy whose grantor is no longer active', async () => {
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
     const response = await motionsPost(
       req(motionsUrl, {
         action: 'setMemberVotes',
@@ -331,7 +340,7 @@ describe('grantor re-validation on the record-keeping routes', () => {
   });
 
   it('setBallots refuses a proxy whose grantor is no longer active', async () => {
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
     const response = await electionsPost(
       req(electionsUrl, {
         action: 'setBallots',
@@ -349,7 +358,7 @@ describe('grantor re-validation on the record-keeping routes', () => {
   it('names the grantor problem rather than a lot or occasion mismatch', async () => {
     // The three 409s share a status code, so the message is the only thing
     // telling a board member which rule refused the entry.
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
     const grantor = await meetingsPost(
       req(meetingsUrl, {
         action: 'setMemberAttendance',
@@ -388,7 +397,7 @@ describe('grantor re-validation on the live cast path', () => {
       electionId: 'election-live',
       propertyId: 'property-proxy',
       candidateIds: ['candidate-live'],
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: 'proxy-live-meeting',
     };
   }
@@ -399,7 +408,7 @@ describe('grantor re-validation on the live cast path', () => {
       motionId: 'motion-live',
       propertyId: 'property-proxy',
       choice: 'yes',
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: 'proxy-live-meeting',
     };
   }
@@ -416,7 +425,7 @@ describe('grantor re-validation on the live cast path', () => {
   });
 
   it('refuses a proxy ballot once the grantor is no longer active', async () => {
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
     const response = await callVote(proxyBallot(), holderCaller);
     expect(response.status).toBe(409);
     expect(await response.text()).toBe(GRANTOR_REFUSAL);
@@ -433,7 +442,7 @@ describe('grantor re-validation on the live cast path', () => {
   });
 
   it('refuses a proxy motion vote once the grantor is no longer active', async () => {
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
     const response = await callVote(proxyMotionVote(), holderCaller);
     expect(response.status).toBe(409);
     expect(await response.text()).toBe(GRANTOR_REFUSAL);
@@ -453,7 +462,7 @@ describe('a buyer who acquires a lot mid-election', () => {
         electionId: 'election-live',
         propertyId: 'property-buyer',
         candidateIds: ['candidate-live'],
-        castByOwnerId: 'owner-buyer',
+        castByPersonId: 'owner-buyer',
         proxyId: null,
       },
       buyerCaller,
@@ -465,7 +474,7 @@ describe('a buyer who acquires a lot mid-election', () => {
       .where(eq(ballots.propertyId, 'property-buyer'));
     expect(rows).toHaveLength(1);
     expect(rows[0].weight).toBe(4);
-    expect(rows[0].castByOwnerId).toBe('owner-buyer');
+    expect(rows[0].castByPersonId).toBe('owner-buyer');
   });
 
   it('refuses the departed seller on the same lot', async () => {
@@ -477,7 +486,7 @@ describe('a buyer who acquires a lot mid-election', () => {
         electionId: 'election-live',
         propertyId: 'property-buyer',
         candidateIds: ['candidate-live'],
-        castByOwnerId: 'owner-seller',
+        castByPersonId: 'owner-seller',
         proxyId: null,
       },
       buyerCaller,
@@ -494,7 +503,7 @@ describe('a proxy cast racing an ownership change', () => {
       electionId: 'election-live',
       propertyId: 'property-proxy',
       candidateIds: ['candidate-live'],
-      castByOwnerId: null,
+      castByPersonId: null,
       proxyId: 'proxy-live-meeting',
     };
   }
@@ -506,7 +515,7 @@ describe('a proxy cast racing an ownership change', () => {
     try {
       const castPromise = callVote(proxyBallot(), holderCaller);
       await barrier.reached;
-      expect(await deactivateGrantor('owner-grantor')).toBe(204);
+      expect(await endGrantorOwnership('owner-grantor')).toBe(1);
       barrier.release();
       const response = await castPromise;
       expect(response.status).toBe(409);
@@ -520,17 +529,17 @@ describe('a proxy cast racing an ownership change', () => {
     expect(await getDb(env).select().from(ballots)).toHaveLength(0);
     expect(await getDb(env).select().from(ballotChoices)).toHaveLength(0);
     const grantorRows = await getDb(env)
-      .select({ status: owners.status })
-      .from(owners)
-      .where(eq(owners.id, 'owner-grantor'));
-    expect(grantorRows[0].status).toBe('inactive');
+      .select({ endDay: ownerships.endDay })
+      .from(ownerships)
+      .where(eq(ownerships.ownerPartyId, 'owner-grantor'));
+    expect(grantorRows[0].endDay).toBe(associationDateIso());
   });
 
   it('lets the ownership change succeed when the cast commits first', async () => {
     const response = await callVote(proxyBallot(), holderCaller);
     expect(response.status).toBe(204);
 
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
 
     // The cast was valid when it was made and is not retroactively undone;
     // the transfer is recorded alongside it.
@@ -539,10 +548,10 @@ describe('a proxy cast racing an ownership change', () => {
     expect(ballotRows[0].proxyId).toBe('proxy-live-meeting');
     expect(await getDb(env).select().from(ballotChoices)).toHaveLength(1);
     const grantorRows = await getDb(env)
-      .select({ status: owners.status })
-      .from(owners)
-      .where(eq(owners.id, 'owner-grantor'));
-    expect(grantorRows[0].status).toBe('inactive');
+      .select({ endDay: ownerships.endDay })
+      .from(ownerships)
+      .where(eq(ownerships.ownerPartyId, 'owner-grantor'));
+    expect(grantorRows[0].endDay).toBe(associationDateIso());
 
     // And the now-stale proxy confers nothing on the next occasion.
     const later = await callVote(
@@ -551,7 +560,7 @@ describe('a proxy cast racing an ownership change', () => {
         motionId: 'motion-live',
         propertyId: 'property-proxy',
         choice: 'yes',
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: 'proxy-live-meeting',
       },
       holderCaller,
@@ -563,7 +572,7 @@ describe('a proxy cast racing an ownership change', () => {
   it('keeps the proxy row itself intact through both orderings', async () => {
     // Deletion is the entire revocation model and is deliberately NOT what a
     // lapsed grantor triggers — the record stands, only its effect stops.
-    expect(await deactivateGrantor('owner-grantor')).toBe(204);
+    expect(await endGrantorOwnership('owner-grantor')).toBe(1);
     const rows = await getDb(env)
       .select()
       .from(proxies)

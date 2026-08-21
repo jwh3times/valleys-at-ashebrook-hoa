@@ -18,6 +18,7 @@ import {
   settings,
   userPropertyLinks,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { users } from '../../src/server/db/auth-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
@@ -37,6 +38,11 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(userPropertyLinks);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(users);
   await db.delete(settings);

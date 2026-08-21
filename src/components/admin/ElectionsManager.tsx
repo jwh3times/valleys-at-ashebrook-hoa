@@ -13,6 +13,7 @@ import {
   saveCandidate,
   deleteCandidate,
   fetchProperties,
+  fetchLotPeople,
   fetchMeetingRosterPeople,
   fetchRosterPeople,
   fetchProxies,
@@ -33,6 +34,7 @@ import type {
   PropertyWithOwners,
   ProxyDetail,
 } from '../../lib/types';
+import type { LotPeople } from '../../lib/admin';
 import { useAdminResource } from './useAdminResource';
 import ProxyPicker, { proxiesForOccasion } from './ProxyPicker';
 
@@ -64,13 +66,21 @@ const emptyElection = {
 
 const emptyCandidate = { fullName: '', statementMd: '', personId: '' };
 
+/**
+ * The Persons offerable as a ballot's caster for one lot — current holders and
+ * former ones alike, since a recorded paper election may predate a sale.
+ */
+function personsForLot(lotId: string, lotPeople: LotPeople[]) {
+  return lotPeople.find((l) => l.lotId === lotId)?.persons ?? [];
+}
+
 /** Per-property ballot draft, keyed by propertyId. */
 interface BallotFormRow {
   selected: boolean;
   weight: string;
-  /** Empty string = no proxy. Picking a proxy clears castByOwnerId. */
+  /** Empty string = no proxy. Picking a proxy clears castByPersonId. */
   proxyId: string;
-  castByOwnerId: string;
+  castByPersonId: string;
 }
 
 /** Per-candidate winner draft for certification, keyed by candidateId.
@@ -121,6 +131,10 @@ export default function ElectionsManager() {
   // primary save/delete target. Only active properties are eligible to cast
   // a ballot, matching ADR 0015's treatment of member-meeting attendance.
   const [properties, setProperties] = useState<PropertyWithOwners[]>([]);
+  // Who may act for each lot, for the ballot caster picker — the roster's Lot
+  // Authority since #248 part 2, former holders included so a paper election
+  // from before a sale stays recordable.
+  const [lotPeople, setLotPeople] = useState<LotPeople[]>([]);
   useEffect(() => {
     fetchProperties()
       .then(setProperties)
@@ -128,6 +142,14 @@ export default function ElectionsManager() {
         const message =
           (err as { message?: string } | null)?.message ??
           'could not load the property roster.';
+        setMsg('Error: ' + message);
+      });
+    fetchLotPeople()
+      .then(setLotPeople)
+      .catch((err: unknown) => {
+        const message =
+          (err as { message?: string } | null)?.message ??
+          'could not load who may act for each lot.';
         setMsg('Error: ' + message);
       });
   }, [setMsg]);
@@ -213,7 +235,7 @@ export default function ElectionsManager() {
             selected: true,
             weight: String(b.weight),
             proxyId: b.proxyId ?? '',
-            castByOwnerId: b.castByOwnerId ?? '',
+            castByPersonId: b.castByPersonId ?? '',
           },
         ]),
       ),
@@ -419,7 +441,7 @@ export default function ElectionsManager() {
             propertyId: p.id,
             weight: trimmedWeight === '' ? undefined : Number(trimmedWeight),
             proxyId: row.proxyId || null,
-            castByOwnerId: row.castByOwnerId || null,
+            castByPersonId: row.castByPersonId || null,
           };
         });
       await setBallots(e.id, entries);
@@ -1125,8 +1147,8 @@ export default function ElectionsManager() {
                                                   prev[p.id]?.weight ?? '',
                                                 proxyId:
                                                   prev[p.id]?.proxyId ?? '',
-                                                castByOwnerId:
-                                                  prev[p.id]?.castByOwnerId ??
+                                                castByPersonId:
+                                                  prev[p.id]?.castByPersonId ??
                                                   '',
                                               },
                                             }))
@@ -1166,15 +1188,16 @@ export default function ElectionsManager() {
                                                   weight: evt.target.value,
                                                   proxyId:
                                                     prev[p.id]?.proxyId ?? '',
-                                                  castByOwnerId:
-                                                    prev[p.id]?.castByOwnerId ??
-                                                    '',
+                                                  castByPersonId:
+                                                    prev[p.id]
+                                                      ?.castByPersonId ?? '',
                                                 },
                                               }))
                                             }
                                             placeholder={String(p.voteWeight)}
                                           />
-                                          {p.owners.length > 0 && (
+                                          {personsForLot(p.id, lotPeople)
+                                            .length > 0 && (
                                             <>
                                               <label
                                                 htmlFor={`ballot-cast-by-${e.id}-${p.id}`}
@@ -1183,7 +1206,9 @@ export default function ElectionsManager() {
                                               </label>
                                               <select
                                                 id={`ballot-cast-by-${e.id}-${p.id}`}
-                                                value={row?.castByOwnerId ?? ''}
+                                                value={
+                                                  row?.castByPersonId ?? ''
+                                                }
                                                 disabled={
                                                   busy || !!row?.proxyId
                                                 }
@@ -1200,7 +1225,7 @@ export default function ElectionsManager() {
                                                       proxyId:
                                                         prev[p.id]?.proxyId ??
                                                         '',
-                                                      castByOwnerId:
+                                                      castByPersonId:
                                                         evt.target.value,
                                                     },
                                                   }))
@@ -1209,7 +1234,10 @@ export default function ElectionsManager() {
                                                 <option value="">
                                                   — none —
                                                 </option>
-                                                {p.owners.map((o) => (
+                                                {personsForLot(
+                                                  p.id,
+                                                  lotPeople,
+                                                ).map((o) => (
                                                   <option
                                                     key={o.id}
                                                     value={o.id}
@@ -1248,10 +1276,10 @@ export default function ElectionsManager() {
                                                   // from the server: picking
                                                   // a proxy clears the
                                                   // cast-by owner.
-                                                  castByOwnerId: proxyId
+                                                  castByPersonId: proxyId
                                                     ? ''
                                                     : (prev[p.id]
-                                                        ?.castByOwnerId ?? ''),
+                                                        ?.castByPersonId ?? ''),
                                                 },
                                               }))
                                             }

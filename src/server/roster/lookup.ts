@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { properties, owners } from '../db/schema';
+import { properties } from '../db/schema';
 import { normalizeAddress } from './normalize';
 
 export { normalizeAddress };
@@ -17,11 +17,4 @@ export async function findActivePropertyByAddress(db: Db, address: string) {
       ),
     );
   return property ?? null;
-}
-
-export async function getActiveOwnersForProperty(db: Db, propertyId: string) {
-  return db
-    .select()
-    .from(owners)
-    .where(and(eq(owners.propertyId, propertyId), eq(owners.status, 'active')));
 }

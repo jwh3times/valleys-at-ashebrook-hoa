@@ -23,7 +23,6 @@ import {
   motionEligibility,
   boardVotes,
   properties,
-  owners,
   memberAttendance,
   memberVotes,
   resolutions,
@@ -34,7 +33,8 @@ import {
   proxies,
 } from '../db/schema';
 import { people } from '../db/roster-schema';
-import { personDisplayLabel } from '../../lib/format';
+import { fetchLotAuthority } from '../roster/authority';
+import { associationDateIso, personDisplayLabel } from '../../lib/format';
 import { visibleTiers } from './visibility';
 import type { Role } from '../authz/guards';
 import { tallyVotes } from '../../lib/types';
@@ -187,6 +187,25 @@ async function withMotionCounts(
 }
 
 /**
+ * Every roster Person's display label, by party id.
+ *
+ * #248 made the meeting record (part 1) and then the member, elections, and
+ * proxies records (part 2) name a party-roster Person wherever they record who
+ * acted. `people.full_name` is nullable under Roster Redaction, so every label
+ * goes through personDisplayLabel — a surface with its own fallback is a bug
+ * (see src/lib/format.ts). One unscoped lookup, then a map: the same shape the
+ * property-address maps in this file use.
+ */
+async function personNameMap(db: Db): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ partyId: people.partyId, fullName: people.fullName })
+    .from(people);
+  return new Map(
+    rows.map((p) => [p.partyId, personDisplayLabel(p.fullName, p.partyId)]),
+  );
+}
+
+/**
  * Assembles the MeetingDetail body (attendance, motions, roll calls, derived
  * tallies) for one already-selected meeting row. Shared by fetchMeetingFor
  * (public, status/tier-gated) and fetchAdminMeeting (board-only, no gate) so
@@ -207,19 +226,7 @@ async function assembleMeetingDetail(
 ): Promise<MeetingDetail> {
   const id = m.id;
 
-  // #248: board attendance, roll call, and mover/second name a party-roster
-  // Person. `people.full_name` is nullable under Roster Redaction, so the label
-  // goes through personDisplayLabel like every other Person read — a surface
-  // with its own fallback is a bug (see src/lib/format.ts).
-  const personRows = await db
-    .select({ partyId: people.partyId, fullName: people.fullName })
-    .from(people);
-  const nameOf = new Map(
-    personRows.map((p) => [
-      p.partyId,
-      personDisplayLabel(p.fullName, p.partyId),
-    ]),
-  );
+  const nameOf = await personNameMap(db);
 
   const attendanceRows = await db
     .select({
@@ -265,10 +272,11 @@ async function assembleMeetingDetail(
     votesByMotion.set(v.motionId, list);
   }
 
-  // Property addresses and owner names, resolved the same way board_people
-  // names are resolved above: one unscoped lookup, then a map. Both member
-  // attendance and every motion's member votes need both maps, so they are
-  // built once and shared.
+  // Property addresses, resolved the same way Person names are resolved above:
+  // one unscoped lookup, then a map. Both member attendance and every motion's
+  // member votes need it, so it is built once and shared. Who acted on the
+  // member side is a Person too since #248 part 2, so `nameOf` above is the
+  // only name map this function needs.
   const propertyRows = await db
     .select({
       id: properties.id,
@@ -279,16 +287,11 @@ async function assembleMeetingDetail(
   const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
   const weightOf = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
 
-  const ownerRows = await db
-    .select({ id: owners.id, fullName: owners.fullName })
-    .from(owners);
-  const ownerNameOf = new Map(ownerRows.map((o) => [o.id, o.fullName]));
-
   const memberAttendanceRows = await db
     .select({
       propertyId: memberAttendance.propertyId,
       present: memberAttendance.present,
-      representedByOwnerId: memberAttendance.representedByOwnerId,
+      representedByPersonId: memberAttendance.representedByPersonId,
       proxyId: memberAttendance.proxyId,
     })
     .from(memberAttendance)
@@ -304,7 +307,7 @@ async function assembleMeetingDetail(
           .select({
             motionId: memberVotes.motionId,
             propertyId: memberVotes.propertyId,
-            castByOwnerId: memberVotes.castByOwnerId,
+            castByPersonId: memberVotes.castByPersonId,
             proxyId: memberVotes.proxyId,
             weight: memberVotes.weight,
             choice: memberVotes.choice,
@@ -365,8 +368,8 @@ async function assembleMeetingDetail(
       address: addressOf.get(a.propertyId) ?? 'Unknown',
       present: a.present,
       weight: weightOf.get(a.propertyId) ?? 0,
-      representedByName: a.representedByOwnerId
-        ? (ownerNameOf.get(a.representedByOwnerId) ?? null)
+      representedByName: a.representedByPersonId
+        ? (nameOf.get(a.representedByPersonId) ?? null)
         : null,
       viaProxy: a.proxyId !== null,
       proxyId: includeProxyIds ? a.proxyId : null,
@@ -401,8 +404,8 @@ async function assembleMeetingDetail(
           address: addressOf.get(v.propertyId) ?? 'Unknown',
           choice: v.choice,
           weight: v.weight,
-          castByName: v.castByOwnerId
-            ? (ownerNameOf.get(v.castByOwnerId) ?? null)
+          castByName: v.castByPersonId
+            ? (nameOf.get(v.castByPersonId) ?? null)
             : null,
           viaProxy: v.proxyId !== null,
           proxyId: includeProxyIds ? v.proxyId : null,
@@ -878,7 +881,7 @@ async function fetchTurnoutCounts(
 
 /**
  * The per-lot ballot list for one election, with each property's address
- * resolved the same way board_people/property names are resolved elsewhere
+ * resolved the same way Person and property names are resolved elsewhere
  * in this file: an unscoped lookup, then a map. Board-only — never called
  * from the public read path. See fetchElectionsFor's ballots: null contract.
  */
@@ -891,7 +894,7 @@ async function fetchBallotRowsFor(
       propertyId: ballots.propertyId,
       weight: ballots.weight,
       proxyId: ballots.proxyId,
-      castByOwnerId: ballots.castByOwnerId,
+      castByPersonId: ballots.castByPersonId,
     })
     .from(ballots)
     .where(eq(ballots.electionId, electionId))
@@ -915,7 +918,7 @@ async function fetchBallotRowsFor(
     weight: r.weight,
     viaProxy: r.proxyId !== null,
     proxyId: r.proxyId,
-    castByOwnerId: r.castByOwnerId,
+    castByPersonId: r.castByPersonId,
   }));
 }
 
@@ -1040,7 +1043,7 @@ export async function fetchAdminElections(env: Env): Promise<ElectionDetail[]> {
 }
 
 /**
- * Board-only: every proxy, newest first, with property address and owner
+ * Board-only: every proxy, newest first, with property address and Person
  * names resolved so the panel needs no second lookup — the same
  * full-detail-on-list shape as fetchAdminElections. There is deliberately no
  * public or tier-gated sibling: who delegated to whom is more sensitive than
@@ -1055,20 +1058,17 @@ export async function fetchAdminProxies(env: Env): Promise<ProxyDetail[]> {
     .select({ id: properties.id, address: properties.address })
     .from(properties);
   const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
-  const ownerRows = await db
-    .select({ id: owners.id, fullName: owners.fullName })
-    .from(owners);
-  const ownerNameOf = new Map(ownerRows.map((o) => [o.id, o.fullName]));
+  const nameOf = await personNameMap(db);
   return rows.map((r) => ({
     id: r.id,
     propertyId: r.propertyId,
     address: addressOf.get(r.propertyId) ?? 'Unknown',
-    grantorOwnerId: r.grantorOwnerId,
-    grantorName: ownerNameOf.get(r.grantorOwnerId) ?? 'Unknown',
+    grantorPersonId: r.grantorPersonId,
+    grantorName: nameOf.get(r.grantorPersonId) ?? 'Unknown',
     holderName: r.holderName,
-    holderOwnerId: r.holderOwnerId,
-    holderOwnerName: r.holderOwnerId
-      ? (ownerNameOf.get(r.holderOwnerId) ?? null)
+    holderPersonId: r.holderPersonId,
+    holderPersonName: r.holderPersonId
+      ? (nameOf.get(r.holderPersonId) ?? null)
       : null,
     meetingId: r.meetingId,
     electionId: r.electionId,
@@ -1136,7 +1136,12 @@ export async function fetchUpcomingOccasionsFor(
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** The caller's own active lots with their ACTIVE owners, for the grant form's pickers. */
+/**
+ * The caller's own active lots with the Persons who may act for them, for the
+ * grant form's pickers. Since #248 part 2 that list is the roster's Lot
+ * Authority — Ownership, or Representation of an owning Organization — rather
+ * than the lot's active `owners` rows.
+ */
 export async function fetchMemberLots(
   env: Env,
   propertyIds: string[],
@@ -1153,33 +1158,29 @@ export async function fetchMemberLots(
     .where(
       and(inArray(properties.id, propertyIds), eq(properties.status, 'active')),
     );
-  const ownerRows = await db
-    .select({
-      id: owners.id,
-      propertyId: owners.propertyId,
-      fullName: owners.fullName,
-    })
-    .from(owners)
-    .where(
-      and(inArray(owners.propertyId, propertyIds), eq(owners.status, 'active')),
-    );
+  const holders = await fetchLotAuthority(
+    db,
+    propertyIds,
+    associationDateIso(),
+  );
   return lots.map((l) => ({
     ...l,
-    owners: ownerRows
-      .filter((o) => o.propertyId === l.id)
-      .map((o) => ({ id: o.id, fullName: o.fullName })),
+    persons: holders
+      .filter((h) => h.lotId === l.id)
+      .map((h) => ({ id: h.personId, fullName: h.fullName })),
   }));
 }
 
 /**
  * The caller's proxy lists: granted = proxies FOR the caller's lots; held =
- * proxies naming one of the caller's lots' active owners as holder. Scoped
+ * proxies naming a Person with authority over one of the caller's lots as
+ * holder. Scoped
  * reads only — this is the homeowner sibling of the board-only
  * fetchAdminProxies and must never widen to other lots' proxies. Every call
  * site is requireMemberApi-gated.
  *
  * Occasion title/date retain ADR 0019's own-lot exception for granted rows:
- * an owner may always see which occasion their lot is committed to, even
+ * a lot's own people may always see which occasion it is committed to, even
  * above their tier. A held row for another lot keeps the proxy itself visible
  * but redacts title/date unless the occasion is within the caller's tier.
  */
@@ -1190,21 +1191,21 @@ export async function fetchMemberProxies(
 ): Promise<MemberProxyLists> {
   if (propertyIds.length === 0) return { granted: [], held: [] };
   const db = getDb(env);
-  const myOwnerRows = await db
-    .select({ id: owners.id })
-    .from(owners)
-    .where(
-      and(inArray(owners.propertyId, propertyIds), eq(owners.status, 'active')),
-    );
-  const myOwnerIds = myOwnerRows.map((o) => o.id);
+  const myPersonIds = [
+    ...new Set(
+      (await fetchLotAuthority(db, propertyIds, associationDateIso())).map(
+        (h) => h.personId,
+      ),
+    ),
+  ];
   const rows = await db
     .select()
     .from(proxies)
     .where(
-      myOwnerIds.length > 0
+      myPersonIds.length > 0
         ? or(
             inArray(proxies.propertyId, propertyIds),
-            inArray(proxies.holderOwnerId, myOwnerIds),
+            inArray(proxies.holderPersonId, myPersonIds),
           )
         : inArray(proxies.propertyId, propertyIds),
     )
@@ -1214,10 +1215,7 @@ export async function fetchMemberProxies(
     .select({ id: properties.id, address: properties.address })
     .from(properties);
   const addressOf = new Map(propRows.map((p) => [p.id, p.address]));
-  const ownerNameRows = await db
-    .select({ id: owners.id, fullName: owners.fullName })
-    .from(owners);
-  const ownerNameOf = new Map(ownerNameRows.map((o) => [o.id, o.fullName]));
+  const nameOf = await personNameMap(db);
   const meetingRows = await db
     .select({
       id: meetings.id,
@@ -1251,12 +1249,12 @@ export async function fetchMemberProxies(
       id: r.id,
       propertyId: r.propertyId,
       address: addressOf.get(r.propertyId) ?? 'Unknown',
-      grantorOwnerId: r.grantorOwnerId,
-      grantorName: ownerNameOf.get(r.grantorOwnerId) ?? 'Unknown',
+      grantorPersonId: r.grantorPersonId,
+      grantorName: nameOf.get(r.grantorPersonId) ?? 'Unknown',
       holderName: r.holderName,
-      holderOwnerId: r.holderOwnerId,
-      holderOwnerName: r.holderOwnerId
-        ? (ownerNameOf.get(r.holderOwnerId) ?? null)
+      holderPersonId: r.holderPersonId,
+      holderPersonName: r.holderPersonId
+        ? (nameOf.get(r.holderPersonId) ?? null)
         : null,
       meetingId: r.meetingId,
       electionId: r.electionId,
@@ -1264,12 +1262,12 @@ export async function fetchMemberProxies(
       occasionDate: showOccasion ? (occ?.date ?? null) : null,
     };
   };
-  const myOwnerIdSet = new Set(myOwnerIds);
+  const myPersonIdSet = new Set(myPersonIds);
   return {
     granted: rows.filter((r) => propertyIdSet.has(r.propertyId)).map(toDetail),
     held: rows
       .filter(
-        (r) => r.holderOwnerId !== null && myOwnerIdSet.has(r.holderOwnerId),
+        (r) => r.holderPersonId !== null && myPersonIdSet.has(r.holderPersonId),
       )
       .map(toDetail),
   };

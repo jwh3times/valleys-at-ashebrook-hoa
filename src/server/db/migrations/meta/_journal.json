@@ -204,6 +204,13 @@
       "when": 1786945882930,
       "tag": "0028_adr0022_repoint_board_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1787281391676,
+      "tag": "0029_adr0022_repoint_member_identity",
+      "breakpoints": true
     }
   ]
 }

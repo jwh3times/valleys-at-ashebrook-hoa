@@ -6,12 +6,12 @@ import { getDb } from '../../src/server/db/client';
 import {
   settings,
   properties,
-  owners,
   meetings,
   elections,
   proxies,
   memberAttendance,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
@@ -28,7 +28,9 @@ beforeEach(async () => {
   await db.delete(proxies);
   await db.delete(elections);
   await db.delete(meetings);
-  await db.delete(owners);
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(settings).where(eq(settings.key, 'site'));
   // Default ON for this suite; the gate's off-behavior is covered in
@@ -80,30 +82,42 @@ async function seedRoster() {
       updatedAt: now,
     },
   ]);
-  await db.insert(owners).values([
-    {
-      id: 'o1',
-      propertyId: 'p1',
-      fullName: 'Jane Doe',
+  // #248 part 2: grantor and holder are roster Persons, so who may act for a
+  // lot comes from Ownership rather than an `owners` row. `o1b` is the former
+  // holder this suite uses where it used to use an inactive owner.
+  const persons: [string, string, string, string | null][] = [
+    ['o1', 'p1', 'Jane Doe', null],
+    ['o1b', 'p1', 'Former Owner', '2020-01-01'],
+    ['o2', 'p2', 'John Roe', null],
+  ];
+  await db.insert(parties).values(
+    persons.map(([id]) => ({
+      id,
+      kind: 'person' as const,
       createdAt: now,
       updatedAt: now,
-    },
-    {
-      id: 'o1b',
-      propertyId: 'p1',
-      fullName: 'Inactive Owner',
-      status: 'inactive',
+    })),
+  );
+  await db.insert(people).values(
+    persons.map(([id, , fullName]) => ({
+      partyId: id,
+      partyKind: 'person',
+      fullName,
+      nameNormalized: fullName.toLowerCase(),
+      updatedAt: now,
+    })),
+  );
+  await db.insert(ownerships).values(
+    persons.map(([id, lotId, , endDay]) => ({
+      id: `${id}-own`,
+      ownerPartyId: id,
+      lotId,
+      startDay: null,
+      endDay,
       createdAt: now,
       updatedAt: now,
-    },
-    {
-      id: 'o2',
-      propertyId: 'p2',
-      fullName: 'John Roe',
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]);
+    })),
+  );
 }
 
 async function seedMeeting(overrides: Record<string, unknown> = {}) {
@@ -149,8 +163,8 @@ async function seedElection(overrides: Record<string, unknown> = {}) {
 function grantBody(overrides: Record<string, unknown> = {}) {
   return {
     propertyId: 'p1',
-    grantorOwnerId: 'o1',
-    holderOwnerId: 'o2',
+    grantorPersonId: 'o1',
+    holderPersonId: 'o2',
     meetingId: 'm1',
     electionId: null,
     ...overrides,
@@ -166,9 +180,9 @@ async function seedReadProxy(
     .values({
       id,
       propertyId: 'p2',
-      grantorOwnerId: 'o2',
+      grantorPersonId: 'o2',
       holderName: 'Jane Doe',
-      holderOwnerId: 'o1',
+      holderPersonId: 'o1',
       createdBy: 'b',
       createdAt: now,
       updatedAt: now,
@@ -206,7 +220,7 @@ describe('POST /api/member/proxies', () => {
       .from(proxies)
       .where(eq(proxies.id, id));
     expect(row.holderName).toBe('John Roe');
-    expect(row.holderOwnerId).toBe('o2');
+    expect(row.holderPersonId).toBe('o2');
     expect(row.createdBy).toBe('u1');
     expect(row.meetingId).toBe('m1');
   });
@@ -230,7 +244,7 @@ describe('POST /api/member/proxies', () => {
       POST,
       'POST',
       jane,
-      grantBody({ propertyId: 'p2', grantorOwnerId: 'o2' }),
+      grantBody({ propertyId: 'p2', grantorPersonId: 'o2' }),
     );
     expect(other.status).toBe(403);
     const missing = await call(
@@ -249,14 +263,14 @@ describe('POST /api/member/proxies', () => {
       POST,
       'POST',
       jane,
-      grantBody({ grantorOwnerId: 'o2' }),
+      grantBody({ grantorPersonId: 'o2' }),
     );
     expect(wrongLot.status).toBe(400);
     const inactive = await call(
       POST,
       'POST',
       jane,
-      grantBody({ grantorOwnerId: 'o1b' }),
+      grantBody({ grantorPersonId: 'o1b' }),
     );
     expect(inactive.status).toBe(400);
   });
@@ -310,15 +324,15 @@ describe('POST /api/member/proxies', () => {
     await seedRoster();
     await seedMeeting({ id: 'm1' });
     expect(
-      (await call(POST, 'POST', jane, grantBody({ holderOwnerId: 'nope' })))
+      (await call(POST, 'POST', jane, grantBody({ holderPersonId: 'nope' })))
         .status,
     ).toBe(404);
     expect(
-      (await call(POST, 'POST', jane, grantBody({ holderOwnerId: 'o1b' })))
+      (await call(POST, 'POST', jane, grantBody({ holderPersonId: 'o1b' })))
         .status,
     ).toBe(404);
     expect(
-      (await call(POST, 'POST', jane, grantBody({ holderOwnerId: 'o1' })))
+      (await call(POST, 'POST', jane, grantBody({ holderPersonId: 'o1' })))
         .status,
     ).toBe(400);
     expect(
@@ -358,9 +372,9 @@ describe('GET /api/member/proxies', () => {
     await db.insert(proxies).values({
       id: 'pxH',
       propertyId: 'p2',
-      grantorOwnerId: 'o2',
+      grantorPersonId: 'o2',
       holderName: 'Jane Doe',
-      holderOwnerId: 'o1',
+      holderPersonId: 'o1',
       meetingId: 'm1',
       createdBy: 'b',
       createdAt: now,
@@ -391,16 +405,16 @@ describe('GET /api/member/proxies', () => {
     });
     await seedReadProxy('pxMeetingGranted', {
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'John Roe',
-      holderOwnerId: 'o2',
+      holderPersonId: 'o2',
       meetingId: 'mBoardGranted',
     });
     await seedReadProxy('pxElectionGranted', {
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'John Roe',
-      holderOwnerId: 'o2',
+      holderPersonId: 'o2',
       electionId: 'eBoardGranted',
     });
 
@@ -504,7 +518,7 @@ describe('DELETE /api/member/proxies', () => {
     await db.insert(proxies).values({
       id: 'pxOther',
       propertyId: 'p2',
-      grantorOwnerId: 'o2',
+      grantorPersonId: 'o2',
       holderName: 'Someone',
       meetingId: 'm1',
       createdBy: 'b',
@@ -555,9 +569,9 @@ describe('DELETE /api/member/proxies', () => {
     await db.insert(proxies).values({
       id: 'pxPastMeeting',
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'John Roe',
-      holderOwnerId: 'o2',
+      holderPersonId: 'o2',
       meetingId: pastMeeting,
       createdBy: 'b',
       createdAt: now,
@@ -582,9 +596,9 @@ describe('DELETE /api/member/proxies', () => {
     await db.insert(proxies).values({
       id: 'pxPastElection',
       propertyId: 'p1',
-      grantorOwnerId: 'o1',
+      grantorPersonId: 'o1',
       holderName: 'John Roe',
-      holderOwnerId: 'o2',
+      holderPersonId: 'o2',
       electionId: pastElection,
       createdBy: 'b',
       createdAt: now,

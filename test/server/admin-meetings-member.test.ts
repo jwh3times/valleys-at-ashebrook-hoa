@@ -18,10 +18,10 @@ import {
   motionEligibility,
   motions,
   properties,
-  owners,
   settings,
   boardPeople,
 } from '../../src/server/db/schema';
+import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { legacyAuthContext } from '../../src/server/authz/context';
 import { seedPeopleRows } from './fixtures';
@@ -37,7 +37,11 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(boardPeople);
   await db.delete(meetings);
-  await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
   await db.delete(settings);
 });
@@ -81,14 +85,32 @@ async function createProperty(address: string): Promise<string> {
   return id;
 }
 
-async function createOwner(
+async function createPerson(
   propertyId: string,
   fullName: string,
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env)
-    .insert(owners)
-    .values({ id, propertyId, fullName, createdAt: now, updatedAt: now });
+  const db = getDb(env);
+  // #248 part 2: the record names a roster Person holding Lot Authority.
+  await db
+    .insert(parties)
+    .values({ id, kind: 'person', createdAt: now, updatedAt: now });
+  await db.insert(people).values({
+    partyId: id,
+    partyKind: 'person',
+    fullName,
+    nameNormalized: fullName.toLowerCase(),
+    updatedAt: now,
+  });
+  await db.insert(ownerships).values({
+    id: `${id}-own`,
+    ownerPartyId: id,
+    lotId: propertyId,
+    startDay: null,
+    endDay: null,
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 
@@ -97,7 +119,7 @@ describe('meetings admin route — member attendance', () => {
     const id = await createMeeting();
     const p1 = await createProperty('1 Oak St');
     const p2 = await createProperty('2 Oak St');
-    const owner1 = await createOwner(p1, 'A. Reyes');
+    const owner1 = await createPerson(p1, 'A. Reyes');
     const res = await postMeeting(
       req(url, 'POST', {
         action: 'setMemberAttendance',
@@ -106,7 +128,7 @@ describe('meetings admin route — member attendance', () => {
           {
             propertyId: p1,
             present: true,
-            representedByOwnerId: owner1,
+            representedByPersonId: owner1,
           },
           { propertyId: p2, present: false },
         ],
@@ -120,11 +142,11 @@ describe('meetings admin route — member attendance', () => {
     expect(rows.length).toBe(2);
     const row1 = rows.find((r) => r.propertyId === p1);
     expect(row1?.present).toBe(true);
-    expect(row1?.representedByOwnerId).toBe(owner1);
+    expect(row1?.representedByPersonId).toBe(owner1);
     expect(row1?.proxyId).toBeNull();
     const row2 = rows.find((r) => r.propertyId === p2);
     expect(row2?.present).toBe(false);
-    expect(row2?.representedByOwnerId).toBeNull();
+    expect(row2?.representedByPersonId).toBeNull();
     expect(row2?.proxyId).toBeNull();
   });
 

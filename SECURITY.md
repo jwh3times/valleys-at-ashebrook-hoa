@@ -28,13 +28,16 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   and 403 to callers below `homeowner`. Each handler calls
   `requireMemberApi`, and middleware independently gates the whole prefix as a production
   backstop. Proxy writes are then scoped to the caller's verified `propertyIds`; verification
-  proves control of a lot, while the grantor selects which active owner of that lot is acting.
+  proves control of a lot, while the grantor selects which of the Persons currently holding Lot
+  Authority there is acting — Ownership, or Representation of an owning Organization (#248 part 2
+  moved that question from the lot's `owners` rows to the party roster).
   Identity within a jointly owned lot is therefore self-asserted, matching the explicit trust
   decision in [ADR 0019](./docs/adr/0019-homeowner-writes-official-mode-gate.md), rather than bound
-  to a specific owner row on the user's verification link.
+  to a specific roster row on the user's verification link.
 - **The proxy holder lookup deliberately discloses a narrow roster slice to verified
   homeowners.** `POST /api/member/owner-lookup` resolves one explicitly typed active-property
-  address to that lot's active owner names and opaque IDs, never phone numbers or email addresses;
+  address to the names and opaque IDs of the Persons who may act for that lot, never phone numbers
+  or email addresses;
   a non-board caller with no currently verified lot is refused. This makes online grants usable by
   a holder in the later voting flow without exposing a browsable roster, but a verified homeowner
   can still repeat address queries to collect those names and IDs. That accepted tradeoff and a
@@ -93,8 +96,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   pattern `ElectionDetail.ballots` already uses, see [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md)),
   and `ElectionDetail.ballots[].proxyId`, already board-only, carries it unconditionally. There is
   no public proxy register. In official mode, `GET /api/member/proxies` separately returns only
-  proxies for the caller's verified lots plus proxies naming an active owner of those lots as
-  holder. An own-lot grant always includes its occasion title/date so the homeowner can understand
+  proxies for the caller's verified lots plus proxies naming a Person with authority over one of
+  those lots as holder. An own-lot grant always includes its occasion title/date so the homeowner can understand
   and revoke it; for a proxy held on another lot, those fields are redacted when the occasion is
   above the caller's visibility tier. The complete `GET /api/admin/proxies` list remains
   `requireBoard`-gated. See [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md)
@@ -110,21 +113,25 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   `board_votes` reference a party-roster Person (`people`, repointed from the legacy `board_people`
   by #248), not addresses, and a board meeting's roll call has always named board members, never
   homeowners.
-- **A proxy's grantor is re-validated as a currently active owner every time the proxy is used, not
-  only when it is granted.** The ADR 0022 phase 3d grantor re-validation (#220, decided by #204)
-  adds a check to the shared `proxyUseError` guard behind `setMemberAttendance`, `setMemberVotes`,
-  and `setBallots`, and to both live-cast authority predicates behind `POST /api/vote`: a proxy
-  whose grantor no longer owns the proxy's lot is refused (`409`) rather than accepted on the
-  strength of having been valid when granted. It reads the legacy roster's current owner status in
-  both cutover modes — this is a live, pre-flip behavior change, not one gated behind
-  `cutover_mode` — and is a deliberate approximation, not an interval check: it refuses whenever
-  the grantor is _currently_ inactive, which can also refuse a proxy that was genuinely valid on
-  the day it was used if the grantor has since sold. The board's escape for a legitimate late
-  record-keeping entry is to record it without the proxy reference. Exact occasion-day interval
-  validation becomes possible only in phase 4, once proxies are re-keyed to the party roster.
+- **A proxy's grantor is re-validated as currently holding the lot every time the proxy is used,
+  not only when it is granted.** The ADR 0022 phase 3d grantor re-validation (#220, decided by
+  #204) adds a check to the shared `proxyUseError` guard behind `setMemberAttendance`,
+  `setMemberVotes`, and `setBallots`, and to both live-cast authority predicates behind
+  `POST /api/vote`: a proxy whose grantor no longer holds Lot Authority over the proxy's lot is
+  refused (`409`) rather than accepted on the strength of having been valid when granted. Since
+  #248 part 2 that question is asked of the party roster — Ownership, or Representation of an
+  owning Organization, through the single definition in `src/server/roster/authority.ts` — rather
+  than of the legacy `owners.status`. It remains a deliberate approximation in ONE respect, the day
+  it asks about: it refuses whenever the grantor does not hold the lot _today_, which can also
+  refuse a proxy that was genuinely valid on the day it was used if the grantor has since sold. The
+  board's escape for a legitimate late record-keeping entry is to record it without the proxy
+  reference. A live cast is unaffected, since for it "today" is the occasion. Exact occasion-day
+  interval containment is now mechanically possible for the first time — the intervals are
+  queryable and the day is on the occasion row — and is deliberately left to its own change rather
+  than folded into a schema repointing.
 - **Election turnout and candidate choices have no explicit identity link or join key.** `ballots`
   records only that a lot participated — election, property, frozen record-date weight, and
-  owner-or-proxy provenance. A successful conducted ballot atomically inserts that turnout row and
+  person-or-proxy provenance. A successful conducted ballot atomically inserts that turnout row and
   one independent `ballot_choices` row per selection, using only the weight frozen in
   `election_eligibility` when the election first opened. Each choice retains an independent id,
   election, candidate, and non-negative weight. It deliberately has no `ballot_id`, `property_id`,
@@ -296,8 +303,9 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Owner names, emails, and phone numbers live only in the D1 database — never in committed files.
   Contact data delivers the one-time verification code to the contact already on file and also
   contributes matching values to the AI pseudonymizer described below; it is never returned by the
-  proxy holder lookup. Active owner names and opaque IDs support the official-mode proxy
-  grant/holder workflow described above. Public docs describe the purpose and high-level handling;
+  proxy holder lookup. Names and opaque IDs of Persons who currently hold Lot Authority support
+  the official-mode proxy grant/holder workflow described above. Public docs describe the purpose
+  and high-level handling;
   deployment-specific removal, erasure, backup, and retention runbooks belong under `private/`.
 - **The admin document assistant is board-only and pseudonymizes known PII before it leaves the
   Worker.** `POST /api/admin/assistant` is gated by `requireBoard` (fail-closed, same as every other

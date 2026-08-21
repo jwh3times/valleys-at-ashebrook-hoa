@@ -4,9 +4,11 @@ import {
   saveProxy,
   deleteProxy,
   fetchProperties,
+  fetchLotPeople,
   fetchMeetings,
   fetchElections,
 } from '../../lib/admin';
+import type { LotPeople } from '../../lib/admin';
 import type {
   ProxyDetail,
   MeetingSummary,
@@ -17,9 +19,9 @@ import { useAdminResource } from './useAdminResource';
 
 const emptyProxy = {
   propertyId: '',
-  grantorOwnerId: '',
+  grantorPersonId: '',
   holderName: '',
-  holderOwnerId: '',
+  holderPersonId: '',
   occasionKind: 'meeting' as 'meeting' | 'election',
   occasionId: '',
 };
@@ -36,12 +38,18 @@ export default function ProxiesManager() {
   const [form, setForm] = useState(emptyProxy);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [properties, setProperties] = useState<PropertyWithOwners[]>([]);
+  // Who may act for each lot — the roster's Lot Authority since #248 part 2,
+  // including former holders so a historical paper proxy stays recordable.
+  const [lotPeople, setLotPeople] = useState<LotPeople[]>([]);
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const [elections, setElections] = useState<ElectionDetail[]>([]);
 
   useEffect(() => {
     fetchProperties()
       .then(setProperties)
+      .catch(() => {});
+    fetchLotPeople()
+      .then(setLotPeople)
       .catch(() => {});
     fetchMeetings()
       .then(setMeetings)
@@ -79,18 +87,25 @@ export default function ProxiesManager() {
   );
 
   const grantorOptions =
-    properties.find((p) => p.id === form.propertyId)?.owners ?? [];
-  const allOwners = properties.flatMap((p) => p.owners);
+    lotPeople.find((l) => l.lotId === form.propertyId)?.persons ?? [];
+  // Every Person who has ever held any lot — the holder need not have any
+  // connection to the lot whose proxy they hold, so this list is not scoped.
+  const allPersons = [
+    ...new Map(
+      lotPeople.flatMap((l) => l.persons).map((p) => [p.id, p] as const),
+    ).values(),
+  ];
 
-  // The route deliberately accepts an inactive grantor, so that a historical
-  // paper proxy can still be entered. Since the phase 3d grantor
-  // re-validation, though, such a proxy is refused wherever it would be USED
-  // (attendance, member votes, ballots) — so say so at entry rather than let
-  // the board discover it months later.
+  // The route deliberately accepts a grantor who no longer holds the lot, so
+  // that a historical paper proxy can still be entered. Since the phase 3d
+  // grantor re-validation, though, such a proxy is refused wherever it would
+  // be USED (attendance, member votes, ballots) — so say so at entry rather
+  // than let the board discover it months later.
   const selectedGrantor = grantorOptions.find(
-    (o) => o.id === form.grantorOwnerId,
+    (p) => p.id === form.grantorPersonId,
   );
-  const grantorInactive = selectedGrantor?.status === 'inactive';
+  const grantorInactive =
+    selectedGrantor !== undefined && !selectedGrantor.current;
 
   function resetForm() {
     setForm(emptyProxy);
@@ -101,9 +116,9 @@ export default function ProxiesManager() {
     setEditingId(px.id);
     setForm({
       propertyId: px.propertyId,
-      grantorOwnerId: px.grantorOwnerId,
+      grantorPersonId: px.grantorPersonId,
       holderName: px.holderName,
-      holderOwnerId: px.holderOwnerId ?? '',
+      holderPersonId: px.holderPersonId ?? '',
       occasionKind: px.meetingId ? 'meeting' : 'election',
       occasionId: px.meetingId ?? px.electionId ?? '',
     });
@@ -116,18 +131,18 @@ export default function ProxiesManager() {
       if (editingId) {
         await saveProxy(
           {
-            grantorOwnerId: form.grantorOwnerId,
+            grantorPersonId: form.grantorPersonId,
             holderName: form.holderName,
-            holderOwnerId: form.holderOwnerId || null,
+            holderPersonId: form.holderPersonId || null,
           },
           editingId,
         );
       } else {
         await saveProxy({
           propertyId: form.propertyId,
-          grantorOwnerId: form.grantorOwnerId,
+          grantorPersonId: form.grantorPersonId,
           holderName: form.holderName,
-          holderOwnerId: form.holderOwnerId || null,
+          holderPersonId: form.holderPersonId || null,
           meetingId: form.occasionKind === 'meeting' ? form.occasionId : null,
           electionId: form.occasionKind === 'election' ? form.occasionId : null,
         });
@@ -239,7 +254,7 @@ export default function ProxiesManager() {
                 setForm({
                   ...form,
                   propertyId: e.target.value,
-                  grantorOwnerId: '',
+                  grantorPersonId: '',
                 })
               }
               required
@@ -255,21 +270,23 @@ export default function ProxiesManager() {
             </select>
           </div>
           <div className="field" style={{ margin: 0 }}>
-            <label htmlFor="proxy-grantor">Grantor (owner)</label>
+            <label htmlFor="proxy-grantor">
+              Grantor (owner or representative)
+            </label>
             <select
               id="proxy-grantor"
-              value={form.grantorOwnerId}
+              value={form.grantorPersonId}
               onChange={(e) =>
-                setForm({ ...form, grantorOwnerId: e.target.value })
+                setForm({ ...form, grantorPersonId: e.target.value })
               }
               required
               disabled={!form.propertyId}
             >
-              <option value="">— choose an owner —</option>
+              <option value="">— choose a person —</option>
               {grantorOptions.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.fullName}
-                  {o.status === 'inactive' ? ' (inactive)' : ''}
+                  {o.current ? '' : ' (no longer holds this lot)'}
                 </option>
               ))}
             </select>
@@ -279,10 +296,10 @@ export default function ProxiesManager() {
                 role="alert"
                 style={{ marginTop: '8px' }}
               >
-                {selectedGrantor?.fullName} is not currently an active owner of
-                this lot. The proxy can still be recorded for the paper record,
-                but it cannot be used: attendance, votes, and ballots refuse a
-                proxy whose grantor is no longer an active owner.
+                {selectedGrantor?.fullName} does not currently hold authority
+                for this lot. The proxy can still be recorded for the paper
+                record, but it cannot be used: attendance, votes, and ballots
+                refuse a proxy whose grantor no longer holds the lot.
               </p>
             )}
           </div>
@@ -300,17 +317,17 @@ export default function ProxiesManager() {
           </div>
           <div className="field" style={{ margin: 0 }}>
             <label htmlFor="proxy-holder-owner">
-              Holder is also an owner (optional)
+              Holder is also on the roster (optional)
             </label>
             <select
               id="proxy-holder-owner"
-              value={form.holderOwnerId}
+              value={form.holderPersonId}
               onChange={(e) =>
-                setForm({ ...form, holderOwnerId: e.target.value })
+                setForm({ ...form, holderPersonId: e.target.value })
               }
             >
               <option value="">— none —</option>
-              {allOwners.map((o) => (
+              {allPersons.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.fullName}
                 </option>

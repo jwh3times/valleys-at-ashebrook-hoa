@@ -351,8 +351,8 @@ export const boardVotes = sqliteTable(
 );
 
 // Member-meeting attendance is per PROPERTY, not per person, because that is
-// what quorum counts. `represented_by_owner_id` records which owner actually
-// showed up when known — a sign-in sheet does not always say.
+// what quorum counts. `represented_by_person_id` records which roster Person
+// actually showed up when known — a sign-in sheet does not always say.
 export const memberAttendance = sqliteTable(
   'member_attendance',
   {
@@ -364,15 +364,23 @@ export const memberAttendance = sqliteTable(
       .notNull()
       .references(() => properties.id, { onDelete: 'restrict' }),
     present: integer('present', { mode: 'boolean' }).notNull(),
-    representedByOwnerId: text('represented_by_owner_id').references(
-      () => owners.id,
+    // #248 part 2: WHO ACTED is the party roster's Person, not a legacy
+    // `owners` row. SET NULL is retained deliberately — see the ballots and
+    // proxies columns below for the same pairing.
+    representedByPersonId: text('represented_by_person_id').references(
+      () => people.partyId,
       { onDelete: 'set null' },
     ),
-    // NOTE: added by ALTER TABLE — drizzle-kit silently drops any ON DELETE
-    // action on ALTER-added FK columns (same trap as properties.vote_weight
-    // and board_terms.election_id), so this is deliberately declared WITHOUT
-    // one and pinned by proxy-schema.test.ts. Deleting a used proxy is
-    // refused by the DELETE pre-check in /api/admin/proxies instead.
+    // No ON DELETE action, and since #248 part 2 that is a DECISION rather
+    // than an artifact. It began as one: the column was added by ALTER TABLE
+    // in 0014, and drizzle-kit silently drops the action on an ALTER-added FK
+    // (same trap as properties.vote_weight and board_terms.election_id).
+    // Migration 0029 rebuilds this table and could have written any action, so
+    // it re-declares NO ACTION on purpose — deleting a used proxy is refused
+    // by the DELETE pre-check in /api/admin/proxies (ADR 0018, deletion IS the
+    // revocation model), and NO ACTION's end-of-statement timing keeps a
+    // meeting or election delete — which cascades into `proxies` and this
+    // table alike — independent of which cascade SQLite runs first.
     proxyId: text('proxy_id').references(() => proxies.id),
   },
   // One row per property per meeting — re-recording attendance replaces
@@ -395,7 +403,8 @@ export const memberVotes = sqliteTable(
     propertyId: text('property_id')
       .notNull()
       .references(() => properties.id, { onDelete: 'restrict' }),
-    castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
+    // #248 part 2: repointed off `owners` onto the party roster's Person.
+    castByPersonId: text('cast_by_person_id').references(() => people.partyId, {
       onDelete: 'set null',
     }),
     // Snapshot of properties.vote_weight when this vote was recorded.
@@ -405,11 +414,16 @@ export const memberVotes = sqliteTable(
     // Member motions are yes/no/abstain. `recused` and `absent` are board
     // roll-call concepts and are deliberately absent here.
     choice: text('choice', { enum: ['yes', 'no', 'abstain'] }).notNull(),
-    // NOTE: added by ALTER TABLE — drizzle-kit silently drops any ON DELETE
-    // action on ALTER-added FK columns (same trap as properties.vote_weight
-    // and board_terms.election_id), so this is deliberately declared WITHOUT
-    // one and pinned by proxy-schema.test.ts. Deleting a used proxy is
-    // refused by the DELETE pre-check in /api/admin/proxies instead.
+    // No ON DELETE action, and since #248 part 2 that is a DECISION rather
+    // than an artifact. It began as one: the column was added by ALTER TABLE
+    // in 0014, and drizzle-kit silently drops the action on an ALTER-added FK
+    // (same trap as properties.vote_weight and board_terms.election_id).
+    // Migration 0029 rebuilds this table and could have written any action, so
+    // it re-declares NO ACTION on purpose — deleting a used proxy is refused
+    // by the DELETE pre-check in /api/admin/proxies (ADR 0018, deletion IS the
+    // revocation model), and NO ACTION's end-of-statement timing keeps a
+    // meeting or election delete — which cascades into `proxies` and this
+    // table alike — independent of which cascade SQLite runs first.
     proxyId: text('proxy_id').references(() => proxies.id),
   },
   // One vote per lot — this index is what enforces it.
@@ -697,15 +711,21 @@ export const ballots = sqliteTable(
     // Snapshot of properties.vote_weight, per ADR 0015, so correcting a lot's
     // weight later cannot rewrite a past turnout figure.
     weight: integer('weight').notNull(),
-    castByOwnerId: text('cast_by_owner_id').references(() => owners.id, {
+    // #248 part 2: repointed off `owners` onto the party roster's Person.
+    castByPersonId: text('cast_by_person_id').references(() => people.partyId, {
       onDelete: 'set null',
     }),
     recordedAt: integer('recorded_at', { mode: 'timestamp' }).notNull(),
-    // NOTE: added by ALTER TABLE — drizzle-kit silently drops any ON DELETE
-    // action on ALTER-added FK columns (same trap as properties.vote_weight
-    // and board_terms.election_id), so this is deliberately declared WITHOUT
-    // one and pinned by proxy-schema.test.ts. Deleting a used proxy is
-    // refused by the DELETE pre-check in /api/admin/proxies instead.
+    // No ON DELETE action, and since #248 part 2 that is a DECISION rather
+    // than an artifact. It began as one: the column was added by ALTER TABLE
+    // in 0014, and drizzle-kit silently drops the action on an ALTER-added FK
+    // (same trap as properties.vote_weight and board_terms.election_id).
+    // Migration 0029 rebuilds this table and could have written any action, so
+    // it re-declares NO ACTION on purpose — deleting a used proxy is refused
+    // by the DELETE pre-check in /api/admin/proxies (ADR 0018, deletion IS the
+    // revocation model), and NO ACTION's end-of-statement timing keeps a
+    // meeting or election delete — which cascades into `proxies` and this
+    // table alike — independent of which cascade SQLite runs first.
     proxyId: text('proxy_id').references(() => proxies.id),
   },
   // One ballot per lot per election. This row records ONLY that a lot returned
@@ -717,11 +737,11 @@ export const ballots = sqliteTable(
   ],
 );
 
-// A proxy: one owner authorising a named holder to act for one lot at ONE
+// A proxy: one Person authorising a named holder to act for one lot at ONE
 // occasion — a meeting or an election, never both, never neither, never
 // open-ended. The CHECK lives in the schema so the database enforces it even
 // against a direct write; the route's own validation exists only to make the
-// failure readable. property/grantor are RESTRICT: a lot or an owner named on
+// failure readable. property/grantor are RESTRICT: a lot or a Person named on
 // a recorded proxy is part of the record. meeting/election are CASCADE like
 // member_attendance/ballots — the occasion's record owns its proxies. (A
 // ballot can cite a meeting-scoped proxy via the "election held at this
@@ -739,14 +759,19 @@ export const proxies = sqliteTable(
     propertyId: text('property_id')
       .notNull()
       .references(() => properties.id, { onDelete: 'restrict' }),
-    grantorOwnerId: text('grantor_owner_id')
+    // #248 part 2: the grantor is a roster Person. A plain FK to
+    // `people(party_id)` is how this schema says "must be a Person" — the
+    // pattern `person_verifications.person_id` already sets. For an
+    // organization-owned lot the signing human is the Representative, which is
+    // the path ADR 0022 already routes org authority down.
+    grantorPersonId: text('grantor_person_id')
       .notNull()
-      .references(() => owners.id, { onDelete: 'restrict' }),
-    // A holder need not be an owner (spouse, neighbour, attorney) — the name
-    // is the record. The owner link is recorded when it exists so "whose
-    // proxies did Jane hold?" stays answerable.
+      .references(() => people.partyId, { onDelete: 'restrict' }),
+    // A holder need not hold authority anywhere (spouse, neighbour, attorney)
+    // — the name is the record. The Person link is recorded when it exists so
+    // "whose proxies did Jane hold?" stays answerable.
     holderName: text('holder_name').notNull(),
-    holderOwnerId: text('holder_owner_id').references(() => owners.id, {
+    holderPersonId: text('holder_person_id').references(() => people.partyId, {
       onDelete: 'set null',
     }),
     meetingId: text('meeting_id').references(() => meetings.id, {

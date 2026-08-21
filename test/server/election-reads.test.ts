@@ -328,7 +328,7 @@ describe('election read helpers', () => {
         address: 'p1 Ashebrook Lane',
         weight: 1,
         viaProxy: false,
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: null,
       },
       {
@@ -336,7 +336,7 @@ describe('election read helpers', () => {
         address: 'p2 Ashebrook Lane',
         weight: 1,
         viaProxy: false,
-        castByOwnerId: null,
+        castByPersonId: null,
         proxyId: null,
       },
     ]);

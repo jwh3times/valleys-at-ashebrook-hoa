@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, or } from 'drizzle-orm';
 import type { OpenVotingItem, VotingLot } from '../../lib/types';
+import { associationDateIso } from '../../lib/format';
 import type { AuthContext } from '../authz/guards';
 import { getDb } from '../db/client';
 import {
@@ -11,10 +12,10 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  owners,
   properties,
   proxies,
 } from '../db/schema';
+import { fetchLotAuthority } from '../roster/authority';
 import { visibleTiers } from './visibility';
 import { resolveCastingAuthority } from './casting-authority';
 
@@ -33,9 +34,9 @@ interface EligibilityRow {
 
 /**
  * Private, caller-specific projection for voting that is currently open.
- * Authority comes from verified lots and active owners of those lots holding
- * an occasion-scoped proxy. Eligibility and weight come only from the frozen
- * snapshots created when voting opened.
+ * Authority comes from verified lots, and from Persons holding Lot Authority
+ * over those lots who also hold an occasion-scoped proxy. Eligibility and
+ * weight come only from the frozen snapshots created when voting opened.
  */
 export async function fetchOpenVotingFor(
   env: Env,
@@ -94,20 +95,13 @@ export async function fetchOpenVotingFor(
   if (electionRows.length === 0 && motionRows.length === 0) return [];
 
   const ownPropertyIds = ownLots;
-  const ownerRows = await db
-    .select({
-      id: owners.id,
-      propertyId: owners.propertyId,
-      fullName: owners.fullName,
-    })
-    .from(owners)
-    .where(
-      and(
-        inArray(owners.propertyId, callerLotIds),
-        eq(owners.status, 'active'),
-      ),
-    )
-    .orderBy(asc(owners.id));
+  // #248 part 2: who may act for a lot is the roster's Lot Authority, not an
+  // `owners` row. Names come back already routed through personDisplayLabel.
+  const authorityRows = await fetchLotAuthority(
+    db,
+    callerLotIds,
+    associationDateIso(),
+  );
 
   const electionIds = electionRows.map((row) => row.id);
   const motionIds = motionRows.map((row) => row.id);
@@ -119,10 +113,12 @@ export async function fetchOpenVotingFor(
       ...motionRows.map((row) => row.meetingId),
     ]),
   ];
-  const ownerIds = ownerRows.map((row) => row.id);
+  const authorityPersonIds = [
+    ...new Set(authorityRows.map((row) => row.personId)),
+  ];
 
   let proxyRows: HeldProxy[] = [];
-  if (ownerIds.length > 0) {
+  if (authorityPersonIds.length > 0) {
     const occasionScope =
       electionIds.length > 0 && meetingIds.length > 0
         ? or(
@@ -141,7 +137,9 @@ export async function fetchOpenVotingFor(
         electionId: proxies.electionId,
       })
       .from(proxies)
-      .where(and(inArray(proxies.holderOwnerId, ownerIds), occasionScope))
+      .where(
+        and(inArray(proxies.holderPersonId, authorityPersonIds), occasionScope),
+      )
       .orderBy(asc(proxies.id));
   }
 
@@ -242,14 +240,14 @@ export async function fetchOpenVotingFor(
             ),
           );
 
-  const ownersByProperty = new Map<
+  const personsByProperty = new Map<
     string,
     Array<{ id: string; fullName: string }>
   >();
-  for (const owner of ownerRows) {
-    const list = ownersByProperty.get(owner.propertyId) ?? [];
-    list.push({ id: owner.id, fullName: owner.fullName });
-    ownersByProperty.set(owner.propertyId, list);
+  for (const holder of authorityRows) {
+    const list = personsByProperty.get(holder.lotId) ?? [];
+    list.push({ id: holder.personId, fullName: holder.fullName });
+    personsByProperty.set(holder.lotId, list);
   }
 
   const ballotReceipts = new Set(
@@ -288,8 +286,8 @@ export async function fetchOpenVotingFor(
             address,
             weight: row.weight,
             hasCast: receipts.has(receiptKey(row.propertyId)),
-            ownerOptions: ownPropertyIds.has(row.propertyId)
-              ? (ownersByProperty.get(row.propertyId) ?? [])
+            personOptions: ownPropertyIds.has(row.propertyId)
+              ? (personsByProperty.get(row.propertyId) ?? [])
               : [],
             proxyOptions: lotProxies.map((proxy) => ({
               id: proxy.id,

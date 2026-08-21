@@ -21,12 +21,13 @@ import {
   properties,
 } from '../../../server/db/schema';
 import { people, parties } from '../../../server/db/roster-schema';
-import { personDisplayLabel } from '../../../lib/format';
+import { associationDateIso, personDisplayLabel } from '../../../lib/format';
+import { fetchLotAuthorityHistory } from '../../../server/roster/authority';
 import { normalizeMeetingInput } from '../../../lib/types';
 import {
   proxyUseError,
   parseProvenance,
-  ownerExistenceError,
+  personExistenceError,
 } from '../../../server/content/proxy-guards';
 import { chunkedIn, D1_MAX_BOUND_PARAMS } from '../../../server/db/chunked';
 import {
@@ -106,7 +107,7 @@ async function setAttendance(db: Db, body: unknown): Promise<Response> {
 interface MemberAttendanceEntry {
   propertyId: string;
   present: boolean;
-  representedByOwnerId: string | null;
+  representedByPersonId: string | null;
   proxyId: string | null;
 }
 
@@ -133,12 +134,12 @@ function parseMemberAttendanceEntries(
         error: 'Each attendance entry needs a propertyId and a present boolean',
       };
     }
-    const provenance = parseProvenance(record, 'representedByOwnerId');
+    const provenance = parseProvenance(record, 'representedByPersonId');
     if (!provenance.ok) return { ok: false, error: provenance.error };
     entries.push({
       propertyId,
       present,
-      representedByOwnerId: provenance.value.ownerId,
+      representedByPersonId: provenance.value.personId,
       proxyId: provenance.value.proxyId,
     });
   }
@@ -173,13 +174,15 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     return new Response(proxyFailure.message, {
       status: proxyFailure.status,
     });
-  const ownerFailure = await ownerExistenceError(
+  const personFailure = await personExistenceError(
     db,
-    parsedEntries.value.map((e) => e.representedByOwnerId),
-    'representedByOwnerId',
+    parsedEntries.value.map((e) => e.representedByPersonId),
+    'representedByPersonId',
   );
-  if (ownerFailure)
-    return new Response(ownerFailure.message, { status: ownerFailure.status });
+  if (personFailure)
+    return new Response(personFailure.message, {
+      status: personFailure.status,
+    });
 
   // ADR 0015 makes `status = 'inactive'` the sanctioned way to pull a lot out
   // of member voting, and totalActiveWeight — the quorum denominator — sums
@@ -222,7 +225,7 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     meetingId,
     propertyId: e.propertyId,
     present: e.present,
-    representedByOwnerId: e.representedByOwnerId,
+    representedByPersonId: e.representedByPersonId,
     proxyId: e.proxyId,
   }));
   // Full replace, atomically: a property omitted from `entries` is removed,
@@ -345,6 +348,38 @@ export const GET: APIRoute = async ({ request, locals }) => {
           fullName: personDisplayLabel(r.fullName, r.id),
         }))
         .sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    );
+  }
+  // The member-side record pickers (member attendance, member votes, ballots)
+  // ask a narrower question than the flat list above: not "who is on the
+  // roster" but "who may act for THIS lot". #248 part 2 repointed those
+  // columns at `people`, so the answer is the roster's Lot Authority —
+  // Ownership, or Representation of an owning Organization — rather than the
+  // lot's legacy `owners` rows. Former holders are included and flagged
+  // `current: false`, because a past meeting was attended by whoever held the
+  // lot THEN; the same reason the legacy picker listed inactive owners.
+  // Board-gated like every branch here: this is the association's whole
+  // authority map.
+  if (url.searchParams.get('roster') === 'lot-people') {
+    const holders = await fetchLotAuthorityHistory(
+      getDb(env),
+      associationDateIso(),
+    );
+    const byLot = new Map<
+      string,
+      { id: string; fullName: string; current: boolean }[]
+    >();
+    for (const holder of holders) {
+      const list = byLot.get(holder.lotId) ?? [];
+      list.push({
+        id: holder.personId,
+        fullName: holder.fullName,
+        current: holder.current,
+      });
+      byLot.set(holder.lotId, list);
+    }
+    return Response.json(
+      [...byLot].map(([lotId, persons]) => ({ lotId, persons })),
     );
   }
   const id = url.searchParams.get('id');
