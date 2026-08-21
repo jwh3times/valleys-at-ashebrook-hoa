@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-08-21
+
+### Changed
+
+- **The automated dependency assistant will stop re-proposing the sign-in
+  library update that had to be rejected in 0.16.3.** Because it bundles all
+  routine updates into a single batch, that one unusable update was holding
+  four harmless ones back with it. Corrections released on the version
+  currently in use are still offered, so a genuine fix is not hidden — only
+  the jump to the newer line that would break signing in is set aside, until
+  the gap in the underlying Cloudflare storage adapter is closed.
+
 ## [0.16.3] - 2026-08-21
 
 ### Changed
