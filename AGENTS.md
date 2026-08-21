@@ -334,7 +334,7 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   closed/certified/void History, exposes conducted Open/Close and count/weight turnout monitoring,
   and never exposes a live conducted tally or editable conducted ballot/choice rows.
 - Board-only complete proxies record (including paper proxies entered by the board and online
-  grants created by homeowners — one owner authorising one named holder to act for one lot at
+  grants created by homeowners — one Person authorising one named holder to act for one lot at
   exactly one meeting or election; see
   [ADR 0018](./docs/adr/0018-proxies-record-via-proxy-consolidation.md)): `/api/admin/proxies`
   supports `GET`/`POST`/`PATCH`/`DELETE`, all `requireBoard`-gated. `GET` returns every proxy with
@@ -342,14 +342,18 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   `/api/admin/resolutions` and `/api/admin/elections`; the member sibling described below is
   lot-scoped rather than a complete register. `POST` returns `201 { id }` with a readable `404` for
   each of the five FKs it
-  can write (`propertyId`, `grantorOwnerId`, `holderOwnerId`, `meetingId`, `electionId`), `400` if
-  the grantor doesn't belong to the given property, `400` if grantor and holder resolve to the same
-  owner, `409` if `meetingId` resolves to a board-body meeting ("Proxies apply to member meetings —
+  can write (`propertyId`, `grantorPersonId`, `holderPersonId`, `meetingId`, `electionId`), `400` if
+  the grantor has NEVER held Lot Authority over the given property — deliberately the weaker of the
+  two questions `roster/authority.ts` answers, since a proxy signed before a sale is a real record
+  the board must be able to enter; `proxyUseError` is what refuses that proxy at every USE, so
+  entering it is allowed and using it is not (ADR 0018's model, preserved by #248 part 2 rather
+  than tightened) — `400` if grantor and holder resolve to the same person,
+  `409` if `meetingId` resolves to a board-body meeting ("Proxies apply to member meetings —
   this is a board meeting" — proxies are cited only by member attendance/votes/ballots, so a
   board-meeting proxy could never be used; election occasions are unaffected), and `409` on a
   duplicate occasion (`proxies_property_meeting_unq`/`proxies_property_election_unq`, "This lot
   already has a proxy for this occasion"). `PATCH`
-  allow-lists `holderName`/`holderOwnerId`/`grantorOwnerId` — `propertyId`, `meetingId`, and
+  allow-lists `holderName`/`holderPersonId`/`grantorPersonId` — `propertyId`, `meetingId`, and
   `electionId` are rejected on key presence by `normalizeProxyInput`, since moving a proxy to
   another lot or occasion is a different proxy, not an edit — and re-checks grantor-≠-holder against
   the effective stored-plus-payload values. `DELETE` returns `409` naming which of `attendance`,
@@ -691,7 +695,7 @@ boolean`.
   `CandidateSummary`, `ElectionTurnout`, `ElectionEligibleProperty`, `BallotRow`, `ElectionInput`,
   `CandidateInput`), member-motion `MotionVotingState` and shared `EligibilityTotals`, the
   caller-specific voting read shapes (`OpenVotingItem`, `OpenElectionVoting`, `OpenMotionVoting`,
-  `VotingLot`, `VotingOwnerOption`, `VotingProxyOption`), cast inputs/results (`VoteAction`,
+  `VotingLot`, `VotingPersonOption`, `VotingProxyOption`), cast inputs/results (`VoteAction`,
   `CastBallotInput`, `CastMotionVoteInput`, `VoteWriteResult`), the proxies shapes (`ProxyDetail`,
   `ProxyInput`, `MemberProxyDetail`, `MemberProxyLists`, `MemberLot`, and `UpcomingOccasion`), a shared
   `isoDateOrError` calendar-date validator used by both the declarative normalizers and the
@@ -864,7 +868,7 @@ boolean`.
   "this Person holds Lot Authority over this Lot" — Ownership, or Representation of an owning
   Organization, mirroring `board-consequences.ts`'s `qualifiesGuard` — exposed both as Drizzle
   readers (`fetchLotAuthority`, `fetchPersonAuthority`, `fetchLotAuthorityHistory`,
-  `hasEverHeldLotAuthority`) and as the raw-SQL `lotAuthorityExists` fragment the casting
+  `hasEverHeldLotAuthority`, `fetchLotAuthorityKeys`) and as the raw-SQL `lotAuthorityExists` fragment the casting
   predicates embed; a `day` of `null` asks "did this authority EVER exist", which is what lets the
   board's pickers still offer a former owner for a past occasion while every USE of that authority
   is refused. `verification/property.ts` is the unchanged-shape legacy backend (minus its

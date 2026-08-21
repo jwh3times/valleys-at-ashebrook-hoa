@@ -15,11 +15,7 @@ import {
   elections,
 } from '../../../server/db/schema';
 import { people } from '../../../server/db/roster-schema';
-import {
-  authorityKey,
-  fetchLotAuthorityKeys,
-} from '../../../server/roster/authority';
-import { associationDateIso } from '../../../lib/format';
+import { hasEverHeldLotAuthority } from '../../../server/roster/authority';
 import { normalizeProxyInput } from '../../../lib/types';
 import { fetchAdminProxies } from '../../../server/content/reads';
 import {
@@ -68,17 +64,26 @@ async function checkHolderPersonExists(
 }
 
 /**
- * 400/404 unless grantorPersonId names a roster Person who holds Lot Authority
- * over the given lot. A proxy is granted BY someone entitled to act for the
- * lot FOR that lot — a grantor with no authority there is a data-entry error,
- * caught here rather than surfacing as a coherent-looking but wrong record.
+ * 400/404 unless grantorPersonId names a roster Person who has EVER held Lot
+ * Authority over the given lot. A proxy is granted BY someone entitled to act
+ * for the lot FOR that lot — a grantor with no connection to it at all is a
+ * data-entry error, caught here rather than surfacing as a coherent-looking
+ * but wrong record.
  *
- * Before #248 part 2 this compared `owners.property_id`; it now asks the
- * shared Lot Authority rule (roster/authority.ts), so an Organization's
- * Representative may sign for the entity's lot — which the legacy shape could
- * not express at all.
+ * Deliberately the WEAKER of the two questions `roster/authority.ts` answers.
+ * A grantor who has since sold still passes here, because a paper proxy signed
+ * before the sale is a real record the board must be able to enter; the phase
+ * 3d re-validation in `proxyUseError` is what refuses that proxy at every USE
+ * (attendance, member votes, ballots, and the live cast). Entering it is
+ * allowed and using it is not — ADR 0018's model, which predates #248 and
+ * survives it. `ProxiesManager` warns at entry that such a proxy will be
+ * unusable, rather than the route refusing to record it.
+ *
+ * Before #248 part 2 the same question was `owners.property_id` regardless of
+ * `owners.status`; it now asks the roster, so an Organization's Representative
+ * may sign for the entity's lot — which the legacy shape could not express.
  */
-async function checkGrantorHoldsAuthority(
+async function checkGrantorHeldAuthority(
   db: Db,
   grantorPersonId: string,
   propertyId: string,
@@ -90,14 +95,9 @@ async function checkGrantorHoldsAuthority(
     .limit(1);
   if (rows.length === 0)
     return new Response('Person not found', { status: 404 });
-  const authority = await fetchLotAuthorityKeys(
-    db,
-    [propertyId],
-    associationDateIso(),
-  );
-  if (!authority.has(authorityKey(grantorPersonId, propertyId)))
+  if (!(await hasEverHeldLotAuthority(db, grantorPersonId, propertyId)))
     return new Response(
-      'grantorPersonId does not hold authority for this property',
+      'grantorPersonId has never held authority for this property',
       { status: 400 },
     );
   return null;
@@ -157,7 +157,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     'Property',
   );
   if (propertyMissing) return propertyMissing;
-  const grantorProblem = await checkGrantorHoldsAuthority(
+  const grantorProblem = await checkGrantorHeldAuthority(
     db,
     input.grantorPersonId!,
     input.propertyId!,
@@ -233,7 +233,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const current = existing[0];
 
   if (input.grantorPersonId !== undefined) {
-    const grantorProblem = await checkGrantorHoldsAuthority(
+    const grantorProblem = await checkGrantorHeldAuthority(
       db,
       input.grantorPersonId,
       current.propertyId,
