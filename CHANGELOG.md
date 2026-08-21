@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-08-20
+
+### Fixed
+
+- A note in the maintainer documentation still said the latest database change
+  had not yet been applied to the live site. It was applied on the day it
+  merged; the note now records that, so nobody reads it later and concludes the
+  site is running against an older database than it is.
+
 ## [0.15.1] - 2026-08-20
 
 ### Added
