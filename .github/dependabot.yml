@@ -24,6 +24,25 @@ updates:
     labels:
       - 'dependencies'
       - 'npm'
+    ignore:
+      # better-auth is held below 1.7 (see #260, and the version-ceiling note in
+      # AGENTS.md under Server code). 1.7 throws from `onRequestRateLimit` unless
+      # the secondary storage implements `increment`; `better-auth-cloudflare`'s
+      # KV adapter does not, and 0.3.1 is its latest release, so there is nothing
+      # to bump to. The throw is per REQUEST, not at start-up, so merging 1.7.x
+      # would break sign-in, sign-up, and password reset in production.
+      #
+      # Without this, every re-proposal lands in the npm-minor-and-patch group
+      # below and takes the other bumps down with it — which is what happened to
+      # #255, blocking four safe updates behind one un-takeable one.
+      #
+      # Scoped to minor/major ONLY: 1.6.x patches still come through, so a fix
+      # released on the current line is not suppressed. Remove this entry when
+      # #260 is resolved.
+      - dependency-name: 'better-auth'
+        update-types:
+          - 'version-update:semver-minor'
+          - 'version-update:semver-major'
     groups:
       # --- Peer-locked families — majors only. All minor/patch bumps land in the
       #     catch-all group at the bottom. ---
