@@ -4,7 +4,6 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import {
   properties,
-  owners,
   meetings,
   memberAttendance,
   memberVotes,
@@ -16,6 +15,7 @@ import {
   seedProperty,
   seedMeeting,
   seedPerson,
+  seedLotAuthority,
 } from './fixtures';
 import { people } from '../../src/server/db/roster-schema';
 
@@ -47,13 +47,7 @@ describe('member meeting schema', () => {
   it('records member attendance per property with an optional representative', async () => {
     const db = getDb(env);
     await seedProperty('p1');
-    await db.insert(owners).values({
-      id: 'o1',
-      propertyId: 'p1',
-      fullName: 'A. Reyes',
-      createdAt: now,
-      updatedAt: now,
-    });
+    await seedLotAuthority('o1', 'p1', { fullName: 'A. Reyes' });
     await seedMeeting('m1');
     await db.insert(memberAttendance).values({
       id: 'a1',

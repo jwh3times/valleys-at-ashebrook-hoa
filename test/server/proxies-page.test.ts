@@ -9,6 +9,11 @@ import {
   meetings,
   proxies,
 } from '../../src/server/db/schema';
+import {
+  parties,
+  people,
+  ownerships,
+} from '../../src/server/db/roster-schema';
 import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
 import ProxiesPage from '../../src/pages/proxies.astro';
 import NotFoundPage from '../../src/pages/404.astro';
@@ -25,6 +30,11 @@ beforeEach(async () => {
   await db.delete(proxies);
   await db.delete(meetings);
   await db.delete(owners);
+  // #248 part 2: ownerships reference both parties and properties with
+  // RESTRICT, so the roster goes before the lots it points at.
+  await db.delete(ownerships);
+  await db.delete(people);
+  await db.delete(parties);
   await db.delete(properties);
 });
 
