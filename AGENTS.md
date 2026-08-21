@@ -1410,9 +1410,9 @@ legacy authorization itself still reads none of the roster tables). Migrations `
 through `0022` were verified as applied to production on 2026-08-14, against the `d1_migrations`
 ledger rather than assumed. Migrations `0023` through `0027` were applied to production manually
 (`db:migrate:remote`) on 2026-08-17, after sitting unapplied for days under deployed v0.12.0 code —
-the observation that falsified the deploys-apply-migrations doctrine below. Migration `0028` is not
-yet applied to production as of this writing; see the deployment-ordering hazard immediately below
-before it is.
+the observation that falsified the deploys-apply-migrations doctrine below. Migration `0028` was applied to
+production manually (`db:migrate:remote`) on 2026-08-21, immediately after the change that needs it
+merged — the deployment-ordering hazard immediately below is why it could not wait.
 
 **Committed migrations do NOT reach production on their own.** Deploys never apply D1
 migrations. This doctrine previously said the opposite, inferred from `0016`-`0022` landing at one
@@ -1431,10 +1431,13 @@ repoints `board_attendance.person_id`/`board_votes.person_id`/`motions.mover_per
 `motions.second_person_id` off `board_people` onto `people(party_id)`, and the merged application
 code (`GET /api/admin/meetings?roster=people`, `/api/admin/candidates`,
 `assembleMeetingDetail` in `src/server/content/reads.ts`) reads and writes only the new column and
-table. If this code deploys before migration `0028` is applied, the admin meeting-record people
-picker and the candidate-link write path fail against the still-legacy schema. The operator must
-run `npm run db:migrate:remote` before or together with this change's deploy, not on the otherwise
-safe any-time-before-the-next-freeze schedule the rest of this section describes.
+table. That code did deploy ahead of the migration — Workers Builds deploys on merge — and the admin
+meeting-record people picker and the candidate-link write path failed against the still-legacy
+schema until the operator ran `npm run db:migrate:remote` minutes later, on 2026-08-21. The
+standing rule this leaves behind: a migration of this kind is applied before or together with its
+change's deploy, never on the otherwise safe any-time-before-the-next-freeze schedule the rest of
+this section describes. #248 part 2 and phase 4's `properties` → `lots` rename are both of this
+kind.
 
 Two consequences worth internalising, migration `0028` aside. Merged code can run **ahead of the
 production schema** for
