@@ -54,7 +54,9 @@ npm run lint:fix          # apply Oxlint's safe fixes
 npm run sync:agents       # regenerate the Claude skills and Codex agents
 npm run sync:agents -- --check # fail if generated agent trees drifted, enforced by CI
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
-npm run db:generate       # generate Drizzle migration files
+npm run lint:migrations   # migrations directory is well-formed and contiguous, enforced by CI
+npm run db:generate       # NOT part of the workflow — the snapshot chain is abandoned (#257) and
+                          # its output replays the #248 rebuilds; hand-author migrations instead
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to production D1 — the ONLY path; deploys do not run migrations
                           # (refuses from a checkout behind origin/main; see the stale-checkout note below)
@@ -95,7 +97,8 @@ npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 ```
 
 CI (`.github/workflows/build.yml`) runs `types:worker:check`, `format:check`, `lint`,
-`sync:agents -- --check`, `lint:coercions`, `check`, `test`, `test:server`, then `build` on every PR
+`sync:agents -- --check`, `lint:coercions`, `lint:migrations`, `check`, `test`, `test:server`, then
+`build` on every PR
 and push to `main`; run the relevant checks locally before pushing. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
 creates a GitHub release using the `package.json` major/minor release line. The project uses the
@@ -1536,9 +1539,33 @@ pre-freeze check**: before any write freeze, backfill, or other schema-dependent
 `npx wrangler d1 migrations list DATABASE --remote` must list nothing unapplied.
 
 Migrations are applied locally with `npm run db:migrate:local` via
-Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots. `0002` and
-`0003` were hand-authored SQL, but the Drizzle snapshot history has been reconciled through `0003`,
-so `npm run db:generate` should diff cleanly for future changes.
+Wrangler, which tracks applied files in D1 independently of Drizzle's `meta/` snapshots.
+
+**THE DIRECTORY IS WHAT RUNS, and the Drizzle snapshot chain is deliberately abandoned (#257).**
+Two beliefs this file used to carry are both false, and the corrections matter in opposite
+directions:
+
+- **`_journal.json` does not decide what applies.** `wrangler d1 migrations apply` reads every
+  `.sql` file under `migrations_dir` in filename order; it never opens the journal. Measured on
+  2026-08-21 — a `.sql` file with no journal entry is listed as pending and applied all the same,
+  contradicting the note left on #248 ("hand-add the `meta/_journal.json` entry, or
+  `db:migrate:local` will not see the file"). The risk is therefore the INVERSE of what that note
+  assumed: a forgotten entry is harmless, while a stray or mis-numbered `.sql` file is a production
+  migration nobody wrote on purpose. `npm run lint:migrations`
+  (`scripts/check-migration-files.ts`, enforced by CI) is the gate: well-formed names, unique and
+  contiguous indices, and a journal that does not disagree with the directory.
+- **`npm run db:generate` does NOT diff cleanly, and is not part of the workflow.** This file used
+  to promise it did, on the strength of the snapshot history having been reconciled through `0003`.
+  That stopped being true at `0019`: snapshots are missing for `0019`-`0021` and `0028`-`0029`, so
+  the newest one (`0027`) still describes `candidates.board_person_id`,
+  `proxies.grantor_owner_id`/`holder_owner_id`, `member_attendance.represented_by_owner_id`, and
+  both `cast_by_owner_id` columns — every one renamed by #248. Running the generator diffs
+  `schema.ts` against that stale world and proposes replaying both #248 table rebuilds on top of
+  whatever you actually changed. Anything structural is hand-authored here by policy (#212), which
+  is what made the gap harmless enough to accept rather than repair: `lint:migrations` guards the
+  directory, and `verify:invariants` is the real correctness gate against the live schema. The
+  snapshots under `meta/` are retained as history, not maintained. If a future change needs the
+  generator, repairing the chain is its first step, and #257 records what that costs.
 
 **Glossary — "board" names three separate things.** They are deliberately distinct; conflating them
 in code or copy is the mistake this table exists to prevent. Use these words in that sense.
