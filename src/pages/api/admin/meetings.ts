@@ -279,6 +279,20 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     representedByPersonId: e.representedByPersonId,
     proxyId: e.proxyId,
   }));
+  // D1's 100-bound-parameter ceiling applies per statement. Drizzle binds all
+  // six member-attendance columns for every row, so a 22-Lot roll would try to
+  // use 132 parameters and fail with a raw 500. Split the insert into at most
+  // 16 rows (96 binds) per statement while keeping every statement beside the
+  // delete in one atomic D1 batch.
+  const insertChunkSize = Math.floor(D1_MAX_BOUND_PARAMS / 6);
+  const insertStatements = [];
+  for (let start = 0; start < rows.length; start += insertChunkSize) {
+    insertStatements.push(
+      db
+        .insert(memberAttendance)
+        .values(rows.slice(start, start + insertChunkSize)),
+    );
+  }
   // Full replace, atomically: a property omitted from `entries` is removed,
   // not left at its previous value. Weight is intentionally not stamped here
   // — member_attendance has no weight column, and attendance weight is
@@ -291,7 +305,7 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     db
       .delete(memberAttendance)
       .where(eq(memberAttendance.meetingId, meetingId)),
-    ...(rows.length > 0 ? [db.insert(memberAttendance).values(rows)] : []),
+    ...insertStatements,
   ] as never);
   return new Response(null, { status: 204 });
 }

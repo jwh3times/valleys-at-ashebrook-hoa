@@ -150,6 +150,35 @@ describe('meetings admin route — member attendance', () => {
     expect(row2?.proxyId).toBeNull();
   });
 
+  it('records a full 22-lot roll without exceeding D1 bound parameters', async () => {
+    const id = await createMeeting();
+    const propertyIds: string[] = [];
+    for (let index = 1; index <= 22; index += 1) {
+      propertyIds.push(await createProperty(`${index} Scale Test St`));
+    }
+
+    const res = await postMeeting(
+      req(url, 'POST', {
+        action: 'setMemberAttendance',
+        meetingId: id,
+        entries: propertyIds.map((propertyId, index) => ({
+          propertyId,
+          present: index === 0,
+          representedByPersonId: null,
+          proxyId: null,
+        })),
+      }),
+    );
+
+    expect(res.status).toBe(204);
+    const rows = await getDb(env)
+      .select()
+      .from(memberAttendance)
+      .where(eq(memberAttendance.meetingId, id));
+    expect(rows).toHaveLength(22);
+    expect(rows.filter((row) => row.present)).toHaveLength(1);
+  });
+
   it('full-replace removes an omitted property', async () => {
     const id = await createMeeting();
     const p1 = await createProperty('1 Oak St');
