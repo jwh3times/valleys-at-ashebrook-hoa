@@ -346,13 +346,15 @@ the rest of the site works without it — and only useful once documents have re
 ## 10. Deploy
 
 Production deploys from `main` are handled by Cloudflare Workers Builds. GitHub Actions is the
-verification gate for formatting, type checks, tests, and build.
+verification gate for formatting, type checks, tests, build, and a dry-run validation of the
+adapter-generated Wrangler deployment config.
 
 Manual deploys use:
 
 ```bash
 npm run types:worker:check
 npm run build
+npm run deploy:check
 npx wrangler deploy -c dist/server/wrangler.json
 ```
 

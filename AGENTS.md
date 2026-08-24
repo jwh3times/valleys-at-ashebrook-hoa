@@ -70,6 +70,7 @@ npm run verify:invariants # ADR 0022 migration invariant gate; pass --local or -
 npm run roster:backfill   # ADR 0022 roster backfill; dry-run by default, --write --operator=<id>, --classify=<id>=technical
 npm run shadow:sweep      # ADR 0022 offline shadow sweep over every account; --local/--remote, --write
 npm run deploy            # build and deploy with Wrangler
+npm run deploy:check      # dry-run the built Worker's generated Wrangler config
 ```
 
 `npm install` also runs the root `postinstall`, which installs the locked TypeScript 6 Astro
@@ -98,7 +99,7 @@ npx vitest run --config vitest.workers.config.ts test/server/api.test.ts
 
 CI (`.github/workflows/build.yml`) runs `types:worker:check`, `format:check`, `lint`,
 `sync:agents -- --check`, `lint:coercions`, `lint:migrations`, `check`, `test`, `test:server`, then
-`build` on every PR
+`build` and `deploy:check` on every PR
 and push to `main`; run the relevant checks locally before pushing. A grouped dependabot PR that
 fails an early gate (e.g. `types:worker:check` on a stale `worker-configuration.d.ts`) skips every
 later step, including the whole test suite — so a green-looking single blocker can hide a real
@@ -1738,6 +1739,7 @@ delegates to it.
 
 ```bash
 npm run build
+npm run deploy:check
 npx wrangler deploy -c dist/server/wrangler.json
 ```
 
