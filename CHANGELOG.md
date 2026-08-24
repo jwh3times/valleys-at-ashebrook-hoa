@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.16.5] - 2026-08-24
+
+### Fixed
+
+- **Saving a member meeting's complete attendance roll no longer fails when the
+  neighborhood has enough homes to exceed Cloudflare D1's per-statement
+  parameter limit.** The save is split into database-safe statements while
+  remaining one atomic full replacement, so a failed write can never leave a
+  partially updated attendance record.
+
 ## [0.16.4] - 2026-08-21
 
 ### Changed
