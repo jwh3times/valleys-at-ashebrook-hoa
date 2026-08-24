@@ -50,3 +50,6 @@ jobs:
       # handlers against a real workerd + D1 with migrations applied.
       - run: npm run test:server
       - run: npm run build
+      # Validates that the adapter-generated config remains consumable by the
+      # repository's pinned Wrangler before a real deployment can reach main.
+      - run: npm run deploy:check

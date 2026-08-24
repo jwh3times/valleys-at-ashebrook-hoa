@@ -91,6 +91,7 @@ npm run check      # TypeScript 7 + Astro type checks
 npm run lint       # type-aware Oxlint correctness and React Hooks checks
 npm run format     # format all files with Prettier
 npm run docs:dedupe # dry-run document duplicate report
+npm run deploy:check # dry-run the generated Wrangler config after a build
 npm run deploy     # build + deploy to Cloudflare Workers
 ```
 
@@ -111,7 +112,7 @@ npm run deploy     # build + deploy to Cloudflare Workers
   temporary `vendor/astro-check-ts6` adapter used for `.astro` diagnostics. See
   [AGENTS.md](./AGENTS.md) for why the split exists.
 - **CI:** `.github/workflows/build.yml` checks generated Worker-type drift, format, lint, type checks, tests,
-  and build on every push and pull request. CodeQL code scanning runs via GitHub's
+  build, and the generated Wrangler deployment config on every push and pull request. CodeQL code scanning runs via GitHub's
   default setup (configured in repo Settings — there is intentionally no CodeQL
   workflow file in the repo). Deploys from `main` are handled by Cloudflare Workers
   Builds, not a GitHub deploy workflow.
