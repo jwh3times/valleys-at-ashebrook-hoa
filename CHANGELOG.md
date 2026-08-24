@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.16.6] - 2026-08-24
+
+### Fixed
+
+- **Production builds can be deployed again after Wrangler removed its obsolete
+  `legacy_env` setting.** The Cloudflare build plugin is now locked to the
+  compatible release that stops writing that setting into Astro's generated
+  deployment configuration, and CI dry-runs the generated artifact so a future
+  build/deploy tool mismatch is caught before it reaches `main`.
+
 ## [0.16.5] - 2026-08-24
 
 ### Fixed
