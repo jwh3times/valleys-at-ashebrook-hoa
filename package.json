@@ -16,6 +16,7 @@
     "db:migrate:local": "wrangler d1 migrations apply ashebrook-hoa --local",
     "db:migrate:remote": "node --experimental-strip-types scripts/check-migrations-current.ts && wrangler d1 migrations apply ashebrook-hoa --remote",
     "deploy": "astro build && wrangler deploy -c dist/server/wrangler.json",
+    "deploy:check": "wrangler deploy --dry-run -c dist/server/wrangler.json",
     "dev": "astro dev",
     "docs:dedupe": "node --experimental-strip-types scripts/dedupe-documents.ts",
     "docs:import": "node --experimental-strip-types scripts/import-documents.ts",
