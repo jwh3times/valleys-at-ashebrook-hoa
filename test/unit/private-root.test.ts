@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
@@ -71,6 +72,46 @@ describe('resolvePrivatePath', () => {
       path.resolve(
         repositoryRoot,
         '../records/rag_corpus/import-manifest.json',
+      ),
+    );
+  });
+});
+
+describe('private root language parity', () => {
+  it('keeps the Python resolver aligned with the TypeScript contract', () => {
+    const externalRoot = path.resolve(
+      repositoryRoot,
+      '..',
+      'encrypted-records',
+    );
+    const configuredRoots = ['', '   ', '../records', externalRoot];
+    const pythonProgram = [
+      'import json, sys',
+      'sys.path.insert(0, sys.argv[1])',
+      'from private_root import resolve_private_root',
+      'values = json.loads(sys.argv[3])',
+      'print(json.dumps([str(resolve_private_root(sys.argv[2], value)) for value in values]))',
+    ].join('\n');
+    const result = spawnSync(
+      process.platform === 'win32' ? 'python' : 'python3',
+      [
+        '-c',
+        pythonProgram,
+        path.resolve(process.cwd(), 'scripts'),
+        repositoryRoot,
+        JSON.stringify(configuredRoots),
+      ],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' },
+      },
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(
+      configuredRoots.map((configuredRoot) =>
+        resolvePrivateRoot({ repositoryRoot, configuredRoot }),
       ),
     );
   });

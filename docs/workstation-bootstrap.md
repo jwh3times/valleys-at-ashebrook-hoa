@@ -1,8 +1,7 @@
 # Workstation Bootstrap
 
 This public guide contains prerequisites and value-free commands only. Exact private repository,
-encrypted-storage, and 1Password item locators belong in the private recovery runbook and the
-Ashebrook `Workstation Bootstrap` item.
+encrypted-storage, and credential-record locators belong in the private recovery runbook.
 
 ## Prerequisites
 
@@ -45,6 +44,13 @@ approved subset, sync procedure, and retention rules are deployment-specific and
 private recovery runbook. Do not point the variable at the provider's encrypted container format;
 point it at the access-controlled working copy made available to the operator.
 
+On Windows, use the selected provider's supported desktop client to synchronize or mount the
+approved subset at the absolute path assigned to `ASHEBROOK_PRIVATE_ROOT`. On macOS or Linux, use
+the provider's supported client or a documented copy operation to make the same approved subset
+available at that path. Verify synchronization has completed before running any tool. Provider
+names, account locators, exact commands, and retention details are private deployment data and
+belong only in the private recovery runbook.
+
 The selected root keeps the existing layout:
 
 ```text
@@ -77,3 +83,17 @@ npm run deploy:check
 Run document, corpus, deduplication, and roster tooling in dry-run/read-only mode before any commit
 or remote mutation. Production D1 migrations remain an explicit operator action and are never run
 by deployment.
+
+The local planning commands are:
+
+```bash
+python scripts/build-import-manifest.py
+npm run docs:import
+npm run docs:dedupe
+npm run corpus:import
+npm run roster:import
+```
+
+These commands may write generated manifests, reports, or SQL beneath the selected private root,
+but they do not mutate production unless an explicitly documented commit or remote-execution flag
+is supplied. Review all generated output before taking that separate action.
