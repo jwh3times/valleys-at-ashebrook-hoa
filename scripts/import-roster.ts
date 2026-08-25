@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { normalizeAddress } from '../src/server/roster/normalize.ts';
+import { resolvePrivatePath } from './private-root.ts';
 
 export interface NewProperty {
   id: string;
@@ -86,9 +87,12 @@ async function main() {
   const fs = await import('node:fs');
   // Read bytes with Node's fs and pass a buffer to XLSX.read — the SheetJS ESM
   // build does not wire up `fs` for XLSX.readFile() unless set_fs() is called.
-  const buf = fs.readFileSync(
-    'private/HOA_files/Ashebrook HOA Contact List.xlsx',
-  );
+  const sourcePath = resolvePrivatePath([
+    'HOA_files',
+    'Ashebrook HOA Contact List.xlsx',
+  ]);
+  const outputPath = resolvePrivatePath(['roster-import.sql']);
+  const buf = fs.readFileSync(sourcePath);
   const wb = XLSX.read(buf, { type: 'buffer' });
   const rows = XLSX.utils.sheet_to_json<Record<string, string>>(
     wb.Sheets[wb.SheetNames[0]],
@@ -109,9 +113,9 @@ async function main() {
   const stmt =
     `INSERT INTO properties (id, address, address_normalized, unit, status, notes, created_at, updated_at) VALUES\n${propValues};\n\n` +
     `INSERT INTO owners (id, property_id, full_name, phone, email, status, notes, created_at, updated_at) VALUES\n${ownerValues};\n`;
-  fs.writeFileSync('private/roster-import.sql', stmt);
+  fs.writeFileSync(outputPath, stmt);
   console.log(
-    `Wrote private/roster-import.sql (${properties.length} homes, ${owners.length} owners). Apply with: wrangler d1 execute ashebrook-hoa --remote --file private/roster-import.sql`,
+    `Wrote ${outputPath} (${properties.length} homes, ${owners.length} owners). Apply with: wrangler d1 execute ashebrook-hoa --remote --file ${outputPath}`,
   );
 }
 
