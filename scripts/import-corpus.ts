@@ -9,13 +9,14 @@ import {
   ragKeyFor,
   type ManifestEntry,
 } from './corpus-import-meta.ts';
+import { resolvePrivatePath } from './private-root.ts';
 
-const HOA = 'private/HOA_files';
-const CORPUS = 'private/rag_corpus';
-const MANIFEST = `${CORPUS}/import-manifest.json`;
-const ID_MAP = `${CORPUS}/import-ids.json`; // relativePath -> uuid (stable re-runs)
-const UPLOADED = `${CORPUS}/import-uploaded.json`; // resume: keys already put
-const SQL = 'private/corpus-import.sql';
+const HOA = resolvePrivatePath(['HOA_files']);
+const CORPUS = resolvePrivatePath(['rag_corpus']);
+const MANIFEST = resolvePrivatePath(['rag_corpus', 'import-manifest.json']);
+const ID_MAP = resolvePrivatePath(['rag_corpus', 'import-ids.json']); // relativePath -> uuid (stable re-runs)
+const UPLOADED = resolvePrivatePath(['rag_corpus', 'import-uploaded.json']); // resume: keys already put
+const SQL = resolvePrivatePath(['corpus-import.sql']);
 
 const nodeRequire = createRequire(import.meta.url);
 const wranglerBin = path.join(

@@ -157,7 +157,11 @@ otherwise leave behind silently.
 ## 5. Import the Owner Roster
 
 Homeowner verification uses the owner roster only to send one-time codes to contacts already on
-file. Keep roster files and generated import SQL under `private/`.
+file. Keep roster files and generated import SQL under the configured private root. Operator tools
+read `ASHEBROOK_PRIVATE_ROOT`; unset or blank preserves the existing `private/` default, while a
+relative value resolves from the public repository root and an absolute value may point at an
+approved external records working directory. See
+[Workstation bootstrap](./docs/workstation-bootstrap.md).
 
 ```bash
 npm run roster:import
@@ -236,7 +240,9 @@ permanently disabled and answers `410`. Additional System Administrators are gra
 
 ## 7. Import Documents
 
-Document archive files and generated manifests belong under `private/`.
+Document archive files and generated manifests belong under the configured private root described
+in §5. They may live outside the public checkout through `ASHEBROOK_PRIVATE_ROOT`; leaving it unset
+continues to use `private/`.
 
 ```bash
 npm run docs:import

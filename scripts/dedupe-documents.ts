@@ -10,6 +10,7 @@ import {
   type DupeGroup,
 } from '../src/server/content/dedupe.ts';
 import type { DocumentEntry } from './import-documents.ts';
+import { resolvePrivatePath } from './private-root.ts';
 
 function sqlStr(v: string): string {
   return `'${v.replace(/'/g, "''")}'`;
@@ -44,8 +45,8 @@ async function main() {
   const path = await import('node:path');
 
   const commit = process.argv.includes('--commit');
-  const sourceDir = 'private/HOA_files';
-  const manifestPath = 'private/documents-manifest.json';
+  const sourceDir = resolvePrivatePath(['HOA_files']);
+  const manifestPath = resolvePrivatePath(['documents-manifest.json']);
 
   if (!fs.existsSync(manifestPath)) {
     console.error(
@@ -85,7 +86,7 @@ async function main() {
   const deletions = planExactDeletions(exact);
   const deletedIds = new Set(deletions.flatMap((d) => d.deleteIds));
 
-  const reportPath = 'private/dedupe-report.json';
+  const reportPath = resolvePrivatePath(['dedupe-report.json']);
   fs.writeFileSync(
     reportPath,
     JSON.stringify(
@@ -127,7 +128,7 @@ async function main() {
       stdio: 'inherit',
     });
 
-  const hashSqlPath = 'private/dedupe-hashes.sql';
+  const hashSqlPath = resolvePrivatePath(['dedupe-hashes.sql']);
   fs.writeFileSync(hashSqlPath, buildHashUpdateSql(hashRows));
   console.log('Writing content hashes to D1...');
   runWrangler([
@@ -155,7 +156,7 @@ async function main() {
 
   if (deletedIds.size > 0) {
     const ids = [...deletedIds].map((id) => sqlStr(id)).join(', ');
-    const delSqlPath = 'private/dedupe-delete.sql';
+    const delSqlPath = resolvePrivatePath(['dedupe-delete.sql']);
     fs.writeFileSync(
       delSqlPath,
       `DELETE FROM documents WHERE id IN (${ids});\n`,
