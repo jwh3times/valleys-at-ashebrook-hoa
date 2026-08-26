@@ -1,13 +1,77 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   // `eslint` is Oxlint's native core-rule namespace; no ESLint runtime or plugin is loaded.
-  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "vitest"],
+  //
+  // Setting `plugins` REPLACES Oxlint's base set, so this list is the whole
+  // surface. `jsx-a11y`, `import`, `promise`, and `node` were added in the
+  // v1.79 config review: at the time, `import`/`promise`/`node` reported zero
+  // findings (pure forward coverage) and `jsx-a11y` reported the form-label
+  // failures fixed in that same change.
+  //
+  // `react-perf`, `jsdoc`, `jest`, `nextjs`, and `vue` stay off: the first two
+  // report nothing here and the last three target frameworks this app does not
+  // use.
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "vitest",
+    "jsx-a11y",
+    "import",
+    "promise",
+    "node",
+  ],
+  // `correctness` is the ONLY category enabled wholesale, and deliberately so.
+  // Measured against this tree, every other category is dominated by rules that
+  // are wrong for it rather than by real findings:
+  //
+  //   suspicious   2,269 — of which 2,143 are `react/react-in-jsx-scope`,
+  //                        meaningless under React 19's automatic JSX runtime
+  //   pedantic    ~2,200 — `require-unicode-regexp` (1,024), `max-lines-per-function` (488)
+  //   perf          ~160 — `no-await-in-loop` (143), nearly all deliberate
+  //                        sequential D1 work
+  //   restriction ~9,000 — `oxc/no-async-await` (2,786) alone
+  //   style      ~25,000 — `one-var` (4,557), `no-magic-numbers` (3,541), ...
+  //   nursery     ~1,700 — `eslint/no-undef` (1,655), meaningless in TypeScript
+  //
+  // Individual high-signal rules from those categories are opted into by name
+  // under `rules` below instead. Re-measure before enabling a category.
   "categories": {
     "correctness": "error",
   },
   "options": {
     "reportUnusedDisableDirectives": "error",
     "typeAware": true,
+  },
+  "rules": {
+    // --- Opted in from `suspicious` -------------------------------------
+    // The React Compiler dependency check. Catches a mount effect that closes
+    // over a component-scope loader without declaring it — the shape that let
+    // three stale-closure-prone effects sit here until v1.79.
+    "react/exhaustive-effect-dependencies": "error",
+    // A re-declared name that hides an outer one of the same name.
+    "eslint/no-shadow": "error",
+    // A `.then()` that neither returns nor throws is usually a chain that has
+    // silently stopped propagating; here it flagged four effect bodies that
+    // should have been `async`/`await` with a cancellation guard.
+    "promise/always-return": "error",
+
+    // --- Turned off from `correctness` ----------------------------------
+    // Opinionated tag-substitution advice that is wrong for all three shapes
+    // this codebase uses it for, so it is off rather than suppressed per site:
+    //   role="status" -> <output>   `<output>` means "result of a calculation";
+    //                               these are live-region status messages, for
+    //                               which role="status" is the correct ARIA.
+    //   role="dialog" -> <dialog>   A real behavior change. The vote review
+    //                               modal implements its own focus trap and
+    //                               Escape handling, which native <dialog>
+    //                               would take over (top layer, ::backdrop).
+    //   role="group"  -> <fieldset> Brings UA border/margin styling for no
+    //                               accessibility gain; role + aria-label is
+    //                               already correct and announced.
+    "jsx-a11y/prefer-tag-over-role": "off",
   },
   "overrides": [
     {
@@ -22,6 +86,17 @@
       "files": ["src/lib/admin.ts"],
       "rules": {
         "unicorn/no-invalid-fetch-options": "off",
+      },
+    },
+    {
+      // The review modal's role="dialog" element carries onKeyDown because it
+      // implements Escape-to-cancel and the Tab focus trap itself — the
+      // documented contract for this dialog, and the correct place for that
+      // handler. The rule treats any keyboard listener on a non-interactive
+      // role as a mistake and cannot see the difference.
+      "files": ["src/components/member/VoteManager.tsx"],
+      "rules": {
+        "jsx-a11y/no-noninteractive-element-interactions": "off",
       },
     },
     {

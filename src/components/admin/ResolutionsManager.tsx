@@ -86,12 +86,18 @@ export default function ResolutionsManager() {
     { id: string; label: string }[]
   >([]);
   useEffect(() => {
-    fetchMeetings()
-      .then(async (meetingList) => {
+    // React's documented mount-fetch shape: the load runs in a function
+    // declared inside the effect and guarded by `cancelled`, which the cleanup
+    // flips so a late response can't write state.
+    let cancelled = false;
+    async function loadMotionOptions() {
+      try {
+        const meetingList = await fetchMeetings();
         const withMotions = meetingList.filter((m) => m.motionCount > 0);
         const details = await Promise.all(
           withMotions.map((m) => fetchMeeting(m.id)),
         );
+        if (cancelled) return;
         setMotionOptions(
           details.flatMap((d) =>
             d.motions.map((mo) => ({
@@ -100,13 +106,18 @@ export default function ResolutionsManager() {
             })),
           ),
         );
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
+        if (cancelled) return;
         const message =
           (err as { message?: string } | null)?.message ??
           'could not load motions.';
         setMsg('Error: ' + message);
-      });
+      }
+    }
+    void loadMotionOptions();
+    return () => {
+      cancelled = true;
+    };
   }, [setMsg]);
 
   // Resolves a resolution's adoptedByMotionId to the same "date — motion

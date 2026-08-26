@@ -100,8 +100,9 @@ export default function AnnouncementsManager() {
         </div>
         <div className="field-grid" style={{ marginBottom: '16px' }}>
           <div className="field" style={{ margin: 0 }}>
-            <label>Title</label>
+            <label htmlFor="announcement-title">Title</label>
             <input
+              id="announcement-title"
               type="text"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -110,8 +111,9 @@ export default function AnnouncementsManager() {
             />
           </div>
           <div className="field" style={{ margin: 0 }}>
-            <label>Date</label>
+            <label htmlFor="announcement-date">Date</label>
             <input
+              id="announcement-date"
               type="date"
               value={form.date}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
@@ -120,8 +122,9 @@ export default function AnnouncementsManager() {
           </div>
         </div>
         <div className="field">
-          <label>Message</label>
+          <label htmlFor="announcement-body">Message</label>
           <textarea
+            id="announcement-body"
             value={form.body}
             onChange={(e) => setForm({ ...form, body: e.target.value })}
             placeholder="Write the announcement…"
@@ -146,8 +149,9 @@ export default function AnnouncementsManager() {
           Pin to top
         </label>
         <div className="field" style={{ marginBottom: '18px' }}>
-          <label>Visibility</label>
+          <label htmlFor="announcement-visibility">Visibility</label>
           <select
+            id="announcement-visibility"
             value={form.visibility}
             onChange={(e) =>
               setForm({

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { fetchReports, fetchReport, deleteReport } from '../../lib/admin';
 import {
   REPORT_TEMPLATES,
@@ -27,20 +27,38 @@ export default function ReportsManager() {
   const [error, setError] = useState('');
   const [topicInput, setTopicInput] = useState('');
 
-  async function refresh() {
+  // `isStale` lets a caller discard a response it no longer wants; the mount
+  // effect passes one, the generate/delete callers are driven by a live
+  // interaction and pass nothing. useCallback so the effect can declare
+  // `refresh` as a dependency without re-running on every render.
+  const refresh = useCallback(async (isStale: () => boolean = () => false) => {
     setLoading(true);
     try {
-      setItems(await fetchReports());
+      const next = await fetchReports();
+      if (isStale()) return;
+      setItems(next);
       setError('');
     } catch {
+      if (isStale()) return;
       setError('Could not load reports.');
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
-  }
-  useEffect(() => {
-    void refresh();
   }, []);
+
+  useEffect(() => {
+    // React's documented mount-fetch shape: the load is started from a
+    // function declared inside the effect and guarded by `ignore`, which the
+    // cleanup flips so a late response can't write state.
+    let ignore = false;
+    async function loadOnMount() {
+      await refresh(() => ignore);
+    }
+    void loadOnMount();
+    return () => {
+      ignore = true;
+    };
+  }, [refresh]);
 
   async function generate(body: { template: string } | { topic: string }) {
     const topic =

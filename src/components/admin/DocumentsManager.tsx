@@ -195,8 +195,9 @@ export default function DocumentsManager() {
           <div className="panel-editor__title">Edit Document</div>
           <div className="field-grid" style={{ marginBottom: '16px' }}>
             <div className="field" style={{ margin: 0 }}>
-              <label>Title</label>
+              <label htmlFor="doc-edit-title">Title</label>
               <input
+                id="doc-edit-title"
                 type="text"
                 value={editForm.title}
                 onChange={(e) =>
@@ -206,8 +207,9 @@ export default function DocumentsManager() {
               />
             </div>
             <div className="field" style={{ margin: 0 }}>
-              <label>Category</label>
+              <label htmlFor="doc-edit-category">Category</label>
               <select
+                id="doc-edit-category"
                 value={editForm.category}
                 onChange={(e) =>
                   setEditForm({ ...editForm, category: e.target.value })
@@ -222,8 +224,9 @@ export default function DocumentsManager() {
             </div>
           </div>
           <div className="field">
-            <label>Visibility</label>
+            <label htmlFor="doc-edit-visibility">Visibility</label>
             <select
+              id="doc-edit-visibility"
               value={editForm.visibility}
               onChange={(e) =>
                 setEditForm({
@@ -261,8 +264,9 @@ export default function DocumentsManager() {
           <div className="panel-editor__title">Upload a document</div>
           <div className="field-grid" style={{ marginBottom: '16px' }}>
             <div className="field" style={{ margin: 0 }}>
-              <label>Title</label>
+              <label htmlFor="doc-upload-title">Title</label>
               <input
+                id="doc-upload-title"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -271,8 +275,9 @@ export default function DocumentsManager() {
               />
             </div>
             <div className="field" style={{ margin: 0 }}>
-              <label>Category</label>
+              <label htmlFor="doc-upload-category">Category</label>
               <select
+                id="doc-upload-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
@@ -285,8 +290,9 @@ export default function DocumentsManager() {
             </div>
           </div>
           <div className="field">
-            <label>Visibility</label>
+            <label htmlFor="doc-upload-visibility">Visibility</label>
             <select
+              id="doc-upload-visibility"
               value={visibility}
               onChange={(e) => setVisibility(e.target.value as Visibility)}
             >
@@ -298,8 +304,9 @@ export default function DocumentsManager() {
             </select>
           </div>
           <div className="field">
-            <label>File (max 25 MB)</label>
+            <label htmlFor="doc-upload-file">File (max 25 MB)</label>
             <input
+              id="doc-upload-file"
               ref={fileInput}
               type="file"
               accept={ACCEPT_ATTR}

@@ -64,8 +64,9 @@ export default function BoardAccessManager() {
         onSubmit={promote}
       >
         <div className="field">
-          <label>Promote account by email</label>
+          <label htmlFor="board-access-email">Promote account by email</label>
           <input
+            id="board-access-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}

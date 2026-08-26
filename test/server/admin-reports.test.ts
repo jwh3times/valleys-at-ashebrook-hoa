@@ -77,9 +77,9 @@ vi.mock('../../src/server/ai/anthropic', () => {
                 await new Promise<never>(() => {});
               }
             }
-            const it = gen();
+            const iterator = gen();
             return {
-              [Symbol.asyncIterator]: () => it,
+              [Symbol.asyncIterator]: () => iterator,
               finalMessage: async () => ({ stop_reason: 'end_turn' }),
             };
           },
