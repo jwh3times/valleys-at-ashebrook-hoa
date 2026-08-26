@@ -80,8 +80,11 @@ export default function SiteManager() {
 
       <div className="panel-card" style={{ maxWidth: '620px' }}>
         <div className="field">
-          <label>Welcome heading (home page)</label>
+          <label htmlFor="site-welcome-heading">
+            Welcome heading (home page)
+          </label>
           <input
+            id="site-welcome-heading"
             type="text"
             value={site.welcomeHeading}
             onChange={(e) =>
@@ -90,15 +93,19 @@ export default function SiteManager() {
           />
         </div>
         <div className="field">
-          <label>Welcome text (home page)</label>
+          <label htmlFor="site-welcome-body">Welcome text (home page)</label>
           <textarea
+            id="site-welcome-body"
             value={site.welcomeBody}
             onChange={(e) => setSite({ ...site, welcomeBody: e.target.value })}
           />
         </div>
         <div className="field">
-          <label>Public contact email (shown on Contact page)</label>
+          <label htmlFor="site-contact-email">
+            Public contact email (shown on Contact page)
+          </label>
           <input
+            id="site-contact-email"
             type="email"
             value={site.contactEmail}
             onChange={(e) => setSite({ ...site, contactEmail: e.target.value })}

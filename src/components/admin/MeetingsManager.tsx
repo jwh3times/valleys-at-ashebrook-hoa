@@ -247,7 +247,16 @@ export default function MeetingsManager() {
   // meeting is expanded, loaded via GET /api/admin/meetings?id= — the admin
   // detail read added alongside this panel so existing motions are editable,
   // not just visible-as-a-count.
-  const [detail, setDetail] = useState<MeetingDetail | null>(null);
+  // `loadedDetail` is whatever the last successful fetch returned, tagged by
+  // the meeting it belongs to. The detail the UI renders is DERIVED from it
+  // during render rather than cleared from an effect: a collapsed row (or a
+  // newly expanded one whose fetch is still in flight) simply doesn't match,
+  // so there is no stale-detail flash and no extra render pass to clear it.
+  const [loadedDetail, setLoadedDetail] = useState<MeetingDetail | null>(null);
+  const detail =
+    loadedDetail !== null && loadedDetail.id === expandedId
+      ? loadedDetail
+      : null;
   const [detailLoading, setDetailLoading] = useState(false);
   const [attendanceForm, setAttendanceForm] = useState<Record<string, boolean>>(
     {},
@@ -267,16 +276,14 @@ export default function MeetingsManager() {
   >({});
 
   useEffect(() => {
-    if (!expandedId) {
-      setDetail(null);
-      return;
-    }
+    if (!expandedId) return;
     let cancelled = false;
-    setDetailLoading(true);
-    fetchMeeting(expandedId)
-      .then((d) => {
+    async function loadDetail(meetingId: string) {
+      setDetailLoading(true);
+      try {
+        const d = await fetchMeeting(meetingId);
         if (cancelled) return;
-        setDetail(d);
+        setLoadedDetail(d);
         setAttendanceForm(
           Object.fromEntries(d.attendance.map((a) => [a.personId, a.present])),
         );
@@ -297,17 +304,17 @@ export default function MeetingsManager() {
             ]),
           ),
         );
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         const message =
           (err as { message?: string } | null)?.message ??
           'could not load the meeting.';
         setMsg('Error: ' + message);
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setDetailLoading(false);
-      });
+      }
+    }
+    void loadDetail(expandedId);
     return () => {
       cancelled = true;
     };
@@ -323,7 +330,7 @@ export default function MeetingsManager() {
 
   async function reloadDetail(meetingId: string) {
     const d = await fetchMeeting(meetingId);
-    setDetail(d);
+    setLoadedDetail(d);
     return d;
   }
 

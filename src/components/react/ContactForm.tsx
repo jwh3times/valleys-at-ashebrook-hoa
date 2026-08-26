@@ -4,14 +4,17 @@ import { SITE_NAME } from '../../lib/site';
 type Status = 'idle' | 'submitting' | 'success' | 'error';
 
 type ContactFormProps = {
-  accessKey?: string;
+  // Named for what it is — the Web3Forms submission key — rather than
+  // `accessKey`, which collides with the DOM `accesskey` attribute and reads
+  // to both humans and linters as a keyboard shortcut.
+  web3formsKey?: string;
 };
 
-export default function ContactForm({ accessKey }: ContactFormProps) {
+export default function ContactForm({ web3formsKey }: ContactFormProps) {
   const [status, setStatus] = useState<Status>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  if (!accessKey) {
+  if (!web3formsKey) {
     return (
       <div className="notice">
         <strong>Setup needed:</strong> the contact form isn’t connected yet. Add
@@ -20,7 +23,7 @@ export default function ContactForm({ accessKey }: ContactFormProps) {
       </div>
     );
   }
-  const configuredAccessKey = accessKey;
+  const configuredAccessKey = web3formsKey;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();

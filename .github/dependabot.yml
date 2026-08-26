@@ -86,10 +86,29 @@ updates:
         update-types:
           - 'major'
 
+      # oxlint travels alone, minor AND patch. A linter release is not a
+      # low-risk bump: a new or recategorized rule that lands in `correctness`
+      # is enabled automatically by .oxlintrc.jsonc's `categories` block and
+      # fails `npm run lint` on code nobody touched. That is exactly what
+      # v1.79.0's `react/react-compiler` split did in #267, where it also took
+      # ten unrelated packages down with it — and because `lint` is an early CI
+      # gate, nothing after it ran. Kept out of the catch-all group so the new
+      # rules arrive as their own reviewable PR.
+      oxlint:
+        patterns:
+          - 'oxlint'
+          - 'oxlint-tsgolint'
+        update-types:
+          - 'minor'
+          - 'patch'
+
       # Bundle low-risk minor + patch bumps into one PR; majors stay separate.
       npm-minor-and-patch:
         patterns:
           - '*'
+        exclude-patterns:
+          - 'oxlint'
+          - 'oxlint-tsgolint'
         update-types:
           - 'minor'
           - 'patch'

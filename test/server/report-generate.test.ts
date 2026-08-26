@@ -39,9 +39,9 @@ vi.mock('../../src/server/ai/anthropic', () => ({
             delta: { type: 'text_delta', text: SURROGATE_NAME },
           };
         }
-        const it = gen();
+        const iterator = gen();
         return {
-          [Symbol.asyncIterator]: () => it,
+          [Symbol.asyncIterator]: () => iterator,
           finalMessage: async () => ({ stop_reason: 'end_turn' }),
         };
       },

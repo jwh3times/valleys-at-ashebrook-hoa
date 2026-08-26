@@ -156,8 +156,18 @@ export default function BoardServicePanel() {
   >([]);
 
   useEffect(() => {
-    Promise.all([fetchRosterPeople(), fetchRosterLots(), fetchElections()])
-      .then(([peopleRows, lotRows, electionRows]) => {
+    // React's documented mount-fetch shape: the load runs in a function
+    // declared inside the effect and guarded by `cancelled`, which the cleanup
+    // flips so a late response can't write state.
+    let cancelled = false;
+    async function loadPickers() {
+      try {
+        const [peopleRows, lotRows, electionRows] = await Promise.all([
+          fetchRosterPeople(),
+          fetchRosterLots(),
+          fetchElections(),
+        ]);
+        if (cancelled) return;
         setPeople(peopleRows);
         setLots(lotRows);
         setElections(
@@ -167,13 +177,18 @@ export default function BoardServicePanel() {
             electionDate: e.electionDate,
           })),
         );
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
+        if (cancelled) return;
         const message =
           (err as { message?: string } | null)?.message ??
           'could not load the pickers.';
         setMsg('Error: ' + message);
-      });
+      }
+    }
+    void loadPickers();
+    return () => {
+      cancelled = true;
+    };
   }, [setMsg]);
 
   const today = associationDateIso();
