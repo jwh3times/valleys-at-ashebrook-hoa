@@ -38,9 +38,9 @@ vi.mock('../../src/server/ai/anthropic', () => ({
             delta: { type: 'text_delta', text: ' is $50.' },
           };
         }
-        const it = gen();
+        const iterator = gen();
         return {
-          [Symbol.asyncIterator]: () => it,
+          [Symbol.asyncIterator]: () => iterator,
           finalMessage: async () => ({ stop_reason: mockFinal.stop_reason }),
         };
       },

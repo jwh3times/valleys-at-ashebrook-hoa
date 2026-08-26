@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchMyProxies,
   grantProxy,
@@ -51,21 +51,43 @@ export default function ProxyManager({ lots, occasions }: Props) {
   // propagated, so callers (mount effect, post-grant/revoke refresh) don't
   // need their own try/catch around it and a reload failure can't be
   // mistaken for the grant/revoke action itself failing.
-  async function reload() {
+  //
+  // `isStale` lets a caller discard a response it no longer wants. The mount
+  // effect passes one so a load that resolves after unmount (or after
+  // StrictMode's second mount) writes nothing; the grant/revoke callers are
+  // driven by a live interaction and pass nothing.
+  //
+  // useCallback so the mount effect below can declare it as a dependency
+  // without re-running on every render.
+  const reload = useCallback(async (isStale: () => boolean = () => false) => {
     try {
-      setLists(await fetchMyProxies());
+      const next = await fetchMyProxies();
+      if (isStale()) return;
+      setLists(next);
       setLoadError(null);
     } catch {
+      if (isStale()) return;
       setLoadError(
         "Couldn't load your proxies — reload the page to try again.",
       );
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
-  }
-  useEffect(() => {
-    void reload();
   }, []);
+
+  useEffect(() => {
+    // React's documented mount-fetch shape: the load is started from a
+    // function declared inside the effect and guarded by `ignore`, which the
+    // cleanup flips so a late response can't write state.
+    let ignore = false;
+    async function loadOnMount() {
+      await reload(() => ignore);
+    }
+    void loadOnMount();
+    return () => {
+      ignore = true;
+    };
+  }, [reload]);
 
   const grantorOptions =
     lots.find((l) => l.id === form.propertyId)?.persons ?? [];

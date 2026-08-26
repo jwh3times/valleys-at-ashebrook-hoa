@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
+// The factory's locals are suffixed so they don't shadow the names this
+// destructuring binds in the module scope around it.
 const { uploadDocument, fetchAdminDocuments, DuplicateError } = vi.hoisted(
   () => {
-    const uploadDocument = vi.fn().mockResolvedValue(undefined);
-    const fetchAdminDocuments = vi.fn().mockResolvedValue([]);
-    class DuplicateError extends Error {
+    const uploadDocumentMock = vi.fn().mockResolvedValue(undefined);
+    const fetchAdminDocumentsMock = vi.fn().mockResolvedValue([]);
+    class DuplicateErrorMock extends Error {
       kind: 'exact' | 'near';
       existing?: {
         id: string;
@@ -22,7 +24,11 @@ const { uploadDocument, fetchAdminDocuments, DuplicateError } = vi.hoisted(
         Object.assign(this, payload);
       }
     }
-    return { uploadDocument, fetchAdminDocuments, DuplicateError };
+    return {
+      uploadDocument: uploadDocumentMock,
+      fetchAdminDocuments: fetchAdminDocumentsMock,
+      DuplicateError: DuplicateErrorMock,
+    };
   },
 );
 vi.mock('../../lib/admin', () => ({

@@ -80,8 +80,9 @@ export default function DuesManager() {
         <div className="panel-editor__title">Amount &amp; schedule</div>
         <div className="field-grid" style={{ marginBottom: '16px' }}>
           <div className="field" style={{ margin: 0 }}>
-            <label>Amount</label>
+            <label htmlFor="dues-amount">Amount</label>
             <input
+              id="dues-amount"
               type="text"
               value={dues.amount}
               onChange={(e) => setDues({ ...dues, amount: e.target.value })}
@@ -89,8 +90,9 @@ export default function DuesManager() {
             />
           </div>
           <div className="field" style={{ margin: 0 }}>
-            <label>Due date / schedule</label>
+            <label htmlFor="dues-due-date">Due date / schedule</label>
             <input
+              id="dues-due-date"
               type="text"
               value={dues.dueDate}
               onChange={(e) => setDues({ ...dues, dueDate: e.target.value })}
@@ -99,8 +101,9 @@ export default function DuesManager() {
           </div>
         </div>
         <div className="field" style={{ margin: 0 }}>
-          <label>Notes (late fees, etc.)</label>
+          <label htmlFor="dues-notes">Notes (late fees, etc.)</label>
           <textarea
+            id="dues-notes"
             value={dues.notes}
             onChange={(e) => setDues({ ...dues, notes: e.target.value })}
           />
@@ -130,8 +133,9 @@ export default function DuesManager() {
         <div key={i} className="panel-card" style={{ marginBottom: '14px' }}>
           <div className="field-grid" style={{ marginBottom: '16px' }}>
             <div className="field" style={{ margin: 0 }}>
-              <label>Label</label>
+              <label htmlFor={`dues-option-${i}-label`}>Label</label>
               <input
+                id={`dues-option-${i}-label`}
                 type="text"
                 value={opt.label}
                 onChange={(e) => updateOption(i, { label: e.target.value })}
@@ -139,8 +143,11 @@ export default function DuesManager() {
               />
             </div>
             <div className="field" style={{ margin: 0 }}>
-              <label>Button link (optional)</label>
+              <label htmlFor={`dues-option-${i}-url`}>
+                Button link (optional)
+              </label>
               <input
+                id={`dues-option-${i}-url`}
                 type="url"
                 value={opt.url ?? ''}
                 onChange={(e) => updateOption(i, { url: e.target.value })}
@@ -149,8 +156,11 @@ export default function DuesManager() {
             </div>
           </div>
           <div className="field" style={{ marginBottom: '14px' }}>
-            <label>Details / instructions</label>
+            <label htmlFor={`dues-option-${i}-details`}>
+              Details / instructions
+            </label>
             <textarea
+              id={`dues-option-${i}-details`}
               value={opt.details}
               onChange={(e) => updateOption(i, { details: e.target.value })}
               placeholder="Handle, address, or instructions"

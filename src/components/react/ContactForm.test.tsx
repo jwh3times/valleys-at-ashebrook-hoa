@@ -19,7 +19,7 @@ describe('ContactForm', () => {
       .mockResolvedValue({ json: async () => ({ success: true }) });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<ContactForm accessKey="test-key" />);
+    render(<ContactForm web3formsKey="test-key" />);
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText(/your name/i), 'Jane Doe');
@@ -42,7 +42,7 @@ describe('ContactForm', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<ContactForm accessKey="test-key" />);
+    render(<ContactForm web3formsKey="test-key" />);
     const user = userEvent.setup();
 
     await user.type(screen.getByLabelText(/your name/i), 'Jane');
