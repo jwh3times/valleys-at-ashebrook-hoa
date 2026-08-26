@@ -49,7 +49,8 @@ npm run test:watch        # Vitest in watch mode
 npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)
 npm run format            # Prettier write
 npm run format:check      # Prettier check, enforced by CI
-npm run lint              # type-aware Oxlint correctness and React Hooks checks
+npm run lint              # type-aware Oxlint: correctness category wholesale plus named opt-ins
+                          # (React effect deps, no-shadow, promise/always-return, a11y)
 npm run lint:fix          # apply Oxlint's safe fixes
 npm run sync:agents       # regenerate the Claude skills and Codex agents
 npm run sync:agents -- --check # fail if generated agent trees drifted, enforced by CI
@@ -105,7 +106,13 @@ fails an early gate (e.g. `types:worker:check` on a stale `worker-configuration.
 later step, including the whole test suite — so a green-looking single blocker can hide a real
 test failure (like the better-auth 1.7 incompatibility recorded under **Server code** below)
 behind it; don't assume the first
-reported failure is the only one. On every
+reported failure is the only one. A second instance of the same hazard hit `lint` itself: the
+grouped dependabot PR #267 that bumped oxlint 1.78.0 to 1.79.0 failed CI on four pre-existing
+call sites once `react/set-state-in-effect` — a rule oxlint 1.79.0 split out of
+`react/react-compiler` — landed in the `correctness` category `.oxlintrc.jsonc` enables wholesale,
+and took ten unrelated grouped packages down with it. `.github/dependabot.yml` now travels
+`oxlint`/`oxlint-tsgolint` in their own minor+patch group, separate from `npm-minor-and-patch`, so
+a linter release with a newly-recategorized rule arrives as its own reviewable PR. On every
 merge to `main`, the Version workflow (`.github/workflows/version.yml`) tags the merge commit and
 creates a GitHub release using the `package.json` major/minor release line. The project uses the
 third semver segment as a build number (`<major>.<minor>.<build>`). The first tag for a new line
@@ -128,6 +135,32 @@ Use TypeScript and Astro conventions already present in the repo. Follow the exi
 settings, keep indentation consistent with the file's current style, and prefer descriptive names
 over abbreviations. Use `*.test.ts` and `*.test.tsx` for tests. Keep server-only code in
 `src/server/` and avoid importing it into client-side modules.
+
+**`.oxlintrc.jsonc` enables the `correctness` category wholesale and nothing else.** Every other
+category was measured against this tree and found dominated by rules that are wrong for it (e.g.
+`suspicious`'s 2,269 findings are 2,143 `react/react-in-jsx-scope`, meaningless under React 19's
+automatic JSX runtime) rather than by real findings; the measurements are recorded in the config
+file itself, and re-measuring is the bar for enabling a category. A handful of high-signal rules
+from those other categories are instead opted in by name —
+`react/exhaustive-effect-dependencies` (the mount-fetch shape below), `eslint/no-shadow`, and
+`promise/always-return` — and a rule `correctness` enables can be turned off by name with a
+documented reason, either globally (`jsx-a11y/prefer-tag-over-role`) or scoped to one file via
+`overrides` (`jsx-a11y/no-noninteractive-element-interactions` off only for `VoteManager.tsx`'s own
+`role="dialog"` element, which legitimately owns its Escape/Tab focus trap).
+
+`correctness` also now carries `react/set-state-in-effect`, which oxlint 1.79.0 split out of the
+former `react/react-compiler` bundle — a category membership this repo does not choose per rule.
+It is a SHAPE check, not a timing analysis: it flags any effect that calls a component-scope
+function which transitively sets state, even when every `setState` happens after an `await`, but
+it never inspects a function declared _inside_ the effect callback, so a genuinely synchronous
+`setState` moved in there goes unreported. It stays at `error` because it does catch the
+direct-in-effect case, but a clean `npm run lint` is not proof no effect sets state synchronously.
+The documented mount-fetch shape — a `useCallback`-memoized loader declared as the effect's
+dependency, started from a function declared inside the effect callback, with an unmount/cleanup
+flag guarding the eventual write — is what both this rule and `react/exhaustive-effect-dependencies`
+expect; six components (the admin `ReportsManager`, `MembersManager`, `MeetingsManager`,
+`BoardServicePanel`, and `ResolutionsManager`, plus the member `ProxyManager`) were brought into
+that shape together.
 
 **Never default a coerced numeric form value with `||`.** `Number('')` and `Number('0')` are both
 `0`, so `Number(x) || 1` cannot tell a blank field from a typed zero and silently substitutes the

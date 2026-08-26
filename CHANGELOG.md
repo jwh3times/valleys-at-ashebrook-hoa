@@ -7,6 +7,40 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.16.7] - 2026-08-25
+
+### Changed
+
+- **Updates to the tool that checks code quality are now proposed on their own
+  rather than bundled with routine dependency updates.** Such an update can
+  introduce a new check that fails the build on code nobody edited — which is
+  what happened when the most recent one arrived alongside ten unrelated
+  updates, stopping the whole batch and every verification step that runs after
+  it. Kept separate, a new check arrives as its own reviewable change. This is
+  the same protection added for the sign-in library in 0.16.4.
+- The set of checks run before merging was broadened: accessibility, import,
+  and background-task handling are now covered, and the rules that catch
+  mistaken data loading in a screen's setup code are switched on individually.
+  A few new checks that give the wrong advice for this codebase are turned off
+  with the reason recorded next to each, rather than left to fail silently or
+  be worked around in the code.
+
+### Fixed
+
+- **Opening a second meeting in the admin meeting record no longer briefly
+  shows the previous meeting's motions underneath it.** The panel now works out
+  which meeting the loaded detail belongs to as it draws, instead of clearing
+  it afterwards, so a slow load shows the loading state rather than another
+  meeting's contents.
+- **Form labels in the admin panels are now attached to the boxes they
+  describe.** Twenty-one fields across the announcements, documents, dues, site
+  settings, and board access editors were labelled only visually, so a screen
+  reader announced them as unlabelled and clicking a label did not move the
+  cursor into its field. The forms look exactly the same as before.
+- Six admin and homeowner screens now discard a data load that finishes after
+  the screen has gone away, instead of writing the result into a view that is
+  no longer shown.
+
 ## [0.16.6] - 2026-08-24
 
 ### Fixed
