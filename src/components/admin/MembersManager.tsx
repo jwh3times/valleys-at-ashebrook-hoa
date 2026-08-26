@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   fetchMembers,
   fetchProperties,
@@ -57,12 +57,17 @@ export default function MembersManager() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
 
-  async function load() {
+  // `isStale` lets a caller discard a response it no longer wants; the mount
+  // effect passes one, the post-action callers are driven by a live
+  // interaction and pass nothing. useCallback so the effect can declare
+  // `load` as a dependency without re-running on every render.
+  const load = useCallback(async (isStale: () => boolean = () => false) => {
     setLoading(true);
     const [members, props] = await Promise.all([
       fetchMembers(),
       fetchProperties(),
     ]);
+    if (isStale()) return;
     const active = props.filter((h) => h.status === 'active');
     setHomes(active);
     setData(members);
@@ -83,21 +88,34 @@ export default function MembersManager() {
         fetchCorrectionRequests(),
         fetchRosterPeople(),
       ]);
+      if (isStale()) return;
       setRequests(open);
       setCorrections(corrs.filter((c) => c.status === 'open'));
       setPeople(roster);
       setPersonPicks({});
       setRequestsError('');
     } catch (err: any) {
+      if (isStale()) return;
       setRequests([]);
       setCorrections([]);
       setRequestsError(err?.message ?? 'Could not load member requests.');
     }
     setLoading(false);
-  }
-  useEffect(() => {
-    void load();
   }, []);
+
+  useEffect(() => {
+    // React's documented mount-fetch shape: the load is started from a
+    // function declared inside the effect and guarded by `ignore`, which the
+    // cleanup flips so a late response can't write state.
+    let ignore = false;
+    async function loadOnMount() {
+      await load(() => ignore);
+    }
+    void loadOnMount();
+    return () => {
+      ignore = true;
+    };
+  }, [load]);
 
   async function act(
     payload: Parameters<typeof memberAction>[0],

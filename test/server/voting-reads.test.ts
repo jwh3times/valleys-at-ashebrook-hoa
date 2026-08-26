@@ -410,19 +410,21 @@ describe('fetchOpenVotingFor', () => {
     expect(own[0].status).toBe('inactive');
 
     const items = await fetchOpenVotingFor(env, homeowner);
-    const election = items.find(
+    const visibleElection = items.find(
       (item): item is OpenElectionVotingItem =>
         item.kind === 'election' && item.id === 'election-visible',
     );
 
     // The deactivated own lot is still offered, at its FROZEN weight (7),
     // not the 700 the roster now says.
-    const ownLot = election?.lots.find((l) => l.propertyId === 'property-own');
+    const ownLot = visibleElection?.lots.find(
+      (l) => l.propertyId === 'property-own',
+    );
     expect(ownLot?.weight).toBe(7);
     // And the proxy held for a different lot survived with it.
-    expect(election?.lots.some((l) => l.propertyId === 'property-held')).toBe(
-      true,
-    );
+    expect(
+      visibleElection?.lots.some((l) => l.propertyId === 'property-held'),
+    ).toBe(true);
   });
 
   it('returns no open voting items when the caller has no verified lots', async () => {
