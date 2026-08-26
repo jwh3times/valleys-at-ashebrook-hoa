@@ -88,7 +88,7 @@ npm run dev        # local dev server at http://localhost:4321
 npm run build      # build the SSR Worker to dist/
 npm test           # run the Vitest spec suite
 npm run check      # TypeScript 7 + Astro type checks
-npm run lint       # type-aware Oxlint correctness and React Hooks checks
+npm run lint       # type-aware Oxlint: correctness rules plus opted-in a11y/effect/promise checks
 npm run format     # format all files with Prettier
 npm run docs:dedupe # dry-run document duplicate report
 npm run deploy:check # dry-run the generated Wrangler config after a build
