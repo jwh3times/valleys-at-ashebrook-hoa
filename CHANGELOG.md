@@ -7,6 +7,46 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-08-27
+
+### Added
+
+- **Private records and private knowledge can now live outside the checkout, so the project
+  is workable from more than one computer.** The document, corpus, deduplication, roster, and
+  manifest tools read a new `ASHEBROOK_PRIVATE_ROOT` setting for where resident-derived records
+  live. Leaving it unset keeps today's `private/` directory; a relative value resolves from the
+  repository root; an absolute value points at an approved external working copy (a mounted or
+  synchronized encrypted-records folder). See the new `docs/workstation-bootstrap.md`.
+- **`npm run bootstrap:private` installs the private operations companion.** It clones the
+  separate private repository (runbooks, design history, 1Password secret-reference templates)
+  beside the main checkout — linked worktrees share that one clone — reading its location from
+  1Password at run time, so no private locator is ever committed or printed. It refuses to
+  overwrite a non-empty directory that is not already a Git checkout, and is a no-op once
+  installed.
+- **`npm run bootstrap:env` recreates `.env` and `.dev.vars` from 1Password.** It runs the
+  companion's bootstrap against the current worktree, validating every referenced secret first
+  and reporting variable names only — never values. A locally edited file is preserved unless
+  `-- --force` is passed. Requires PowerShell 7 (`pwsh`) on every platform.
+- `.env.example` now lists the browser-visible `TURNSTILE_SITE_KEY` and `WEB3FORMS_KEY`
+  placeholders the pages actually read, so a fresh checkout's example is complete.
+
+### Changed
+
+- The `end-session` maintainer skill now updates the private companion repository (versioned,
+  pushed) rather than loose files under `private/`, which remains a gitignored working area for
+  records only.
+
+## [0.16.8] - 2026-08-25
+
+### Changed
+
+- Routine dependency updates: `@anthropic-ai/sdk` 0.117.1 → 0.120.0, `@astrojs/cloudflare`
+  14.2.1 → 14.2.3, `@astrojs/react` 6.0.2 → 6.0.4, `astro` 7.2.2 → 7.2.4, `better-auth`
+  1.6.29 → 1.6.30 (still held on the 1.6 line), `@cloudflare/vitest-pool-workers` 0.21.3 →
+  0.22.0, `@cloudflare/workers-types` 5.20260821.1 → 5.20260823.1, `@testing-library/user-event`
+  14.6.5 → 14.6.6, `@vitejs/plugin-react` 6.0.5 → 6.1.0, and `@vitest/coverage-v8` 4.1.10 →
+  4.1.11.
+
 ## [0.16.7] - 2026-08-25
 
 ### Changed

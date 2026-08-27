@@ -305,8 +305,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   contributes matching values to the AI pseudonymizer described below; it is never returned by the
   proxy holder lookup. Names and opaque IDs of Persons who currently hold Lot Authority support
   the official-mode proxy grant/holder workflow described above. Public docs describe the purpose
-  and high-level handling;
-  deployment-specific removal, erasure, backup, and retention runbooks belong under `private/`.
+  and high-level handling; deployment-specific removal, erasure, backup, and retention runbooks
+  live in the private operations companion repository (see `AGENTS.md`), never in this repo.
 - **The admin document assistant is board-only and pseudonymizes known PII before it leaves the
   Worker.** `POST /api/admin/assistant` is gated by `requireBoard` (fail-closed, same as every other
   admin endpoint). Answering a question sends retrieved document excerpts, the question, and recent

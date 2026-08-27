@@ -1841,8 +1841,9 @@ per-turn docs hook.
 
 The user-invokable `end-session` skill (`.claude/skills/end-session/`) closes out a work session
 across the four stores that live outside the tracked tree and therefore rot silently: project
-memory, GitHub issues, `private/` (see **Security & Configuration Tips** below), and the local
-workspace — uncommitted or untracked strays, stale `.worktrees/` and scratch directories, and
+memory, GitHub issues, the private companion repository and `private/` (see **Security &
+Configuration Tips** below), and the local workspace — uncommitted or untracked strays, stale
+`.worktrees/` and scratch directories, and
 generated-tree drift (`sync:agents -- --check`, `format:check`, `types:worker:check`). It is a
 maintainer routine, not a build step: it never pushes, merges, or opens PRs (that is `/ship`),
 never rewrites the docs `docs-updater` owns, never runs a remote-D1 write, and shows every deletion
