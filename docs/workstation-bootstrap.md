@@ -18,6 +18,32 @@ Those commands report filenames and variable names only and materialize `.env` a
 directly into this public checkout. Do not copy resolved values into shell arguments, logs, issue
 bodies, or Git.
 
+## Private companion
+
+Two npm scripts wrap those private-repository steps so a new checkout or worktree needs no
+locator on hand:
+
+```bash
+npm run bootstrap:private   # clone the private companion beside the MAIN checkout, if absent
+npm run bootstrap:env       # ...then materialize .env and .dev.vars for THIS worktree
+```
+
+`bootstrap:private` reads the companion's clone URL from the Ashebrook `Workstation Bootstrap`
+item through the `op` CLI (`--op-reference` overrides the field; `--url` supplies a
+credential-free GitHub URL directly; an optional `ASHEBROOK_OP_SERVICE_ACCOUNT_REFERENCE` or
+`--service-account-reference` names a token field to retry with, held only in process memory).
+The clone lands at `../<companion-name>` relative to the main repository root — linked worktrees
+resolve to the main checkout, so every worktree shares one companion — or at `ASHEBROOK_OPS_ROOT`
+/ `--target`. It refuses to overwrite a non-empty directory that is not a Git checkout, never
+prints the locator, and is a no-op when the companion is already installed. The companion is not
+placed under `private/`, which is the default `ASHEBROOK_PRIVATE_ROOT` and holds resident records
+that must never enter any Git repository.
+
+`bootstrap:env` runs the companion's PowerShell bootstrap (`pwsh` is required on every platform)
+against the current worktree root; it validates every referenced 1Password field first and reports
+variable names only. A divergent existing `.env` or `.dev.vars` is preserved unless you pass
+`-- --force`.
+
 ## Private records root
 
 The document, corpus, deduplication, roster, and manifest tools use
