@@ -63,7 +63,11 @@ names for your deployment.
 ## 3. Configure Secrets and Public Values
 
 Server secrets are set locally in `.dev.vars` and in production with Cloudflare Worker secrets.
-Do not commit real values.
+Do not commit real values. If you already have access to this deployment's private operations
+companion repository, `npm run bootstrap:env` (see
+[Workstation bootstrap](./docs/workstation-bootstrap.md)) materializes `.env`/`.dev.vars` for the
+current worktree from 1Password instead of copying these values by hand; it reports variable names
+only.
 
 | Secret                                                   | Purpose                                              |
 | -------------------------------------------------------- | ---------------------------------------------------- |
