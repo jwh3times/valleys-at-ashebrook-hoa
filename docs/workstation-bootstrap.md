@@ -63,6 +63,16 @@ against the current worktree root; it validates every referenced 1Password field
 variable names only. A divergent existing `.env` or `.dev.vars` is preserved unless you pass
 `-- --force`.
 
+## Deploying Worker secrets
+
+`npm run secrets:put -- <NAME>` deploys one Worker secret straight from 1Password: the name is
+looked up in the companion's `.dev.vars.tpl` (the same template `bootstrap:env` uses, so a name
+it does not declare is refused), the value is piped to `wrangler secret put` on stdin, and the
+Cloudflare operator token and account id are read from the Ashebrook `Cloudflare Production`
+item into the child process's environment only. Nothing is printed, written, or passed as an
+argument. This replaces both interactive `wrangler login` and any `wrangler secret put` typed by
+hand.
+
 ## Private records root
 
 The document, corpus, deduplication, roster, and manifest tools use
