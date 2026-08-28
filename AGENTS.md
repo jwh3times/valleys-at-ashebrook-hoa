@@ -62,7 +62,7 @@ npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to production D1 — the ONLY path; deploys do not run migrations
                           # (refuses from a checkout behind origin/main; see the stale-checkout note below)
 npm run auth:generate     # regenerate Better Auth schema from config
-npm run bootstrap:private # clone the private ops companion beside the main checkout via 1Password
+npm run bootstrap:private # clone the private ops companion into gitignored private/ via 1Password
 npm run bootstrap:env     # materialize .env/.dev.vars for this worktree through the companion's op bootstrap
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
@@ -1804,10 +1804,11 @@ access control must stay server-side and fail closed.
 Do not commit implementation scratchpads, security reviews, import artifacts, resident-data-derived
 files, or detailed operational runbooks. Durable private TEXT (runbooks, design history, handoffs,
 incident notes, 1Password secret-reference templates) lives in the separate private companion
-repository that `npm run bootstrap:private` clones beside the main checkout; its locator is read
-from 1Password at run time and is never committed here. Resident-derived records and generated
-import artifacts stay under the gitignored `private/` (the default `ASHEBROOK_PRIVATE_ROOT`, see
-`docs/workstation-bootstrap.md`), which is a working area, not a source of truth. Public docs
+repository that `npm run bootstrap:private` clones into the gitignored `private/`; its locator is
+read from 1Password at run time and is never committed here. Resident-derived records and generated
+import artifacts also live under `private/` (the default `ASHEBROOK_PRIVATE_ROOT`, see
+`docs/workstation-bootstrap.md`) but are excluded from the companion by its own `.gitignore` and
+must never be committed there. Public docs
 should describe supported architecture and workflows, not exploit analysis, private execution
 notes, or resident-data handling details.
 

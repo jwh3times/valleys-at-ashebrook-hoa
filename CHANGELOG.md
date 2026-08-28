@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-08-27
+
+### Changed
+
+- **The private operations companion is now installed into the checkout's gitignored
+  `private/` directory** rather than a sibling directory, so `npm run bootstrap:private` gives
+  each checkout or worktree its own companion clone and nothing lands outside the project folder.
+  `private/` remains the default `ASHEBROOK_PRIVATE_ROOT`; the companion's own ignore rules
+  exclude the resident-derived records the import tooling writes there.
+
 ## [0.17.0] - 2026-08-27
 
 ### Added
