@@ -66,6 +66,7 @@ npm run bootstrap:private # clone the private ops companion into gitignored priv
                           # then hardlink the machine's records there from the main checkout's private/
 npm run bootstrap:env     # materialize .env/.dev.vars for this worktree through the companion's op bootstrap
 npm run roster:import     # import owner roster for homeowner verification
+npm run secrets:put -- <NAME> # deploy one Worker secret from 1Password via stdin/env; never prints the value
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
 npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
 npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; see SETUP.md §7
