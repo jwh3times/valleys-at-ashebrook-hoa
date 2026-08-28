@@ -98,11 +98,11 @@ For each issue this session touched:
 
 ### 4. Update the private companion and `private/`
 
-Durable private TEXT lives in the private companion repository, cloned beside the main checkout by
-`npm run bootstrap:private` (a sibling directory; its locator comes from 1Password and is never
-committed here). It is versioned: commit and push it before ending the session. Resident-derived
-artifacts, generated import SQL/manifests, and other records stay under the gitignored `private/`
-(the default `ASHEBROOK_PRIVATE_ROOT`), which is a working area, not a source of truth.
+Durable private TEXT lives in the private companion repository, cloned into the gitignored `private/` by
+`npm run bootstrap:private` (its locator comes from 1Password and is never committed here). It is versioned: commit and push it before ending the session. Resident-derived
+artifacts, generated import SQL/manifests, and other records also live under `private/` (the
+default `ASHEBROOK_PRIVATE_ROOT`) but are ignored by the companion's `.gitignore` and must never be
+committed to it — check `git -C private status` shows none of them.
 
 What lives in the companion and what changes it:
 

@@ -1,14 +1,12 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   COMPANION_NAME,
   DEFAULT_LOCATOR_REFERENCE,
-  defaultCompanionRoot,
+  DEFAULT_TARGET,
   inspectTarget,
-  mainRepositoryRoot,
   parseArgs,
   validateCloneUrl,
 } from '../../scripts/bootstrap-private';
@@ -99,44 +97,11 @@ describe('validateCloneUrl', () => {
 });
 
 describe('companion location', () => {
-  it('is a sibling of the main root named after the companion', () => {
-    expect(defaultCompanionRoot('/w/valleys-at-ashebrook-hoa')).toBe(
-      path.join('/w', COMPANION_NAME),
+  it('defaults to the gitignored private/ directory of this checkout', () => {
+    expect(DEFAULT_TARGET).toBe('private');
+    expect(path.resolve('/w/valleys-at-ashebrook-hoa', DEFAULT_TARGET)).toBe(
+      path.join('/w/valleys-at-ashebrook-hoa', 'private'),
     );
-  });
-
-  it('resolves a linked worktree back to its main checkout', () => {
-    const root = tempDir();
-    const main = path.join(root, 'main');
-    const git = (cwd: string, ...args: string[]) =>
-      execFileSync('git', args, { cwd, encoding: 'utf8', stdio: 'pipe' });
-    mkdirSync(main);
-    git(main, 'init', '-q', '-b', 'main');
-    git(
-      main,
-      '-c',
-      'user.email=t@t',
-      '-c',
-      'user.name=t',
-      'commit',
-      '-q',
-      '--allow-empty',
-      '-m',
-      'init',
-    );
-    const worktree = path.join(root, 'wt');
-    git(main, 'worktree', 'add', '-q', worktree, '-b', 'wt');
-
-    expect(mainRepositoryRoot(main)).toBe(main);
-    expect(mainRepositoryRoot(worktree)).toBe(main);
-    expect(defaultCompanionRoot(mainRepositoryRoot(worktree))).toBe(
-      path.join(root, COMPANION_NAME),
-    );
-  });
-
-  it('falls back to the given root outside any repository', () => {
-    const root = tempDir();
-    expect(mainRepositoryRoot(root)).toBe(root);
   });
 });
 
