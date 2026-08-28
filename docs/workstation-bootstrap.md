@@ -12,9 +12,9 @@ encrypted-storage, and credential-record locators belong in the private recovery
 - the official `age` CLI for encrypted recovery archives
 - an authorized 1Password session and access to the Ashebrook vault
 
-Clone the public and private repositories as siblings using the locators recovered from 1Password.
-From the private repository, run its 1Password validation command and then its bootstrap command.
-Those commands report filenames and variable names only and materialize `.env` and `.dev.vars`
+Clone the public repository, then install the private companion into its gitignored `private/`
+directory using the locator recovered from 1Password (`npm run bootstrap:private` does this).
+The companion's validation and bootstrap commands (`npm run bootstrap:env`) report filenames and variable names only and materialize `.env` and `.dev.vars`
 directly into this public checkout. Do not copy resolved values into shell arguments, logs, issue
 bodies, or Git.
 
@@ -24,7 +24,7 @@ Two npm scripts wrap those private-repository steps so a new checkout or worktre
 locator on hand:
 
 ```bash
-npm run bootstrap:private   # clone the private companion beside the MAIN checkout, if absent
+npm run bootstrap:private   # clone the private companion into private/, if absent
 npm run bootstrap:env       # ...then materialize .env and .dev.vars for THIS worktree
 ```
 
@@ -32,12 +32,12 @@ npm run bootstrap:env       # ...then materialize .env and .dev.vars for THIS wo
 item through the `op` CLI (`--op-reference` overrides the field; `--url` supplies a
 credential-free GitHub URL directly; an optional `ASHEBROOK_OP_SERVICE_ACCOUNT_REFERENCE` or
 `--service-account-reference` names a token field to retry with, held only in process memory).
-The clone lands at `../<companion-name>` relative to the main repository root — linked worktrees
-resolve to the main checkout, so every worktree shares one companion — or at `ASHEBROOK_OPS_ROOT`
-/ `--target`. It refuses to overwrite a non-empty directory that is not a Git checkout, never
-prints the locator, and is a no-op when the companion is already installed. The companion is not
-placed under `private/`, which is the default `ASHEBROOK_PRIVATE_ROOT` and holds resident records
-that must never enter any Git repository.
+The clone lands in `private/` under the current checkout or worktree — gitignored here, so each
+worktree gets its own companion — or at `ASHEBROOK_OPS_ROOT` / `--target`. It refuses to overwrite
+a non-empty directory that is not a Git checkout, never prints the locator, and is a no-op when the
+companion is already installed. Because `private/` is also the default `ASHEBROOK_PRIVATE_ROOT`,
+resident records written by the import tooling land inside the companion clone; the companion's
+`.gitignore` excludes those families by name and they must never be committed to it.
 
 `bootstrap:env` runs the companion's PowerShell bootstrap (`pwsh` is required on every platform)
 against the current worktree root; it validates every referenced 1Password field first and reports
