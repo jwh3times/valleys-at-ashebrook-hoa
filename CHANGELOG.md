@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-08-27
+
+### Added
+
+- **A new worktree now gets the resident records it needs from `npm run bootstrap:private`.**
+  After cloning the private companion, the command hardlinks the machine's record families
+  (`HOA_files/`, `rag_corpus/`, generated SQL and manifests) from the main checkout's `private/`
+  into the worktree's — no duplicated disk, nothing overwritten, rerun-safe — with
+  `--records-from`, `--copy`, and `--no-records` overrides. The records themselves are restored
+  once per machine from the encrypted snapshot by the companion's new POSIX restore script.
+
 ## [0.17.1] - 2026-08-27
 
 ### Changed

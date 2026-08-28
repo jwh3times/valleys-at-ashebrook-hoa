@@ -62,7 +62,8 @@ npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to production D1 — the ONLY path; deploys do not run migrations
                           # (refuses from a checkout behind origin/main; see the stale-checkout note below)
 npm run auth:generate     # regenerate Better Auth schema from config
-npm run bootstrap:private # clone the private ops companion into gitignored private/ via 1Password
+npm run bootstrap:private # clone the private ops companion into gitignored private/ via 1Password,
+                          # then hardlink the machine's records there from the main checkout's private/
 npm run bootstrap:env     # materialize .env/.dev.vars for this worktree through the companion's op bootstrap
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
