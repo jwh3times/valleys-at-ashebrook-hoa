@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pathToDocMeta } from './doc-tiers.ts';
+import { resolvePrivatePath } from './private-root.ts';
 
 export interface DocumentEntry {
   id: string;
@@ -121,7 +122,7 @@ async function main() {
   const path = await import('node:path');
 
   const commit = process.argv.includes('--commit');
-  const sourceDir = 'private/HOA_files';
+  const sourceDir = resolvePrivatePath(['HOA_files']);
 
   if (!fs.existsSync(sourceDir)) {
     console.error(`Error: source directory ${sourceDir} does not exist`);
@@ -133,7 +134,7 @@ async function main() {
   // Reuse ids from a prior manifest so re-runs produce STABLE R2 keys — a fresh
   // UUID per run would orphan every already-uploaded object. Keyed by the source
   // relativePath, which uniquely identifies a file.
-  const manifestPath = 'private/documents-manifest.json';
+  const manifestPath = resolvePrivatePath(['documents-manifest.json']);
   let previous = new Map<string, string>();
   if (fs.existsSync(manifestPath)) {
     try {
@@ -175,7 +176,7 @@ async function main() {
   // Always write the manifest and SQL regardless of mode.
   fs.writeFileSync(manifestPath, JSON.stringify(entries, null, 2));
 
-  const sqlPath = 'private/documents-import.sql';
+  const sqlPath = resolvePrivatePath(['documents-import.sql']);
   fs.writeFileSync(sqlPath, buildInsertSql(entries));
 
   console.log(
@@ -212,7 +213,7 @@ async function main() {
   // Resume support: record every uploaded key so a re-run skips what's already
   // done instead of re-uploading all ~500 files. Combined with the stable ids
   // above, a re-run picks up exactly where a failed run stopped.
-  const uploadedPath = 'private/documents-uploaded.json';
+  const uploadedPath = resolvePrivatePath(['documents-uploaded.json']);
   const uploaded = new Set<string>(
     fs.existsSync(uploadedPath)
       ? (JSON.parse(fs.readFileSync(uploadedPath, 'utf8')) as string[])

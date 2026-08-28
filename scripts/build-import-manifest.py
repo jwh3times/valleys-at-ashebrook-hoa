@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import os, re, csv, json
+from private_root import private_path
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-HOA = os.path.join(ROOT, "private", "HOA_files")
-CORPUS = os.path.join(ROOT, "private", "rag_corpus")
+HOA = str(private_path("HOA_files"))
+CORPUS = str(private_path("rag_corpus"))
 INDEX = os.path.join(CORPUS, "corpus_index.csv")
 
 DISPLAY = {
