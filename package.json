@@ -33,6 +33,7 @@
     "preview": "astro preview",
     "roster:backfill": "node --experimental-strip-types scripts/migrate-roster.ts",
     "roster:import": "node --experimental-strip-types scripts/import-roster.ts",
+    "secrets:put": "node --experimental-strip-types scripts/put-secret.ts",
     "shadow:sweep": "node --experimental-strip-types scripts/shadow-sweep.ts",
     "start": "astro dev",
     "sync:agents": "node --experimental-strip-types scripts/sync-agent-skills.ts",

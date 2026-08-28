@@ -66,8 +66,9 @@ Server secrets are set locally in `.dev.vars` and in production with Cloudflare 
 Do not commit real values. If you already have access to this deployment's private operations
 companion repository, `npm run bootstrap:env` (see
 [Workstation bootstrap](./docs/workstation-bootstrap.md)) materializes `.env`/`.dev.vars` for the
-current worktree from 1Password instead of copying these values by hand; it reports variable names
-only.
+current worktree from 1Password instead of copying these values by hand, and
+`npm run secrets:put -- <NAME>` deploys a production secret the same way — value-free, via stdin
+and the operator token from 1Password. Both report variable names only.
 
 | Secret                                                   | Purpose                                              |
 | -------------------------------------------------------- | ---------------------------------------------------- |
