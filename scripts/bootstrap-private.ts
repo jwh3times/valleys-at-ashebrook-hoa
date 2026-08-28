@@ -1,5 +1,5 @@
 /**
- * Install the private operations companion beside this checkout, and
+ * Install the private operations companion into this checkout's private/ directory, and
  * optionally materialize `.env`/`.dev.vars` from 1Password through it.
  *
  * The private companion (a separate private GitHub repository) holds the
@@ -9,20 +9,18 @@
  * `Workstation Bootstrap` item through the 1Password CLI, so this file names
  * only an `op://` reference, never a URL.
  *
- * Where it goes: a SIBLING of the main repository root, named after the
- * companion — `../valleys-at-ashebrook-hoa-ops` — the convention the private
- * recovery runbook and its bootstrap script both assume. Worktrees resolve the
- * MAIN checkout (`git rev-parse --git-common-dir`), so every worktree shares
- * one companion clone rather than each cloning its own. `private/` under this
- * repository is not used for the companion: that directory is the default
- * `ASHEBROOK_PRIVATE_ROOT`, reserved for resident-derived records that must
- * never enter any Git repository.
+ * Where it goes: `private/` under THIS checkout or worktree — gitignored here,
+ * so the companion's own `.git` never shows up in the public tree, and each
+ * worktree gets its own clone (the ApexRacers convention). `private/` is also
+ * the default `ASHEBROOK_PRIVATE_ROOT`, so resident-derived records the import
+ * tooling writes land inside the companion clone; the companion's `.gitignore`
+ * excludes those families by name, and its README forbids committing them.
  *
  * Usage:
  *
  *   npm run bootstrap:private                 # clone the companion if absent
  *   npm run bootstrap:env                     # ...then materialize .env/.dev.vars
- *   npm run bootstrap:private -- --target <dir>
+ *   npm run bootstrap:private -- --target <dir>   # or ASHEBROOK_OPS_ROOT
  *   npm run bootstrap:private -- --op-reference <op://...>
  *   npm run bootstrap:private -- --url <credential-free github url>
  *
@@ -48,6 +46,7 @@ export const DEFAULT_LOCATOR_REFERENCE =
 export const SERVICE_ACCOUNT_REFERENCE_ENV =
   'ASHEBROOK_OP_SERVICE_ACCOUNT_REFERENCE';
 export const OPS_ROOT_ENV = 'ASHEBROOK_OPS_ROOT';
+export const DEFAULT_TARGET = 'private';
 
 export interface Options {
   url: string | null;
@@ -134,26 +133,6 @@ export function validateCloneUrl(cloneUrl: string): string {
   return cloneUrl;
 }
 
-/**
- * The main checkout's root, even when invoked from a linked worktree: the
- * common git dir is `<main>/.git` for the main checkout and every worktree,
- * so its parent is where the sibling companion belongs.
- */
-export function mainRepositoryRoot(worktreeRoot: string): string {
-  const result = spawnSync('git', ['rev-parse', '--git-common-dir'], {
-    cwd: worktreeRoot,
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-  if (result.status !== 0 || !result.stdout.trim()) return worktreeRoot;
-  const commonDir = path.resolve(worktreeRoot, result.stdout.trim());
-  return path.dirname(commonDir);
-}
-
-export function defaultCompanionRoot(mainRoot: string): string {
-  return path.join(path.dirname(mainRoot), COMPANION_NAME);
-}
-
 export type InstallState = 'installed' | 'absent' | 'occupied';
 
 export function inspectTarget(target: string): InstallState {
@@ -233,10 +212,9 @@ export function main(argv: readonly string[]): void {
     path.dirname(fileURLToPath(import.meta.url)),
     '..',
   );
-  const mainRoot = mainRepositoryRoot(worktreeRoot);
   const companionRoot = path.resolve(
-    mainRoot,
-    options.target ?? defaultCompanionRoot(mainRoot),
+    worktreeRoot,
+    options.target ?? DEFAULT_TARGET,
   );
 
   const state = inspectTarget(companionRoot);
