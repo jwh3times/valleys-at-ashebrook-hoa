@@ -1,4 +1,12 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -7,6 +15,9 @@ import {
   DEFAULT_LOCATOR_REFERENCE,
   DEFAULT_TARGET,
   inspectTarget,
+  isRecordEntry,
+  mainRepositoryRoot,
+  seedRecords,
   parseArgs,
   validateCloneUrl,
 } from '../../scripts/bootstrap-private';
@@ -29,6 +40,22 @@ describe('parseArgs', () => {
     expect(options.url).toBeNull();
     expect(options.target).toBeNull();
     expect(options.materialize).toBe(false);
+    expect(options.seedRecords).toBe(true);
+    expect(options.copyRecords).toBe(false);
+    expect(options.recordsFrom).toBeNull();
+  });
+
+  it('reads the records source from the environment and the record flags', () => {
+    expect(parseArgs([], { ASHEBROOK_RECORDS_SOURCE: '/r' }).recordsFrom).toBe(
+      '/r',
+    );
+    const options = parseArgs(
+      ['--records-from', '/x', '--copy', '--no-records'],
+      {},
+    );
+    expect(options.recordsFrom).toBe('/x');
+    expect(options.copyRecords).toBe(true);
+    expect(options.seedRecords).toBe(false);
   });
 
   it('reads the service-account reference and ops root from the environment', () => {
@@ -63,6 +90,9 @@ describe('parseArgs', () => {
       target: '/t',
       materialize: true,
       force: true,
+      recordsFrom: null,
+      seedRecords: true,
+      copyRecords: false,
     });
   });
 
@@ -119,5 +149,96 @@ describe('inspectTarget', () => {
     const installed = path.join(root, 'installed');
     mkdirSync(path.join(installed, '.git'), { recursive: true });
     expect(inspectTarget(installed)).toBe('installed');
+  });
+});
+
+describe('records seeding', () => {
+  it('classifies record families by name', () => {
+    expect(isRecordEntry('HOA_files', true)).toBe(true);
+    expect(isRecordEntry('rag_corpus', true)).toBe(true);
+    expect(isRecordEntry('operations', true)).toBe(false);
+    expect(isRecordEntry('roster-import.sql', false)).toBe(true);
+    expect(isRecordEntry('documents-manifest.json', false)).toBe(true);
+    expect(isRecordEntry('dedupe-report.json', false)).toBe(true);
+    expect(isRecordEntry('README.md', false)).toBe(false);
+    expect(isRecordEntry('package.json', false)).toBe(false);
+  });
+
+  it('resolves a linked worktree back to its main checkout', () => {
+    const root = tempDir();
+    const main = path.join(root, 'main');
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync('git', args, { cwd, encoding: 'utf8', stdio: 'pipe' });
+    mkdirSync(main);
+    git(main, 'init', '-q', '-b', 'main');
+    git(
+      main,
+      '-c',
+      'user.email=t@t',
+      '-c',
+      'user.name=t',
+      'commit',
+      '-q',
+      '--allow-empty',
+      '-m',
+      'init',
+    );
+    const worktree = path.join(root, 'wt');
+    git(main, 'worktree', 'add', '-q', worktree, '-b', 'wt');
+    expect(mainRepositoryRoot(main)).toBe(main);
+    expect(mainRepositoryRoot(worktree)).toBe(main);
+    expect(mainRepositoryRoot(tempDir())).not.toBe(main);
+  });
+
+  it('hardlinks only the record families and never overwrites', () => {
+    const root = tempDir();
+    const source = path.join(root, 'source');
+    const target = path.join(root, 'target');
+    mkdirSync(path.join(source, 'HOA_files', 'sub'), { recursive: true });
+    mkdirSync(path.join(source, 'operations'), { recursive: true });
+    mkdirSync(target);
+    writeFileSync(path.join(source, 'HOA_files', 'sub', 'a.pdf'), 'pdf');
+    writeFileSync(path.join(source, 'operations', 'OPERATIONS.md'), 'text');
+    writeFileSync(path.join(source, 'roster-import.sql'), 'sql');
+    writeFileSync(path.join(source, 'README.md'), 'readme');
+    writeFileSync(path.join(target, 'roster-import.sql'), 'mine');
+
+    const result = seedRecords(source, target, false);
+    expect(result.families.sort()).toEqual(['HOA_files', 'roster-import.sql']);
+    expect(result.linked).toBe(1);
+    expect(result.skipped).toBe(1);
+    expect(
+      readFileSync(path.join(target, 'HOA_files', 'sub', 'a.pdf'), 'utf8'),
+    ).toBe('pdf');
+    expect(statSync(path.join(target, 'HOA_files', 'sub', 'a.pdf')).ino).toBe(
+      statSync(path.join(source, 'HOA_files', 'sub', 'a.pdf')).ino,
+    );
+    expect(readFileSync(path.join(target, 'roster-import.sql'), 'utf8')).toBe(
+      'mine',
+    );
+    expect(
+      statSync(path.join(target, 'operations'), { throwIfNoEntry: false }),
+    ).toBeUndefined();
+    expect(
+      statSync(path.join(target, 'README.md'), { throwIfNoEntry: false }),
+    ).toBeUndefined();
+  });
+
+  it('copies instead of linking when asked, and is a no-op for a missing or same source', () => {
+    const root = tempDir();
+    const source = path.join(root, 'source');
+    const target = path.join(root, 'target');
+    mkdirSync(path.join(source, 'rag_corpus'), { recursive: true });
+    mkdirSync(target);
+    writeFileSync(path.join(source, 'rag_corpus', 'x.md'), 'md');
+    const copied = seedRecords(source, target, true);
+    expect(copied.linked).toBe(1);
+    expect(statSync(path.join(target, 'rag_corpus', 'x.md')).ino).not.toBe(
+      statSync(path.join(source, 'rag_corpus', 'x.md')).ino,
+    );
+    expect(
+      seedRecords(path.join(root, 'nope'), target, false).families,
+    ).toEqual([]);
+    expect(seedRecords(source, source, false).families).toEqual([]);
   });
 });
