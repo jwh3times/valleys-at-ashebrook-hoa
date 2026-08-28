@@ -39,6 +39,25 @@ companion is already installed. Because `private/` is also the default `ASHEBROO
 resident records written by the import tooling land inside the companion clone; the companion's
 `.gitignore` excludes those families by name and they must never be committed to it.
 
+After the clone, `bootstrap:private` also **seeds the records** a worktree needs: the resident
+record families (`HOA_files/`, `rag_corpus/`, `backups/`, `portability/`, generated `*.sql`,
+`documents-*.json`, `dedupe-*`) are not in the companion — they are kept out of every Git
+repository — so they are hardlinked from the main checkout's `private/` (linked worktrees resolve
+to it automatically; `--records-from <dir>` / `ASHEBROOK_RECORDS_SOURCE` overrides, `--copy` makes
+real copies, `--no-records` skips). Existing files are never overwritten, and a rerun is a no-op.
+The main checkout's `private/` is populated once per machine from the encrypted snapshot using the
+companion's restore script (see its `operations/recovery.md`); `git -C private status` must stay
+clean afterward.
+
+The per-worktree sequence is therefore:
+
+```bash
+git worktree add .worktrees/<name> -b <name> && cd .worktrees/<name>
+npm ci
+npm run bootstrap:private   # companion clone + records
+npm run bootstrap:env       # .env and .dev.vars from 1Password
+```
+
 `bootstrap:env` runs the companion's PowerShell bootstrap (`pwsh` is required on every platform)
 against the current worktree root; it validates every referenced 1Password field first and reports
 variable names only. A divergent existing `.env` or `.dev.vars` is preserved unless you pass
