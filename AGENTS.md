@@ -62,6 +62,8 @@ npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to production D1 — the ONLY path; deploys do not run migrations
                           # (refuses from a checkout behind origin/main; see the stale-checkout note below)
 npm run auth:generate     # regenerate Better Auth schema from config
+npm run bootstrap:private # clone the private ops companion beside the main checkout via 1Password
+npm run bootstrap:env     # materialize .env/.dev.vars for this worktree through the companion's op bootstrap
 npm run roster:import     # import owner roster for homeowner verification
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
 npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
@@ -1800,9 +1802,14 @@ Do not commit real roster data, secrets, or production credentials. Keep environ
 access control must stay server-side and fail closed.
 
 Do not commit implementation scratchpads, security reviews, import artifacts, resident-data-derived
-files, or detailed operational runbooks. Keep those under `private/`; public docs should describe
-supported architecture and workflows, not exploit analysis, private execution notes, or
-resident-data handling details.
+files, or detailed operational runbooks. Durable private TEXT (runbooks, design history, handoffs,
+incident notes, 1Password secret-reference templates) lives in the separate private companion
+repository that `npm run bootstrap:private` clones beside the main checkout; its locator is read
+from 1Password at run time and is never committed here. Resident-derived records and generated
+import artifacts stay under the gitignored `private/` (the default `ASHEBROOK_PRIVATE_ROOT`, see
+`docs/workstation-bootstrap.md`), which is a working area, not a source of truth. Public docs
+should describe supported architecture and workflows, not exploit analysis, private execution
+notes, or resident-data handling details.
 
 ## Agents & Docs Automation
 
@@ -1834,8 +1841,9 @@ per-turn docs hook.
 
 The user-invokable `end-session` skill (`.claude/skills/end-session/`) closes out a work session
 across the four stores that live outside the tracked tree and therefore rot silently: project
-memory, GitHub issues, `private/` (see **Security & Configuration Tips** below), and the local
-workspace — uncommitted or untracked strays, stale `.worktrees/` and scratch directories, and
+memory, GitHub issues, the private companion repository and `private/` (see **Security &
+Configuration Tips** below), and the local workspace — uncommitted or untracked strays, stale
+`.worktrees/` and scratch directories, and
 generated-tree drift (`sync:agents -- --check`, `format:check`, `types:worker:check`). It is a
 maintainer routine, not a build step: it never pushes, merges, or opens PRs (that is `/ship`),
 never rewrites the docs `docs-updater` owns, never runs a remote-D1 write, and shows every deletion

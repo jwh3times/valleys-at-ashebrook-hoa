@@ -1,7 +1,7 @@
 {
   "name": "valleys-at-ashebrook-hoa",
   "type": "module",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "description": "Resident-run website for The Valleys at Ashebrook",
   "engines": {
     "node": ">=26.4.0"
@@ -9,6 +9,8 @@
   "scripts": {
     "astro": "astro",
     "auth:generate": "npx @better-auth/cli generate --output src/server/db/auth-schema.ts",
+    "bootstrap:env": "node --experimental-strip-types scripts/bootstrap-private.ts --materialize",
+    "bootstrap:private": "node --experimental-strip-types scripts/bootstrap-private.ts",
     "build": "astro build",
     "check": "astro sync && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && node vendor/astro-check-ts6/node_modules/@astrojs/check/bin/astro-check.js --root .",
     "corpus:import": "node --experimental-strip-types scripts/import-corpus.ts",

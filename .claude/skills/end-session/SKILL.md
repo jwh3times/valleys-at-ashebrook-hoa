@@ -18,7 +18,7 @@ The charter, verbatim:
 A session's durable output is not just the diff. It also produces things that live in four places
 outside the tracked tree, each of which rots silently if nobody writes to it: **memory** (what you
 now know about this project that the code doesn't say), **GitHub issues** (this repo's only
-tracker — decisions, follow-ups, and closures), **`private/`** (operator procedures, evidence, and
+tracker — decisions, follow-ups, and closures), **the private companion and `private/`** (operator procedures, evidence, and
 anything resident-data-derived, which is gitignored and therefore invisible to every code review),
 and the **local workspace** (scratch files, stale worktrees, generated-tree drift that fails the
 next session's CI for reasons that have nothing to do with it).
@@ -96,27 +96,42 @@ For each issue this session touched:
 - If the session used a wayfinder map, append to its Decisions-so-far and close resolved children
   per the wayfinding section of `docs/agents/issue-tracker.md`.
 
-### 4. Update `private/` docs
+### 4. Update the private companion and `private/`
 
-`private/` is gitignored (`.gitignore`, "private files") and is the only place operational detail,
-resident-data-derived artifacts, security reviews, and execution notes may live — `AGENTS.md` bans
-them from the public tree. Nothing here is committed; it is updated in place.
+Durable private TEXT lives in the private companion repository, cloned beside the main checkout by
+`npm run bootstrap:private` (a sibling directory; its locator comes from 1Password and is never
+committed here). It is versioned: commit and push it before ending the session. Resident-derived
+artifacts, generated import SQL/manifests, and other records stay under the gitignored `private/`
+(the default `ASHEBROOK_PRIVATE_ROOT`), which is a working area, not a source of truth.
 
-What already lives there and what changes it:
+What lives in the companion and what changes it:
 
-- **`private/OPERATIONS.md`** — production identity, roster import, and the post-flip
+- **`operations/OPERATIONS.md`** — production identity, roster import, and the post-flip
   removal/erasure procedure. Update it when the session changed an operator procedure, a resource
   name, or a bootstrap/backup step.
-- **`private/flip/`** (`RUNBOOK.md`, `EVIDENCE-LOG.md`, `ALLOW-LIST.md`) — cutover execution
-  record. Append evidence when the session produced any (an invariant run, a sweep result, a
-  measurement).
-- **`private/backups/`** — record any dump taken, with its date in the filename.
-- **`private/archive/`** — finished session notes and resumes (e.g.
-  `2026-08-04-pr7b-session-resume.md`). Park a long-form note here rather than in the tracked tree.
+- **`operations/recovery.md`** and **`operations/cross-computer-portability-plan.md`** — the
+  fresh-workstation runbook and the portability plan's "Resume Here" checkpoint. Update the
+  checkpoint (last checkpoint, current work item, status table, execution log) whenever a phase's
+  state changed.
+- **`operations/history/`** — cutover execution records (`RUNBOOK.md`, `EVIDENCE-LOG.md`,
+  `ALLOW-LIST.md`). Append evidence when the session produced any (an invariant run, a sweep
+  result, a measurement).
+- **`handoffs/`** — the current resumable session context; archive superseded ones under
+  `handoffs/archive/`.
+- **`incidents/`**, **`research/`**, **`design-history/`**, **`inventories/`** — private analyses,
+  research, reviewed plans/specs, and non-resident migration manifests.
+- **`config/1password/`** — unresolved `op://` templates only. Add a variable there (and in the
+  matching Ashebrook item) when the session introduced a new secret or binding.
+
+Before committing the companion, inspect the staged diff for credentials, personal data, sensitive
+filenames, production identifiers, and undisclosed vulnerabilities — its `.gitignore` rejects the
+obvious file types, not their contents. Dumps and backups go to encrypted records storage per the
+portability plan, never to either Git repository.
 
 Also sweep the other direction: if this session left a scratchpad, security review, runbook, or
-anything resident-data-derived **in the tracked tree**, move it under `private/` or delete it now.
-That rule is in `AGENTS.md` and a gitignored file can't be caught by review.
+anything resident-data-derived **in the tracked tree**, move it to the companion (text) or under
+`private/` (records), or delete it now. That rule is in `AGENTS.md` and a gitignored file can't be
+caught by review.
 
 ### 5. Note (don't write) public-doc debt
 
@@ -159,7 +174,7 @@ Show findings before acting. Work through:
 
 ### 7. Report
 
-One short paragraph per lane — memory, issues, `private/`, workspace — naming what changed and what
+One short paragraph per lane — memory, issues, private companion, workspace — naming what changed and what
 was deliberately left alone. End with **what's still open**: the branch mid-flight, the unanswered
 question, the issue awaiting a reply. That paragraph is what makes the next session cheap to start.
 
