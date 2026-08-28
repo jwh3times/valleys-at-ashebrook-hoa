@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-08-27
+
+### Added
+
+- **`npm run secrets:put -- <NAME>` deploys a Worker secret straight from 1Password.** The
+  secret's location is taken from the private companion's `.dev.vars.tpl` (a name it does not
+  declare is refused), the value reaches `wrangler secret put` on stdin, and the Cloudflare
+  operator token is read from 1Password into the child process's environment only — nothing is
+  printed, written, or passed as an argument, and no interactive `wrangler login` is needed on a
+  new machine.
+
 ## [0.17.2] - 2026-08-27
 
 ### Added
