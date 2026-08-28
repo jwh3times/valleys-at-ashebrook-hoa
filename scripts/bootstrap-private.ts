@@ -13,14 +13,29 @@
  * so the companion's own `.git` never shows up in the public tree, and each
  * worktree gets its own clone (the ApexRacers convention). `private/` is also
  * the default `ASHEBROOK_PRIVATE_ROOT`, so resident-derived records the import
- * tooling writes land inside the companion clone; the companion's `.gitignore`
- * excludes those families by name, and its README forbids committing them.
+ * tooling reads and writes land inside the companion clone; the companion's
+ * `.gitignore` excludes those families by name, and its README forbids
+ * committing them.
+ *
+ * Records seeding: those record families (`HOA_files/`, `rag_corpus/`, the
+ * generated SQL/manifests) are NOT in the companion — they are resident data
+ * kept out of every Git repository — so a linked worktree gets them from the
+ * MAIN checkout's `private/` (`git rev-parse --git-common-dir`'s parent),
+ * which the operator populates once per machine from the encrypted snapshot
+ * (see the companion's `operations/recovery.md`). Files are HARDLINKED by
+ * default — no extra disk, and an edit is visible from every worktree, which
+ * is what a source record wants — or copied with `--copy`. The source can be
+ * overridden with `--records-from <dir>` / `ASHEBROOK_RECORDS_SOURCE`; a
+ * source that has no records is reported and skipped. Existing files in the
+ * target are left alone.
  *
  * Usage:
  *
  *   npm run bootstrap:private                 # clone the companion if absent
  *   npm run bootstrap:env                     # ...then materialize .env/.dev.vars
  *   npm run bootstrap:private -- --target <dir>   # or ASHEBROOK_OPS_ROOT
+ *   npm run bootstrap:private -- --records-from <dir> --copy   # or ASHEBROOK_RECORDS_SOURCE
+ *   npm run bootstrap:private -- --no-records
  *   npm run bootstrap:private -- --op-reference <op://...>
  *   npm run bootstrap:private -- --url <credential-free github url>
  *
@@ -35,7 +50,14 @@
  * process memory for one retry and never written anywhere.
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -47,6 +69,20 @@ export const SERVICE_ACCOUNT_REFERENCE_ENV =
   'ASHEBROOK_OP_SERVICE_ACCOUNT_REFERENCE';
 export const OPS_ROOT_ENV = 'ASHEBROOK_OPS_ROOT';
 export const DEFAULT_TARGET = 'private';
+export const RECORDS_SOURCE_ENV = 'ASHEBROOK_RECORDS_SOURCE';
+
+/** Directories and file globs that make up the resident-records working copy. */
+export const RECORD_DIRECTORIES = [
+  'HOA_files',
+  'rag_corpus',
+  'backups',
+  'portability',
+] as const;
+export const RECORD_FILE_PATTERNS: readonly RegExp[] = [
+  /\.sql$/u,
+  /^documents-.*\.json$/u,
+  /^dedupe-/u,
+];
 
 export interface Options {
   url: string | null;
@@ -55,6 +91,9 @@ export interface Options {
   target: string | null;
   materialize: boolean;
   force: boolean;
+  recordsFrom: string | null;
+  seedRecords: boolean;
+  copyRecords: boolean;
 }
 
 export type EnvLike = Readonly<Record<string, string | undefined>>;
@@ -70,12 +109,16 @@ export function parseArgs(
     target: env[OPS_ROOT_ENV]?.trim() || null,
     materialize: false,
     force: false,
+    recordsFrom: env[RECORDS_SOURCE_ENV]?.trim() || null,
+    seedRecords: true,
+    copyRecords: false,
   };
   const valued = new Set([
     '--url',
     '--op-reference',
     '--service-account-reference',
     '--target',
+    '--records-from',
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -87,12 +130,21 @@ export function parseArgs(
       options.force = true;
       continue;
     }
+    if (argument === '--no-records') {
+      options.seedRecords = false;
+      continue;
+    }
+    if (argument === '--copy') {
+      options.copyRecords = true;
+      continue;
+    }
     if (!valued.has(argument)) throw new Error(`Unknown argument: ${argument}`);
     const value = argv[index + 1];
     if (!value) throw new Error(`${argument} requires a value.`);
     if (argument === '--url') options.url = value;
     else if (argument === '--op-reference') options.reference = value;
     else if (argument === '--target') options.target = value;
+    else if (argument === '--records-from') options.recordsFrom = value;
     else options.serviceAccountReference = value;
     index += 1;
   }
@@ -131,6 +183,100 @@ export function validateCloneUrl(cloneUrl: string): string {
     );
   }
   return cloneUrl;
+}
+
+/**
+ * The main checkout's root, even when invoked from a linked worktree: the
+ * common git dir is `<main>/.git` for the main checkout and every worktree,
+ * so its parent is where the machine's records copy lives.
+ */
+export function mainRepositoryRoot(worktreeRoot: string): string {
+  const result = spawnSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: worktreeRoot,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (result.status !== 0 || !result.stdout.trim()) return worktreeRoot;
+  return path.dirname(path.resolve(worktreeRoot, result.stdout.trim()));
+}
+
+export function isRecordEntry(name: string, isDirectory: boolean): boolean {
+  if (isDirectory) {
+    return (RECORD_DIRECTORIES as readonly string[]).includes(name);
+  }
+  return RECORD_FILE_PATTERNS.some((pattern) => pattern.test(name));
+}
+
+export interface SeedResult {
+  linked: number;
+  skipped: number;
+  families: string[];
+}
+
+function placeFile(from: string, to: string, copy: boolean): void {
+  if (copy) {
+    copyFileSync(from, to);
+    return;
+  }
+  try {
+    linkSync(from, to);
+  } catch {
+    copyFileSync(from, to); // cross-device or unsupported: fall back to a copy
+  }
+}
+
+function seedTree(
+  from: string,
+  to: string,
+  copy: boolean,
+  result: SeedResult,
+): void {
+  mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    const source = path.join(from, entry.name);
+    const destination = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      seedTree(source, destination, copy, result);
+    } else if (entry.isFile()) {
+      if (existsSync(destination)) {
+        result.skipped += 1;
+      } else {
+        placeFile(source, destination, copy);
+        result.linked += 1;
+      }
+    }
+  }
+}
+
+/**
+ * Hardlink (or copy) the record families from `source` into `target`,
+ * never overwriting. Same-path is a no-op — the main checkout seeding itself.
+ */
+export function seedRecords(
+  source: string,
+  target: string,
+  copy: boolean,
+): SeedResult {
+  const result: SeedResult = { linked: 0, skipped: 0, families: [] };
+  if (!existsSync(source) || path.resolve(source) === path.resolve(target)) {
+    return result;
+  }
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    if (!isRecordEntry(entry.name, entry.isDirectory())) continue;
+    result.families.push(entry.name);
+    const from = path.join(source, entry.name);
+    const to = path.join(target, entry.name);
+    if (entry.isDirectory()) {
+      seedTree(from, to, copy, result);
+    } else if (statSync(from).isFile()) {
+      if (existsSync(to)) result.skipped += 1;
+      else {
+        placeFile(from, to, copy);
+        result.linked += 1;
+      }
+    }
+  }
+  return result;
 }
 
 export type InstallState = 'installed' | 'absent' | 'occupied';
@@ -239,6 +385,24 @@ export function main(argv: readonly string[]): void {
       );
     }
     console.log(`Private companion installed at ${companionRoot}.`);
+  }
+
+  if (options.seedRecords) {
+    const source = path.resolve(
+      worktreeRoot,
+      options.recordsFrom ??
+        path.join(mainRepositoryRoot(worktreeRoot), DEFAULT_TARGET),
+    );
+    const seeded = seedRecords(source, companionRoot, options.copyRecords);
+    if (seeded.families.length === 0) {
+      console.log(
+        `No record families found at ${source}; restore the snapshot there first (see the companion's operations/recovery.md).`,
+      );
+    } else {
+      console.log(
+        `Records ${options.copyRecords ? 'copied' : 'linked'} from ${source}: ${seeded.families.join(', ')} (${seeded.linked} files, ${seeded.skipped} already present).`,
+      );
+    }
   }
 
   if (options.materialize) {
