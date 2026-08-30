@@ -7,6 +7,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.5] - 2026-08-30
+
+### Fixed
+
+- **`npm run bootstrap:private` no longer tells an operator to restore a snapshot over records
+  that are already there.** Run from the main checkout, the command seeds the records into
+  themselves, which is deliberately a no-op — but the no-op was indistinguishable from an empty
+  source, so it printed "No record families found". It now reports what is present and that there
+  is nothing to seed, and keeps the restore-the-snapshot message for the case it was written for:
+  a source that genuinely holds no record families, whether or not it is the checkout's own.
+- A Windows-only failure in the companion-location unit test, which compared a resolved path
+  against a joined one — the two agree on Linux but not on Windows, where resolving a rooted POSIX
+  path prepends the current drive letter.
+
+## [0.17.4] - 2026-08-27
+
+### Changed
+
+- Bumped `@astrojs/cloudflare` from 14.2.3 to 14.2.4 and `astro` from 7.2.4 to 7.2.6, and the
+  direct development dependencies `@cloudflare/workers-types` from 5.20260823.1 to 5.20260825.1,
+  `@napi-rs/canvas` from 1.0.7 to 1.0.8, `@types/node` from 26.2.0 to 26.3.0, and
+  `@types/react-dom` from 19.2.4 to 19.2.5.
+
 ## [0.17.3] - 2026-08-27
 
 ### Added
