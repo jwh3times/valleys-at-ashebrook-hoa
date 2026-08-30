@@ -129,8 +129,10 @@ describe('validateCloneUrl', () => {
 describe('companion location', () => {
   it('defaults to the gitignored private/ directory of this checkout', () => {
     expect(DEFAULT_TARGET).toBe('private');
+    // path.resolve, not path.join, on both sides: on Windows resolve prepends
+    // the CWD's drive letter to a rooted POSIX path and join does not.
     expect(path.resolve('/w/valleys-at-ashebrook-hoa', DEFAULT_TARGET)).toBe(
-      path.join('/w/valleys-at-ashebrook-hoa', 'private'),
+      path.resolve('/w/valleys-at-ashebrook-hoa', 'private'),
     );
   });
 });
@@ -239,6 +241,29 @@ describe('records seeding', () => {
     expect(
       seedRecords(path.join(root, 'nope'), target, false).families,
     ).toEqual([]);
-    expect(seedRecords(source, source, false).families).toEqual([]);
+  });
+
+  it('reports the main checkout seeding itself as already in place, not as missing records', () => {
+    const root = tempDir();
+    const source = path.join(root, 'source');
+    mkdirSync(path.join(source, 'rag_corpus'), { recursive: true });
+    writeFileSync(path.join(source, 'rag_corpus', 'x.md'), 'md');
+
+    const same = seedRecords(source, source, false);
+    expect(same.sameRoot).toBe(true);
+    expect(same.families).toEqual(['rag_corpus']);
+    expect(same.linked).toBe(0);
+    expect(same.skipped).toBe(0);
+  });
+
+  it('still reports a same-root source holding no families as missing', () => {
+    const root = tempDir();
+    const empty = path.join(root, 'empty');
+    mkdirSync(empty, { recursive: true });
+    writeFileSync(path.join(empty, 'README.md'), 'readme');
+
+    const same = seedRecords(empty, empty, false);
+    expect(same.sameRoot).toBe(true);
+    expect(same.families).toEqual([]);
   });
 });
