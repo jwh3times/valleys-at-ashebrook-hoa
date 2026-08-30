@@ -211,6 +211,12 @@ export interface SeedResult {
   linked: number;
   skipped: number;
   families: string[];
+  /**
+   * Source and target resolve to the same directory: the main checkout seeding
+   * itself. Families are still enumerated, but nothing is placed, so an empty
+   * `families` here means the records really are missing.
+   */
+  sameRoot: boolean;
 }
 
 function placeFile(from: string, to: string, copy: boolean): void {
@@ -249,21 +255,25 @@ function seedTree(
 }
 
 /**
- * Hardlink (or copy) the record families from `source` into `target`,
- * never overwriting. Same-path is a no-op — the main checkout seeding itself.
+ * Hardlink (or copy) the record families from `source` into `target`, never
+ * overwriting. Same-path places nothing — the main checkout seeding itself —
+ * but still enumerates what is there, so the caller can tell "already in
+ * place" from "no records at all" rather than conflating the two.
  */
 export function seedRecords(
   source: string,
   target: string,
   copy: boolean,
 ): SeedResult {
-  const result: SeedResult = { linked: 0, skipped: 0, families: [] };
-  if (!existsSync(source) || path.resolve(source) === path.resolve(target)) {
+  const sameRoot = path.resolve(source) === path.resolve(target);
+  const result: SeedResult = { linked: 0, skipped: 0, families: [], sameRoot };
+  if (!existsSync(source)) {
     return result;
   }
   for (const entry of readdirSync(source, { withFileTypes: true })) {
     if (!isRecordEntry(entry.name, entry.isDirectory())) continue;
     result.families.push(entry.name);
+    if (sameRoot) continue;
     const from = path.join(source, entry.name);
     const to = path.join(target, entry.name);
     if (entry.isDirectory()) {
@@ -397,6 +407,10 @@ export function main(argv: readonly string[]): void {
     if (seeded.families.length === 0) {
       console.log(
         `No record families found at ${source}; restore the snapshot there first (see the companion's operations/recovery.md).`,
+      );
+    } else if (seeded.sameRoot) {
+      console.log(
+        `Records already in place at ${source}: ${seeded.families.join(', ')}; nothing to seed.`,
       );
     } else {
       console.log(
