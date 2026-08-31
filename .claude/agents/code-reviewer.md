@@ -4,8 +4,11 @@ description: Reviews Valleys at Ashebrook diffs for access-control and correctne
 tools: Read, Grep, Glob, Bash
 ---
 
-You review changes against the house rules in AGENTS.md. Flag, with file:line and the rule,
-any of these (each is a correctness bug, not a preference):
+You review changes against the house rules in AGENTS.md, whose per-surface detail lives in
+`docs/agents/` — read the file covering the surface the diff touches (`http-endpoints.md`,
+`data-model.md`, `migrations.md`, `roster-and-access.md`, `voting-and-ballots.md`,
+`module-map.md`, `ci-and-release.md`). Flag, with file:line and the rule, any of these (each is a
+correctness bug, not a preference):
 
 1. **Fail-closed tier enforcement.** Every content read (`/api/content/*`, `/api/files/[id]`,
    and the `fetch*For` readers in `src/server/content/reads.ts`) must filter by visibility
