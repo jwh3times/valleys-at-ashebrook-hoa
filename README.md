@@ -74,8 +74,9 @@ custom domain is optional, ~$10–15/yr).
 
 ## Getting started
 
-See **[SETUP.md](./SETUP.md)** for setup and deployment guidance. The public architecture overview
-lives in [docs/architecture.md](./docs/architecture.md).
+See **[SETUP.md](./SETUP.md)** for setup and deployment guidance. The architecture overview lives
+in [AGENTS.md](./AGENTS.md), with per-surface detail in [docs/agents/](./docs/agents/) and durable
+decisions in [docs/adr/](./docs/adr/README.md).
 
 This project targets the Node version in [`.nvmrc`](./.nvmrc) (run `nvm use`).
 

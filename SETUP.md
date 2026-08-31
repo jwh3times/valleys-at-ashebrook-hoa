@@ -459,5 +459,5 @@ resource, binding, or secret.
 
 ## Public Architecture
 
-See [docs/architecture.md](./docs/architecture.md) for a public architecture overview and
-[docs/adr/](./docs/adr/) for durable architecture decisions.
+See [AGENTS.md](./AGENTS.md) for the architecture overview, [docs/agents/](./docs/agents/) for
+per-surface detail, and [docs/adr/](./docs/adr/) for durable architecture decisions.
