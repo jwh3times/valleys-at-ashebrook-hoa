@@ -36,10 +36,17 @@ Look for the originating spec, in this order:
 
 In this repo the coding standards live in **`AGENTS.md`** — always include it, especially its
 "Coding Style & Naming Conventions" section (including the `Number(x) || <default>` coercion
-rule), "Testing Guidelines", and "Security & Configuration Tips". Add `CONTRIBUTING.md` and any
-`docs/adr/` entries touching the changed area. Note: `npm run lint:coercions` catches only the
-literal `Number(x) ||` shape, so blank-vs-zero conflations in other forms are NOT "already
-enforced by tooling" — review them.
+rule), "Testing Guidelines", and "Security & Configuration Tips".
+
+`AGENTS.md` carries only what binds every change; per-surface detail sits behind its pointer table
+in **`docs/agents/`**. Add the file covering the surface the diff touches —
+`http-endpoints.md` (route guards, status codes), `data-model.md` (tables, FKs, CHECKs),
+`migrations.md`, `roster-and-access.md` (authorization, write freeze), `voting-and-ballots.md`
+(ballot secrecy), `module-map.md`, `ci-and-release.md`. Add `CONTRIBUTING.md` and any `docs/adr/`
+entries touching the changed area.
+
+Note: `npm run lint:coercions` catches only the literal `Number(x) ||` shape, so blank-vs-zero
+conflations in other forms are NOT "already enforced by tooling" — review them.
 
 On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 

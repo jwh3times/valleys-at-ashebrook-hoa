@@ -7,6 +7,33 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.6] - 2026-08-31
+
+### Changed
+
+- **`AGENTS.md` is factored from 1,871 lines down to roughly 370, with per-surface detail moved
+  behind a pointer table into `docs/agents/`.** The file is loaded on every turn of every session,
+  and 83% of it was a single Architecture section carrying endpoint contracts, a module map,
+  per-table schema notes, and a migration-by-migration history — reference material that bears on
+  a task only once that task touches the surface. `AGENTS.md` now carries what binds every change
+  (commands, the coding rules, architecture at altitude, roles and the board glossary, testing,
+  deploy) and routes everything else by task to one of seven new files: `http-endpoints.md`,
+  `data-model.md`, `migrations.md`, `roster-and-access.md`, `voting-and-ballots.md`,
+  `module-map.md`, and `ci-and-release.md`. No rule was dropped: live rules moved verbatim, while
+  settled history — completed migration phases, applied-on dates, issue-by-issue archaeology — was
+  compressed to the rule that survives plus its issue citation.
+- The `docs-updater` subagent routes documentation changes by surface and now carries a standing
+  rule to keep `AGENTS.md` small, so the file does not re-inflate. The `code-reviewer` subagent and
+  the `code-review` skill read the per-surface file covering the diff under review.
+
+### Removed
+
+- **`docs/architecture.md`**, which duplicated `AGENTS.md` at prose altitude and had gone stale in
+  two places: it still described board service as living in `board_people`/`board_terms`, retired
+  by ADR 0022 phase 3b, and owner lookup as reading the legacy owner roster, repointed by #248. Its
+  unique prose folded into the `docs/agents/` files, and `README.md` and `SETUP.md` now link to
+  `AGENTS.md` and `docs/agents/` instead.
+
 ## [0.17.5] - 2026-08-30
 
 ### Fixed

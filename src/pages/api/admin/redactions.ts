@@ -25,7 +25,7 @@ export const prerender = false;
 // separate authority from deciding a value should be erased at all.
 
 const AUTHORITY_REFERENCE_MAX = 300;
-// A reason CODE, not free text (see AGENTS.md's ledger rules) — short, and
+// A reason CODE, not free text (see docs/agents/roster-and-access.md) — short, and
 // capped accordingly.
 const REASON_MAX = 120;
 

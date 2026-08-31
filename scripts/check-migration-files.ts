@@ -28,7 +28,7 @@
  * chain has been abandoned since `0019` and is five migrations stale (#257):
  * migrations here are hand-authored, `db:generate` is not part of the workflow,
  * and requiring a snapshot per migration would enforce a workflow this project
- * does not use. See the migrations section of AGENTS.md.
+ * does not use. See docs/agents/migrations.md.
  *
  * Usage:
  *
