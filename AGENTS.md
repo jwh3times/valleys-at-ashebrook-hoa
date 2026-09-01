@@ -78,6 +78,7 @@ npm run lint:migrations   # migrations directory is well-formed and contiguous, 
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to production D1 — the ONLY path
 npm run auth:generate     # regenerate Better Auth schema from config
+npm run sync:main         # fast-forward this checkout AND private/ to the latest default branch
 npm run bootstrap:private # clone the private ops companion into gitignored private/ via 1Password
 npm run bootstrap:env     # materialize .env/.dev.vars for this worktree
 npm run roster:import     # import owner roster for homeowner verification
