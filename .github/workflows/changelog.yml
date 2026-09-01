@@ -43,9 +43,9 @@ jobs:
 
       - name: Verify CHANGELOG.md documents the target version
         env:
-          PR_ACTOR: ${{ github.actor }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
-          if [ "$PR_ACTOR" = "dependabot[bot]" ]; then
+          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
             echo "Dependabot PR — changelog entry is backfilled by /ship on the next human PR. Skipping."
             exit 0
           fi
