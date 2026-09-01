@@ -7,6 +7,44 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.8] - 2026-09-01
+
+### Added
+
+- **`npm run sync:main` brings this checkout and the private operations companion to the latest
+  default branch in one command.** Work here spans two Git repositories with separate remotes —
+  the public tree and the companion clone under `private/` — so "pull latest" was two sets of
+  commands in two directories, and the companion is the one that gets forgotten, because nothing
+  in a build or a test run reads it and its staleness is therefore silent. Per repository the
+  command runs `git fetch --prune origin`, checks out the default branch (from `origin/HEAD`,
+  falling back to `main`), then fast-forwards it, printing one line per repository.
+
+  It refuses rather than guesses: a repository with uncommitted changes is reported and left
+  untouched, never stashed and never carried across a branch switch, and the merge is
+  fast-forward only, so a local branch that has diverged from its remote errors instead of
+  minting a merge commit. Each repository is handled independently, so one dirty tree does not
+  block the other. A companion that is not installed is skipped with a pointer to
+  `npm run bootstrap:private`, since a fresh worktree legitimately has none. `--branch <name>`
+  targets a branch other than `origin/HEAD`, `--skip-private` limits the run to the public tree,
+  and `--target <dir>` (or `ASHEBROOK_OPS_ROOT`) points at a companion kept elsewhere.
+
+## [0.17.7] - 2026-09-01
+
+### Changed
+
+- Dependency updates from the `npm-minor-and-patch` group: `@anthropic-ai/sdk` 0.120 to 0.122,
+  `astro` 7.2.6 to 7.2.9, `@astrojs/cloudflare` 14.2.4 to 14.2.5, `@cloudflare/workers-types`
+  5.20260825.1 to 5.20260829.1, `wrangler` 4.125.0 to 4.127.1, `@types/node` 26.3 to 26.4,
+  `@testing-library/react` 16.3.2 to 16.3.3, and `@vitejs/plugin-react` 6.1.0 to 6.1.1.
+  `worker-configuration.d.ts` was regenerated for the newer Wrangler and workers types.
+
+### Fixed
+
+- The `Changelog Version` workflow's Dependabot exemption now reads the pull request's author
+  (`github.event.pull_request.user.login`) rather than `github.actor`. `github.actor` is whoever
+  triggered the run, so a maintainer re-running or updating a Dependabot PR failed the check the
+  exemption exists to skip.
+
 ## [0.17.6] - 2026-08-31
 
 ### Changed

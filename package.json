@@ -37,6 +37,7 @@
     "shadow:sweep": "node --experimental-strip-types scripts/shadow-sweep.ts",
     "start": "astro dev",
     "sync:agents": "node --experimental-strip-types scripts/sync-agent-skills.ts",
+    "sync:main": "node --experimental-strip-types scripts/sync-main.ts",
     "test": "vitest run",
     "test:server": "vitest run --config vitest.workers.config.ts",
     "test:watch": "vitest",
