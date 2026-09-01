@@ -63,6 +63,18 @@ against the current worktree root; it validates every referenced 1Password field
 variable names only. A divergent existing `.env` or `.dev.vars` is preserved unless you pass
 `-- --force`.
 
+## Staying current
+
+`npm run sync:main` fast-forwards both this checkout and the private companion under `private/` to
+the latest default branch in one command — the companion is the one that gets forgotten, since
+nothing in a build or test run reads it, so its staleness is silent. Per repository it fetches,
+checks out the default branch, and merges `--ff-only`; it refuses a repository with uncommitted
+changes rather than stashing them, and a diverged local branch stops with an error instead of
+minting a merge commit. A missing companion is reported and skipped with a pointer to
+`npm run bootstrap:private`, not treated as a failure. `-- --branch <name>` targets a branch other
+than `origin/HEAD`, `-- --skip-private` limits the run to the public tree, and
+`-- --target <dir>` (or `ASHEBROOK_OPS_ROOT`) points at a companion kept elsewhere.
+
 ## Deploying Worker secrets
 
 `npm run secrets:put -- <NAME>` deploys one Worker secret straight from 1Password: the name is
