@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   repositoryRootFromModuleUrl,
   resolvePrivatePath,
@@ -13,6 +13,14 @@ const repositoryRoot = path.join(
   'workspace',
   'public',
 );
+
+beforeEach(() => {
+  vi.stubEnv('ASHEBROOK_PRIVATE_ROOT', '');
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('resolvePrivateRoot', () => {
   it('derives the default repository root from the resolver module', () => {
