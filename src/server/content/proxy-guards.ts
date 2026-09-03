@@ -2,7 +2,6 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { proxies, memberAttendance, memberVotes, ballots } from '../db/schema';
 import { people } from '../db/roster-schema';
-import { associationDateIso } from '../../lib/format';
 import { authorityKey, fetchLotAuthorityKeys } from '../roster/authority';
 
 /**
@@ -19,21 +18,11 @@ import { authorityKey, fetchLotAuthorityKeys } from '../roster/authority';
  * the shared `roster/authority.ts` definition — the same rule
  * `qualifiesGuard` applies to a Board Term's qualifying Lot.
  *
- * The roster records intervals, but this comparison is still made at TODAY's
- * Association Day rather than the occasion's, so the approximation #220
- * documented survives the repointing: a grantor who sold AFTER the occasion
- * still fails, even though the proxy was good on the day. That deliberately
- * accepts false refusals of late record-keeping, because the alternative
- * (accepting every proxy from a former owner) is the March-proxy /
- * April-meeting / recorded-in-May hole #204 opens with. The escape for a
- * legitimate late entry is to record it without the proxy reference.
- *
- * Exact occasion-day containment is now MECHANICALLY possible for the first
- * time — the intervals are queryable and the day is on the occasion row — and
- * is deliberately left to its own change rather than folded into a schema
- * repointing, since it moves a safety-critical guard's semantics rather than
- * its storage. For a LIVE cast the occasion is now, so `voting.ts`'s
- * mutation-boundary predicate is already exact.
+ * Callers supply the occasion's Association Day. Board record-keeping uses a
+ * meeting's `date` or an election's `election_date`, so a proxy that was valid
+ * on a past occasion remains recordable after a later transfer. Live casting
+ * supplies today, and its mutation-boundary predicate independently uses that
+ * same day, so a proxy whose grantor has lost authority confers nothing now.
  */
 
 export interface ProxyUse {
@@ -163,13 +152,17 @@ export interface ProxyUseFailure {
  * (each is a cross-row condition), which is why this guard exists in front of
  * every insert that writes a proxy_id.
  *
- * The grantor check is the ADR 0022 phase-3d addition; see the module comment
- * above for which day it asks about and what that still approximates.
+ * `associationDay` is required so a new caller cannot silently fall back to
+ * today's answer when it is writing a past occasion.
  */
 export async function proxyUseError(
   db: Db,
   uses: ProxyUse[],
-  occasion: { meetingId?: string | null; electionId?: string | null },
+  occasion: {
+    meetingId?: string | null;
+    electionId?: string | null;
+    associationDay: string;
+  },
 ): Promise<ProxyUseFailure | null> {
   if (uses.length === 0) return null;
   const ids = [...new Set(uses.map((u) => u.proxyId))];
@@ -189,7 +182,7 @@ export async function proxyUseError(
   const authority = await fetchLotAuthorityKeys(
     db,
     [...new Set(rows.map((r) => r.propertyId))],
-    associationDateIso(),
+    occasion.associationDay,
   );
   for (const u of uses) {
     const p = byId.get(u.proxyId);
@@ -199,7 +192,8 @@ export async function proxyUseError(
     if (!authority.has(authorityKey(p.grantorPersonId, p.propertyId)))
       return {
         status: 409,
-        message: 'Proxy grantor no longer holds authority for this lot',
+        message:
+          'Proxy grantor did not hold authority for this lot on the occasion date',
       };
     const coversMeeting =
       p.meetingId !== null &&

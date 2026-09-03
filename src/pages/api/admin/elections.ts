@@ -252,6 +252,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       status: elections.status,
       source: elections.source,
       meetingId: elections.meetingId,
+      electionDate: elections.electionDate,
     })
     .from(elections)
     .where(eq(elections.id, electionId))
@@ -269,7 +270,11 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     parsedEntries.value
       .filter((e) => e.proxyId !== null)
       .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
-    { electionId, meetingId: election.meetingId },
+    {
+      electionId,
+      meetingId: election.meetingId,
+      associationDay: election.electionDate,
+    },
   );
   if (proxyFailure)
     return new Response(proxyFailure.message, {

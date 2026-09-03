@@ -21,7 +21,7 @@ fullName}` list from `GET /api/admin/meetings?roster=people` — plus `fetchLotP
   Lot Authority list from `GET /api/admin/meetings?roster=lot-people` that backs the member
   attendance, member vote, ballot, and proxy pickers (#248 part 2; former holders included and
   flagged `current: false`, so a past occasion stays recordable and the Proxies panel can warn that
-  a grantor's proxy would be born unusable), and `fetchRosterPeople` and
+  current status does not decide whether a past occasion-day use is valid), and `fetchRosterPeople` and
   `fetchRosterLots` over `GET /api/admin/roster`), meeting-record helpers
   (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
   `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
@@ -270,8 +270,8 @@ SecondaryStorage.increment.")` from `onRequestRateLimit` on every request whenev
   readers (`fetchLotAuthority`, `fetchPersonAuthority`, `fetchLotAuthorityHistory`,
   `hasEverHeldLotAuthority`, `fetchLotAuthorityKeys`) and as the raw-SQL `lotAuthorityExists` fragment the casting
   predicates embed; a `day` of `null` asks "did this authority EVER exist", which is what lets the
-  board's pickers still offer a former owner for a past occasion while every USE of that authority
-  is refused. `verification/property.ts` is the unchanged-shape legacy backend (minus its
+  board's pickers still offer a former owner for a past occasion, while proxy use checks the
+  meeting or election's own Association Day. `verification/property.ts` is the unchanged-shape legacy backend (minus its
   three retired auto-enqueue paths, and now holding the `getActiveOwnersForProperty` reader that
   moved out of `roster/lookup.ts` when the member surfaces left the legacy roster — it is the only
   caller left) and `verification/rate-limit.ts` holds the shared KV throttles
