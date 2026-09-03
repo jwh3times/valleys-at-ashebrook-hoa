@@ -192,7 +192,7 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
   if (!parsedEntries.ok)
     return new Response(parsedEntries.error, { status: 400 });
   const existing = await db
-    .select({ id: meetings.id, body: meetings.body })
+    .select({ id: meetings.id, body: meetings.body, date: meetings.date })
     .from(meetings)
     .where(eq(meetings.id, meetingId))
     .limit(1);
@@ -207,7 +207,7 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     parsedEntries.value
       .filter((e) => e.proxyId !== null)
       .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
-    { meetingId },
+    { meetingId, associationDay: existing[0].date },
   );
   if (proxyFailure)
     return new Response(proxyFailure.message, {

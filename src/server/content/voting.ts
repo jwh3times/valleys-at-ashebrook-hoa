@@ -183,11 +183,10 @@ async function proxyCastingError(
   occasion: { meetingId?: string | null; electionId?: string | null },
 ): Promise<VoteWriteResult | null> {
   const db = getDb(env);
-  const scopeError = await proxyUseError(
-    db,
-    [{ propertyId, proxyId }],
-    occasion,
-  );
+  const scopeError = await proxyUseError(db, [{ propertyId, proxyId }], {
+    ...occasion,
+    associationDay: associationDateIso(),
+  });
   if (scopeError) return failure(scopeError.status, scopeError.message);
 
   // The caller holds this proxy when its holder Person holds Lot Authority

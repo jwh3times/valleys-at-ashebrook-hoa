@@ -112,10 +112,10 @@ API routes live under `src/pages/api/`:
   `proxyUseError` guard (`src/server/content/proxy-guards.ts`) — unknown `proxyId` is `400`, a proxy
   for a different lot or scoped to a different occasion is `409` (a meeting-scoped proxy also
   covers an election held at that meeting; a standalone election accepts only its own), a proxy
-  whose grantor does not currently hold Lot Authority over the proxy's lot is `409` (the ADR 0022
-  phase 3d grantor re-validation, #220/#204 — still a current-day approximation of "held Lot
-  Authority at the occasion", but asked of the party roster since #248 part 2 rather than of
-  `owners.status`; see the module comment) — and an entry carrying both `proxyId` and
+  whose grantor did not hold Lot Authority over the proxy's lot on the occasion day is `409` (the
+  ADR 0022 phase 3d grantor re-validation, #220/#204, asked of the party roster since #248 part 2;
+  meeting attendance and votes use `meetings.date`, while recorded-election ballots use
+  `elections.election_date`, including a meeting-scoped proxy covering that election) — and an entry carrying both `proxyId` and
   `representedByPersonId`/`castByPersonId` is `400`, since who acted
   lives on the canonical proxy row, never beside it. All verbs on both routes are
   `requireBoard`-gated.

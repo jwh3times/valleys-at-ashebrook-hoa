@@ -82,6 +82,7 @@ async function meetingBodyForMotion(
       found: true;
       body: string;
       meetingId: string;
+      meetingDate: string;
       votingState: 'none' | 'open' | 'closed';
       votingRevision: number;
     }
@@ -97,7 +98,7 @@ async function meetingBodyForMotion(
     .limit(1);
   if (existing.length === 0) return { found: false };
   const meeting = await db
-    .select({ body: meetings.body })
+    .select({ body: meetings.body, date: meetings.date })
     .from(meetings)
     .where(eq(meetings.id, existing[0].meetingId))
     .limit(1);
@@ -105,6 +106,7 @@ async function meetingBodyForMotion(
     found: true,
     body: meeting[0]?.body ?? '',
     meetingId: existing[0].meetingId,
+    meetingDate: meeting[0]?.date ?? '',
     votingState: existing[0].votingState,
     votingRevision: existing[0].votingRevision,
   };
@@ -268,7 +270,7 @@ async function setMemberVotes(
     parsedEntries.value
       .filter((e) => e.proxyId !== null)
       .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
-    { meetingId: lookup.meetingId },
+    { meetingId: lookup.meetingId, associationDay: lookup.meetingDate },
   );
   if (proxyFailure)
     return new Response(proxyFailure.message, {
