@@ -5,21 +5,25 @@ export const PURGED_REPORT_MARKDOWN =
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function purgeStatement(database: D1Database, cutoffSeconds?: number) {
-  const cutoffClause = cutoffSeconds === undefined ? '' : 'created_at < ? AND ';
-  const statement = database.prepare(
-    `UPDATE reports
+function purgeStatement(
+  database: D1Database,
+  condition: string,
+  conditionValues: Array<string | number>,
+) {
+  return database
+    .prepare(
+      `UPDATE reports
         SET topic = ?, content_md = ?, sources_json = '[]'
-      WHERE ${cutoffClause}(topic <> ? OR content_md <> ? OR sources_json <> '[]')`,
-  );
-  const values = [
-    PURGED_REPORT_TOPIC,
-    PURGED_REPORT_MARKDOWN,
-    ...(cutoffSeconds === undefined ? [] : [cutoffSeconds]),
-    PURGED_REPORT_TOPIC,
-    PURGED_REPORT_MARKDOWN,
-  ];
-  return statement.bind(...values);
+      WHERE ${condition}
+        AND (topic <> ? OR content_md <> ? OR sources_json <> '[]')`,
+    )
+    .bind(
+      PURGED_REPORT_TOPIC,
+      PURGED_REPORT_MARKDOWN,
+      ...conditionValues,
+      PURGED_REPORT_TOPIC,
+      PURGED_REPORT_MARKDOWN,
+    );
 }
 
 /** A mutation-boundary statement used inside a roster-redaction D1 batch. */
@@ -27,20 +31,11 @@ export function purgeAllSavedReportContentStatement(
   database: D1Database,
   redactionEventId: string,
 ) {
-  return database
-    .prepare(
-      `UPDATE reports
-          SET topic = ?, content_md = ?, sources_json = '[]'
-        WHERE EXISTS (SELECT 1 FROM audit_events WHERE id = ?)
-          AND (topic <> ? OR content_md <> ? OR sources_json <> '[]')`,
-    )
-    .bind(
-      PURGED_REPORT_TOPIC,
-      PURGED_REPORT_MARKDOWN,
-      redactionEventId,
-      PURGED_REPORT_TOPIC,
-      PURGED_REPORT_MARKDOWN,
-    );
+  return purgeStatement(
+    database,
+    'EXISTS (SELECT 1 FROM audit_events WHERE id = ?)',
+    [redactionEventId],
+  );
 }
 
 /** Remove de-anonymized report text after the application retention window. */
@@ -52,6 +47,8 @@ export async function cleanupSavedReportContent(
   const cutoffSeconds = Math.floor(
     (now.getTime() - REPORT_CONTENT_RETENTION_DAYS * DAY_MS) / 1000,
   );
-  const result = await purgeStatement(env.DATABASE, cutoffSeconds).run();
+  const result = await purgeStatement(env.DATABASE, 'created_at < ?', [
+    cutoffSeconds,
+  ]).run();
   return { reportRows: result.meta.changes };
 }
