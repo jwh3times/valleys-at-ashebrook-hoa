@@ -72,8 +72,8 @@ async function createProperty(
  * columns from `owners` onto `people(party_id)`.
  *
  * `endDay` seeds a FORMER holder, which the route still accepts as a grantor
- * (a historical paper proxy stays recordable) while every use of that proxy is
- * refused.
+ * because a historical paper proxy stays recordable. Its use is validated
+ * against the meeting or election day rather than the current-state flag.
  */
 async function createPerson(
   propertyId: string,

@@ -2,13 +2,18 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { proxies, memberAttendance, memberVotes, ballots } from '../db/schema';
 import { people } from '../db/roster-schema';
-import { authorityKey, fetchLotAuthorityKeys } from '../roster/authority';
+import {
+  authorityKey,
+  fetchLotAuthorityKeys,
+  lotAuthorityExists,
+  type AuthoritySql,
+} from '../roster/authority';
 
 /**
  * GRANTOR RE-VALIDATION (ADR 0022 phase 3d, #220 / #204).
  *
  * `proxyUseError` below asks, in addition to lot and occasion scope, whether
- * the proxy's GRANTOR still holds Lot Authority.
+ * the proxy's GRANTOR held Lot Authority on the occasion day.
  *
  * Until #248 part 2 that question was answered from the LEGACY roster
  * (`owners.status` / `owners.property_id`) in both cutover modes, because a
@@ -28,6 +33,12 @@ import { authorityKey, fetchLotAuthorityKeys } from '../roster/authority';
 export interface ProxyUse {
   propertyId: string;
   proxyId: string;
+}
+
+export interface ProxyOccasion {
+  meetingId?: string | null;
+  electionId?: string | null;
+  associationDay: string;
 }
 
 /**
@@ -144,13 +155,13 @@ export interface ProxyUseFailure {
 /**
  * Validates every proxy referenced by a write action's entries: the proxy
  * must exist, belong to the entry's own lot, be scoped to the occasion
- * being written, and have a grantor who still holds Lot Authority for that
- * lot. `occasion` carries the meeting or election under write; an
+ * being written, and have a grantor who held Lot Authority for that lot on
+ * the occasion day. `occasion` carries the meeting or election under write; an
  * election held at a meeting passes BOTH ids, because a form signed "for the
  * annual meeting" covers that meeting's business, its election included —
- * the lookup rule ADR 0018 records. The database cannot express any of this
- * (each is a cross-row condition), which is why this guard exists in front of
- * every insert that writes a proxy_id.
+ * the lookup rule ADR 0018 records. This reader runs first so callers receive
+ * the precise failure message; `proxyUsesValidAtMutation` repeats the same
+ * cross-row conditions inside each replacement transaction.
  *
  * `associationDay` is required so a new caller cannot silently fall back to
  * today's answer when it is writing a past occasion.
@@ -158,11 +169,7 @@ export interface ProxyUseFailure {
 export async function proxyUseError(
   db: Db,
   uses: ProxyUse[],
-  occasion: {
-    meetingId?: string | null;
-    electionId?: string | null;
-    associationDay: string;
-  },
+  occasion: ProxyOccasion,
 ): Promise<ProxyUseFailure | null> {
   if (uses.length === 0) return null;
   const ids = [...new Set(uses.map((u) => u.proxyId))];
@@ -210,6 +217,54 @@ export async function proxyUseError(
       };
   }
   return null;
+}
+
+/**
+ * Mutation-boundary form of `proxyUseError` for an already preflighted entry
+ * set. It repeats lot, scope, and occasion-day grantor authority inside the
+ * write transaction, where a concurrent proxy edit or roster correction can
+ * no longer invalidate a successful answer before the child rows land.
+ *
+ * Callers still run `proxyUseError` first for its precise 400/409 messages.
+ * This predicate is the fail-closed race backstop: false means the replacement
+ * must change no rows and return 409.
+ */
+export function proxyUsesValidAtMutation(
+  uses: ProxyUse[],
+  occasion: ProxyOccasion,
+): AuthoritySql {
+  if (uses.length === 0) return { sql: '1', binds: [] };
+
+  const authority = lotAuthorityExists(
+    { column: 'proxy_under_write.grantor_person_id' },
+    { column: 'proxy_under_write.property_id' },
+    occasion.associationDay,
+  );
+  const scopeParts: string[] = [];
+  const scopeBinds: unknown[] = [];
+  if (occasion.meetingId != null) {
+    scopeParts.push('proxy_under_write.meeting_id = ?');
+    scopeBinds.push(occasion.meetingId);
+  }
+  if (occasion.electionId != null) {
+    scopeParts.push('proxy_under_write.election_id = ?');
+    scopeBinds.push(occasion.electionId);
+  }
+  const scopeSql = scopeParts.length > 0 ? scopeParts.join(' OR ') : '0';
+
+  return {
+    sql: `NOT EXISTS (
+      SELECT 1
+      FROM json_each(?) requested_proxy
+      LEFT JOIN proxies proxy_under_write
+        ON proxy_under_write.id = json_extract(requested_proxy.value, '$.proxyId')
+      WHERE proxy_under_write.id IS NULL
+         OR proxy_under_write.property_id <> json_extract(requested_proxy.value, '$.propertyId')
+         OR NOT ${authority.sql}
+         OR NOT (${scopeSql})
+    )`,
+    binds: [JSON.stringify(uses), ...authority.binds, ...scopeBinds],
+  };
 }
 
 /**

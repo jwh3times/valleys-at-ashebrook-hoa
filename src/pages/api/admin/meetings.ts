@@ -11,7 +11,6 @@ import type { Db } from '../../../server/db/client';
 import {
   meetings,
   boardAttendance,
-  memberAttendance,
   motions,
   motionEligibility,
   resolutions,
@@ -26,6 +25,7 @@ import { fetchLotAuthorityHistory } from '../../../server/roster/authority';
 import { normalizeMeetingInput } from '../../../lib/types';
 import {
   proxyUseError,
+  proxyUsesValidAtMutation,
   parseProvenance,
   personExistenceError,
 } from '../../../server/content/proxy-guards';
@@ -185,7 +185,11 @@ function parseMemberAttendanceEntries(
   return { ok: true, value: entries };
 }
 
-async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
+async function setMemberAttendance(
+  db: Db,
+  database: D1Database,
+  body: unknown,
+): Promise<Response> {
   const meetingId = stringField(body, 'meetingId');
   if (!meetingId) return new Response('meetingId is required', { status: 400 });
   const parsedEntries = parseMemberAttendanceEntries(body);
@@ -202,13 +206,14 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
   // produce a meeting with both kinds of attendance and an incoherent quorum.
   if (existing[0].body !== 'member')
     return new Response('Meeting is not a member meeting', { status: 409 });
-  const proxyFailure = await proxyUseError(
-    db,
-    parsedEntries.value
-      .filter((e) => e.proxyId !== null)
-      .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
-    { meetingId, associationDay: existing[0].date },
-  );
+  const proxyUses = parsedEntries.value
+    .filter((e) => e.proxyId !== null)
+    .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! }));
+  const proxyOccasion = {
+    meetingId,
+    associationDay: existing[0].date,
+  };
+  const proxyFailure = await proxyUseError(db, proxyUses, proxyOccasion);
   if (proxyFailure)
     return new Response(proxyFailure.message, {
       status: proxyFailure.status,
@@ -279,34 +284,76 @@ async function setMemberAttendance(db: Db, body: unknown): Promise<Response> {
     representedByPersonId: e.representedByPersonId,
     proxyId: e.proxyId,
   }));
-  // D1's 100-bound-parameter ceiling applies per statement. Drizzle binds all
-  // six member-attendance columns for every row, so a 22-Lot roll would try to
-  // use 132 parameters and fail with a raw 500. Split the insert into at most
-  // 16 rows (96 binds) per statement while keeping every statement beside the
-  // delete in one atomic D1 batch.
-  const insertChunkSize = Math.floor(D1_MAX_BOUND_PARAMS / 6);
-  const insertStatements = [];
-  for (let start = 0; start < rows.length; start += insertChunkSize) {
-    insertStatements.push(
-      db
-        .insert(memberAttendance)
-        .values(rows.slice(start, start + insertChunkSize)),
-    );
-  }
   // Full replace, atomically: a property omitted from `entries` is removed,
   // not left at its previous value. Weight is intentionally not stamped here
   // — member_attendance has no weight column, and attendance weight is
   // resolved live from properties.vote_weight at read time, because quorum
-  // is a question about the roster as it stands today. db.batch() requires a
-  // non-empty array, and clearing attendance entirely (rows.length === 0) is
-  // legitimate, so the insert statement is only included when there is
-  // something to insert.
-  await db.batch([
-    db
-      .delete(memberAttendance)
-      .where(eq(memberAttendance.meetingId, meetingId)),
-    ...insertStatements,
-  ] as never);
+  // is a question about the roster as it stands today. The no-op UPDATE is the
+  // replacement's mutation-boundary guard: it repeats the meeting context and
+  // every proxy condition after preflight. The delete runs only when that
+  // marker matched, and the set-based insert repeats the guard inside the same
+  // transaction. One JSON bind also keeps a full neighborhood roll below D1's
+  // parameter ceiling.
+  const proxyGuard = proxyUsesValidAtMutation(proxyUses, proxyOccasion);
+  const [guard, , inserted] = await database.batch([
+    database
+      .prepare(
+        `UPDATE meetings
+         SET updated_at = updated_at
+         WHERE id = ?
+           AND body = 'member'
+           AND date = ?
+           AND ${proxyGuard.sql}
+         RETURNING id`,
+      )
+      .bind(meetingId, existing[0].date, ...proxyGuard.binds),
+    database
+      .prepare(
+        `DELETE FROM member_attendance
+         WHERE meeting_id = ? AND changes() = 1`,
+      )
+      .bind(meetingId),
+    database
+      .prepare(
+        `WITH replacement
+           (id, meeting_id, property_id, present, represented_by_person_id, proxy_id) AS (
+           SELECT
+             json_extract(value, '$.id'),
+             json_extract(value, '$.meetingId'),
+             json_extract(value, '$.propertyId'),
+             json_extract(value, '$.present'),
+             json_extract(value, '$.representedByPersonId'),
+             json_extract(value, '$.proxyId')
+           FROM json_each(?)
+         )
+         INSERT INTO member_attendance
+           (id, meeting_id, property_id, present, represented_by_person_id, proxy_id)
+         SELECT id, meeting_id, property_id, present, represented_by_person_id, proxy_id
+         FROM replacement
+         WHERE EXISTS (
+           SELECT 1 FROM meetings
+           WHERE meetings.id = ?
+             AND meetings.body = 'member'
+             AND meetings.date = ?
+             AND ${proxyGuard.sql}
+         )`,
+      )
+      .bind(
+        JSON.stringify(rows),
+        meetingId,
+        existing[0].date,
+        ...proxyGuard.binds,
+      ),
+  ]);
+  if (guard.meta.changes !== 1)
+    return new Response(
+      'Member attendance changed or a proxy became invalid before correction',
+      { status: 409 },
+    );
+  if (inserted.meta.changes !== rows.length)
+    return new Response('Member attendance was not fully recorded', {
+      status: 500,
+    });
   return new Response(null, { status: 204 });
 }
 
@@ -468,7 +515,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'setAttendance':
       return setAttendance(db, parsed.value);
     case 'setMemberAttendance':
-      return setMemberAttendance(db, parsed.value);
+      return setMemberAttendance(db, env.DATABASE, parsed.value);
     case 'approve':
       return approveMeeting(db, parsed.value, locals, request);
     case 'unapprove':

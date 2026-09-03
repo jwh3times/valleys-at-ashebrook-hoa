@@ -124,8 +124,9 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   than of the legacy `owners.status`. Board-entered attendance and member votes use the meeting's
   Association Day; recorded-election ballots use the election's Association Day, including when a
   meeting-scoped proxy covers the election. A later sale therefore does not invalidate a proxy that
-  was valid on a past occasion. For a live cast, today is the occasion, and the same current-day
-  authority rule is re-checked inside the mutation SQL so an ownership race cannot grant a cast.
+  was valid on a past occasion. The board replacements repeat that occasion-day rule inside their
+  mutation batches, while live casts repeat the current-day rule inside their mutation SQL, so an
+  ownership correction racing either kind of use returns `409` without a partial write.
 - **Election turnout and candidate choices have no explicit identity link or join key.** `ballots`
   records only that a lot participated — election, property, frozen record-date weight, and
   person-or-proxy provenance. A successful conducted ballot atomically inserts that turnout row and
