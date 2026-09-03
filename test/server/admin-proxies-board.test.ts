@@ -335,10 +335,9 @@ describe('proxies admin route — board', () => {
   // 7. Duplicate (same lot, same occasion); control: different occasion ok.
   it('POST accepts a grantor who has since sold, so a paper proxy stays recordable', async () => {
     // ADR 0018's model, which #248 part 2 preserves rather than tightening:
-    // entering a historical proxy is allowed, USING it is refused. The
-    // create-time question is deliberately the weaker one ("has ever held"),
-    // and the phase 3d re-validation in proxyUseError is what refuses the
-    // proxy at attendance, member votes, ballots, and the live cast.
+    // entering a historical proxy asks only whether authority ever existed.
+    // Use is stricter: proxyUseError accepts it only when the grantor held
+    // authority on the recorded occasion day (today for a live cast).
     const propertyId = await createProperty();
     const formerHolder = await createPerson(
       propertyId,
