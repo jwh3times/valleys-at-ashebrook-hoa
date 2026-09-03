@@ -50,6 +50,27 @@ describe('RosterManager', () => {
     ).toBeInTheDocument();
   });
 
+  it('includes a visible unit in every lot action name', async () => {
+    fetchProperties.mockResolvedValue([{ ...HOME, unit: 'A' }]);
+    render(<RosterManager />);
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Edit lot: 1 Test St, Unit A',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Add owner to 1 Test St, Unit A',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Deactivate lot: 1 Test St, Unit A',
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('adds an owner to a home with the correct propertyId', async () => {
     render(<RosterManager />);
     fireEvent.click(
