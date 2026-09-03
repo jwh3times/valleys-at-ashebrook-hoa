@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.12] - 2026-09-02
+
+### Changed
+
+- **The roadmap now names ADR 0022 phase 4 as the next architectural priority without presenting
+  the gated migration as immediately executable.** It records the earliest production entry date
+  and remaining sign-off conditions, points to issue #212 as the live checklist, and repairs the
+  malformed AI report status text.
+
+## [0.17.11] - 2026-09-02
+
+### Security
+
+- Updated the transitive `browserslist` dependency from 4.28.4 to 4.28.8, including refreshed
+  browser-compatibility data packages, to take the fixes for its unbounded query-cache growth and
+  unsafe custom-statistics normalization advisories.
+
 ## [0.17.10] - 2026-09-02
 
 ### Fixed
