@@ -438,17 +438,23 @@ export default function DocumentsManager() {
               <div className="row-actions">
                 <a
                   className="row-link"
+                  aria-label={`View document: ${d.title}`}
                   href={`/api/files/${d.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   View
                 </a>
-                <button className="row-link" onClick={() => startEdit(d)}>
+                <button
+                  className="row-link"
+                  aria-label={`Edit document: ${d.title}`}
+                  onClick={() => startEdit(d)}
+                >
                   Edit
                 </button>
                 <button
                   className="row-link row-link--danger"
+                  aria-label={`Delete document: ${d.title}`}
                   onClick={() => handleDelete(d)}
                 >
                   Delete

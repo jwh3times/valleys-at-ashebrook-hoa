@@ -896,6 +896,7 @@ export default function MeetingsManager() {
                 <div className="row-actions">
                   <button
                     className="row-link"
+                    aria-label={`Edit meeting: ${m.title}`}
                     disabled={editDetailLoadingId === m.id}
                     onClick={() => startEditMeeting(m)}
                   >
@@ -903,6 +904,7 @@ export default function MeetingsManager() {
                   </button>
                   <button
                     className="row-link"
+                    aria-label={`${expandedId === m.id ? 'Hide' : 'Show'} attendance & motions for meeting: ${m.title}`}
                     onClick={() => toggleExpand(m.id)}
                   >
                     {expandedId === m.id
@@ -912,6 +914,7 @@ export default function MeetingsManager() {
                   {m.status === 'approved' ? (
                     <button
                       className="row-link"
+                      aria-label={`Unapprove meeting: ${m.title}`}
                       onClick={() => handleUnapprove(m)}
                     >
                       Unapprove
@@ -919,6 +922,7 @@ export default function MeetingsManager() {
                   ) : (
                     <button
                       className="row-link"
+                      aria-label={`Approve meeting: ${m.title}`}
                       onClick={() => handleApprove(m)}
                     >
                       Approve

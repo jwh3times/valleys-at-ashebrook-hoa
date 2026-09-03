@@ -130,6 +130,10 @@ Follow the TypeScript and Astro conventions already in the repo and the existing
 settings, keep indentation consistent with the file's current style, and prefer descriptive names
 over abbreviations. Use `*.test.ts` / `*.test.tsx` for tests.
 
+Every repeated row-action control needs an accessible name that combines the action with the row's
+visible identity, such as `Delete announcement: Pool closure`; the visible bare verb may remain as
+the button text.
+
 ### Never default a coerced numeric form value with `||`
 
 `Number('')` and `Number('0')` are both `0`, so `Number(x) || 1` cannot tell a blank field from a

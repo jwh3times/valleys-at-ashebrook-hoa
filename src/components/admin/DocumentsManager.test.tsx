@@ -156,6 +156,15 @@ describe('DocumentsManager visibility filter', () => {
     expect(
       screen.getByRole('button', { name: /Board \(2\)/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'View document: Alpha Doc' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Edit document: Alpha Doc' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Delete document: Alpha Doc' }),
+    ).toBeInTheDocument();
   });
 
   it('shows only the selected tier when a tab is clicked', async () => {
