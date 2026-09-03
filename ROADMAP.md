@@ -1,16 +1,19 @@
 # Roadmap
 
-**Updated:** 2026-08-05
+**Updated:** 2026-09-02
 
-This is the current list of work that is not implemented yet. It replaces the older private review
-notes and now-removed implementation handoff docs.
+This is the current product and operations roadmap. It replaces the older private review notes and
+now-removed implementation handoff docs.
 
 Previously identified partial implementation items have been completed or closed by explicit
 operating decisions. Shipped work is tracked in `CHANGELOG.md`; durable decisions are recorded
 under `docs/adr/`.
 
-The immediate product priority is item 9, live homeowner voting and conducted elections. Items
-1–8 and 10 remain unordered policy-, need-, or specification-gated backlog; their numbering is for
+The next architectural priority is [ADR 0022 phase 4 (#212)](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/212),
+the irreversible removal of the legacy roster schema and compatibility layer. Its production entry
+gate cannot open before 2026-09-17 and also requires no clock-resetting Sev-1 plus named human
+sign-off. Until that gate opens, immediate work comes from the public issue tracker. Items 1–8 and
+10 remain unordered policy-, need-, or specification-gated backlog; their numbering is for
 reference, not a delivery commitment.
 
 ## How to Use This Roadmap
@@ -20,6 +23,14 @@ reference, not a delivery commitment.
 - Add or update tests with every behavior change.
 - Update `CHANGELOG.md` when an item ships.
 - Add an ADR when an item changes a durable architecture or operating decision.
+
+## Active Migration Program
+
+ADR 0022 phases 1–3 are shipped, and production has used derived access since 2026-08-18. Only
+phase 4 remains: remove the legacy tables, shadow comparison, and compatibility aliases after the
+required soak. Issue [#212](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/212) is the
+authoritative source for its live entry criteria, sequencing, and sign-off; this roadmap does not
+duplicate that changing checklist.
 
 ## Product Backlog
 
@@ -132,13 +143,12 @@ Remaining automation work:
 ### 8. AI CC&R Compliance Report
 
 **Status:** Core report generator implemented; compliance and lifecycle refinements remain
-governing-documents report (six curated templates plus a freeform topic, planned
-sub-query retrieval, streamed five-section report with `[Source N]` citations, and
-saved report history in the `reports` table).
 **Gate:** Dedicated spec for the remaining compliance angle
 **Likely size:** Medium
 
-The "what do our CC&Rs say about X" half is shipped. Remaining work:
+The governing-documents report is shipped: six curated templates plus a freeform topic, planned
+sub-query retrieval, a streamed five-section report with `[Source N]` citations, and saved report
+history in the `reports` table. Remaining work:
 
 - The **compliance** angle — "where are our current practices out of step with the
   governing documents" — is only covered indirectly by the report's Gaps section. Structured
