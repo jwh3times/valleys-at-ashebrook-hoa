@@ -1,4 +1,5 @@
 import { cleanupVerificationState } from './cleanup/verification';
+import { cleanupSavedReportContent } from './cleanup/reports';
 import { formatInvariantRun, runInvariants } from './db/invariants';
 
 /**
@@ -9,12 +10,10 @@ import { formatInvariantRun, runInvariants } from './db/invariants';
  * therefore cannot be imported by the Workers test pool. Keeping the worker
  * entry a thin adapter is what makes this testable at all.
  *
- * The two jobs are independent on purpose: a broken cleanup must not hide a
- * roster invariant violation, and a violated invariant must not stop retention
- * sweeps from running. Both always run, and this throws afterwards if either
- * failed — a partial-success invocation still shows red in the dashboard
- * rather than being silently swallowed, matching what the cleanup handler
- * already did on its own.
+ * The jobs are independent on purpose: one broken cleanup must not hide a
+ * roster invariant violation or stop the other retention sweep. Every job
+ * always runs, and this throws afterwards if any failed — a partial-success
+ * invocation still shows red in the dashboard.
  */
 export async function runScheduledJobs(env: Env): Promise<void> {
   const failures: string[] = [];
@@ -27,6 +26,14 @@ export async function runScheduledJobs(env: Env): Promise<void> {
   } catch (err) {
     console.error('[cleanup] failed', err);
     failures.push('cleanup');
+  }
+
+  try {
+    const result = await cleanupSavedReportContent(env);
+    console.log(`[report-retention] reports=${result.reportRows}`);
+  } catch (err) {
+    console.error('[report-retention] failed', err);
+    failures.push('report-retention');
   }
 
   // ADR 0022 drift check (#240, per #206: the checks that gate a migration are

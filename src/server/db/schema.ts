@@ -498,6 +498,9 @@ export const reports = sqliteTable(
     id: text('id').primaryKey(),
     topic: text('topic').notNull(),
     templateKey: text('template_key'),
+    // De-anonymized report text is retained for 90 days. The scheduled sweep
+    // and every roster redaction replace it with a fixed non-PII notice while
+    // retaining the row's audit metadata; sources_json is cleared with it.
     contentMd: text('content_md').notNull(),
     sourcesJson: text('sources_json').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
@@ -505,7 +508,7 @@ export const reports = sqliteTable(
     // same pattern as documents.keep_verified_by.
     createdBy: text('created_by').notNull(),
   },
-  // History list reads order by createdAt desc.
+  // Cursor-paginated history reads order by (createdAt, id) descending.
   (t) => [index('reports_created_at_idx').on(t.createdAt)],
 );
 

@@ -374,8 +374,8 @@ Astro SSR requests and the daily scheduled trigger.
 
 ## Scheduled Maintenance
 
-Wrangler config includes a daily cron trigger (`0 7 * * *`). It runs two jobs independently, so a
-failure in one does not hide a failure in the other:
+Wrangler config includes a daily cron trigger (`0 7 * * *`). It runs three jobs independently, so
+a failure in one does not hide or stop the others:
 
 - `cleanupVerificationState`, which keeps 30 days of consumed/expired property-verification rows
   and resolved manual-approval rows (pending manual approvals are retained), plus the ADR 0022
@@ -383,14 +383,18 @@ failure in one does not hide a failure in the other:
   about a day past consumption/expiry, since a code is only ever useful for its ~10-minute TTL, and
   resolved (accepted/declined) verification review requests (`verification_review_requests`) age
   out after 30 days — open requests are retained.
+- `cleanupSavedReportContent`, which replaces de-anonymized report content, freeform-capable topics,
+  and cited-source metadata with a fixed non-PII removal state after 90 days while retaining the
+  report ID, template, creator, and timestamp. An authorized roster name/contact redaction performs
+  the same purge immediately in its mutation batch.
 - The ADR 0022 invariant drift check (`runInvariants`, the same 17 checks `npm run
 verify:invariants` runs) — added by #240 so the phase-4 soak isn't running without automated
   drift detection. A violation is logged (IDs and codes only, never a personal value) and fails the
   cron invocation, which surfaces as a red run in Workers Logs/the Cloudflare dashboard; nothing is
   stored, and a real violation re-fires every day until it's fixed.
 
-Neither job's failure blocks the other; if either fails, the invocation throws so the dashboard
-shows the run as failed.
+No job's failure blocks another; if any fails, the invocation throws so the dashboard shows the run
+as failed.
 
 ## Security Headers
 
