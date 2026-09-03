@@ -23,9 +23,9 @@ import { personDisplayLabel } from '../../lib/format';
  *
  * Two expressions of it live here, for the two layers this repo separates on
  * purpose (ADR 0020): a Drizzle reader for preflight checks and pickers, and a
- * raw-SQL fragment for the mutation-boundary predicates that re-check the same
- * thing inside the INSERT. They must agree, and keeping them adjacent is what
- * makes a divergence visible.
+ * raw-SQL fragment for mutation-boundary predicates that re-check the same
+ * thing inside a write transaction. They must agree, and keeping them adjacent
+ * is what makes a divergence visible.
  *
  * Consolidated duplicate Parties are deliberately NOT canonicalized here, and
  * retired Lots are deliberately not excluded — both matching `qualifiesGuard`.
@@ -208,9 +208,9 @@ export function fetchAllLotAuthority(
  * The board's member attendance, member vote, ballot, and proxy pickers all
  * need the historic list: a meeting held last spring was attended by whoever
  * held the lot then, and a paper proxy signed before a sale is still a record
- * worth entering. `current` is what those surfaces warn on — a proxy from a
- * former owner is accepted at entry and refused at USE (see
- * content/proxy-guards.ts).
+ * worth entering. `current` lets those surfaces warn when a Person no longer
+ * holds authority today; proxy use itself is validated on the occasion day
+ * (see content/proxy-guards.ts).
  */
 export async function fetchLotAuthorityHistory(
   db: Db,

@@ -202,8 +202,10 @@ SecondaryStorage.increment.")` from `onRequestRateLimit` on every request whenev
   `fetchAdminMeetings` call it `true`; `fetchMeetingFor`/`fetchMeetingsFor` call it `false`, and
   `viaProxy` — always present — is derived as `proxyId !== null` rather than a stored flag. `content/`
   also has `dedupe.ts` (SHA-256 exact matching and metadata-only near-duplicate scoring),
-  `proxy-guards.ts` (`proxyUseError`, the shared cross-row guard `setMemberAttendance`,
-  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`, plus
+  `proxy-guards.ts` (`proxyUseError`, the shared cross-row preflight `setMemberAttendance`,
+  `setMemberVotes`, and `setBallots` each call before writing a `proxyId`, and
+  `proxyUsesValidAtMutation`, which repeats those proxy predicates inside their replacement batches,
+  plus
   `parseProvenance`/`personExistenceError` — the latter now shared by five entry-set columns
   referencing `people(party_id)` (#234): the three acting-Person provenance columns beside a proxy
   (`member_attendance.represented_by_person_id`, `member_votes.cast_by_person_id`,

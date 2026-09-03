@@ -414,8 +414,8 @@ function electionAuthorityPredicate(
   // The grantor-currency check is the ADR 0022 phase-3d addition (#220 /
   // #204): a proxy whose grantor no longer holds the lot confers nothing. For
   // a live cast the occasion is NOW, so today's Association Day is exact "held
-  // Lot Authority at the occasion" semantics here — the approximation caveat
-  // in proxy-guards.ts applies only to back-entered record-keeping.
+  // Lot Authority at the occasion" semantics here. Back-entered records use
+  // the stored meeting or election day instead.
   //
   // #248 part 2 re-keyed both sides to Persons: the holder reaches the caller
   // through Lot Authority over a lot this account is verified for, which is

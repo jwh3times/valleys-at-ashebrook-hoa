@@ -24,6 +24,7 @@ import {
 import type { VoteChoice, MemberVoteChoice } from '../../../lib/types';
 import {
   proxyUseError,
+  proxyUsesValidAtMutation,
   parseProvenance,
   personExistenceError,
 } from '../../../server/content/proxy-guards';
@@ -67,13 +68,12 @@ function parseVoteEntries(
 }
 
 /**
- * Look up the `body` of the meeting a motion belongs to, and that meeting's
- * own id — needed by setMemberVotes to scope the proxy guard to the right
- * occasion. Reaching the meeting from a motion takes a second lookup —
- * `motions.meetingId` then `meetings.body` — since `motions` does not carry
- * `body` directly.
+ * Look up the meeting context a motion inherits: body, occasion id and date,
+ * plus the motion's voting lifecycle fields used by the replacement CAS.
+ * Reaching the meeting takes a second lookup because those occasion fields do
+ * not live on `motions`.
  */
-async function meetingBodyForMotion(
+async function meetingContextForMotion(
   db: Db,
   motionId: string,
 ): Promise<
@@ -160,7 +160,7 @@ async function setVotes(db: Db, body: unknown): Promise<Response> {
   const parsedEntries = parseVoteEntries(body);
   if (!parsedEntries.ok)
     return new Response(parsedEntries.error, { status: 400 });
-  const lookup = await meetingBodyForMotion(db, motionId);
+  const lookup = await meetingContextForMotion(db, motionId);
   if (!lookup.found) return new Response('Motion not found', { status: 404 });
   // A board roll call against a member meeting's motion (or vice versa) would
   // silently produce a motion with an incoherent electorate.
@@ -251,7 +251,7 @@ async function setMemberVotes(
   const parsedEntries = parseMemberVoteEntries(body);
   if (!parsedEntries.ok)
     return new Response(parsedEntries.error, { status: 400 });
-  const lookup = await meetingBodyForMotion(db, motionId);
+  const lookup = await meetingContextForMotion(db, motionId);
   if (!lookup.found) return new Response('Motion not found', { status: 404 });
   // A member vote against a board meeting's motion (or vice versa) would
   // silently produce a motion with an incoherent electorate.
@@ -265,13 +265,14 @@ async function setMemberVotes(
       },
     );
 
-  const proxyFailure = await proxyUseError(
-    db,
-    parsedEntries.value
-      .filter((e) => e.proxyId !== null)
-      .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
-    { meetingId: lookup.meetingId, associationDay: lookup.meetingDate },
-  );
+  const proxyUses = parsedEntries.value
+    .filter((e) => e.proxyId !== null)
+    .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! }));
+  const proxyOccasion = {
+    meetingId: lookup.meetingId,
+    associationDay: lookup.meetingDate,
+  };
+  const proxyFailure = await proxyUseError(db, proxyUses, proxyOccasion);
   if (proxyFailure)
     return new Response(proxyFailure.message, {
       status: proxyFailure.status,
@@ -363,6 +364,7 @@ async function setMemberVotes(
   // the batch as one transaction, so a stale or competing replacement writes
   // nothing and returns 409.
   const updatedAt = Math.floor(Date.now() / 1000);
+  const proxyGuard = proxyUsesValidAtMutation(proxyUses, proxyOccasion);
   const statements: D1PreparedStatement[] = [
     database
       .prepare(
@@ -374,10 +376,21 @@ async function setMemberVotes(
              WHERE motions.id = ?
                AND motions.voting_state = ?
                AND motions.voting_revision = ?
+               AND motions.meeting_id = ?
                AND meetings.body = 'member'
+               AND meetings.date = ?
+               AND ${proxyGuard.sql}
            )`,
       )
-      .bind(motionId, motionId, lookup.votingState, lookup.votingRevision),
+      .bind(
+        motionId,
+        motionId,
+        lookup.votingState,
+        lookup.votingRevision,
+        lookup.meetingId,
+        lookup.meetingDate,
+        ...proxyGuard.binds,
+      ),
     database
       .prepare(
         `UPDATE motions
@@ -389,10 +402,21 @@ async function setMemberVotes(
              SELECT 1 FROM meetings
              WHERE meetings.id = motions.meeting_id
                AND meetings.body = 'member'
+               AND meetings.id = ?
+               AND meetings.date = ?
+               AND ${proxyGuard.sql}
            )
          RETURNING id`,
       )
-      .bind(updatedAt, motionId, lookup.votingState, lookup.votingRevision),
+      .bind(
+        updatedAt,
+        motionId,
+        lookup.votingState,
+        lookup.votingRevision,
+        lookup.meetingId,
+        lookup.meetingDate,
+        ...proxyGuard.binds,
+      ),
   ];
   if (rows.length > 0) {
     // One bound JSON value keeps the statement below D1's parameter ceiling
@@ -642,7 +666,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       status: 409,
     });
   if (input.moverPersonId != null || input.secondPersonId != null) {
-    const lookup = await meetingBodyForMotion(db, id);
+    const lookup = await meetingContextForMotion(db, id);
     if (!lookup.found) return new Response('Motion not found', { status: 404 });
     const moverError = boardMoverError(
       lookup.body,

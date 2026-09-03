@@ -99,8 +99,8 @@ async function callVote(body: unknown, ctx: AuthContext): Promise<Response> {
  * route's own behavior (its audit correlation and the transfer-effects engine)
  * is transfer-effects.test.ts's subject, while THIS suite is about what the
  * proxy guards do once authority is gone, however it went. Writing the state
- * directly also makes the interleaving tests below a test of the casting
- * predicate rather than of another route's batch.
+ * directly also makes the interleaving tests below a test of the proxy-use
+ * mutation predicates rather than of another route's batch.
  *
  * By default `endDay` is today. Tests may supply an occasion day to exercise
  * the end-exclusive boundary (`day < end_day`).
@@ -479,6 +479,126 @@ describe('grantor re-validation on the record-keeping routes', () => {
       }),
     );
     expect(await wrongLot.text()).toBe('Proxy is for a different lot');
+  });
+});
+
+describe('a record-keeping write racing an occasion-day authority correction', () => {
+  it('preserves attendance when the proxy becomes invalid before the batch', async () => {
+    const db = getDb(env);
+    await db.insert(memberAttendance).values({
+      id: 'attendance-existing',
+      meetingId: 'meeting-record',
+      propertyId: 'property-own',
+      present: true,
+      representedByPersonId: 'owner-holder',
+    });
+    const barrier = fx.pauseNextBatch();
+    try {
+      const write = meetingsPost(
+        req(meetingsUrl, {
+          action: 'setMemberAttendance',
+          meetingId: 'meeting-record',
+          entries: [
+            {
+              propertyId: 'property-proxy',
+              present: true,
+              proxyId: 'proxy-record-meeting',
+            },
+          ],
+        }),
+      );
+      await barrier.reached;
+      expect(
+        await endGrantorOwnership('owner-grantor', associationDayPlus(-7)),
+      ).toBe(1);
+      barrier.release();
+      const response = await write;
+      expect(response.status).toBe(409);
+      expect(await db.select().from(memberAttendance)).toEqual([
+        expect.objectContaining({ id: 'attendance-existing' }),
+      ]);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+  });
+
+  it('preserves member votes when the proxy becomes invalid before the batch', async () => {
+    const db = getDb(env);
+    await db.insert(memberVotes).values({
+      id: 'vote-existing',
+      motionId: 'motion-record',
+      propertyId: 'property-own',
+      castByPersonId: 'owner-holder',
+      weight: 1,
+      choice: 'no',
+    });
+    const barrier = fx.pauseNextBatch();
+    try {
+      const write = motionsPost(
+        req(motionsUrl, {
+          action: 'setMemberVotes',
+          motionId: 'motion-record',
+          entries: [
+            {
+              propertyId: 'property-proxy',
+              choice: 'yes',
+              proxyId: 'proxy-record-meeting',
+            },
+          ],
+        }),
+      );
+      await barrier.reached;
+      expect(
+        await endGrantorOwnership('owner-grantor', associationDayPlus(-7)),
+      ).toBe(1);
+      barrier.release();
+      const response = await write;
+      expect(response.status).toBe(409);
+      expect(await db.select().from(memberVotes)).toEqual([
+        expect.objectContaining({ id: 'vote-existing', choice: 'no' }),
+      ]);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
+  });
+
+  it('preserves ballots when the proxy becomes invalid before the batch', async () => {
+    const db = getDb(env);
+    await db.insert(ballots).values({
+      id: 'ballot-existing',
+      electionId: 'election-record',
+      propertyId: 'property-own',
+      castByPersonId: 'owner-holder',
+      weight: 1,
+      recordedAt: now,
+    });
+    const barrier = fx.pauseNextBatch();
+    try {
+      const write = electionsPost(
+        req(electionsUrl, {
+          action: 'setBallots',
+          electionId: 'election-record',
+          entries: [
+            { propertyId: 'property-proxy', proxyId: 'proxy-record-election' },
+          ],
+        }),
+      );
+      await barrier.reached;
+      expect(
+        await endGrantorOwnership('owner-grantor', associationDayPlus(-3)),
+      ).toBe(1);
+      barrier.release();
+      const response = await write;
+      expect(response.status).toBe(409);
+      expect(await db.select().from(ballots)).toEqual([
+        expect.objectContaining({ id: 'ballot-existing' }),
+      ]);
+    } finally {
+      barrier.release();
+      barrier.restore();
+    }
   });
 });
 
