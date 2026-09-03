@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.2] - 2026-09-03
+
+### Fixed
+
+- **Historical proxy attendance, votes, and ballots now validate the grantor on the recorded
+  occasion date.** A later property transfer no longer blocks legitimate late record entry, while
+  proxies that were invalid on the meeting or election day remain refused. The replacement writes
+  repeat proxy scope and grantor authority inside their atomic D1 batches, so a concurrent proxy or
+  roster correction returns a conflict without erasing the prior record.
+
 ## [0.18.1] - 2026-09-03
 
 ### Fixed
