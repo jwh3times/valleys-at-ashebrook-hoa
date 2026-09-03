@@ -125,6 +125,7 @@ function FlagCard({
           Opened {moment(flag.openedAt)}
           {flag.resolvedAt !== null && ` · resolved ${moment(flag.resolvedAt)}`}
         </div>
+        <div className="admin-row-sub">Review flag: {flag.id}</div>
         <SourceEvent flag={flag} />
         <Impacted flag={flag} />
         {flag.status === 'resolved' && flag.resolutionCode && (
