@@ -122,6 +122,16 @@ describe('MeetingsManager', () => {
     expect(within(card).getByText(/2026-09-14/)).toBeInTheDocument();
     expect(within(card).getByText(/special/i)).toBeInTheDocument();
     expect(within(card).getByText(/3 motions/i)).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', {
+        name: 'Edit meeting: September meeting',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByRole('button', {
+        name: 'Show attendance & motions for meeting: September meeting',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('marks a draft meeting as Draft and an approved one as Approved', async () => {
@@ -188,7 +198,9 @@ describe('MeetingsManager', () => {
     mocked.saveMeeting.mockResolvedValue(undefined);
     render(<MeetingsManager />);
     await screen.findByText('September meeting');
-    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit meeting:/i }),
+    );
 
     const summary = await screen.findByLabelText(/^minutes/i);
     expect(summary).toHaveValue('Old minutes.');
@@ -227,7 +239,9 @@ describe('MeetingsManager', () => {
     mocked.saveMeeting.mockResolvedValue(undefined);
     render(<MeetingsManager />);
     await screen.findByText('September meeting');
-    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit meeting:/i }),
+    );
     await screen.findByLabelText(/^minutes/i);
 
     await userEvent.click(
@@ -273,7 +287,9 @@ describe('MeetingsManager', () => {
     mocked.saveMeeting.mockResolvedValue(undefined);
     render(<MeetingsManager />);
     await screen.findByText('September meeting');
-    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit meeting:/i }),
+    );
 
     const summary = await screen.findByLabelText(/^minutes/i);
     expect(summary).toHaveValue('Old minutes.');
@@ -474,7 +490,9 @@ describe('MeetingsManager', () => {
     render(<MeetingsManager />);
     await screen.findByText('September meeting');
 
-    await userEvent.click(screen.getByRole('button', { name: /^approve$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /approve meeting:/i }),
+    );
 
     await waitFor(() =>
       expect(mocked.approveMeeting).toHaveBeenCalledWith('m1'),
@@ -492,7 +510,9 @@ describe('MeetingsManager', () => {
     render(<MeetingsManager />);
     await screen.findByText('September meeting');
 
-    await userEvent.click(screen.getByRole('button', { name: /^unapprove$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /unapprove meeting:/i }),
+    );
 
     await waitFor(() =>
       expect(mocked.unapproveMeeting).toHaveBeenCalledWith('m1'),

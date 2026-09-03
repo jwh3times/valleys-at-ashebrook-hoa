@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-09-03
+
+### Fixed
+
+- **Admin row actions now name the record they affect for screen-reader users.** Repeated actions
+  such as Edit, Delete, Resolve, Revoke, and Keep expose distinct accessible names across every
+  admin panel, including visible lot units and review-flag identifiers where needed to distinguish
+  otherwise similar rows.
+
 ## [0.18.0] - 2026-09-03
 
 ### Added

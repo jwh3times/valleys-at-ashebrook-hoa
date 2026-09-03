@@ -97,6 +97,7 @@ export default function BoardAccessManager() {
               <div className="row-actions">
                 <button
                   className="row-link row-link--danger"
+                  aria-label={`Demote board administrator: ${u.name} (${u.email})`}
                   onClick={() => demote(u)}
                 >
                   Demote

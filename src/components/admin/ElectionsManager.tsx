@@ -859,6 +859,7 @@ export default function ElectionsManager() {
                                       {canWithdrawCandidate(e, c) && (
                                         <button
                                           className="row-link"
+                                          aria-label={`${c.withdrawn ? 'Reinstate' : 'Withdraw'} candidate: ${c.fullName}`}
                                           onClick={() =>
                                             toggleWithdrawn(e.id, c)
                                           }

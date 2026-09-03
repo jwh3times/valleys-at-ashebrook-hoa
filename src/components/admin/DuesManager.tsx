@@ -169,6 +169,7 @@ export default function DuesManager() {
           <button
             type="button"
             className="row-link row-link--danger"
+            aria-label={`Remove payment option: ${opt.label.trim() || `option ${i + 1}`}`}
             onClick={() => removeOption(i)}
           >
             Remove option
