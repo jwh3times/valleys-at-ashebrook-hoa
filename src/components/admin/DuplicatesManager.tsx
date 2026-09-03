@@ -55,6 +55,7 @@ function GroupCard({
     (kind === 'exact'
       ? 'These files have identical bytes.'
       : 'These files have similar metadata and should be reviewed manually.');
+  const groupLabel = group.members.map((member) => member.title).join(', ');
 
   return (
     <div className="panel-card" style={{ marginBottom: '16px' }}>
@@ -104,6 +105,7 @@ function GroupCard({
             </label>
             <a
               className="row-link"
+              aria-label={`View document: ${m.title}`}
               href={`/api/files/${m.id}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -115,7 +117,11 @@ function GroupCard({
       </div>
       {kind === 'exact' && group.autoResolvable && (
         <div style={{ marginTop: '8px' }}>
-          <button className="row-link" onClick={selectAllButSuggested}>
+          <button
+            className="row-link"
+            aria-label={`Select all but suggested in duplicate group: ${groupLabel}`}
+            onClick={selectAllButSuggested}
+          >
             Select all but suggested
           </button>
         </div>
@@ -123,6 +129,7 @@ function GroupCard({
       <div className="btn-row" style={{ marginTop: '10px' }}>
         <button
           className="btn btn--small"
+          aria-label={`${deletingAll ? 'Keep at least one file' : `Delete ${deleteIds.size} selected`} from duplicate group: ${groupLabel}`}
           disabled={busy || deleteIds.size === 0 || deletingAll}
           onClick={() => onResolve(keepIds, [...deleteIds])}
         >
@@ -132,6 +139,7 @@ function GroupCard({
         </button>
         <button
           className="btn btn--small"
+          aria-label={`Keep all files in duplicate group: ${groupLabel}`}
           disabled={busy}
           onClick={() => onResolve(allIds, [])}
         >

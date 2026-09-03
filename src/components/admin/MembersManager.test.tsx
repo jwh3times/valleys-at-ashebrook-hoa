@@ -165,7 +165,9 @@ describe('MembersManager', () => {
       fireEvent.change(screen.getByLabelText(/person for applicant@x.com/i), {
         target: { value: 'per1' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /accept verification request:/i }),
+      );
       await waitFor(() =>
         expect(acceptVerificationRequest).toHaveBeenCalledWith({
           id: 'vr1',
@@ -180,7 +182,9 @@ describe('MembersManager', () => {
     it('refuses to accept until a person is picked', async () => {
       render(<MembersManager />);
       await screen.findByText('applicant@x.com');
-      fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /accept verification request:/i }),
+      );
       expect(
         await screen.findByText(/pick the person this account belongs to/i),
       ).toBeInTheDocument();
@@ -198,7 +202,9 @@ describe('MembersManager', () => {
       fireEvent.change(screen.getByLabelText(/person for applicant@x.com/i), {
         target: { value: 'per1' },
       });
-      fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /accept verification request:/i }),
+      );
       expect(
         await screen.findByText(
           /this person is already linked to an account — unlink it first/i,
@@ -209,7 +215,9 @@ describe('MembersManager', () => {
     it('declines a request', async () => {
       render(<MembersManager />);
       await screen.findByText('applicant@x.com');
-      fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+      fireEvent.click(
+        screen.getByRole('button', { name: /decline verification request:/i }),
+      );
       await waitFor(() =>
         expect(declineVerificationRequest).toHaveBeenCalledWith('vr1'),
       );

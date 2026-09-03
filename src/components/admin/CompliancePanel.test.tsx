@@ -220,7 +220,9 @@ describe('CompliancePanel', () => {
     render(<CompliancePanel />);
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /record purged/i }),
+      await screen.findByRole('button', {
+        name: 'Record purged: Pseudonymizer catalog cleanup for person-1',
+      }),
     );
 
     await waitFor(() =>
@@ -240,7 +242,9 @@ describe('CompliancePanel', () => {
     render(<CompliancePanel />);
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /record purged/i }),
+      await screen.findByRole('button', {
+        name: 'Record purged: Pseudonymizer catalog cleanup for person-1',
+      }),
     );
 
     expect(

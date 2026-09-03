@@ -149,7 +149,7 @@ describe('ReportsManager', () => {
       expect(screen.getByText('Rentals & leasing')).toBeInTheDocument(),
     );
     const deleteBtn = screen.getByRole('button', {
-      name: 'Delete Rentals & leasing',
+      name: 'Delete report: Rentals & leasing',
     });
     fireEvent.click(deleteBtn);
     expect(confirm).toHaveBeenCalledWith(
@@ -185,7 +185,7 @@ describe('ReportsManager', () => {
       expect(screen.getByText('Rentals & leasing')).toBeInTheDocument(),
     );
     fireEvent.click(
-      screen.getByRole('button', { name: 'Delete Rentals & leasing' }),
+      screen.getByRole('button', { name: 'Delete report: Rentals & leasing' }),
     );
     expect(confirm).toHaveBeenCalled();
     expect(mock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(
@@ -223,7 +223,9 @@ describe('ReportsManager', () => {
     vi.stubGlobal('fetch', mock);
     render(<ReportsManager />);
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Rentals & leasing' }),
+      await screen.findByRole('button', {
+        name: 'Open report: Rentals & leasing',
+      }),
     );
     await waitFor(() =>
       expect(screen.getByText('Detail body.')).toBeInTheDocument(),

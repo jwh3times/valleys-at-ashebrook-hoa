@@ -77,6 +77,11 @@ describe('ReviewPanel', () => {
     );
     expect(values).toEqual(['', 'remediated', 'confirmed_valid', 'no_effect']);
     expect(values).not.toContain('superseded');
+    expect(
+      screen.getByRole('button', {
+        name: 'Resolve Intervening action (backdated change) flag: flag-1',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('resolves an open flag with the chosen code and reloads', async () => {

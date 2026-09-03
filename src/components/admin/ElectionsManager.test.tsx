@@ -602,6 +602,9 @@ describe('ElectionsManager', () => {
     await screen.findByText('Board Election 2026');
 
     await userEvent.click(screen.getByRole('button', { name: /details/i }));
+    expect(
+      screen.getByRole('button', { name: 'Withdraw candidate: Alice' }),
+    ).toBeInTheDocument();
     await userEvent.click(
       screen.getByRole('button', { name: /^certify election$/i }),
     );
