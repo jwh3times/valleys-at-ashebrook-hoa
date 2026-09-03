@@ -6,20 +6,35 @@ afterEach(() => vi.unstubAllGlobals());
 describe('reports client helpers', () => {
   it('fetchReports GETs the list endpoint', async () => {
     const mock = vi.fn(async () =>
-      Response.json([
-        {
-          id: 'r1',
-          topic: 'Rentals & leasing',
-          templateKey: 'rentals',
-          createdAt: '2026-07-31T00:00:00.000Z',
-          createdBy: 'u1',
-        },
-      ]),
+      Response.json({
+        items: [
+          {
+            id: 'r1',
+            topic: 'Rentals & leasing',
+            templateKey: 'rentals',
+            createdAt: '2026-07-31T00:00:00.000Z',
+            createdBy: 'u1',
+          },
+        ],
+        nextCursor: 'next-page',
+      }),
     );
     vi.stubGlobal('fetch', mock);
-    const list = await fetchReports();
-    expect(mock).toHaveBeenCalledWith('/api/admin/reports');
-    expect(list[0].id).toBe('r1');
+    const page = await fetchReports();
+    expect(mock).toHaveBeenCalledWith('/api/admin/reports?limit=20');
+    expect(page.items[0].id).toBe('r1');
+    expect(page.nextCursor).toBe('next-page');
+  });
+
+  it('fetchReports carries an opaque cursor to the next page', async () => {
+    const mock = vi.fn(async () =>
+      Response.json({ items: [], nextCursor: null }),
+    );
+    vi.stubGlobal('fetch', mock);
+    await fetchReports('cursor/+ value');
+    expect(mock).toHaveBeenCalledWith(
+      '/api/admin/reports?limit=20&cursor=cursor%2F%2B+value',
+    );
   });
 
   it('fetchReport GETs by id and throws on 404', async () => {

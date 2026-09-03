@@ -22,7 +22,11 @@ import type {
   ProxyDetail,
   ProxyInput,
 } from './types';
-import type { ReportListItem, ReportDetail } from './reports';
+import {
+  REPORT_PAGE_SIZE,
+  type ReportDetail,
+  type ReportPage,
+} from './reports';
 
 /**
  * Every admin write goes through here, so that a failure surfaces the
@@ -318,9 +322,11 @@ export async function demoteFromBoard(userId: string): Promise<void> {
 }
 
 // ---------- Reports ----------
-export async function fetchReports(): Promise<ReportListItem[]> {
-  return adminRequest<ReportListItem[]>(
-    '/api/admin/reports',
+export async function fetchReports(cursor?: string): Promise<ReportPage> {
+  const params = new URLSearchParams({ limit: String(REPORT_PAGE_SIZE) });
+  if (cursor) params.set('cursor', cursor);
+  return adminRequest<ReportPage>(
+    `/api/admin/reports?${params}`,
     'GET',
     undefined,
     'Load reports failed',

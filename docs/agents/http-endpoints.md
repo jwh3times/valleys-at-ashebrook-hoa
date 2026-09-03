@@ -461,10 +461,11 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   `scripts/ocr-scanned.ts` (rasterize + Workers AI vision; see [ADR 0010](../adr/0010-ocr-scanned-documents-operator-job.md)).
 - Board-only governing-documents reports: `POST /api/admin/reports` (SSE) takes `{ template }` XOR
   `{ topic }` (topic capped at `INPUT_LIMITS.reportTopic`; 400 on malformed/both/neither/
-  unknown-template/over-length, 500 when the Anthropic key is missing, 503 when AI Search is
-  unavailable). One of six curated templates (rentals, fences/improvements, assessments,
+  unknown-template/over-length, 422 when retrieval yields no usable excerpts before any report
+  generation call, 500 when the Anthropic key is missing, 503 when AI Search is unavailable). One
+  of six curated templates (rentals, fences/improvements, assessments,
   enforcement, meetings/voting, maintenance) supplies fixed retrieval sub-queries; a freeform topic
-  is instead expanded into 3-6 sub-queries by a small Claude Haiku planning call. Chunks from every
+  is instead expanded into 3-6 sub-queries by a small Claude Haiku structured-output call. Chunks from every
   sub-query are retrieved, pooled, deduped, and capped at 30, then streamed through one Claude Opus
   generation into a five-section markdown report (Summary / What the documents say / Where it
   lives / Ambiguities and conflicts / Gaps) with `[Source N]` citations, built via the same
@@ -472,10 +473,13 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   below). The stream emits a `sources` frame, `token` frames, then `done { id }`; a completed
   report is inserted into the `reports` table before `done` is emitted, so a failed or
   client-disconnected generation leaves no row. `GET /api/admin/reports` lists saved report
-  metadata newest-first, or returns one full report (`?id=`) including `contentMd` and sources;
+  metadata newest-first in an `{ items, nextCursor }` envelope (`limit` defaults to 20 and is capped
+  at 100; pass the opaque `cursor` to continue), or returns one full report (`?id=`) including
+  `contentMd` and sources;
   `DELETE /api/admin/reports` (body `{ id }`) removes a saved report. All three verbs are
-  `requireBoard`-gated, fail-closed. See SECURITY.md for the privacy model shared with the chat
-  assistant and the saved-report exposure it does not share.
+  `requireBoard`-gated, fail-closed. Saved de-anonymized text and source metadata are purged after 90
+  days and atomically with any roster name/contact redaction; the row's ID, template, creator, and
+  timestamp remain. See SECURITY.md for the privacy model shared with the chat assistant.
 - Homeowner verification: `/api/verify/{request,confirm,review,unlink}` — see the ADR 0022 phase
   3c entry above for the full contract.
 - First-System-Administrator bootstrap: `POST /api/bootstrap/board` (rewritten by #219; see

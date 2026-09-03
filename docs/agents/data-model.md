@@ -28,7 +28,9 @@ governing-documents
 reports: `topic`, nullable `template_key` — null means freeform — `content_md` (final
 de-anonymized markdown), `sources_json` (a `{id, title, category}` snapshot), indexed
 `created_at`, and `created_by` as a plain-text board-user-id audit column with no FK; only a
-completed generation is saved, so a failed or client-disconnected generation leaves no row),
+completed generation is saved, so a failed or client-disconnected generation leaves no row;
+after 90 days or any authorized roster name/contact redaction, `topic`, `content_md`, and
+`sources_json` are replaced with a fixed non-PII removal state while the other metadata remains),
 `board_people` and `board_terms` (the board roster's identity layer, per
 [ADR 0012](../adr/0012-board-record-as-structured-rows.md): `board_people` records a person,
 with a nullable `user_id` link to a Better Auth `user` row kept for display only and never for
