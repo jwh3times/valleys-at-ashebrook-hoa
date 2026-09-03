@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.17.10] - 2026-09-02
+
+### Fixed
+
+- The private-root resolver unit suite now isolates `ASHEBROOK_PRIVATE_ROOT`, so the clean-machine
+  portability drill can run the application and full test suite against an external restored root
+  without changing the test that verifies the default `private/` location.
+
 ## [0.17.8] - 2026-09-01
 
 ### Added
