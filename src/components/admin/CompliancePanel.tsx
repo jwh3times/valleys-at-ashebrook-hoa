@@ -203,6 +203,7 @@ function TaskRow({
         <div className="row-actions">
           <button
             className="row-link"
+            aria-label={`Record purged: ${TASK_TARGET[task.target_kind]} cleanup for ${task.target_identifier}`}
             disabled={busy}
             onClick={() => onCleanup(task, 'succeeded')}
           >
@@ -210,6 +211,7 @@ function TaskRow({
           </button>
           <button
             className="row-link row-link--danger"
+            aria-label={`Record failed: ${TASK_TARGET[task.target_kind]} cleanup for ${task.target_identifier}`}
             disabled={busy}
             onClick={() => onCleanup(task, 'failed')}
           >

@@ -42,6 +42,12 @@ describe('RosterManager', () => {
     render(<RosterManager />);
     expect(await screen.findByText('1 Test St')).toBeInTheDocument();
     expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Edit lot: 1 Test St' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Edit owner: Jane Doe' }),
+    ).toBeInTheDocument();
   });
 
   it('adds an owner to a home with the correct propertyId', async () => {
@@ -95,7 +101,7 @@ describe('RosterManager — vote weight', () => {
     render(<RosterManager />);
     await screen.findByText(/1 Test St/);
     // The home's own "Edit" button is the first — owners have one too.
-    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /edit lot:/i }));
     const input = screen.getByLabelText(/vote weight/i) as HTMLInputElement;
     expect(input.value).toBe('4');
   });
@@ -104,7 +110,7 @@ describe('RosterManager — vote weight', () => {
     fetchProperties.mockReset().mockResolvedValue([{ ...HOME, voteWeight: 1 }]);
     render(<RosterManager />);
     await screen.findByText(/1 Test St/);
-    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /edit lot:/i }));
     fireEvent.change(screen.getByLabelText(/vote weight/i), {
       target: { value: '7' },
     });
@@ -118,7 +124,7 @@ describe('RosterManager — vote weight', () => {
     fetchProperties.mockReset().mockResolvedValue([{ ...HOME, voteWeight: 1 }]);
     render(<RosterManager />);
     await screen.findByText(/1 Test St/);
-    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /edit lot:/i }));
     fireEvent.change(screen.getByLabelText(/vote weight/i), {
       target: { value: '0' },
     });
@@ -136,7 +142,7 @@ describe('RosterManager — vote weight', () => {
     );
     render(<RosterManager />);
     await screen.findByText(/1 Test St/);
-    fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: /edit lot:/i }));
     fireEvent.change(screen.getByLabelText(/vote weight/i), {
       target: { value: '0' },
     });

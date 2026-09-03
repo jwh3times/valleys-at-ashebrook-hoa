@@ -236,11 +236,16 @@ export default function MembersManager() {
                 </select>
               </div>
               <div className="row-actions">
-                <button className="row-link" onClick={() => accept(r)}>
+                <button
+                  className="row-link"
+                  aria-label={`Accept verification request: ${r.accountEmail ?? r.accountId}`}
+                  onClick={() => accept(r)}
+                >
                   Accept
                 </button>
                 <button
                   className="row-link row-link--danger"
+                  aria-label={`Decline verification request: ${r.accountEmail ?? r.accountId}`}
                   onClick={() =>
                     requestAction(
                       () => declineVerificationRequest(r.id),
@@ -359,11 +364,16 @@ export default function MembersManager() {
                   </select>
                 </div>
                 <div className="row-actions">
-                  <button className="row-link" onClick={() => approve(q)}>
+                  <button
+                    className="row-link"
+                    aria-label={`Approve legacy verification request: ${q.email ?? q.userId}`}
+                    onClick={() => approve(q)}
+                  >
                     Approve
                   </button>
                   <button
                     className="row-link row-link--danger"
+                    aria-label={`Deny legacy verification request: ${q.email ?? q.userId}`}
                     onClick={() =>
                       act({ action: 'deny', queueId: q.id }, 'Request denied.')
                     }
@@ -393,6 +403,7 @@ export default function MembersManager() {
               <div className="row-actions">
                 <button
                   className="row-link row-link--danger"
+                  aria-label={`Revoke homeowner access: ${u.name} (${u.email})`}
                   onClick={() =>
                     act(
                       { action: 'revoke', userId: u.id },

@@ -156,7 +156,7 @@ function FlagCard({
           <button
             className="btn btn--small"
             disabled={busy || code === ''}
-            aria-label={`Resolve ${category?.label ?? flag.category} flag`}
+            aria-label={`Resolve ${category?.label ?? flag.category} flag: ${flag.id}`}
             onClick={() => code !== '' && onResolve(flag.id, code)}
           >
             Resolve

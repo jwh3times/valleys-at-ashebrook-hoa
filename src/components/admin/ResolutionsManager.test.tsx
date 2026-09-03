@@ -129,6 +129,12 @@ describe('ResolutionsManager', () => {
       .getAllByRole('heading', { level: 2 })
       .map((h) => h.textContent);
     expect(headings).toEqual(['In force', 'Superseded', 'Repealed', 'Drafts']);
+    expect(
+      screen.getByRole('button', { name: 'Edit resolution: 2024-04' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Adopt resolution: 2024-04' }),
+    ).toBeInTheDocument();
 
     // Pin real DOM order, not just heading presence: each resolution's
     // number must land after its own group heading and before the next one.
@@ -183,7 +189,9 @@ describe('ResolutionsManager', () => {
     render(<ResolutionsManager />);
     await screen.findByText(/2024-01/);
 
-    await userEvent.click(screen.getByRole('button', { name: /^adopt$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /adopt resolution:/i }),
+    );
     const effectiveDate = await screen.findByLabelText(/^effective date$/i);
     await userEvent.type(effectiveDate, '2026-09-01');
     await userEvent.click(
@@ -216,7 +224,7 @@ describe('ResolutionsManager', () => {
     await screen.findByText(/2024-02/);
 
     await userEvent.click(
-      screen.getByRole('button', { name: /^supersede…$/i }),
+      screen.getByRole('button', { name: /supersede resolution:/i }),
     );
     await userEvent.selectOptions(
       screen.getByLabelText(/^supersedes$/i),
@@ -294,7 +302,9 @@ describe('ResolutionsManager', () => {
     render(<ResolutionsManager />);
     await screen.findByText(/2024-01/);
 
-    await userEvent.click(screen.getByRole('button', { name: /^adopt$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /adopt resolution:/i }),
+    );
     await userEvent.type(
       await screen.findByLabelText(/^effective date$/i),
       '2026-09-01',
@@ -342,7 +352,9 @@ describe('ResolutionsManager', () => {
     render(<ResolutionsManager />);
     await screen.findByText('2024-01 — Pool Hours');
 
-    await userEvent.click(screen.getByRole('button', { name: /^adopt$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /adopt resolution:/i }),
+    );
     const motionSelect = await screen.findByLabelText(/^motion \(optional\)$/i);
     await screen.findByRole('option', {
       name: '2026-09-14 — Approve the budget',
@@ -375,7 +387,9 @@ describe('ResolutionsManager', () => {
     render(<ResolutionsManager />);
     await screen.findByText('2024-01 — Pool Hours');
 
-    await userEvent.click(screen.getByRole('button', { name: /^adopt$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /adopt resolution:/i }),
+    );
     // Wait for the picker to finish loading so its default ("— no motion —")
     // is the settled value, not a race against the fetch.
     await screen.findByRole('option', {
@@ -418,7 +432,7 @@ describe('ResolutionsManager', () => {
     await screen.findByText('2024-02 — Pool Hours');
 
     await userEvent.click(
-      screen.getByRole('button', { name: /^supersede…$/i }),
+      screen.getByRole('button', { name: /supersede resolution:/i }),
     );
     await userEvent.selectOptions(
       screen.getByLabelText(/^supersedes$/i),
@@ -465,7 +479,7 @@ describe('ResolutionsManager', () => {
     await screen.findByText('2024-02 — Pool Hours');
 
     await userEvent.click(
-      screen.getByRole('button', { name: /^supersede…$/i }),
+      screen.getByRole('button', { name: /supersede resolution:/i }),
     );
     await userEvent.selectOptions(
       screen.getByLabelText(/^supersedes$/i),
@@ -522,7 +536,9 @@ describe('ResolutionsManager', () => {
     render(<ResolutionsManager />);
     await screen.findByText('2024-01 — Pool Hours');
 
-    await userEvent.click(screen.getByRole('button', { name: /^edit$/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit resolution:/i }),
+    );
     const titleInput = screen.getByLabelText(/^title$/i);
     await userEvent.clear(titleInput);
     await userEvent.type(titleInput, 'Updated Pool Hours');
