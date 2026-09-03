@@ -2,7 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { users } from '../../src/server/db/schema';
+import { reports, users } from '../../src/server/db/schema';
 import { people, contactMethods } from '../../src/server/db/roster-schema';
 import {
   auditEvents,
@@ -29,6 +29,7 @@ beforeAll(async () => {
 const url = 'http://localhost/api/admin/redactions';
 
 const TABLES_TO_CLEAR = [
+  'reports',
   'redaction_tasks',
   'audit_sensitive_field_changes',
   'audit_scalar_changes',
@@ -234,6 +235,48 @@ describe('redactions admin route — redactPersonName', () => {
     expect(res.status).toBe(404);
   });
 
+  it('purges saved report text in the same authorized redaction', async () => {
+    await seedAccount('sa');
+    await seedPerson('per-report', 'Report Subject');
+    await getDb(env)
+      .insert(reports)
+      .values({
+        id: 'report-with-pii',
+        topic: 'Report Subject request',
+        templateKey: null,
+        contentMd: 'Report Subject appears here.',
+        sourcesJson: JSON.stringify([
+          { id: 'doc-1', title: 'Report Subject letter', category: 'Other' },
+        ]),
+        createdAt: new Date(),
+        createdBy: 'sa',
+      });
+
+    const response = await POST(
+      req(
+        'POST',
+        {
+          action: 'redactPersonName',
+          personId: 'per-report',
+          authorityKind: 'legal_requirement',
+          authorityReference: 'Erasure request',
+          reason: 'resident_request',
+        },
+        systemAdminContext(),
+      ),
+    );
+
+    expect(response.status).toBe(204);
+    const [report] = await getDb(env).select().from(reports);
+    expect(report).toMatchObject({
+      id: 'report-with-pii',
+      topic: 'Report content removed',
+      contentMd:
+        '## Report content removed\n\nThe saved report text was removed under the 90-day retention policy.',
+      sourcesJson: '[]',
+    });
+  });
+
   it('returns 400 for a missing/oversize authority', async () => {
     await seedAccount('sa');
     await seedPerson('per-2', 'Someone');
@@ -296,6 +339,15 @@ describe('redactions admin route — redactContactMethod', () => {
       'resident@example.com',
     );
     await seedContactMethod('cm-sms-1', 'per-3', 'sms', '+15550001111');
+    await getDb(env).insert(reports).values({
+      id: 'report-with-contact',
+      topic: 'Contact report',
+      templateKey: null,
+      contentMd: 'Email resident@example.com.',
+      sourcesJson: '[]',
+      createdAt: new Date(),
+      createdBy: 'sa',
+    });
 
     const emailRes = await POST(
       req(
@@ -325,6 +377,9 @@ describe('redactions admin route — redactContactMethod', () => {
       .from(rosterRedactions)
       .where(eq(rosterRedactions.eventId, emailEvent.id));
     expect(emailDetail.fieldCategory).toBe('email');
+    expect((await getDb(env).select().from(reports))[0].contentMd).toBe(
+      '## Report content removed\n\nThe saved report text was removed under the 90-day retention policy.',
+    );
 
     const smsRes = await POST(
       req(

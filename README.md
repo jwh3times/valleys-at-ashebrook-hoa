@@ -35,7 +35,8 @@ It provides:
 - 📊 **Board-only AI governing-documents reports** — generate a saved, citable markdown
   report from a curated template (rentals, fences/improvements, assessments, enforcement,
   meetings/voting, maintenance) or a freeform topic, built on the same AI Search + Claude
-  - pseudonymization pipeline as the document assistant
+  pseudonymization pipeline as the document assistant; saved report content is removed after 90
+  days and immediately when a roster name or contact method is redacted
 - 💳 **Dues & payments** — annual dues amount and payment options (shown in official
   mode)
 - ✉️ **Contact form** — reaches the resident who maintains the site (or the board, in

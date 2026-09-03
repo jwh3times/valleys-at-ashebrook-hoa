@@ -142,27 +142,22 @@ Remaining automation work:
 
 ### 8. AI CC&R Compliance Report
 
-**Status:** Core report generator implemented; compliance and lifecycle refinements remain
+**Status:** Report generator and lifecycle refinements implemented; compliance angle remains
 **Gate:** Dedicated spec for the remaining compliance angle
 **Likely size:** Medium
 
 The governing-documents report is shipped: six curated templates plus a freeform topic, planned
 sub-query retrieval, a streamed five-section report with `[Source N]` citations, and saved report
-history in the `reports` table. Remaining work:
+history in the `reports` table, structured planner output, empty-retrieval short-circuiting,
+paginated history, and 90-day saved-content retention tied to roster redactions. Remaining work:
 
 - The **compliance** angle — "where are our current practices out of step with the
   governing documents" — is only covered indirectly by the report's Gaps section. Structured
   meetings, motions, resolutions, elections, and proxies now provide some current-practice data,
   but dues history and enforcement records are still absent. Define the comparison dataset before
   designing compliance analysis.
-- Refinements deferred from the shipped build: a retention policy for the
-  PII-bearing `reports.content_md` (hang it off the existing scheduled cleanup
-  trigger), structured outputs for the sub-query planner instead of parsing JSON
-  out of the response text, pagination for the saved-report list, and a
-  short-circuit when retrieval returns nothing so no generation call is made.
-
-_Product angle: a standalone AI governing-documents report is a sellable
-artifact on its own._
+  _Product angle: a standalone AI governing-documents report is a sellable
+  artifact on its own._
 
 ### 9. Live Homeowner Voting and Conducted Elections
 

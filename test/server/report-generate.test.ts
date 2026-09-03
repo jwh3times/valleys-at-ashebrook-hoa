@@ -14,16 +14,13 @@ vi.mock('../../src/server/ai/anthropic', () => ({
   AssistantNotConfiguredError: class extends Error {},
   getAnthropic: () => ({
     messages: {
-      create: async (params: unknown) => {
+      parse: async (params: unknown) => {
         captured.planParams = params;
         if (anthropicState.planFail) throw new Error('planner down');
         return {
-          content: [
-            {
-              type: 'text',
-              text: '["planned one", "planned two", "planned three"]',
-            },
-          ],
+          parsed_output: {
+            queries: ['planned one', 'planned two', 'planned three'],
+          },
         };
       },
       stream: (params: unknown) => {

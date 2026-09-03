@@ -9,15 +9,20 @@ import {
 } from './assistant';
 import type { Source } from './sources';
 import { REPORT_TEMPLATES } from '../../lib/reports';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { z } from 'zod/v4';
 
 export const PLANNER_MODEL = 'claude-haiku-4-5';
 export const REPORT_CONTEXT_CHUNK_CAP = 30;
 
 const PLANNER_PROMPT = [
   'You expand a homeowners-association research topic into retrieval search queries.',
-  'Return ONLY a JSON array of 3 to 6 short search queries covering the distinct angles of the topic as it would appear in HOA governing documents (CC&Rs, bylaws, articles, amendments, rules).',
-  'No prose, no code fences — just the JSON array.',
+  'Return 3 to 6 short search queries covering the distinct angles of the topic as it would appear in HOA governing documents (CC&Rs, bylaws, articles, amendments, rules).',
 ].join('\n');
+
+const plannerOutput = z.object({
+  queries: z.array(z.string()).min(3).max(6),
+});
 
 /**
  * Expand a freeform topic into retrieval sub-queries via a small Haiku call.
@@ -32,22 +37,15 @@ export async function planSubQueries(
 ): Promise<string[]> {
   try {
     const client = getAnthropic(env);
-    const res = (await client.messages.create({
+    const res = await client.messages.parse({
       model: PLANNER_MODEL,
       max_tokens: 500,
       system: PLANNER_PROMPT,
       messages: [{ role: 'user', content: `Topic: ${pseud.anonymize(topic)}` }],
-    })) as { content: { type: string; text?: string }[] };
-    const text =
-      res.content.find((b) => b.type === 'text' && typeof b.text === 'string')
-        ?.text ?? '';
-    const start = text.indexOf('[');
-    const end = text.lastIndexOf(']');
-    if (start === -1 || end <= start) return [topic];
-    const parsed: unknown = JSON.parse(text.slice(start, end + 1));
-    if (!Array.isArray(parsed)) return [topic];
-    const queries = parsed
-      .filter((q): q is string => typeof q === 'string' && q.trim() !== '')
+      output_config: { format: zodOutputFormat(plannerOutput) },
+    });
+    const queries = (res.parsed_output?.queries ?? [])
+      .filter((q) => q.trim() !== '')
       .slice(0, 6)
       .map((q) => pseud.deanonymize(q.trim()));
     return queries.length >= 1 ? queries : [topic];
@@ -72,7 +70,6 @@ const REPORT_SYSTEM_PROMPT = [
   'Cite every claim drawn from an excerpt with its [Source N] label. When governing documents (CC&Rs, bylaws, articles, amendments, rules) conflict with other retrieved material, the governing documents control — note the difference.',
   'Do not present general knowledge as document content; if you add context the excerpts do not support, clearly mark it, for example "General knowledge (not from the documents):".',
   'Do not fabricate document contents or [Source N] citations. Names, addresses, phone numbers, and emails in the excerpts are placeholders — use them exactly as written; never alter, abbreviate, or reformat them.',
-  'If no relevant excerpts were found, say so plainly in the Summary and keep the other sections brief.',
   'Respond with the report only — no preamble.',
 ].join('\n');
 
@@ -80,6 +77,13 @@ export class UnknownTemplateError extends Error {
   constructor(key: string) {
     super(`Unknown report template: ${key}`);
     this.name = 'UnknownTemplateError';
+  }
+}
+
+export class NoRelevantDocumentsError extends Error {
+  constructor() {
+    super('No searchable documents matched this report topic');
+    this.name = 'NoRelevantDocumentsError';
   }
 }
 
@@ -133,14 +137,17 @@ export async function generateReport(
 
   const perQuery = await Promise.all(subQueries.map((q) => retrieve(env, q)));
   const pooled = poolChunks(perQuery);
+  if (pooled.length === 0) throw new NoRelevantDocumentsError();
   const { sources, contextText } = await buildExcerptContext(
     env,
     pooled,
     pseud,
   );
+  if (sources.length === 0 || contextText.trim() === '')
+    throw new NoRelevantDocumentsError();
 
   const userText =
-    `Document excerpts:\n\n${contextText || '(no relevant excerpts found)'}\n\n` +
+    `Document excerpts:\n\n${contextText}\n\n` +
     `Report topic: ${pseud.anonymize(topic)}`;
 
   const client = getAnthropic(env);

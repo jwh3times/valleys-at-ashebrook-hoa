@@ -7,6 +7,26 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-03
+
+### Added
+
+- **Board administrators can page through saved reports without loading the complete report
+  history at once.** The reports API now uses stable opaque cursors, and the admin report manager
+  offers a **Load more** action while additional results remain.
+
+### Changed
+
+- Report generation now uses Anthropic structured output for retrieval planning and stops with a
+  clear 422 response when search finds no usable supporting documents, avoiding an unsupported
+  generated report or saved result.
+
+### Security
+
+- Saved report text and source references are removed after 90 days while non-sensitive audit
+  metadata remains. A successful person or contact redaction also purges saved report content in
+  the same D1 batch so previously generated text cannot retain the redacted information.
+
 ## [0.17.12] - 2026-09-02
 
 ### Changed
@@ -31,6 +51,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - The private-root resolver unit suite now isolates `ASHEBROOK_PRIVATE_ROOT`, so the clean-machine
   portability drill can run the application and full test suite against an external restored root
   without changing the test that verifies the default `private/` location.
+
+## [0.17.9] - 2026-09-02
+
+### Changed
+
+- Dependency updates from the `npm-minor-and-patch` group: `@cloudflare/workers-types`
+  5.20260829.1 to 5.20260830.1 and `pdfjs-dist` 6.2.108 to 6.3.289.
 
 ## [0.17.8] - 2026-09-01
 

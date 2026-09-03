@@ -23,7 +23,9 @@ type View =
 export default function ReportsManager() {
   const [view, setView] = useState<View>({ kind: 'list' });
   const [items, setItems] = useState<ReportListItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [topicInput, setTopicInput] = useState('');
 
@@ -36,7 +38,8 @@ export default function ReportsManager() {
     try {
       const next = await fetchReports();
       if (isStale()) return;
-      setItems(next);
+      setItems(next.items);
+      setNextCursor(next.nextCursor);
       setError('');
     } catch {
       if (isStale()) return;
@@ -45,6 +48,21 @@ export default function ReportsManager() {
       if (!isStale()) setLoading(false);
     }
   }, []);
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const next = await fetchReports(nextCursor);
+      setItems((current) => [...current, ...next.items]);
+      setNextCursor(next.nextCursor);
+      setError('');
+    } catch {
+      setError('Could not load more reports.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     // React's documented mount-fetch shape: the load is started from a
@@ -202,32 +220,44 @@ export default function ReportsManager() {
           ) : items.length === 0 ? (
             <p>No reports yet. Generate one with “New report”.</p>
           ) : (
-            <ul className="reports__history">
-              {items.map((r) => (
-                <li key={r.id} className="reports__row">
-                  <button
-                    type="button"
-                    className="reports__topic-btn"
-                    onClick={() => void openReport(r.id)}
-                  >
-                    {r.topic}
-                  </button>
-                  <div className="reports__row-actions">
-                    <span className="reports__row-date">
-                      {new Date(r.createdAt).toLocaleDateString()}
-                    </span>
+            <>
+              <ul className="reports__history">
+                {items.map((r) => (
+                  <li key={r.id} className="reports__row">
                     <button
                       type="button"
-                      className="btn btn--outline btn--small"
-                      aria-label={`Delete ${r.topic}`}
-                      onClick={() => void onDelete(r.id, r.topic)}
+                      className="reports__topic-btn"
+                      onClick={() => void openReport(r.id)}
                     >
-                      Delete
+                      {r.topic}
                     </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                    <div className="reports__row-actions">
+                      <span className="reports__row-date">
+                        {new Date(r.createdAt).toLocaleDateString()}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn--outline btn--small"
+                        aria-label={`Delete ${r.topic}`}
+                        onClick={() => void onDelete(r.id, r.topic)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {nextCursor && (
+                <button
+                  type="button"
+                  className="btn btn--outline"
+                  disabled={loadingMore}
+                  onClick={() => void loadMore()}
+                >
+                  {loadingMore ? 'Loading…' : 'Load more'}
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

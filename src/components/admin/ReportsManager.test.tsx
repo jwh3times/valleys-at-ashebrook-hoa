@@ -24,11 +24,15 @@ const LIST = [
   },
 ];
 
+function listPage(items = LIST, nextCursor: string | null = null) {
+  return { items, nextCursor };
+}
+
 describe('ReportsManager', () => {
   it('shows an empty state when no reports are saved', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => Response.json([])),
+      vi.fn(async () => Response.json(listPage([]))),
     );
     render(<ReportsManager />);
     await waitFor(() =>
@@ -39,7 +43,7 @@ describe('ReportsManager', () => {
   it('lists saved reports', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => Response.json(LIST)),
+      vi.fn(async () => Response.json(listPage())),
     );
     render(<ReportsManager />);
     await waitFor(() =>
@@ -47,10 +51,35 @@ describe('ReportsManager', () => {
     );
   });
 
+  it('loads the next page of saved reports on demand', async () => {
+    const older = {
+      ...LIST[0],
+      id: 'r2',
+      topic: 'Older report',
+      createdAt: '2026-07-29T12:00:00.000Z',
+    };
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(listPage(LIST, 'cursor-2')))
+      .mockResolvedValueOnce(Response.json(listPage([older])));
+    vi.stubGlobal('fetch', mock);
+
+    render(<ReportsManager />);
+    fireEvent.click(await screen.findByRole('button', { name: /load more/i }));
+
+    expect(await screen.findByText('Older report')).toBeInTheDocument();
+    expect(mock).toHaveBeenLastCalledWith(
+      '/api/admin/reports?limit=20&cursor=cursor-2',
+    );
+    expect(
+      screen.queryByRole('button', { name: /load more/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it('shows the six template cards and a freeform topic box on New report', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => Response.json([])),
+      vi.fn(async () => Response.json(listPage([]))),
     );
     render(<ReportsManager />);
     fireEvent.click(await screen.findByRole('button', { name: /new report/i }));
@@ -60,7 +89,7 @@ describe('ReportsManager', () => {
   });
 
   it('POSTs the template key, streams tokens, then shows the saved report', async () => {
-    const mock = vi.fn(async (url: unknown, init?: RequestInit) => {
+    const mock = vi.fn(async (_url: unknown, init?: RequestInit) => {
       if (init?.method === 'POST') {
         expect(JSON.parse(init.body as string)).toEqual({
           template: 'rentals',
@@ -81,7 +110,7 @@ describe('ReportsManager', () => {
           ['done', { id: 'new-id' }],
         ]);
       }
-      return Response.json([]);
+      return Response.json(listPage([]));
     });
     vi.stubGlobal('fetch', mock);
     render(<ReportsManager />);
@@ -112,7 +141,7 @@ describe('ReportsManager', () => {
         return new Response(null, { status: 200 });
       }
       listCalls += 1;
-      return Response.json(listCalls === 1 ? LIST : []);
+      return Response.json(listPage(listCalls === 1 ? LIST : []));
     });
     vi.stubGlobal('fetch', mock);
     render(<ReportsManager />);
@@ -148,7 +177,7 @@ describe('ReportsManager', () => {
       if (init?.method === 'DELETE') {
         throw new Error('DELETE should not have been called');
       }
-      return Response.json(LIST);
+      return Response.json(listPage());
     });
     vi.stubGlobal('fetch', mock);
     render(<ReportsManager />);
@@ -189,7 +218,7 @@ describe('ReportsManager', () => {
         });
       }
       listCalls += 1;
-      return Response.json(listCalls === 1 ? LIST : []);
+      return Response.json(listPage(listCalls === 1 ? LIST : []));
     });
     vi.stubGlobal('fetch', mock);
     render(<ReportsManager />);
@@ -218,7 +247,7 @@ describe('ReportsManager', () => {
           ['sources', []],
           ['error', { message: 'Report generation failed.' }],
         ]);
-      return Response.json([]);
+      return Response.json(listPage([]));
     });
     vi.stubGlobal('fetch', mock);
     render(<ReportsManager />);

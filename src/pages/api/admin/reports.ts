@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt, or } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -9,14 +9,51 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { reports } from '../../../server/db/schema';
 import { INPUT_LIMITS } from '../../../lib/types';
+import { REPORT_PAGE_MAX, REPORT_PAGE_SIZE } from '../../../lib/reports';
 import {
   generateReport,
+  NoRelevantDocumentsError,
   UnknownTemplateError,
 } from '../../../server/ai/report';
 import { AiSearchUnavailableError } from '../../../server/ai/search';
 import { AssistantNotConfiguredError } from '../../../server/ai/anthropic';
 
 export const prerender = false;
+
+interface ReportCursor {
+  createdAt: number;
+  id: string;
+}
+
+function encodeCursor(cursor: ReportCursor): string {
+  return btoa(JSON.stringify(cursor))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+}
+
+function decodeCursor(raw: string): ReportCursor | null {
+  try {
+    const base64 = raw.replaceAll('-', '+').replaceAll('_', '/');
+    const parsed: unknown = JSON.parse(
+      atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')),
+    );
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      !('createdAt' in parsed) ||
+      !('id' in parsed) ||
+      typeof parsed.createdAt !== 'number' ||
+      !Number.isSafeInteger(parsed.createdAt) ||
+      typeof parsed.id !== 'string' ||
+      parsed.id === ''
+    )
+      return null;
+    return { createdAt: parsed.createdAt, id: parsed.id };
+  } catch {
+    return null;
+  }
+}
 
 function sseFrame(event: string, data: unknown): Uint8Array {
   return new TextEncoder().encode(
@@ -51,6 +88,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   } catch (err) {
     if (err instanceof UnknownTemplateError) {
       return new Response('Unknown report template', { status: 400 });
+    }
+    if (err instanceof NoRelevantDocumentsError) {
+      return new Response('No searchable documents matched this report topic', {
+        status: 422,
+      });
     }
     if (err instanceof AssistantNotConfiguredError) {
       return new Response("The assistant isn't configured", { status: 500 });
@@ -136,7 +178,8 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
   const db = getDb(env);
-  const id = new URL(request.url).searchParams.get('id');
+  const searchParams = new URL(request.url).searchParams;
+  const id = searchParams.get('id');
 
   if (id) {
     const rows = await db.select().from(reports).where(eq(reports.id, id));
@@ -153,6 +196,22 @@ export const GET: APIRoute = async ({ request, locals }) => {
     });
   }
 
+  const rawLimit = searchParams.get('limit');
+  const limit = rawLimit === null ? REPORT_PAGE_SIZE : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > REPORT_PAGE_MAX) {
+    return new Response(
+      `limit must be an integer from 1 to ${REPORT_PAGE_MAX}`,
+      {
+        status: 400,
+      },
+    );
+  }
+  const rawCursor = searchParams.get('cursor');
+  const cursor = rawCursor === null ? null : decodeCursor(rawCursor);
+  if (rawCursor !== null && cursor === null) {
+    return new Response('Invalid cursor', { status: 400 });
+  }
+
   const rows = await db
     .select({
       id: reports.id,
@@ -162,10 +221,31 @@ export const GET: APIRoute = async ({ request, locals }) => {
       createdBy: reports.createdBy,
     })
     .from(reports)
-    .orderBy(desc(reports.createdAt));
-  return Response.json(
-    rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
-  );
+    .where(
+      cursor
+        ? or(
+            lt(reports.createdAt, new Date(cursor.createdAt)),
+            and(
+              eq(reports.createdAt, new Date(cursor.createdAt)),
+              lt(reports.id, cursor.id),
+            ),
+          )
+        : undefined,
+    )
+    .orderBy(desc(reports.createdAt), desc(reports.id))
+    .limit(limit + 1);
+  const pageRows = rows.slice(0, limit);
+  const last = pageRows.at(-1);
+  return Response.json({
+    items: pageRows.map((r) => ({
+      ...r,
+      createdAt: r.createdAt.toISOString(),
+    })),
+    nextCursor:
+      rows.length > limit && last
+        ? encodeCursor({ createdAt: last.createdAt.getTime(), id: last.id })
+        : null,
+  });
 };
 
 export const DELETE: APIRoute = async ({ request, locals }) => {

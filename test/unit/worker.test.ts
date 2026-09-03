@@ -18,7 +18,7 @@ const ctx = {
   passThroughOnException: vi.fn(),
 } as unknown as ExecutionContext;
 
-// The entry point is deliberately a thin adapter: both jobs it triggers live
+// The entry point is deliberately a thin adapter: the jobs it triggers live
 // in modules the Workers test pool can import, which `src/worker.ts` itself is
 // not (it pulls Astro's build-time virtual config). So this file asserts
 // delegation only — `scheduled.test.ts` covers what the cron actually does.
