@@ -343,11 +343,12 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   **pseudonymized** topic into 3-6 retrieval sub-queries and the returned queries are de-anonymized
   before retrieval, so search still runs over real document text — any planning failure degrades to
   a single query on the raw topic rather than failing the request. Retrieval that yields no usable
-  excerpt returns before a report-writing model call. Otherwise the Claude Opus call receives the same
-  pseudonymized excerpt and title context as the chat assistant, built from one shared
-  pseudonymizer instance per request, and the streamed markdown is de-anonymized server-side before
-  it reaches the board member's browser. Retrieval itself is not tier-aware for the same reason
-  described below, so this endpoint stays board-only rather than being exposed to homeowners.
+  excerpt returns before a report-writing model call. Otherwise the Claude Opus call receives the
+  same pseudonymized excerpt and title context as the chat assistant, built from one shared
+  pseudonymizer instance per request, and the streamed markdown is de-anonymized server-side
+  before it reaches the board member's browser. Retrieval itself is not tier-aware for the same
+  reason described below, so this endpoint stays board-only rather than being exposed to
+  homeowners.
 - **Saved reports retain real, de-anonymized text in D1 for 90 days — unlike the chat assistant,
   which saves nothing.** `reports.content_md`, the freeform-capable topic, and
   `reports.sources_json` carry the final report and its cited document metadata so a board member
