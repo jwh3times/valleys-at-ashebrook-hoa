@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const cleanupVerificationState = vi.hoisted(() => vi.fn());
+const cleanupSavedReportContent = vi.hoisted(() => vi.fn());
 const runInvariants = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/server/cleanup/verification', () => ({
   cleanupVerificationState,
+}));
+
+vi.mock('../../src/server/cleanup/reports', () => ({
+  cleanupSavedReportContent,
 }));
 
 vi.mock('../../src/server/db/invariants', async (importOriginal) => ({
@@ -56,17 +61,20 @@ const VIOLATED = run({
 describe('the daily scheduled jobs', () => {
   beforeEach(() => {
     cleanupVerificationState.mockReset();
+    cleanupSavedReportContent.mockReset();
+    cleanupSavedReportContent.mockResolvedValue({ reportRows: 5 });
     runInvariants.mockReset();
     vi.restoreAllMocks();
   });
 
-  it('runs both jobs and completes quietly when both are clean', async () => {
+  it('runs every job and completes quietly when all are clean', async () => {
     cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
     runInvariants.mockResolvedValue(run());
 
     await expect(runScheduledJobs(env)).resolves.toBeUndefined();
 
     expect(cleanupVerificationState).toHaveBeenCalledWith(env);
+    expect(cleanupSavedReportContent).toHaveBeenCalledWith(env);
     expect(runInvariants).toHaveBeenCalledWith(env);
   });
 
@@ -90,9 +98,22 @@ describe('the daily scheduled jobs', () => {
       'scheduled job failed: invariants',
     );
     expect(cleanupVerificationState).toHaveBeenCalledWith(env);
+    expect(cleanupSavedReportContent).toHaveBeenCalledWith(env);
   });
 
-  it('names both jobs when both fail', async () => {
+  it('still runs the other jobs when report retention fails', async () => {
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    cleanupSavedReportContent.mockRejectedValue(new Error('D1 unavailable'));
+    runInvariants.mockResolvedValue(run());
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: report-retention',
+    );
+    expect(cleanupVerificationState).toHaveBeenCalledWith(env);
+    expect(runInvariants).toHaveBeenCalledWith(env);
+  });
+
+  it('names both failures when two jobs fail', async () => {
     cleanupVerificationState.mockRejectedValue(new Error('D1 unavailable'));
     runInvariants.mockResolvedValue(VIOLATED);
 

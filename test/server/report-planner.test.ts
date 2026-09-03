@@ -5,16 +5,16 @@ import { vi } from 'vitest';
 const captured: { planParams?: unknown } = {};
 const planner = vi.hoisted(() => ({
   fail: false,
-  text: '["leasing restrictions", "minimum lease term", "tenant approval"]',
+  queries: ['leasing restrictions', 'minimum lease term', 'tenant approval'],
 }));
 vi.mock('../../src/server/ai/anthropic', () => ({
   AssistantNotConfiguredError: class extends Error {},
   getAnthropic: () => ({
     messages: {
-      create: async (params: unknown) => {
+      parse: async (params: unknown) => {
         captured.planParams = params;
         if (planner.fail) throw new Error('planner down');
-        return { content: [{ type: 'text', text: planner.text }] };
+        return { parsed_output: { queries: planner.queries } };
       },
     },
   }),
@@ -79,6 +79,10 @@ describe('planSubQueries', () => {
     expect((captured.planParams as { model: string }).model).toBe(
       'claude-haiku-4-5',
     );
+    expect(
+      (captured.planParams as { output_config: { format: { type: string } } })
+        .output_config.format.type,
+    ).toBe('json_schema');
   });
 
   it('falls back to the raw topic when the planner call throws', async () => {
@@ -91,25 +95,25 @@ describe('planSubQueries', () => {
     }
   });
 
-  it('falls back to the raw topic on unparseable planner output', async () => {
-    planner.text = 'sure! here are some queries';
+  it('falls back to the raw topic when structured output is absent', async () => {
+    planner.queries = [];
     try {
       const queries = await planSubQueries(env, await pseud(), 'solar panels');
       expect(queries).toEqual(['solar panels']);
     } finally {
-      planner.text = '["a", "b", "c"]';
+      planner.queries = ['a', 'b', 'c'];
     }
   });
 
   it('de-anonymizes surrogate names in returned queries so retrieval matches real text', async () => {
     const p = await pseud();
     const surrogate = p.anonymize('Jane Q Homeowner');
-    planner.text = JSON.stringify([`letters from ${surrogate}`, 'b', 'c']);
+    planner.queries = [`letters from ${surrogate}`, 'b', 'c'];
     try {
       const queries = await planSubQueries(env, p, 'complaints');
       expect(queries[0]).toBe('letters from Jane Q Homeowner');
     } finally {
-      planner.text = '["a", "b", "c"]';
+      planner.queries = ['a', 'b', 'c'];
     }
   });
 });

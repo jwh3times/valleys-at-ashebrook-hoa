@@ -14,6 +14,7 @@ import {
   updatedRowGuard,
   operationKey,
 } from '../../../server/roster/audit';
+import { purgeAllSavedReportContentStatement } from '../../../server/cleanup/reports';
 
 export const prerender = false;
 
@@ -139,6 +140,7 @@ async function redactPersonName(
     peopleUpdate,
     ...correlation.statements,
     redactionTaskStatement(rootEventId, personId, nowMs),
+    purgeAllSavedReportContentStatement(env.DATABASE, rootEventId),
   ]);
   if (results[0].meta.changes !== 1)
     return new Response('Name already redacted', { status: 409 });
@@ -202,6 +204,7 @@ async function redactContactMethod(
     contactUpdate,
     ...correlation.statements,
     redactionTaskStatement(rootEventId, contactMethodId, nowMs),
+    purgeAllSavedReportContentStatement(env.DATABASE, rootEventId),
   ]);
   if (results[0].meta.changes !== 1)
     return new Response('Value already redacted', { status: 409 });

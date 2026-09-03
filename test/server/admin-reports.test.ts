@@ -52,12 +52,10 @@ vi.mock('../../src/server/ai/anthropic', () => {
       }
       return {
         messages: {
-          create: async (params: unknown) => {
+          parse: async (params: unknown) => {
             captured.params!.push(params);
             return {
-              content: [
-                { type: 'text', text: '["q one", "q two", "q three"]' },
-              ],
+              parsed_output: { queries: ['q one', 'q two', 'q three'] },
             };
           },
           stream: (params: unknown) => {
@@ -303,6 +301,34 @@ describe('POST /api/admin/reports', () => {
     expect(res.status).toBe(503);
     expect(await res.text()).toContain('temporarily unavailable');
   });
+
+  it('returns 422 without starting generation or saving when retrieval finds nothing', async () => {
+    retrieveMock.mockImplementation(async () => []);
+    try {
+      captured.params = [];
+      const before = (await getDb(env).select().from(reports)).length;
+
+      const res = await post({ template: 'rentals' });
+
+      expect(res.status).toBe(422);
+      expect(await res.text()).toContain('No searchable documents matched');
+      expect(captured.params).toEqual([]);
+      expect(await getDb(env).select().from(reports)).toHaveLength(before);
+    } finally {
+      retrieveMock.mockImplementation(async () => [
+        {
+          id: 'c1',
+          score: 0.9,
+          content: 'Leases must run 12 months. Jane Q Homeowner filed a note.',
+          metadata: {
+            filename: 'f.pdf',
+            folder: 'documents/doc-1/f.pdf',
+            timestamp: 1,
+          },
+        },
+      ]);
+    }
+  });
 });
 
 describe('GET /api/admin/reports', () => {
@@ -320,13 +346,85 @@ describe('GET /api/admin/reports', () => {
       request: new Request('http://localhost/api/admin/reports'),
     } as never);
     expect(res.status).toBe(200);
-    const list = (await res.json()) as {
-      id: string;
-      topic: string;
-      contentMd?: string;
-    }[];
-    expect(list.length).toBeGreaterThan(0);
-    expect(list[0].contentMd).toBeUndefined();
+    const page = (await res.json()) as {
+      items: { id: string; topic: string; contentMd?: string }[];
+      nextCursor: string | null;
+    };
+    expect(page.items.length).toBeGreaterThan(0);
+    expect(page.items[0].contentMd).toBeUndefined();
+  });
+
+  it('paginates report history without duplicating or skipping rows', async () => {
+    await getDb(env)
+      .insert(reports)
+      .values([
+        {
+          id: 'page-1',
+          topic: 'Oldest page fixture',
+          templateKey: null,
+          contentMd: 'oldest',
+          sourcesJson: '[]',
+          createdAt: new Date('2030-01-02T00:00:00.000Z'),
+          createdBy: 'board-1',
+        },
+        {
+          id: 'page-2',
+          topic: 'Middle page fixture',
+          templateKey: null,
+          contentMd: 'middle',
+          sourcesJson: '[]',
+          createdAt: new Date('2030-01-02T00:00:00.000Z'),
+          createdBy: 'board-1',
+        },
+        {
+          id: 'page-3',
+          topic: 'Newest page fixture',
+          templateKey: null,
+          contentMd: 'newest',
+          sourcesJson: '[]',
+          createdAt: new Date('2030-01-03T00:00:00.000Z'),
+          createdBy: 'board-1',
+        },
+      ]);
+
+    const first = await GET({
+      locals: {},
+      request: new Request('http://localhost/api/admin/reports?limit=2'),
+    } as never);
+    const firstPage = (await first.json()) as {
+      items: { id: string; contentMd?: string }[];
+      nextCursor: string | null;
+    };
+    expect(firstPage.items.map((r) => r.id)).toEqual(['page-3', 'page-2']);
+    expect(firstPage.items.every((r) => r.contentMd === undefined)).toBe(true);
+    expect(firstPage.nextCursor).toEqual(expect.any(String));
+
+    const second = await GET({
+      locals: {},
+      request: new Request(
+        `http://localhost/api/admin/reports?limit=2&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
+      ),
+    } as never);
+    const secondPage = (await second.json()) as {
+      items: { id: string }[];
+      nextCursor: string | null;
+    };
+    expect(secondPage.items[0].id).toBe('page-1');
+    expect(secondPage.items.map((r) => r.id)).not.toContain('page-2');
+  });
+
+  it('rejects invalid report-history pagination inputs', async () => {
+    const badLimit = await GET({
+      locals: {},
+      request: new Request('http://localhost/api/admin/reports?limit=0'),
+    } as never);
+    expect(badLimit.status).toBe(400);
+
+    const badCursor = await GET({
+      locals: {},
+      request: new Request('http://localhost/api/admin/reports?cursor=nope'),
+    } as never);
+    expect(badCursor.status).toBe(400);
   });
 
   it('returns a full report by id, and 404s an unknown id', async () => {

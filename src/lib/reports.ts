@@ -96,6 +96,14 @@ export interface ReportListItem {
   createdBy: string;
 }
 
+export interface ReportPage {
+  items: ReportListItem[];
+  nextCursor: string | null;
+}
+
+export const REPORT_PAGE_SIZE = 20;
+export const REPORT_PAGE_MAX = 100;
+
 export interface ReportDetail extends ReportListItem {
   contentMd: string;
   sources: ReportSource[];

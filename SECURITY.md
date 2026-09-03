@@ -339,22 +339,27 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **The board-only report generator shares the assistant's pseudonymization and is also board-only
   end to end.** `POST /api/admin/reports` is gated by `requireBoard` the same as every other admin
   endpoint. For one of six curated templates, hand-tuned retrieval sub-queries are used directly;
-  for a freeform topic, a small Claude Haiku call first expands the **pseudonymized** topic into 3-6
-  retrieval sub-queries and the returned queries are de-anonymized before retrieval, so search still
-  runs over real document text — any planning failure degrades to a single query on the raw topic
-  rather than failing the request. The report-writing Claude Opus call receives the same
+  for a freeform topic, a small Claude Haiku structured-output call first expands the
+  **pseudonymized** topic into 3-6 retrieval sub-queries and the returned queries are de-anonymized
+  before retrieval, so search still runs over real document text — any planning failure degrades to
+  a single query on the raw topic rather than failing the request. Retrieval that yields no usable
+  excerpt returns before a report-writing model call. Otherwise the Claude Opus call receives the same
   pseudonymized excerpt and title context as the chat assistant, built from one shared
   pseudonymizer instance per request, and the streamed markdown is de-anonymized server-side before
   it reaches the board member's browser. Retrieval itself is not tier-aware for the same reason
   described below, so this endpoint stays board-only rather than being exposed to homeowners.
-- **Saved reports persist real, de-anonymized text in D1 — unlike the chat assistant, which saves
-  nothing.** `reports.content_md` and `reports.sources_json` store the final report and its cited
-  document metadata so a board member can reopen it later; this is equivalent exposure to the
-  documents it cites, and is protected by the same board-only access as every other admin surface,
-  not by any additional encryption. A saved report is a point-in-time snapshot with no retention or
-  cleanup policy yet; removing one is a manual, board-only action (`DELETE /api/admin/reports`).
-  Only a completed generation is saved — the row is inserted before the SSE `done` frame is emitted,
-  so a failed or client-disconnected generation leaves no row.
+- **Saved reports retain real, de-anonymized text in D1 for 90 days — unlike the chat assistant,
+  which saves nothing.** `reports.content_md`, the freeform-capable topic, and
+  `reports.sources_json` carry the final report and its cited document metadata so a board member
+  can reopen it during that window; this is equivalent exposure to the documents it cites, is
+  protected by the same board-only access as every other admin surface, and has no additional
+  encryption. The daily scheduled job replaces all three text-bearing fields with a fixed non-PII
+  removal state after 90 days while retaining the report ID, template key, creator ID, and timestamp.
+  Any authorized Person-name or Contact Method redaction performs that purge for every saved report
+  in the same D1 batch, so an old de-anonymized copy cannot outlive the roster erasure. A board
+  member may still delete the retained row manually (`DELETE /api/admin/reports`). Only a completed
+  generation is saved — the row is inserted before the SSE `done` frame is emitted, so a failed or
+  client-disconnected generation leaves no row.
 - **The AI Search index is not tier-aware, which is why the assistant stays board-only.** Retrieval
   runs over a single Cloudflare AI Search index built from every document's Markdown text
   (`rag/<uuid>.md`) regardless of that document's visibility tier, and returns un-pseudonymized

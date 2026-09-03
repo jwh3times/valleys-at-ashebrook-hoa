@@ -57,8 +57,8 @@ boolean`.
   message and never create a receipt.
 - `src/lib/reports.ts` contains the six curated `REPORT_TEMPLATES` (rentals, fences/improvements,
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
-  sub-queries, and the shared `ReportListItem`/`ReportDetail`/`ReportSource` shapes used by both
-  the admin UI and the `/api/admin/reports` endpoint.
+  sub-queries, pagination constants, and the shared `ReportPage`/`ReportListItem`/`ReportDetail`/
+  `ReportSource` shapes used by both the admin UI and the `/api/admin/reports` endpoint.
 - `src/lib/types.ts` contains shared shapes, `DEFAULT_*` fallbacks, `DOCUMENT_CATEGORIES`, the
   `Visibility` type, fail-closed `SiteSettings.liveVotingEnabled`, admin-write input normalizers
   (`normalize{Announcement,Property,Owner,Resolution,Election,Candidate,Proxy}Input`,
@@ -251,8 +251,12 @@ SecondaryStorage.increment.")` from `onRequestRateLimit` on every request whenev
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), migrations, and
   `invariants.ts` (`INVARIANT_CHECKS`, `runInvariants(env)`, `formatInvariantRun` — see the
   invariant-gate section of [`roster-and-access.md`](./roster-and-access.md)).
-- `scheduled.ts`: `runScheduledJobs(env)`, the body of the Worker's daily `0 7 * * *` cron trigger —
-  see **Deploy** below.
+- `cleanup/`: retention jobs. `verification.ts` expires completed verification state;
+  `reports.ts` purges de-anonymized saved-report text after 90 days and supplies the statement that
+  performs the same purge atomically with roster redactions.
+- `scheduled.ts`: `runScheduledJobs(env)`, the body of the Worker's daily `0 7 * * *` cron trigger;
+  it independently runs verification cleanup, saved-report cleanup, and ADR 0022 invariants — see
+  **Deploy** below.
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
   shared Person Link creation/ending machinery behind `/api/verify/unlink` and
