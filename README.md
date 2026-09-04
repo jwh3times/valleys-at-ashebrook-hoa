@@ -196,8 +196,8 @@ adopts the process and the board is ready to operate it. The board workflow is:
 
 Contributions are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow and local
 checks, and [AGENTS.md](./AGENTS.md) for the architecture and conventions. Future work is tracked
-in [ROADMAP.md](./ROADMAP.md), and durable architecture decisions live in
-[docs/adr](./docs/adr/README.md).
+as GitHub issues — see [ROADMAP.md](./ROADMAP.md) for where to find them — and durable architecture
+decisions live in [docs/adr](./docs/adr/README.md).
 By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md). For help and bug
 reports, see [SUPPORT.md](./SUPPORT.md); report vulnerabilities privately per
 [SECURITY.md](./SECURITY.md). Shipped changes are tracked in the [changelog](./CHANGELOG.md).

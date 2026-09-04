@@ -7,6 +7,36 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.4] - 2026-09-04
+
+### Changed
+
+- **The backlog now lives in GitHub issues instead of `ROADMAP.md`.** All twelve numbered roadmap
+  items are tracked as issues, each naming the gate that has to open before work can start — a
+  spec, a board decision, an operator action, an upstream release, an observed need, or a calendar
+  date plus sign-off. `ROADMAP.md` keeps only what has no completion state: where the two trackers
+  are, what a gate means, the current priority, what deliberately stays in files, and the
+  longer-range product opportunities. The per-item status lines are gone, because they were a
+  second copy of state that drifted out of step with the issues that owned it.
+- **`docs/agents/issue-tracker.md` now records which tracker an issue belongs in** — the public
+  repository by default, the private operations repository only when the issue body itself cannot
+  be public — along with the project board's fields and the rule that the issue, not a board field,
+  is the durable record. It also warns that `gh project` writes fail silently without the `project`
+  token scope, which is how a previous board drifted unnoticed.
+- **The `end-session` skill now closes out the project board, not only the issue tracker.** It
+  previously described GitHub issues as this repository's only tracker, so a session could end with
+  the board's Status, Gate, Next Action, and Blocking Item untouched and still look complete. It now
+  names both trackers with the routing rule, adds a board pass, and requires the closing report to
+  say when that pass was skipped for a missing `project` token scope — the failure mode that is
+  otherwise indistinguishable from success. ADR 0009's dangling reference to a numbered roadmap item
+  now points at the issue that replaced it.
+
+## [0.18.3] - 2026-09-03
+
+### Changed
+
+- Bumped the `@cloudflare/workers-types` development dependency from 5.20260830.1 to 5.20260831.1.
+
 ## [0.18.2] - 2026-09-03
 
 ### Fixed
