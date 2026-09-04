@@ -29,8 +29,11 @@ layouts in `src/layouts/`, client helpers in `src/lib/`, and **server-only logic
 in `public/`, automation in `scripts/`, documentation in `docs/`.
 
 `design/Ashebrook HOA.dc.html` is a static design mockup kept as visual reference only; it is not
-built or imported and should not be edited. Roadmap items live in `ROADMAP.md`; durable
-architecture decisions in `docs/adr/`; the association's domain vocabulary in `CONTEXT.md`.
+built or imported and should not be edited. **Backlog items are GitHub issues, not file entries** —
+`ROADMAP.md` explains the trackers and the Gate vocabulary but holds no status lines, and
+[`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md) carries the public/private routing
+rule. Durable architecture decisions live in `docs/adr/`; the association's domain vocabulary in
+`CONTEXT.md`.
 
 ## Where to look next
 

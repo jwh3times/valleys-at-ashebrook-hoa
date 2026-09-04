@@ -2,6 +2,50 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
+## Which repository an issue goes in
+
+Two trackers, and the choice is decided by **the content of the body**, never by the topic.
+
+- **Public** — `jwh3times/valleys-at-ashebrook-hoa`. The default. Product, engineering,
+  dependencies, architecture, and anything whose body is safe to publish.
+- **Private** — `jwh3times/valleys-at-ashebrook-hoa-ops`. Only when the body itself cannot be
+  public: production identifiers, resident or roster data, operator procedure detail, or the
+  specifics of an unfixed security problem.
+
+When an issue is _about_ something private but can be written without reproducing it, it belongs in
+the public tracker pointing at the private record. #278 is the worked example.
+
+`gh` infers the repo from `git remote -v`, so run private-tracker commands from `private/` or pass
+`--repo jwh3times/valleys-at-ashebrook-hoa-ops` explicitly.
+
+## The project board
+
+[Ashebrook](https://github.com/users/jwh3times/projects/6) (private, user-owned) is one ordered view
+across both trackers. Fields: Status, **Gate**, Area, Next Action, Blocking Item.
+
+**The issue is the record; the board is a view.** Durable facts go in the issue body and comments,
+never only in a Project field. The fields are deliberately cheap to update so the board can go stale
+without losing anything.
+
+Board visibility and issue visibility are independent — a private board holding public issues keeps
+the _ordering_ unpublished while the issues stay public.
+
+`gh project` writes need the `project` token scope, and **a token without it fails silently**: the
+`gh project` call errors, nothing else does, and the session still looks clean. Check with
+`gh auth status` (look for `project`, not `read:project`) and fix with
+`gh auth refresh -h github.com -s project`. The device flow needs a real terminal, so an agent shell
+cannot do it.
+
+### Gate values
+
+- **None — ready to work** — nothing blocks it.
+- **Spec needed** — design decisions have to be settled first.
+- **Board decision** — needs an association decision, not an engineering one.
+- **Operator action** — a human at a dashboard or a keyboard.
+- **Upstream** — waiting on a dependency or platform capability.
+- **Needs evidence** — deliberately dormant until a real need is observed.
+- **Calendar/sign-off** — time-gated with a named approval.
+
 ## Conventions
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line

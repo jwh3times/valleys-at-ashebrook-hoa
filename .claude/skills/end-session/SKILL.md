@@ -17,8 +17,9 @@ The charter, verbatim:
 
 A session's durable output is not just the diff. It also produces things that live in four places
 outside the tracked tree, each of which rots silently if nobody writes to it: **memory** (what you
-now know about this project that the code doesn't say), **GitHub issues** (this repo's only
-tracker — decisions, follow-ups, and closures), **the private companion and `private/`** (operator procedures, evidence, and
+now know about this project that the code doesn't say), **GitHub issues and the project board**
+(two trackers and the ordered view across them — decisions, follow-ups, closures, and
+gates), **the private companion and `private/`** (operator procedures, evidence, and
 anything resident-data-derived, which is gitignored and therefore invisible to every code review),
 and the **local workspace** (scratch files, stale worktrees, generated-tree drift that fails the
 next session's CI for reasons that have nothing to do with it).
@@ -74,10 +75,16 @@ one fact per file with `name` / `description` / `metadata.type` (`user`, `feedba
 - **Delete or correct memories this session falsified.** A memory that is now wrong is worse than a
   missing one — the deploys-don't-apply-migrations correction is the standing example.
 
-### 3. Update GitHub issues
+### 3. Update GitHub issues and the project board
 
 Issues are the tracker (`docs/agents/issue-tracker.md`); labels are in
 `docs/agents/triage-labels.md`. Use `gh`, which infers the repo from the clone.
+
+**There are two trackers.** Inferring the repo from this clone gives you the public one, which is
+right for almost everything. Work whose _body_ cannot be public — production identifiers, resident
+data, operator procedure detail, unfixed security specifics — belongs in the private operations
+repository instead (`--repo jwh3times/valleys-at-ashebrook-hoa-ops`, or run from `private/`). The
+routing rule is in `docs/agents/issue-tracker.md`.
 
 For each issue this session touched:
 
@@ -95,6 +102,24 @@ For each issue this session touched:
   `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`).
 - If the session used a wayfinder map, append to its Decisions-so-far and close resolved children
   per the wayfinding section of `docs/agents/issue-tracker.md`.
+
+Then update the **board** — [Ashebrook](https://github.com/users/jwh3times/projects/6), the private
+ordered view across both trackers. The issue stays the record; these fields are only what makes the
+next session cheap to start:
+
+- **Move what changed.** `Status` for items that started or finished. `Gate` only for an item whose
+  blocker genuinely opened or closed — a board decision taken, an upstream release, a spec written.
+  Do not re-gate an item because it feels stuck.
+- **Refresh `Next Action` and `Blocking Item`** on anything this session touched. A stale Next
+  Action is worse than an empty one, because it will be believed.
+- **Add any issue you opened above.** A new issue does not join the board on its own.
+
+`gh project` writes need the `project` token scope and **fail silently without it** — the
+`gh project` call errors, nothing else does, and the session still looks clean. That is how the
+previous board drifted for weeks. Check `gh auth status` for `project` (not `read:project`); if it
+is missing, say so in the report rather than skipping this lane quietly. The fix
+(`gh auth refresh -h github.com -s project`) needs a real terminal and cannot be done from an agent
+shell.
 
 ### 4. Update the private companion and `private/`
 
@@ -174,9 +199,11 @@ Show findings before acting. Work through:
 
 ### 7. Report
 
-One short paragraph per lane — memory, issues, private companion, workspace — naming what changed and what
-was deliberately left alone. End with **what's still open**: the branch mid-flight, the unanswered
-question, the issue awaiting a reply. That paragraph is what makes the next session cheap to start.
+One short paragraph per lane — memory, issues and board, private companion, workspace — naming what
+changed and what was deliberately left alone. Say explicitly if the board lane was skipped for a
+missing `project` scope; that is the one failure that otherwise looks identical to success. End with
+**what's still open**: the branch mid-flight, the unanswered question, the issue awaiting a reply.
+That paragraph is what makes the next session cheap to start.
 
 ## Do not
 
