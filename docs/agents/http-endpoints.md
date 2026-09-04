@@ -112,10 +112,12 @@ API routes live under `src/pages/api/`:
   `proxyUseError` guard (`src/server/content/proxy-guards.ts`) — unknown `proxyId` is `400`, a proxy
   for a different lot or scoped to a different occasion is `409` (a meeting-scoped proxy also
   covers an election held at that meeting; a standalone election accepts only its own), a proxy
-  whose grantor does not currently hold Lot Authority over the proxy's lot is `409` (the ADR 0022
-  phase 3d grantor re-validation, #220/#204 — still a current-day approximation of "held Lot
-  Authority at the occasion", but asked of the party roster since #248 part 2 rather than of
-  `owners.status`; see the module comment) — and an entry carrying both `proxyId` and
+  whose grantor did not hold Lot Authority over the proxy's lot on the occasion day is `409` (the
+  ADR 0022 phase 3d grantor re-validation, #220/#204, asked of the party roster since #248 part 2;
+  meeting attendance and votes use `meetings.date`, while recorded-election ballots use
+  `elections.election_date`, including a meeting-scoped proxy covering that election). The same
+  proxy predicates are repeated inside each full-replacement batch, so a concurrent proxy or roster
+  correction returns `409` without replacing any existing rows. An entry carrying both `proxyId` and
   `representedByPersonId`/`castByPersonId` is `400`, since who acted
   lives on the canonical proxy row, never beside it. All verbs on both routes are
   `requireBoard`-gated.
@@ -166,7 +168,8 @@ API routes live under `src/pages/api/`:
   makes the replacement return `409`. `setBallots` stamps `weight` from
   `properties.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
   same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
-meetingId: election.meetingId }` so a proxy signed for the election's own meeting also covers it.
+meetingId: election.meetingId, associationDay: election.electionDate }` so a proxy signed for the
+  election's own meeting also covers it while grantor authority is evaluated on the election day.
   `certify` (reworked by phase 3b, #218, per #203) takes per-winner
   `{candidateId, personId?, qualifyingLotId, startDay, scheduledEndDay, office?}` and, in one
   reserved `db.batch()`, creates PARTY-ROSTER facts: a `board_service_terms` row per winner
@@ -210,9 +213,9 @@ meetingId: election.meetingId }` so a proxy signed for the election's own meetin
   can write (`propertyId`, `grantorPersonId`, `holderPersonId`, `meetingId`, `electionId`), `400` if
   the grantor has NEVER held Lot Authority over the given property — deliberately the weaker of the
   two questions `roster/authority.ts` answers, since a proxy signed before a sale is a real record
-  the board must be able to enter; `proxyUseError` is what refuses that proxy at every USE, so
-  entering it is allowed and using it is not (ADR 0018's model, preserved by #248 part 2 rather
-  than tightened) — `400` if grantor and holder resolve to the same person,
+  the board must be able to enter; `proxyUseError` decides whether that proxy was effective on its
+  occasion day (ADR 0018's entry/use split, preserved by #248 part 2 rather than tightened) —
+  `400` if grantor and holder resolve to the same person,
   `409` if `meetingId` resolves to a board-body meeting ("Proxies apply to member meetings —
   this is a board meeting" — proxies are cited only by member attendance/votes/ballots, so a
   board-meeting proxy could never be used; election occasions are unaffected), and `409` on a

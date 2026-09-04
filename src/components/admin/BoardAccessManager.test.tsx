@@ -40,7 +40,11 @@ describe('BoardAccessManager', () => {
 
   it('demotes a board member', async () => {
     render(<BoardAccessManager />);
-    fireEvent.click(await screen.findByRole('button', { name: /demote/i }));
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Demote board administrator: Alice (alice@example.com)',
+      }),
+    );
     await waitFor(() => expect(demoteFromBoard).toHaveBeenCalledWith('u1'));
   });
 });

@@ -19,6 +19,7 @@ import { normalizeElectionInput, isoDateOrError } from '../../../lib/types';
 import { fetchAdminElections } from '../../../server/content/reads';
 import {
   proxyUseError,
+  proxyUsesValidAtMutation,
   parseProvenance,
   personExistenceError,
 } from '../../../server/content/proxy-guards';
@@ -252,6 +253,7 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       status: elections.status,
       source: elections.source,
       meetingId: elections.meetingId,
+      electionDate: elections.electionDate,
     })
     .from(elections)
     .where(eq(elections.id, electionId))
@@ -264,13 +266,15 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
   if (election.source !== 'recorded')
     return new Response(NOT_RECORDED('Ballots'), { status: 409 });
 
-  const proxyFailure = await proxyUseError(
-    db,
-    parsedEntries.value
-      .filter((e) => e.proxyId !== null)
-      .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! })),
-    { electionId, meetingId: election.meetingId },
-  );
+  const proxyUses = parsedEntries.value
+    .filter((e) => e.proxyId !== null)
+    .map((e) => ({ propertyId: e.propertyId, proxyId: e.proxyId! }));
+  const proxyOccasion = {
+    electionId,
+    meetingId: election.meetingId,
+    associationDay: election.electionDate,
+  };
+  const proxyFailure = await proxyUseError(db, proxyUses, proxyOccasion);
   if (proxyFailure)
     return new Response(proxyFailure.message, {
       status: proxyFailure.status,
@@ -342,12 +346,25 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
   // reservation protocol as setTallies — see `election-reservation.ts`.
   const sentinel = RESERVATION_SENTINELS.ballots;
   const guard = reservationGuard(electionId, sentinel);
+  const proxyGuard = proxyUsesValidAtMutation(proxyUses, proxyOccasion);
   const reserve = env.DATABASE.prepare(
     `UPDATE elections
        SET status = ?
-       WHERE id = ? AND source = 'recorded' AND status = ?
+       WHERE id = ?
+         AND source = 'recorded'
+         AND status = ?
+         AND election_date = ?
+         AND meeting_id IS ?
+         AND ${proxyGuard.sql}
        RETURNING id`,
-  ).bind(sentinel, electionId, election.status);
+  ).bind(
+    sentinel,
+    electionId,
+    election.status,
+    election.electionDate,
+    election.meetingId,
+    ...proxyGuard.binds,
+  );
   const children: D1PreparedStatement[] = [
     env.DATABASE.prepare(
       `DELETE FROM ballots WHERE election_id = ? AND ${guard.sql}`,

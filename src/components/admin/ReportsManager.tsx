@@ -227,6 +227,7 @@ export default function ReportsManager() {
                     <button
                       type="button"
                       className="reports__topic-btn"
+                      aria-label={`Open report: ${r.topic}`}
                       onClick={() => void openReport(r.id)}
                     >
                       {r.topic}
@@ -238,7 +239,7 @@ export default function ReportsManager() {
                       <button
                         type="button"
                         className="btn btn--outline btn--small"
-                        aria-label={`Delete ${r.topic}`}
+                        aria-label={`Delete report: ${r.topic}`}
                         onClick={() => void onDelete(r.id, r.topic)}
                       >
                         Delete

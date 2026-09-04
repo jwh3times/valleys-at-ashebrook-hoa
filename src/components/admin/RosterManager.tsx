@@ -7,6 +7,13 @@ const emptyHome = { address: '', unit: '', notes: '', voteWeight: '1' };
 const emptyOwner = { fullName: '', phone: '', email: '', notes: '' };
 type Status = 'active' | 'inactive';
 
+function lotIdentity({
+  address,
+  unit,
+}: Pick<PropertyWithOwners, 'address' | 'unit'>): string {
+  return unit ? `${address}, Unit ${unit}` : address;
+}
+
 export default function RosterManager() {
   const {
     data: homes,
@@ -357,18 +364,23 @@ export default function RosterManager() {
                   </div>
                 </div>
                 <div className="row-actions">
-                  <button className="row-link" onClick={() => startEditHome(h)}>
+                  <button
+                    className="row-link"
+                    aria-label={`Edit lot: ${lotIdentity(h)}`}
+                    onClick={() => startEditHome(h)}
+                  >
                     Edit
                   </button>
                   <button
                     className="row-link"
-                    aria-label={`Add owner to ${h.address}`}
+                    aria-label={`Add owner to ${lotIdentity(h)}`}
                     onClick={() => startAddOwner(h.id)}
                   >
                     Add owner
                   </button>
                   <button
                     className="row-link row-link--danger"
+                    aria-label={`${h.status === 'active' ? 'Deactivate' : 'Reactivate'} lot: ${lotIdentity(h)}`}
                     onClick={() => toggleHome(h)}
                   >
                     {h.status === 'active' ? 'Deactivate' : 'Reactivate'}
@@ -396,13 +408,14 @@ export default function RosterManager() {
                   <div className="row-actions">
                     <button
                       className="row-link"
+                      aria-label={`Edit owner: ${o.fullName}`}
                       onClick={() => startEditOwner(o)}
                     >
                       Edit
                     </button>
                     <button
                       className="row-link row-link--danger"
-                      aria-label="Deactivate owner"
+                      aria-label={`${o.status === 'active' ? 'Deactivate' : 'Reactivate'} owner: ${o.fullName}`}
                       onClick={() => toggleOwner(o)}
                     >
                       {o.status === 'active' ? 'Deactivate' : 'Reactivate'}

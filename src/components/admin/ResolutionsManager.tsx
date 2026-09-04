@@ -485,6 +485,7 @@ export default function ResolutionsManager() {
                       <div className="row-actions">
                         <button
                           className="row-link"
+                          aria-label={`Edit resolution: ${r.number}`}
                           onClick={() => startEdit(r)}
                         >
                           Edit
@@ -493,6 +494,7 @@ export default function ResolutionsManager() {
                           <>
                             <button
                               className="row-link"
+                              aria-label={`Adopt resolution: ${r.number}`}
                               onClick={() => startAdopt(r)}
                             >
                               Adopt
@@ -500,6 +502,7 @@ export default function ResolutionsManager() {
                             {inForce.length > 0 && (
                               <button
                                 className="row-link"
+                                aria-label={`Supersede resolution: ${r.number}`}
                                 onClick={() => startSupersede(r)}
                               >
                                 Supersede…

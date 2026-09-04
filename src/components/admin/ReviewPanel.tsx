@@ -125,6 +125,7 @@ function FlagCard({
           Opened {moment(flag.openedAt)}
           {flag.resolvedAt !== null && ` · resolved ${moment(flag.resolvedAt)}`}
         </div>
+        <div className="admin-row-sub">Review flag: {flag.id}</div>
         <SourceEvent flag={flag} />
         <Impacted flag={flag} />
         {flag.status === 'resolved' && flag.resolutionCode && (
@@ -156,7 +157,7 @@ function FlagCard({
           <button
             className="btn btn--small"
             disabled={busy || code === ''}
-            aria-label={`Resolve ${category?.label ?? flag.category} flag`}
+            aria-label={`Resolve ${category?.label ?? flag.category} flag: ${flag.id}`}
             onClick={() => code !== '' && onResolve(flag.id, code)}
           >
             Resolve

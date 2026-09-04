@@ -97,10 +97,9 @@ export default function ProxiesManager() {
   ];
 
   // The route deliberately accepts a grantor who no longer holds the lot, so
-  // that a historical paper proxy can still be entered. Since the phase 3d
-  // grantor re-validation, though, such a proxy is refused wherever it would
-  // be USED (attendance, member votes, ballots) — so say so at entry rather
-  // than let the board discover it months later.
+  // that a historical paper proxy can still be entered. Use is checked on the
+  // occasion's day, not against this current-state flag, so explain the
+  // distinction without claiming every former grantor's proxy is unusable.
   const selectedGrantor = grantorOptions.find(
     (p) => p.id === form.grantorPersonId,
   );
@@ -298,8 +297,8 @@ export default function ProxiesManager() {
               >
                 {selectedGrantor?.fullName} does not currently hold authority
                 for this lot. The proxy can still be recorded for the paper
-                record, but it cannot be used: attendance, votes, and ballots
-                refuse a proxy whose grantor no longer holds the lot.
+                record. When it is used, the server checks whether they held
+                authority on that occasion&apos;s date.
               </p>
             )}
           </div>
