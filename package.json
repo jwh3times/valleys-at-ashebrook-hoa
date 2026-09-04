@@ -47,9 +47,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
-    "@astrojs/cloudflare": "^14.2.5",
-    "@astrojs/react": "^6.0.4",
-    "astro": "^7.2.9",
+    "@astrojs/cloudflare": "^14.2.6",
+    "@astrojs/react": "^6.0.5",
+    "astro": "^7.2.10",
     "better-auth": "^1.6.30",
     "better-auth-cloudflare": "^0.3.1",
     "drizzle-orm": "^0.45.2",
@@ -58,7 +58,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20260831.1",
+    "@cloudflare/workers-types": "^5.20260901.1",
     "@napi-rs/canvas": "^1.0.8",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
