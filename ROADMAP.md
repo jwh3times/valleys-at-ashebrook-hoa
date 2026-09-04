@@ -1,255 +1,85 @@
 # Roadmap
 
-**Updated:** 2026-09-02
+**Updated:** 2026-09-04
 
-This is the current product and operations roadmap. It replaces the older private review notes and
-now-removed implementation handoff docs.
+Backlog items are **GitHub issues**, not entries in this file. This page explains where to look and
+what the tracker's vocabulary means; it deliberately holds no status lines, because a status line
+here is a second copy of state that drifts out of step with the issue that owns it.
 
-Previously identified partial implementation items have been completed or closed by explicit
-operating decisions. Shipped work is tracked in `CHANGELOG.md`; durable decisions are recorded
-under `docs/adr/`.
+## Where the work is
 
-The next architectural priority is [ADR 0022 phase 4 (#212)](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/212),
+| Surface                                                                                | Holds                                                                                                                          |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [Public issues](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues)          | Product, engineering, dependencies, architecture — anything whose body is safe to publish                                      |
+| [Private ops issues](https://github.com/jwh3times/valleys-at-ashebrook-hoa-ops/issues) | Work whose body cannot be public: production identifiers, resident data, operator procedure detail, unfixed security specifics |
+| [The Ashebrook project board](https://github.com/users/jwh3times/projects/6) (private) | One ordered view across both repositories, carrying Status, Gate, Area, Next Action, and Blocking Item                         |
+
+The routing rule between the two repositories is in
+[`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
+
+## The current priority
+
+**[ADR 0022 phase 4 (#212)](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/212)** —
 the irreversible removal of the legacy roster schema and compatibility layer. Its production entry
-gate cannot open before 2026-09-17 and also requires no clock-resetting Sev-1 plus named human
-sign-off. Until that gate opens, immediate work comes from the public issue tracker. Items 1–8 and
-10 remain unordered policy-, need-, or specification-gated backlog; their numbering is for
-reference, not a delivery commitment.
+gate cannot open before **2026-09-17** and additionally requires no clock-resetting Sev-1 plus named
+human sign-off. Phases 1–3 are shipped and production has used derived access since 2026-08-18.
 
-## How to Use This Roadmap
+#212 is the authoritative source for its own live entry criteria, removal sequence, and sign-off.
+That checklist changes; this file does not duplicate it.
 
-- Treat each product item below as requiring its own spec before build.
+## Reading a gate
+
+Every backlog issue states a **Gate** — what has to happen before work can start. This is the field
+that made a Markdown roadmap unmaintainable, because gates change without anyone editing a file.
+
+- **None — ready to work** — nothing blocks it.
+- **Spec needed** — design decisions have to be settled first.
+- **Board decision** — needs an association decision, not an engineering one.
+- **Operator action** — a human at a dashboard or a keyboard.
+- **Upstream** — waiting on a dependency or platform capability.
+- **Needs evidence** — deliberately dormant until a real need is observed.
+- **Calendar/sign-off** — time-gated with a named approval.
+
+A gated item is not a commitment to build it. Several exist so the design reasoning is on record and
+is not rediscovered from scratch.
+
+## How to use the backlog
+
+- Treat each product item as requiring its own spec before build.
 - Keep security, authorization, and visibility checks server-side.
 - Add or update tests with every behavior change.
 - Update `CHANGELOG.md` when an item ships.
 - Add an ADR when an item changes a durable architecture or operating decision.
 
-## Active Migration Program
+## What stays in files, not issues
 
-ADR 0022 phases 1–3 are shipped, and production has used derived access since 2026-08-18. Only
-phase 4 remains: remove the legacy tables, shadow comparison, and compatibility aliases after the
-required soak. Issue [#212](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/212) is the
-authoritative source for its live entry criteria, sequencing, and sign-off; this roadmap does not
-duplicate that changing checklist.
+Issues hold **work** — things with a "done". These stay as files because they record what is true or
+how to do something, and have no completion state:
 
-## Product Backlog
-
-### 1. Google Docs, Sheets, and Drive Import
-
-**Status:** Not implemented
-**Gate:** Dedicated spec
-**Likely size:** Large
-
-Allow a board member to import a Google Doc, Sheet, or Drive file into the
-existing document library. The likely shape is a board-only import endpoint that
-exports Google Docs to PDF and Sheets to XLSX, then stores the artifact through
-the same R2 plus D1 document pipeline used by normal uploads.
-
-Decisions to settle:
-
-- Shared service account versus per-board-member OAuth.
-- Snapshot import versus live synchronization.
-- Export size cap and failure behavior.
-- How imported filenames, titles, categories, and visibility are chosen.
-
-### 2. Per-Owner Private Data
-
-**Status:** Not implemented
-**Gate:** Board privacy decision
-**Likely size:** Large
-
-Add private homeowner data such as dues balances or violations. This should not
-start until the board explicitly decides that publishing per-owner private data
-through the site is appropriate.
-
-Expected shape:
-
-- New D1 tables keyed to owner or property records.
-- Homeowner endpoints that filter by the caller's verified `propertyIds`.
-- Board CRUD in the admin app.
-- No client-side filtering as an authorization boundary.
-
-### 3. Roster Quality of Life
-
-**Status:** Not implemented
-**Gate:** Dedicated spec
-**Likely size:** Medium per sub-item
-
-Improve the roster admin workflow beyond the current CRUD and CLI import path.
-
-Candidate items:
-
-- Bulk import UI with preview, diff, and commit steps.
-- Ownership-transfer workflow that deactivates old owners and adds new owners in
-  one board action.
-- Optional `Account #` capture on owner or property records, with a migration and
-  admin form support.
-
-### 4. Homeowner Uploads and Large Files
-
-**Status:** Dormant
-**Gate:** Actual need for homeowner uploads or files over the Worker body cap
-**Likely size:** Medium
-
-The current document workflow is board-managed. Revisit this only if homeowners
-need to upload files, or if board uploads hit the Worker request body cap. The
-likely design is a signed R2 upload flow with server-side completion and
-visibility checks.
-
-### 5. Tenant and Renter Accounts
-
-**Status:** Not implemented
-**Gate:** Board policy decision
-**Likely size:** Large
-
-Support non-owner resident accounts. This needs a product decision first because
-tenant access affects identity proofing, owner delegation, roster data, and
-visibility rules.
-
-Expected decisions:
-
-- Owner-invited access versus board-approved access.
-- Whether tenants can view homeowner-only documents.
-- How tenant access expires or is revoked.
-
-### 6. Online Payments
-
-**Status:** Not implemented
-**Gate:** Official adoption and payment-provider decision
-**Likely size:** Large
-
-The site can display dues information in official mode, but it does not process
-payments. Payment work should wait until the board adopts the site for official
-HOA use and selects a provider.
-
-### 7. Assistant Indexing Automation
-
-**Status:** Core pipeline implemented; automation refinements remain
-**Gate:** Cloudflare platform support or a demonstrated operational need
-**Likely size:** Small to Medium
-
-The board-only assistant, its two-representation R2 index, upload-time Markdown twins, searchable
-status, and operator-run OCR recovery are shipped. See `CHANGELOG.md`,
-[ADR 0009](./docs/adr/0009-rag-index-separate-from-download-library.md), and
-[ADR 0010](./docs/adr/0010-ocr-scanned-documents-operator-job.md).
-
-Remaining automation work:
-
-- Scanned/image-only PDFs require the operator-run `npm run ocr:scanned` job. Revisit automatic
-  on-upload OCR only if Cloudflare provides a supported in-Worker PDF rasterization primitive.
-- New uploads become searchable only at the next AI Search sync (default ≤6h), not
-  immediately on upload. Triggering a sync automatically after upload is a possible refinement.
-
-### 8. AI CC&R Compliance Report
-
-**Status:** Report generator and lifecycle refinements implemented; compliance angle remains
-**Gate:** Dedicated spec for the remaining compliance angle
-**Likely size:** Medium
-
-The governing-documents report is shipped: six curated templates plus a freeform topic, planned
-sub-query retrieval, a streamed five-section report with `[Source N]` citations, and saved report
-history in the `reports` table, structured planner output, empty-retrieval short-circuiting,
-paginated history, and 90-day saved-content retention tied to roster redactions. Remaining work:
-
-- The **compliance** angle — "where are our current practices out of step with the
-  governing documents" — is only covered indirectly by the report's Gaps section. Structured
-  meetings, motions, resolutions, elections, and proxies now provide some current-practice data,
-  but dues history and enforcement records are still absent. Define the comparison dataset before
-  designing compliance analysis.
-  _Product angle: a standalone AI governing-documents report is a sellable
-  artifact on its own._
-
-### 9. Live Homeowner Voting and Conducted Elections
-
-**Status:** Implemented in Phase 1; remains disabled by default
-**Enablement gate:** Official adoption, a board decision, and an operator smoke test; enabling the
-deployed setting is a separate board operation
-**Likely size:** Large
-
-The site records elections conducted on paper, aggregate tallies, per-lot turnout, certification,
-board terms, paper proxies, and official-mode homeowner proxy grants. Phase 1 adds the default-off
-live-voting setting, retained choice and eligibility-snapshot schema, board-only election and
-member-motion lifecycle controls, strict-origin atomic casting, the caller-specific read model, the
-verified-homeowner `/vote` experience, and admin Active/History monitoring.
-
-The implementation provides application-level identifier separation: a turnout row
-records that a lot cast a ballot, while choice rows carry only election, candidate, and weight —
-never a direct lot, ballot, owner, proxy, or timestamp link. This is not mathematical anonymity:
-rare weights, SQLite insertion order, and D1 Time Travel retain inference risk. No live tally is
-exposed for a conducted election; aggregate results are derived when the board closes voting. The
-casting route is gated by official mode and the separate live-voting setting, tier-filtered, exact-
-Origin protected, and scoped to a verified lot or an occasion-valid proxy held by the caller.
-
-The board prepares and opens conducted elections or member motions, monitors frozen-denominator
-turnout, pauses all open voting by disabling either feature flag, and closes the occasion without
-losing its history. Closed conducted elections appear in the admin History view and cannot reopen;
-member motions may reopen while their meeting remains draft and retain the original snapshot and
-votes. Homeowners explicitly review their selection and provenance, receive a finality warning,
-and after a successful cast see only a selection-free receipt.
-
-The reviewed implementation direction is recorded in
-[Live Homeowner Voting and Conducted Elections](./docs/specs/2026-08-05-live-homeowner-voting-design.md).
-
-_Product angle: per-election pricing on top of a subscription._
-
-### 10. Reserve Planning Tracker
-
-**Status:** Not implemented
-**Gate:** Dedicated spec and board-supplied reserve study data
-**Likely size:** Large
-
-Track reserve components, useful and remaining life, and funding projections.
-This is an entirely new domain model with the least reuse of existing
-infrastructure, so it sits last in this group. It needs real reserve study data
-from the board to be more than an empty shell.
-
-_Product angle: a price-ladder module for a future product tier._
-
-## Operations Backlog
-
-### 11. Enable HSTS at the Cloudflare Zone
-
-**Status:** Not implemented
-**Gate:** Operator action in Cloudflare
-**Likely size:** Small
-
-The app already sends the baseline security headers it can control. HSTS should
-be enabled at the Cloudflare zone level after confirming HTTPS is stable for the
-production domain and any subdomains that need to remain reachable.
-
-### 12. Rename GitHub and Cloudflare Resources
-
-**Status:** Deferred
-**Gate:** Maintainer action
-**Likely size:** Small code update plus operator work
-
-The resident rebrand is complete in the app, but some resource names still use
-the original HOA-oriented names. Renaming the GitHub repository, D1 database, or
-R2 bucket is operationally risky and should be done only when the maintainer is
-ready to coordinate dashboard changes, Wrangler config updates, and a deploy.
+- `docs/adr/` — durable architecture and operating decisions, reviewed alongside the code.
+- `AGENTS.md` and `docs/agents/` — context loaded by agents at session start.
+- `private/operations/` — runbooks you execute.
+- `CHANGELOG.md` — the release record.
+- `CONTEXT.md`, `SETUP.md`, `SECURITY.md` — domain vocabulary, deployment, and the security model.
 
 ## Product Opportunities
 
-This section records the longer-range product vision so it is not lost. Nothing
-here is backlog. This repo is the v1 pilot of a possible self-managed HOA
-governance product; Ashebrook remains a single-community deployment, and any
-multi-tenant productization requires its own decision, recorded as an ADR,
+This section records the longer-range product vision so it is not lost. **Nothing here is backlog**,
+and none of it has a "done", which is why it is prose here rather than issues. This repo is the v1
+pilot of a possible self-managed HOA governance product; Ashebrook remains a single-community
+deployment, and any multi-tenant productization requires its own decision, recorded as an ADR,
 before this repo's architecture bends toward it.
 
-- **COI tracking.** Certificate-of-insurance tracking for vendors. Weak as a
-  standalone feature but a good shared module across this product and LeaseBook.
-  The build-once-ship-twice decision belongs at the product level, not in this
-  repo's backlog.
-- **Board certification courses.** Document library plus quiz plus certificate
-  PDF. Not software revenue — treat as top-of-funnel marketing for a future
-  product. No backlog entry.
-- **Monetization notes.** Pricing observations kept here so the backlog entries
-  above stay product-neutral: election management supports per-election pricing
-  ($200–500/election) on top of a subscription and is the best-margin item;
-  the reserve planning tracker is a price-ladder module sold to the same buyer
-  under the same login.
+- **COI tracking.** Certificate-of-insurance tracking for vendors. Weak as a standalone feature but
+  a good shared module across this product and LeaseBook. The build-once-ship-twice decision belongs
+  at the product level, not in this repo's backlog.
+- **Board certification courses.** Document library plus quiz plus certificate PDF. Not software
+  revenue — treat as top-of-funnel marketing for a future product. No backlog entry.
+- **Monetization notes.** Pricing observations kept here so the backlog entries stay
+  product-neutral: election management supports per-election pricing ($200–500/election) on top of a
+  subscription and is the best-margin item; the reserve planning tracker is a price-ladder module
+  sold to the same buyer under the same login.
 
-## Completed Work
+## Completed work
 
-Completed work is intentionally not duplicated here. See `CHANGELOG.md` for shipped changes and
-`docs/adr/` for durable architecture and operating decisions.
+Not duplicated here. See `CHANGELOG.md` for shipped changes and `docs/adr/` for durable decisions.
