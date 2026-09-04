@@ -198,11 +198,16 @@ export default function AnnouncementsManager() {
                 <div className="admin-row-sub">{a.body}</div>
               </div>
               <div className="row-actions">
-                <button className="row-link" onClick={() => startEdit(a)}>
+                <button
+                  className="row-link"
+                  aria-label={`Edit announcement: ${a.title}`}
+                  onClick={() => startEdit(a)}
+                >
                   Edit
                 </button>
                 <button
                   className="row-link row-link--danger"
+                  aria-label={`Delete announcement: ${a.title}`}
                   onClick={() => handleDelete(a.id)}
                 >
                   Delete

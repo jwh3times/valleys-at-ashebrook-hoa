@@ -2,14 +2,18 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { proxies, memberAttendance, memberVotes, ballots } from '../db/schema';
 import { people } from '../db/roster-schema';
-import { associationDateIso } from '../../lib/format';
-import { authorityKey, fetchLotAuthorityKeys } from '../roster/authority';
+import {
+  authorityKey,
+  fetchLotAuthorityKeys,
+  lotAuthorityExists,
+  type AuthoritySql,
+} from '../roster/authority';
 
 /**
  * GRANTOR RE-VALIDATION (ADR 0022 phase 3d, #220 / #204).
  *
  * `proxyUseError` below asks, in addition to lot and occasion scope, whether
- * the proxy's GRANTOR still holds Lot Authority.
+ * the proxy's GRANTOR held Lot Authority on the occasion day.
  *
  * Until #248 part 2 that question was answered from the LEGACY roster
  * (`owners.status` / `owners.property_id`) in both cutover modes, because a
@@ -19,26 +23,22 @@ import { authorityKey, fetchLotAuthorityKeys } from '../roster/authority';
  * the shared `roster/authority.ts` definition — the same rule
  * `qualifiesGuard` applies to a Board Term's qualifying Lot.
  *
- * The roster records intervals, but this comparison is still made at TODAY's
- * Association Day rather than the occasion's, so the approximation #220
- * documented survives the repointing: a grantor who sold AFTER the occasion
- * still fails, even though the proxy was good on the day. That deliberately
- * accepts false refusals of late record-keeping, because the alternative
- * (accepting every proxy from a former owner) is the March-proxy /
- * April-meeting / recorded-in-May hole #204 opens with. The escape for a
- * legitimate late entry is to record it without the proxy reference.
- *
- * Exact occasion-day containment is now MECHANICALLY possible for the first
- * time — the intervals are queryable and the day is on the occasion row — and
- * is deliberately left to its own change rather than folded into a schema
- * repointing, since it moves a safety-critical guard's semantics rather than
- * its storage. For a LIVE cast the occasion is now, so `voting.ts`'s
- * mutation-boundary predicate is already exact.
+ * Callers supply the occasion's Association Day. Board record-keeping uses a
+ * meeting's `date` or an election's `election_date`, so a proxy that was valid
+ * on a past occasion remains recordable after a later transfer. Live casting
+ * supplies today, and its mutation-boundary predicate independently uses that
+ * same day, so a proxy whose grantor has lost authority confers nothing now.
  */
 
 export interface ProxyUse {
   propertyId: string;
   proxyId: string;
+}
+
+export interface ProxyOccasion {
+  meetingId?: string | null;
+  electionId?: string | null;
+  associationDay: string;
 }
 
 /**
@@ -155,21 +155,21 @@ export interface ProxyUseFailure {
 /**
  * Validates every proxy referenced by a write action's entries: the proxy
  * must exist, belong to the entry's own lot, be scoped to the occasion
- * being written, and have a grantor who still holds Lot Authority for that
- * lot. `occasion` carries the meeting or election under write; an
+ * being written, and have a grantor who held Lot Authority for that lot on
+ * the occasion day. `occasion` carries the meeting or election under write; an
  * election held at a meeting passes BOTH ids, because a form signed "for the
  * annual meeting" covers that meeting's business, its election included —
- * the lookup rule ADR 0018 records. The database cannot express any of this
- * (each is a cross-row condition), which is why this guard exists in front of
- * every insert that writes a proxy_id.
+ * the lookup rule ADR 0018 records. This reader runs first so callers receive
+ * the precise failure message; `proxyUsesValidAtMutation` repeats the same
+ * cross-row conditions inside each replacement transaction.
  *
- * The grantor check is the ADR 0022 phase-3d addition; see the module comment
- * above for which day it asks about and what that still approximates.
+ * `associationDay` is required so a new caller cannot silently fall back to
+ * today's answer when it is writing a past occasion.
  */
 export async function proxyUseError(
   db: Db,
   uses: ProxyUse[],
-  occasion: { meetingId?: string | null; electionId?: string | null },
+  occasion: ProxyOccasion,
 ): Promise<ProxyUseFailure | null> {
   if (uses.length === 0) return null;
   const ids = [...new Set(uses.map((u) => u.proxyId))];
@@ -189,7 +189,7 @@ export async function proxyUseError(
   const authority = await fetchLotAuthorityKeys(
     db,
     [...new Set(rows.map((r) => r.propertyId))],
-    associationDateIso(),
+    occasion.associationDay,
   );
   for (const u of uses) {
     const p = byId.get(u.proxyId);
@@ -199,7 +199,8 @@ export async function proxyUseError(
     if (!authority.has(authorityKey(p.grantorPersonId, p.propertyId)))
       return {
         status: 409,
-        message: 'Proxy grantor no longer holds authority for this lot',
+        message:
+          'Proxy grantor did not hold authority for this lot on the occasion date',
       };
     const coversMeeting =
       p.meetingId !== null &&
@@ -216,6 +217,54 @@ export async function proxyUseError(
       };
   }
   return null;
+}
+
+/**
+ * Mutation-boundary form of `proxyUseError` for an already preflighted entry
+ * set. It repeats lot, scope, and occasion-day grantor authority inside the
+ * write transaction, where a concurrent proxy edit or roster correction can
+ * no longer invalidate a successful answer before the child rows land.
+ *
+ * Callers still run `proxyUseError` first for its precise 400/409 messages.
+ * This predicate is the fail-closed race backstop: false means the replacement
+ * must change no rows and return 409.
+ */
+export function proxyUsesValidAtMutation(
+  uses: ProxyUse[],
+  occasion: ProxyOccasion,
+): AuthoritySql {
+  if (uses.length === 0) return { sql: '1', binds: [] };
+
+  const authority = lotAuthorityExists(
+    { column: 'proxy_under_write.grantor_person_id' },
+    { column: 'proxy_under_write.property_id' },
+    occasion.associationDay,
+  );
+  const scopeParts: string[] = [];
+  const scopeBinds: unknown[] = [];
+  if (occasion.meetingId != null) {
+    scopeParts.push('proxy_under_write.meeting_id = ?');
+    scopeBinds.push(occasion.meetingId);
+  }
+  if (occasion.electionId != null) {
+    scopeParts.push('proxy_under_write.election_id = ?');
+    scopeBinds.push(occasion.electionId);
+  }
+  const scopeSql = scopeParts.length > 0 ? scopeParts.join(' OR ') : '0';
+
+  return {
+    sql: `NOT EXISTS (
+      SELECT 1
+      FROM json_each(?) requested_proxy
+      LEFT JOIN proxies proxy_under_write
+        ON proxy_under_write.id = json_extract(requested_proxy.value, '$.proxyId')
+      WHERE proxy_under_write.id IS NULL
+         OR proxy_under_write.property_id <> json_extract(requested_proxy.value, '$.propertyId')
+         OR NOT ${authority.sql}
+         OR NOT (${scopeSql})
+    )`,
+    binds: [JSON.stringify(uses), ...authority.binds, ...scopeBinds],
+  };
 }
 
 /**

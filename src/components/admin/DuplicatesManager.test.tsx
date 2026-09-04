@@ -92,8 +92,12 @@ describe('DuplicatesManager', () => {
       remaining: 0,
     });
     render(<DuplicatesManager />);
-    const links = await screen.findAllByRole('link', { name: /view/i });
+    const links = await screen.findAllByRole('link', {
+      name: /view document:/i,
+    });
     expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAccessibleName('View document: Report');
+    expect(links[1]).toHaveAccessibleName('View document: Report copy');
     expect(links[0]).toHaveAttribute('href', '/api/files/x');
     expect(links[1]).toHaveAttribute('href', '/api/files/y');
   });

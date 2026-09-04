@@ -242,10 +242,9 @@ describe('ProxiesManager', () => {
 
   describe('inactive grantor warning', () => {
     // The route accepts a grantor who no longer holds the lot on purpose
-    // (historical paper records), but the phase 3d grantor re-validation
-    // refuses the proxy wherever it would be used — the panel says so at entry
-    // time. #248 part 2: "no longer holds it" is now the roster's answer, so
-    // the picker offers former holders flagged `current: false`.
+    // (historical paper records). Use is validated on the occasion day, so the
+    // current-state warning explains that distinction. The picker offers
+    // former holders flagged `current: false`.
     function grantorLotPeople() {
       return [
         {
@@ -258,7 +257,7 @@ describe('ProxiesManager', () => {
       ];
     }
 
-    it('warns that the proxy would be born unusable when the grantor is inactive', async () => {
+    it('explains occasion-date validation when the grantor is no longer current', async () => {
       mocked.fetchProxies.mockResolvedValue([]);
       mocked.fetchProperties.mockResolvedValue([
         property({ id: 'p1', address: '100 Main St' }),
@@ -272,7 +271,7 @@ describe('ProxiesManager', () => {
 
       expect(
         await screen.findByText(
-          /does not currently hold authority for this lot/i,
+          /server checks whether they held authority on that occasion's date/i,
         ),
       ).toBeInTheDocument();
       // Entry is still allowed — the warning never disables the form.

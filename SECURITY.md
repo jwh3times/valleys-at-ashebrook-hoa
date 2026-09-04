@@ -113,22 +113,20 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   `board_votes` reference a party-roster Person (`people`, repointed from the legacy `board_people`
   by #248), not addresses, and a board meeting's roll call has always named board members, never
   homeowners.
-- **A proxy's grantor is re-validated as currently holding the lot every time the proxy is used,
-  not only when it is granted.** The ADR 0022 phase 3d grantor re-validation (#220, decided by
+- **A proxy's grantor is re-validated as holding the lot on the occasion day every time the proxy
+  is used, not only when it is granted.** The ADR 0022 phase 3d grantor re-validation (#220, decided by
   #204) adds a check to the shared `proxyUseError` guard behind `setMemberAttendance`,
   `setMemberVotes`, and `setBallots`, and to both live-cast authority predicates behind
-  `POST /api/vote`: a proxy whose grantor no longer holds Lot Authority over the proxy's lot is
-  refused (`409`) rather than accepted on the strength of having been valid when granted. Since
+  `POST /api/vote`: a proxy whose grantor did not hold Lot Authority over the proxy's lot on the
+  relevant day is refused (`409`) rather than accepted on the strength of having been valid when granted. Since
   #248 part 2 that question is asked of the party roster — Ownership, or Representation of an
   owning Organization, through the single definition in `src/server/roster/authority.ts` — rather
-  than of the legacy `owners.status`. It remains a deliberate approximation in ONE respect, the day
-  it asks about: it refuses whenever the grantor does not hold the lot _today_, which can also
-  refuse a proxy that was genuinely valid on the day it was used if the grantor has since sold. The
-  board's escape for a legitimate late record-keeping entry is to record it without the proxy
-  reference. A live cast is unaffected, since for it "today" is the occasion. Exact occasion-day
-  interval containment is now mechanically possible for the first time — the intervals are
-  queryable and the day is on the occasion row — and is deliberately left to its own change rather
-  than folded into a schema repointing.
+  than of the legacy `owners.status`. Board-entered attendance and member votes use the meeting's
+  Association Day; recorded-election ballots use the election's Association Day, including when a
+  meeting-scoped proxy covers the election. A later sale therefore does not invalidate a proxy that
+  was valid on a past occasion. The board replacements repeat that occasion-day rule inside their
+  mutation batches, while live casts repeat the current-day rule inside their mutation SQL, so an
+  ownership correction racing either kind of use returns `409` without a partial write.
 - **Election turnout and candidate choices have no explicit identity link or join key.** `ballots`
   records only that a lot participated — election, property, frozen record-date weight, and
   person-or-proxy provenance. A successful conducted ballot atomically inserts that turnout row and
