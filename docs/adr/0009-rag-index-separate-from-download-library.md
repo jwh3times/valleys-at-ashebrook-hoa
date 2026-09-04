@@ -57,7 +57,7 @@ Markdown corpus is a derived artifact, never surfaced to residents and never a
    `rag_status`; uploads that cannot be converted (scanned/image-only PDFs, old `.doc`) are stored
    downloadable-but-not-searchable and flagged. OCR of scanned/image-only PDFs is addressed by an
    operator-run job — see [ADR 0010](./0010-ocr-scanned-documents-operator-job.md); automatic
-   on-upload OCR remains future work (see `ROADMAP.md` item 7). Born-digital uploads can be
+   on-upload OCR remains future work (see [#296](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/296)). Born-digital uploads can be
    text-extracted in-Worker; a **scanned** upload needs OCR (the operator-run job, or an explicit
    "not searchable" flag) — a scan with no Markdown is silently absent from assistant retrieval
    while still appearing in the library until the operator runs the OCR job. This ongoing sync is

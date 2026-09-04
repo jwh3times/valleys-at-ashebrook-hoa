@@ -23,6 +23,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   be public — along with the project board's fields and the rule that the issue, not a board field,
   is the durable record. It also warns that `gh project` writes fail silently without the `project`
   token scope, which is how a previous board drifted unnoticed.
+- **The `end-session` skill now closes out the project board, not only the issue tracker.** It
+  previously described GitHub issues as this repository's only tracker, so a session could end with
+  the board's Status, Gate, Next Action, and Blocking Item untouched and still look complete. It now
+  names both trackers with the routing rule, adds a board pass, and requires the closing report to
+  say when that pass was skipped for a missing `project` token scope — the failure mode that is
+  otherwise indistinguishable from success. ADR 0009's dangling reference to a numbered roadmap item
+  now points at the issue that replaced it.
 
 ## [0.18.3] - 2026-09-03
 
