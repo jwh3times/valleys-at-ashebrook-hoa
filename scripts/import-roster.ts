@@ -18,7 +18,7 @@ export interface NewOwner {
 }
 
 // The contact spreadsheet packs multiple, labeled values into single cells, e.g.
-//   All Phones:  "John (919) 451-7647, Ginny (919) 816-5442"
+//   All Phones:  "Alex (919) 555-0101, Jamie (919) 555-0102"
 //   All Emails:  "a@example.com, b@example.com"
 // The OTP channel needs ONE usable value, so pull the first of each.
 

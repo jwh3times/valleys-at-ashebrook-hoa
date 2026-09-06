@@ -9,7 +9,7 @@ grouped dependency PR hide a real failure.
 
 ```
 types:worker:check → format:check → lint → sync:agents -- --check
-  → lint:coercions → lint:migrations → check → test → test:server
+  → lint:coercions → lint:migrations → lint:fixtures → check → test → test:server
   → build → deploy:check
 ```
 

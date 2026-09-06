@@ -115,18 +115,18 @@ describe('loadRosterEntries reads the party roster', () => {
 
   it('includes Contact Methods on both channels, mapped to the right PII type', async () => {
     await seedPerson('p1', 'Dana Rivera');
-    await seedContact('c1', 'p1', 'person', 'email', 'dana@realmail.com');
+    await seedContact('c1', 'p1', 'person', 'email', 'dana@realmail.test');
     await seedContact('c2', 'p1', 'person', 'sms', '(919) 555-0142');
 
     const entries = await loadRosterEntries(env);
 
-    expect(valuesOf(entries, 'email')).toContain('dana@realmail.com');
+    expect(valuesOf(entries, 'email')).toContain('dana@realmail.test');
     expect(valuesOf(entries, 'phone')).toContain('(919) 555-0142');
   });
 
   it('includes an ended or voided Contact Method — a stale value still appears in old documents', async () => {
     await seedPerson('p1', 'Dana Rivera');
-    await seedContact('c1', 'p1', 'person', 'email', 'old@realmail.com', {
+    await seedContact('c1', 'p1', 'person', 'email', 'old@realmail.test', {
       endDay: '2020-01-01',
     });
     await seedContact('c2', 'p1', 'person', 'sms', '(919) 555-0143', {
@@ -135,7 +135,7 @@ describe('loadRosterEntries reads the party roster', () => {
 
     const entries = await loadRosterEntries(env);
 
-    expect(valuesOf(entries, 'email')).toContain('old@realmail.com');
+    expect(valuesOf(entries, 'email')).toContain('old@realmail.test');
     expect(valuesOf(entries, 'phone')).toContain('(919) 555-0143');
   });
 
@@ -159,12 +159,12 @@ describe('loadRosterEntries reads the party roster', () => {
       'g1',
       'organization',
       'email',
-      'trust@realmail.com',
+      'trust@realmail.test',
     );
 
     const entries = await loadRosterEntries(env);
 
-    expect(valuesOf(entries, 'email')).toContain('trust@realmail.com');
+    expect(valuesOf(entries, 'email')).toContain('trust@realmail.test');
   });
 
   it('skips a redacted Person name rather than resurrecting it', async () => {
@@ -200,20 +200,20 @@ describe('loadRosterEntries reads the party roster', () => {
       id: 'o1',
       propertyId: 'lot-1',
       fullName: 'Dana Rivera',
-      email: 'dana@realmail.com',
+      email: 'dana@realmail.test',
       status: 'active',
       createdAt: now(),
       updatedAt: now(),
     });
     // The same human, backfilled into the party roster by the flip.
     await seedPerson('p1', 'Dana Rivera');
-    await seedContact('c1', 'p1', 'person', 'email', 'dana@realmail.com');
+    await seedContact('c1', 'p1', 'person', 'email', 'dana@realmail.test');
 
     const entries = await loadRosterEntries(env);
 
     expect(valuesOf(entries, 'address')).toEqual(['123 Ashebrook Lane']);
     expect(valuesOf(entries, 'name')).toEqual(['Dana Rivera']);
-    expect(valuesOf(entries, 'email')).toEqual(['dana@realmail.com']);
+    expect(valuesOf(entries, 'email')).toEqual(['dana@realmail.test']);
   });
 
   it('excludes organization NAMES, whose tokens would rewrite the neighborhood itself', async () => {

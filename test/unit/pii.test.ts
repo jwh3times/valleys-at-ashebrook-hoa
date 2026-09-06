@@ -6,19 +6,21 @@ const ROSTER: PiiEntry[] = [
   { type: 'name', value: 'Bob Neighbor' },
   { type: 'address', value: '123 Ashebrook Lane' },
   { type: 'phone', value: '(919) 555-0100' },
-  { type: 'email', value: 'jane@realmail.com' },
+  { type: 'email', value: 'jane@realmail.test' },
 ];
 
 describe('pseudonymizer — anonymize', () => {
   it('replaces every roster name/address/phone/email in the text', () => {
     const p = buildPseudonymizer(ROSTER);
     const text =
-      'Jane Q Homeowner at 123 Ashebrook Lane, call (919) 555-0100 or jane@realmail.com. Bob Neighbor too.';
+      'Jane Q Homeowner at 123 Ashebrook Lane, call (919) 555-0100 or jane@realmail.test. Bob Neighbor too.';
     const out = p.anonymize(text);
     for (const e of ROSTER) expect(out).not.toContain(e.value);
     // A phone/email that is NOT in the roster still gets scrubbed by regex.
-    const out2 = p.anonymize('Reach vendor at vendor@acme.co or 704-555-0199.');
-    expect(out2).not.toContain('vendor@acme.co');
+    const out2 = p.anonymize(
+      'Reach vendor at vendor@acme.test or 704-555-0199.',
+    );
+    expect(out2).not.toContain('vendor@acme.test');
     expect(out2).not.toContain('704-555-0199');
   });
 
