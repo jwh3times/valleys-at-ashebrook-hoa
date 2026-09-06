@@ -35,7 +35,7 @@ import MembersManager from './MembersManager';
 const request = {
   id: 'vr1',
   accountId: 'a1',
-  accountEmail: 'applicant@x.com',
+  accountEmail: 'applicant@x.test',
   claimedAddress: '12 Oak Ln',
   claimedName: 'Pat Applicant',
   channel: 'email' as const,
@@ -51,9 +51,9 @@ const correction = {
   kind: 'contact_method' as const,
   contactMethodId: 'cm1',
   targetChannel: 'email' as const,
-  targetCurrentValue: 'old@x.com',
+  targetCurrentValue: 'old@x.test',
   channel: 'email' as const,
-  proposedValue: 'new@x.com',
+  proposedValue: 'new@x.test',
   note: 'typo in my email',
   status: 'open' as const,
   createdAt: Date.UTC(2026, 6, 5, 12),
@@ -67,7 +67,7 @@ beforeEach(() => {
       {
         id: 'u1',
         name: 'Existing HO',
-        email: 'ho@x.com',
+        email: 'ho@x.test',
         createdAt: '2026-06-01T00:00:00.000Z',
       },
     ],
@@ -75,7 +75,7 @@ beforeEach(() => {
       {
         id: 'q1',
         userId: 'u2',
-        email: 'pending@x.com',
+        email: 'pending@x.test',
         claimedAddress: '9 Elm St',
         reason: 'address not found',
         status: 'pending',
@@ -111,15 +111,15 @@ beforeEach(() => {
 describe('MembersManager', () => {
   it('renders the pending queue with the requester email, and recent homeowners', async () => {
     render(<MembersManager />);
-    expect(await screen.findByText('pending@x.com')).toBeInTheDocument();
+    expect(await screen.findByText('pending@x.test')).toBeInTheDocument();
     expect(screen.getByText('9 Elm St')).toBeInTheDocument();
-    expect(screen.getByText('ho@x.com')).toBeInTheDocument();
+    expect(screen.getByText('ho@x.test')).toBeInTheDocument();
   });
 
   it('approves a pending request with the selected propertyId', async () => {
     render(<MembersManager />);
-    await screen.findByText('pending@x.com');
-    fireEvent.change(screen.getByLabelText(/home for pending@x.com/i), {
+    await screen.findByText('pending@x.test');
+    fireEvent.change(screen.getByLabelText(/home for pending@x.test/i), {
       target: { value: 'p9' },
     });
     fireEvent.click(screen.getByRole('button', { name: /approve/i }));
@@ -133,7 +133,7 @@ describe('MembersManager', () => {
 
   it('revokes a homeowner', async () => {
     render(<MembersManager />);
-    await screen.findByText('ho@x.com');
+    await screen.findByText('ho@x.test');
     fireEvent.click(screen.getByRole('button', { name: /revoke/i }));
     await waitFor(() => expect(memberAction).toHaveBeenCalledTimes(1));
     expect(memberAction.mock.calls[0][0]).toEqual({
@@ -153,7 +153,7 @@ describe('MembersManager', () => {
 
     it('lists an open request with the applicant claim', async () => {
       render(<MembersManager />);
-      expect(await screen.findByText('applicant@x.com')).toBeInTheDocument();
+      expect(await screen.findByText('applicant@x.test')).toBeInTheDocument();
       expect(
         screen.getByText(/pat applicant — 12 oak ln/i),
       ).toBeInTheDocument();
@@ -161,8 +161,8 @@ describe('MembersManager', () => {
 
     it('accepts a request with the person the board picked', async () => {
       render(<MembersManager />);
-      await screen.findByText('applicant@x.com');
-      fireEvent.change(screen.getByLabelText(/person for applicant@x.com/i), {
+      await screen.findByText('applicant@x.test');
+      fireEvent.change(screen.getByLabelText(/person for applicant@x.test/i), {
         target: { value: 'per1' },
       });
       fireEvent.click(
@@ -181,7 +181,7 @@ describe('MembersManager', () => {
 
     it('refuses to accept until a person is picked', async () => {
       render(<MembersManager />);
-      await screen.findByText('applicant@x.com');
+      await screen.findByText('applicant@x.test');
       fireEvent.click(
         screen.getByRole('button', { name: /accept verification request:/i }),
       );
@@ -198,8 +198,8 @@ describe('MembersManager', () => {
         ),
       );
       render(<MembersManager />);
-      await screen.findByText('applicant@x.com');
-      fireEvent.change(screen.getByLabelText(/person for applicant@x.com/i), {
+      await screen.findByText('applicant@x.test');
+      fireEvent.change(screen.getByLabelText(/person for applicant@x.test/i), {
         target: { value: 'per1' },
       });
       fireEvent.click(
@@ -214,7 +214,7 @@ describe('MembersManager', () => {
 
     it('declines a request', async () => {
       render(<MembersManager />);
-      await screen.findByText('applicant@x.com');
+      await screen.findByText('applicant@x.test');
       fireEvent.click(
         screen.getByRole('button', { name: /decline verification request:/i }),
       );
@@ -243,7 +243,7 @@ describe('MembersManager', () => {
       ]);
       render(<MembersManager />);
       expect(await screen.findByText('Lee Owner')).toBeInTheDocument();
-      expect(screen.getAllByText(/old@x\.com → new@x\.com/)).toHaveLength(1);
+      expect(screen.getAllByText(/old@x\.test → new@x\.test/)).toHaveLength(1);
       expect(screen.getByText(/typo in my email/)).toBeInTheDocument();
     });
 
@@ -283,7 +283,7 @@ describe('MembersManager', () => {
         queue: [],
       });
       render(<MembersManager />);
-      await screen.findByText('applicant@x.com');
+      await screen.findByText('applicant@x.test');
       expect(screen.queryByText(/legacy queue/i)).not.toBeInTheDocument();
       expect(
         screen.queryByRole('button', { name: /approve/i }),
