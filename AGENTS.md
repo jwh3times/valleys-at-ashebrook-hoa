@@ -162,7 +162,8 @@ anyone: NANP fictional numbers (area code 555, exchange 555 — `555-01XX` prefe
 exchange starting with 0 or 1) and RFC 2606 reserved names (`example.com`/`.net`/`.org`, or
 anything under `.test`, `.example`, `.invalid`, `.localhost`). `npm run lint:fixtures`
 (`scripts/check-fixture-values.ts`) fails CI on anything else, apart from a short allowlist of
-published contact addresses; a deliberate case needs a trailing `fixture-ok` comment with a reason.
+published contact addresses and infrastructure hosts; a deliberate case needs a trailing
+`fixture-ok` comment with a reason.
 It catches the shape of a phone number or an email address, not a name or a street address —
 invent those too, and never copy a fixture from real data.
 
