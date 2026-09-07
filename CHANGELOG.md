@@ -7,6 +7,35 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.10] - 2026-09-07
+
+### Changed
+
+- **vitest is held below 5 until `@cloudflare/vitest-pool-workers` accepts it.** The pool that
+  runs the Worker and D1 suite declares a `vitest@^4.1.0` peer, so the 5.0.0 bump failed `npm ci`
+  before any gate ran (#308). `.github/dependabot.yml` now ignores `vitest` and `@vitest/*` major
+  updates, with the reason beside the better-auth rule and in `docs/agents/ci-and-release.md`;
+  4.x minors and patches still arrive. #313 tracks the upstream gate and says when to remove the
+  rule.
+
+## [0.18.9] - 2026-09-07
+
+### Changed
+
+- Bumped `astro` from 7.2.10 to 7.3.1, `@astrojs/cloudflare` from 14.2.6 to 14.3.0,
+  `@anthropic-ai/sdk` from 0.122.0 to 0.123.0, and `wrangler` from 4.127.1 to 4.129.0, plus the
+  `@cloudflare/workers-types` (5.20260901.1 to 5.20260904.1), `@testing-library/user-event`
+  (14.6.6 to 14.6.7), `@types/node` (26.4.0 to 26.4.1), and `@types/react-dom` (19.2.5 to 19.2.7)
+  development dependencies. `worker-configuration.d.ts` was regenerated for the new wrangler and
+  workers-types (Hyperdrive dynamic-config types and an optional `code` on tail-stream exceptions),
+  which is what the group bump had failed on.
+
+## [0.18.8] - 2026-09-07
+
+### Changed
+
+- Bumped the `oxlint` development dependency from 1.80.0 to 1.81.0.
+
 ## [0.18.7] - 2026-09-07
 
 ### Changed
