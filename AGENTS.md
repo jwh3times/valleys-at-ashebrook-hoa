@@ -373,11 +373,11 @@ merging.
 **Human follow-ups from agent work are filed, not narrated.** When completed agent work leaves a
 step only a human can take — a dashboard, DNS, or zone setting, a production migration or secret, a
 force-push, a named sign-off, an association decision — the closing report is not where it lives.
-File a `ready-for-human` follow-up issue on the **private** tracker and add it to the board, write
-step-by-step instructions on the private wiki linked from its `Human-TODO` page, then report both
-links. `/ship` files them before it reports, `end-session` audits that every human-only step from
-the session has both, `docs-updater` treats a missing pair as drift, and `code-reviewer` flags a
-diff that introduces an operator step without them. The procedure is in
+File a `ready-for-human` follow-up issue on the **private** tracker and add it to the project
+board, write step-by-step instructions on the private wiki linked from its `Human-TODO` page, then
+report both links. `/ship` files them before it reports, `end-session` audits that every human-only
+step from the session has both, `docs-updater` treats a missing pair as drift, and `code-reviewer`
+flags a diff that introduces an operator step without them. The procedure is in
 [`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
 
 **One source of truth, two CLIs.** `.agents/skills` is the authored source for complete skill
@@ -395,8 +395,8 @@ the complete branch diff as a major, minor, or build release, applies any major/
 package-version change idempotently, invokes `docs-updater` scoped to that branch's diff, writes
 the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts, runs the fast
 `sync:agents -- --check` / `format:check` / `lint` / `lint:coercions` / `lint:fixtures` / `check`
-gates, files any human follow-up the merge will leave, then pushes and opens or updates the PR.
-Documentation is kept in sync at ship time through that
+gates, pushes and opens or updates the PR, then files any human follow-up the merge will leave
+and links it from the PR body. Documentation is kept in sync at ship time through that
 `docs-updater` pass, so there is no per-turn docs hook.
 
 The user-invokable **`end-session`** skill closes out a work session across the four stores that

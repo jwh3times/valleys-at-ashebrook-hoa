@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.7] - 2026-09-07
+
+### Changed
+
+- **Human follow-ups from agent work are now filed, not narrated.** When completed agent work
+  leaves a step only a human can take — a dashboard, DNS, or zone setting, a production migration
+  or secret, a force-push, a named sign-off, an association decision — the agent files a
+  `ready-for-human` issue on the private tracker, adds it to the project board, writes step-by-step
+  instructions on the private wiki linked from its `Human-TODO` page, and reports both links.
+  `docs/agents/issue-tracker.md` carries the procedure, together with the 2026-09-05 routing rules
+  for unfixed security findings (draft advisories on this repository) and long-form reviews (the
+  private wiki). The `ship` skill files any follow-up before it reports, `end-session` audits that
+  every human-only step from a session has both records, `docs-updater` treats a missing pair as
+  drift, and `code-reviewer` flags a diff that introduces an operator step without a linked
+  follow-up. The reviewer's stale instruction that schema changes come with a generated migration
+  now matches the hand-authored workflow.
+
 ## [0.18.6] - 2026-09-05
 
 ### Security
