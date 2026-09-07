@@ -7,6 +7,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.6] - 2026-09-05
+
+### Security
+
+- **Every phone number and email address in the repository is now a reserved synthetic value,
+  enforced by CI.** `npm run lint:fixtures` (`scripts/check-fixture-values.ts`) fails the build on
+  any number outside the NANP fictional shapes or any address outside the RFC 2606 reserved names,
+  apart from a short allowlist of published contact addresses. It reports `file:line` and the kind
+  of value, never the value itself, and a deliberate case needs a trailing `fixture-ok` comment
+  with a reason. The roster import test's sample cells and the import script's example comment now
+  use those values, and the other suites' fixture domains moved onto `.test`. The gate checks the
+  shape of a phone number or an email address only — names and street addresses in a fixture still
+  need a reviewer to ask where they came from. It also runs in the `/ship` fast checks and is
+  listed among `SECURITY.md`'s automated safeguards.
+
+## [0.18.5] - 2026-09-04
+
+### Changed
+
+- Bumped `astro` from 7.2.9 to 7.2.10, `@astrojs/cloudflare` from 14.2.5 to 14.2.6, and
+  `@astrojs/react` from 6.0.4 to 6.0.5, and the `@cloudflare/workers-types` development dependency
+  from 5.20260831.1 to 5.20260901.1.
+
 ## [0.18.4] - 2026-09-04
 
 ### Changed

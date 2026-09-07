@@ -382,6 +382,11 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **Dependabot** — dependency update PRs and security alerts (`.github/dependabot.yml`).
 - **CI** — every push and PR runs format, type-check, unit tests, Worker/D1 integration tests
   (`test:server`), and build gates (`.github/workflows/build.yml`).
+- **Synthetic-fixture gate** — `npm run lint:fixtures` (`scripts/check-fixture-values.ts`) fails CI
+  when any phone number or email address in the tracked tree is outside the NANP fictional ranges
+  or the RFC 2606 reserved domains, aside from a short allowlist of published contact addresses and
+  infrastructure hosts, so test data and documentation examples cannot carry a resident's contact
+  details.
 
 ## Responsible disclosure
 

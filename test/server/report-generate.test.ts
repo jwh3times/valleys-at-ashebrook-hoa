@@ -86,7 +86,7 @@ beforeAll(async () => {
     id: 'o1',
     propertyId: 'doc-1',
     fullName: 'Jane Q Homeowner',
-    email: 'jane@realmail.com',
+    email: 'jane@realmail.test',
     status: 'active',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -176,7 +176,7 @@ describe('generateReport', () => {
     );
     const both = JSON.stringify([captured.planParams, captured.genParams]);
     expect(both).not.toContain('Jane Q Homeowner');
-    expect(both).not.toContain('jane@realmail.com');
+    expect(both).not.toContain('jane@realmail.test');
     expect(both).not.toContain('123 Ashebrook Lane');
   });
 

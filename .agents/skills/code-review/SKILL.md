@@ -46,7 +46,9 @@ in **`docs/agents/`**. Add the file covering the surface the diff touches —
 entries touching the changed area.
 
 Note: `npm run lint:coercions` catches only the literal `Number(x) ||` shape, so blank-vs-zero
-conflations in other forms are NOT "already enforced by tooling" — review them.
+conflations in other forms are NOT "already enforced by tooling" — review them. Likewise
+`npm run lint:fixtures` catches only the shape of a phone number or an email address; a fixture's
+names and street addresses are not checked by tooling, so ask where they came from.
 
 On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
 

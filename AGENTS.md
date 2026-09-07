@@ -78,6 +78,7 @@ npm run sync:agents       # regenerate the Claude skills and Codex agents
 npm run sync:agents -- --check # fail if generated agent trees drifted, enforced by CI
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run lint:migrations   # migrations directory is well-formed and contiguous, enforced by CI
+npm run lint:fixtures     # every phone number and email address is a reserved synthetic value, enforced by CI
 npm run db:migrate:local  # apply migrations to local D1 with Wrangler
 npm run db:migrate:remote # apply migrations to production D1 — the ONLY path
 npm run auth:generate     # regenerate Better Auth schema from config
@@ -153,6 +154,18 @@ tally recorded as a real 0 when the field was left blank, destroying the `NULL` 
 vs `0` ("recorded as zero") distinction. `npm run lint:coercions` fails CI on the pattern; a
 deliberate case needs a trailing `coercion-ok` comment with a reason. It catches the shape, not
 every way blank can be conflated with zero.
+
+### Fixtures and examples use reserved synthetic contact values
+
+Every phone number and email address in the tracked tree must be one that cannot belong to
+anyone: NANP fictional numbers (area code 555, exchange 555 — `555-01XX` preferred — or an
+exchange starting with 0 or 1) and RFC 2606 reserved names (`example.com`/`.net`/`.org`, or
+anything under `.test`, `.example`, `.invalid`, `.localhost`). `npm run lint:fixtures`
+(`scripts/check-fixture-values.ts`) fails CI on anything else, apart from a short allowlist of
+published contact addresses and infrastructure hosts; a deliberate case needs a trailing
+`fixture-ok` comment with a reason.
+It catches the shape of a phone number or an email address, not a name or a street address —
+invent those too, and never copy a fixture from real data.
 
 ### Linting
 
@@ -329,9 +342,12 @@ the user-visible result.
 
 ## Security & Configuration Tips
 
-Do not commit real roster data, secrets, or production credentials. Keep environment examples in
-`.env.example` and `.dev.vars.example`. Schema changes go through Drizzle migrations, and access
-control must stay server-side and fail closed.
+Do not commit real roster data, secrets, or production credentials. Test fixtures and documentation
+examples use reserved synthetic contact values only; `npm run lint:fixtures` enforces the phone and
+email half of that rule (see
+[Fixtures and examples use reserved synthetic contact values](#fixtures-and-examples-use-reserved-synthetic-contact-values)).
+Keep environment examples in `.env.example` and `.dev.vars.example`. Schema changes go through
+Drizzle migrations, and access control must stay server-side and fail closed.
 
 Do not commit implementation scratchpads, security reviews, import artifacts,
 resident-data-derived files, or detailed operational runbooks. Durable private text (runbooks,
@@ -368,7 +384,8 @@ The user-invokable **`ship`** skill takes a branch from code-complete to an open
 the complete branch diff as a major, minor, or build release, applies any major/minor
 package-version change idempotently, invokes `docs-updater` scoped to that branch's diff, writes
 the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts, runs the fast
-`sync:agents -- --check` / `format:check` / `lint` / `lint:coercions` / `check` gates, then pushes
+`sync:agents -- --check` / `format:check` / `lint` / `lint:coercions` / `lint:fixtures` / `check`
+gates, then pushes
 and opens or updates the PR. Documentation is kept in sync at ship time through that
 `docs-updater` pass, so there is no per-turn docs hook.
 
