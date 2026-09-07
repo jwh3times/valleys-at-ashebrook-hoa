@@ -40,18 +40,18 @@ rule. Durable architecture decisions live in `docs/adr/`; the association's doma
 This file carries what binds every change. Detail lives in `docs/agents/`, one file per surface —
 load the one your task touches.
 
-| Load this                                                      | When you are                                                                  |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.  |
-| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                            |
-| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.               |
-| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze. |
-| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.   |
-| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.           |
-| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                     |
-| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                      |
-| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                      |
-| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                     |
+| Load this                                                      | When you are                                                                      |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.      |
+| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                                |
+| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.                   |
+| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze.     |
+| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.       |
+| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.               |
+| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                         |
+| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions); filing human follow-ups. |
+| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                          |
+| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                         |
 
 `docs/adr/` records the decisions behind all of it; [`docs/adr/README.md`](./docs/adr/README.md)
 indexes every ADR with a one-line title.
@@ -370,6 +370,16 @@ Project subagents live in `.claude/agents/`: **`docs-updater`** keeps `AGENTS.md
 fields, ballot secrecy, numeric-coercion, D1 write-integrity, and Drizzle FK-trap rules before
 merging.
 
+**Human follow-ups from agent work are filed, not narrated.** When completed agent work leaves a
+step only a human can take — a dashboard, DNS, or zone setting, a production migration or secret, a
+force-push, a named sign-off, an association decision — the closing report is not where it lives.
+File a `ready-for-human` follow-up issue on the **private** tracker and add it to the board, write
+step-by-step instructions on the private wiki linked from its `Human-TODO` page, then report both
+links. `/ship` files them before it reports, `end-session` audits that every human-only step from
+the session has both, `docs-updater` treats a missing pair as drift, and `code-reviewer` flags a
+diff that introduces an operator step without them. The procedure is in
+[`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
+
 **One source of truth, two CLIs.** `.agents/skills` is the authored source for complete skill
 directories. Run `npm run format` before `npm run sync:agents`; the latter regenerates
 `.claude/skills` for Claude Code and `.codex/agents` from authored `.claude/agents`. Never edit
@@ -385,13 +395,14 @@ the complete branch diff as a major, minor, or build release, applies any major/
 package-version change idempotently, invokes `docs-updater` scoped to that branch's diff, writes
 the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts, runs the fast
 `sync:agents -- --check` / `format:check` / `lint` / `lint:coercions` / `lint:fixtures` / `check`
-gates, then pushes
-and opens or updates the PR. Documentation is kept in sync at ship time through that
+gates, files any human follow-up the merge will leave, then pushes and opens or updates the PR.
+Documentation is kept in sync at ship time through that
 `docs-updater` pass, so there is no per-turn docs hook.
 
 The user-invokable **`end-session`** skill closes out a work session across the four stores that
 live outside the tracked tree and therefore rot silently: project memory, GitHub issues, the
-private companion repository and `private/`, and the local workspace. It is a maintainer routine,
+private companion repository and `private/`, and the local workspace — and it audits that every
+human-only step the session produced has its follow-up issue and wiki page. It is a maintainer routine,
 not a build step: it never pushes, merges, or opens PRs (that is `/ship`), never rewrites the docs
 `docs-updater` owns, never runs a remote-D1 write, and shows every deletion as a list before
 acting.
