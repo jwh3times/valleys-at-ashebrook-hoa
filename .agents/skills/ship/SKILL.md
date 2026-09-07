@@ -183,10 +183,21 @@ gh pr list --head "$(git branch --show-current)" --state open --json number -q '
   changelog section you just wrote.
 - **PR exists** → `gh pr edit <number>` to refresh the body. Do not open a second PR.
 
-### 10. Report
+### 10. File any human follow-up the merge will leave
+
+If merging this branch leaves a step only a human can take — a migration to apply with its deploy,
+a secret to set, a dashboard, DNS, or zone change, a force-push, a sign-off — file it now, per
+`docs/agents/issue-tracker.md` § "Human follow-ups from agent work": a `ready-for-human` issue on
+the **private** tracker added to the project board, and a step-by-step page on the private wiki linked from
+`Human-TODO`. Then `gh pr edit` the PR body to link both, so the reviewer sees them. A follow-up
+that exists only in the report below is the failure this step prevents. Skip it, and say so, only
+when the merge leaves nothing for a human beyond the merge itself.
+
+### 11. Report
 
 Give the user: the PR URL, the release-impact classification, the version this merge will mint,
-and anything the fast checks or backfill surfaced. State plainly that `test`, `test:server`, and
+the human follow-ups filed in step 10 with both links (or that there were none), and anything the
+fast checks or backfill surfaced. State plainly that `test`, `test:server`, and
 `build` run in CI, not locally — do not imply the branch is verified beyond the fast checks.
 
 ## Do not

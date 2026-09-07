@@ -67,11 +67,19 @@ correctness bug, not a preference):
    go through the pseudonymization pipeline in `src/server/ai/`.
 10. **Official-mode presentation** flows through `src/lib/site.ts` only — no ad-hoc
     `officialMode` branching scattered in pages.
-11. **Schema changes** come with a generated Drizzle migration (`npm run db:generate`);
-    applied migrations are never edited in place.
+11. **Schema changes** come with a hand-authored Drizzle migration (`npm run db:generate` is
+    not part of the workflow — the snapshot chain is abandoned, #257); applied migrations are
+    never edited in place.
 12. **Reference assets.** `design/Ashebrook HOA.dc.html` must not be edited or imported.
     Generated trees (`.claude/skills/`, `.codex/agents/`) are never edited directly — only
     their authored sources (`.agents/skills/`, `.claude/agents/`).
+13. **Operator steps are filed, not implied.** If the diff leaves a step only a human can
+    take after merge — a migration that is not safe in either order, a new secret or binding,
+    a `wrangler.toml`, DNS, or zone dependency, a force-push, a sign-off — the PR must link
+    the `ready-for-human` follow-up issue on the private tracker and the step-by-step page on
+    the private wiki (`docs/agents/issue-tracker.md` § "Human follow-ups from agent work").
+    Absent links are a finding; a description that says "the operator must then…" is not a
+    substitute.
 
 Read the diff (`git diff main...HEAD` or the staged changes), then the touched files for
 context. Be specific and cite the rule; do not raise generic style nits. If the diff is clean
