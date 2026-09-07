@@ -114,3 +114,64 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Claim**: `gh issue edit <n> --add-assignee @me` — the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a
   context pointer (gist + link) to the map's Decisions-so-far.
+
+## Security findings and long-form reviews
+
+Two routing rules decided 2026-09-05, alongside the public/private rule above:
+
+- **An unfixed security finding is a draft repository security advisory on the public repo**
+  (`gh api -X POST repos/jwh3times/valleys-at-ashebrook-hoa/security-advisories`), never an issue on
+  either tracker. The private companion cannot host advisories (GitHub answers 404 there, even on
+  Pro). A draft is visible to repository admins only; close it (do not publish) when publication
+  would add exposure.
+- **A long-form review or audit goes to the private companion's wiki**, never into either tracked
+  tree. `Home` is the index there. A tracking issue on either tracker links both the wiki page and
+  the advisories; ops issue #22 with the wiki page `Security-Review-2026-09-04` is the worked example.
+
+## Human follow-ups from agent work
+
+Agent-completed work often ends with a step only a human can take: a dashboard, DNS, or zone
+setting, a production migration or secret, a force-push, a named sign-off, a decision the
+association owns. **The closing report is not where that step lives.** A chat reply is read once and
+lost; the operator works from the tracker and the wiki. So every such step is filed, in two places,
+before the agent reports the work done:
+
+1. **A follow-up issue on the private tracker** (`jwh3times/valleys-at-ashebrook-hoa-ops`), one per
+   distinct human action or one per coherent batch whose steps mean nothing apart, labelled
+   `ready-for-human`, and added to the Ashebrook board with `Status` Todo, `Gate` set to the human
+   gate that applies (`Operator action`, `Board decision`, or `Calendar/sign-off`), `Area`,
+   `Next Action` naming the first step, and `Blocking Item` when one exists. The body says what the
+   agent did, why the remaining step is human-only, what done looks like, and links the originating
+   PR, issue, or advisory and the wiki page below. It goes on the private tracker because such steps
+   almost always carry production identifiers or procedure detail. If a private issue already tracks
+   the work — a remediation issue with an ordered checklist, say — add the step there as a checklist
+   line plus a comment rather than opening a duplicate.
+2. **A step-by-step page on the private wiki** (`jwh3times/valleys-at-ashebrook-hoa-ops` → Wiki):
+   exact commands with their working directory, exact dashboard paths, the order when it matters,
+   how to verify, and what rollback exists or that none does. Values-free — no resident value, no
+   secret, no `op read` output. Name it for the task (`Operator-<topic>-<date>`, or a checklist
+   name), link it from `Home`, and add one terse line to **`Human-TODO`**, the operator's tickable
+   list, pointing at it. A long procedure may also live as a runbook in the companion's
+   `operations/`; the wiki page may summarise and link it, but must be enough to start from.
+3. **Say so in the closing report, with both links.** "You now need to…" in prose without the
+   issue and the page is the failure this rule exists to prevent.
+
+Mechanics. The wiki is a Git repository: clone
+`https://github.com/jwh3times/valleys-at-ashebrook-hoa-ops.wiki.git` (branch `master`) into the
+session scratchpad with `git -c credential.helper='!gh auth git-credential'`, edit, scan the changed
+pages for contact values, commit, push. The scan reuses the CI gate's classifier:
+
+```bash
+node --experimental-strip-types --input-type=module -e "import { findContactValues } from './scripts/check-fixture-values.ts'; import fs from 'node:fs'; for (const f of process.argv.slice(1)) { const r = findContactValues(fs.readFileSync(f, 'utf8')); console.log(f, r.length ? JSON.stringify(r) : 'clean'); }" -- <page.md>...
+```
+
+Board writes need the `project` scope (see above). Field and option ids come from
+`gh project field-list 6 --owner jwh3times --format json`; add an issue with
+`gh project item-add 6 --owner jwh3times --url <issue-url>`, then set fields with
+`gh project item-edit --project-id <project-id> --id <item-id> --field-id <field-id> --single-select-option-id <option-id>`
+(or `--text` for `Next Action` and `Blocking Item`).
+
+The rule binds every agent and skill that can finish work: `/ship` files the follow-up before it
+reports, `end-session` audits that every human-only step from the session has both records,
+`docs-updater` treats a missing pair as drift when a change it documents needs operator action, and
+`code-reviewer` flags a diff that introduces an operator step without a linked follow-up.
