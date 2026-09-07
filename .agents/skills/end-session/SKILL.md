@@ -96,6 +96,12 @@ For each issue this session touched:
   open the follow-up rather than leaving a half-done issue open.
 - **Open issues for deferred work discovered this session** — the thing you noticed and decided not
   to do now: `gh issue create --title "..." --body "..."` with a heredoc for the body.
+- **File every human-only step the session's completed work produced** — a dashboard, DNS, or zone
+  setting, a production migration or secret, a force-push, a sign-off, a decision — as a
+  `ready-for-human` follow-up on the **private** tracker, added to the project board, per
+  `docs/agents/issue-tracker.md` § "Human follow-ups from agent work". The closing report is not
+  where those steps live. Where a private issue already tracks the work, add the step there as a
+  checklist line and a comment instead of a duplicate. Each one also needs its wiki page (step 4).
 - **Fix labels** so the next AFK pass sees the truth — `gh issue edit <n> --add-label ...` and
   `--remove-label ...`, using the strings in `docs/agents/triage-labels.md` (`needs-triage`,
   `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`).
@@ -146,6 +152,13 @@ What lives in the companion and what changes it:
   research, reviewed plans/specs, and non-resident migration manifests.
 - **`config/1password/`** — unresolved `op://` templates only. Add a variable there (and in the
   matching Ashebrook item) when the session introduced a new secret or binding.
+- **The wiki** (`Human-TODO` and the step-by-step operator pages behind it) — the second half of
+  every human follow-up filed in step 3. Each needs a page with exact commands and their working
+  directory, dashboard paths, order, verification, and rollback, values-free, linked from `Home`
+  and from a terse line in `Human-TODO`. Clone
+  `https://github.com/jwh3times/valleys-at-ashebrook-hoa-ops.wiki.git` (branch `master`) into the
+  session scratchpad with `git -c credential.helper='!gh auth git-credential'`, edit, run the
+  contact-value scan from `docs/agents/issue-tracker.md` over the changed pages, push.
 
 Before committing the companion, inspect the staged diff for credentials, personal data, sensitive
 filenames, production identifiers, and undisclosed vulnerabilities — its `.gitignore` rejects the
@@ -200,8 +213,9 @@ Show findings before acting. Work through:
 
 One short paragraph per lane — memory, issues and board, private companion, workspace — naming what
 changed and what was deliberately left alone. Say explicitly if the board lane was skipped for a
-missing `project` scope; that is the one failure that otherwise looks identical to success. End with
-**what's still open**: the branch mid-flight, the unanswered question, the issue awaiting a reply.
+missing `project` scope; that is the one failure that otherwise looks identical to success. List
+the human follow-ups filed this session with their issue and wiki links, or say there were none. End
+with **what's still open**: the branch mid-flight, the unanswered question, the issue awaiting a reply.
 That paragraph is what makes the next session cheap to start.
 
 ## Do not

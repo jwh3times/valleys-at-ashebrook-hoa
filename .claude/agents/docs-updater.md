@@ -11,14 +11,15 @@ features or capabilities that don't exist in the code.
 
 ## Documents you maintain
 
-| File               | Audience         | What it covers                                                                                                                                                    |
-| ------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AGENTS.md`        | AI coding agents | Only what binds **every** change: commands, coding rules, architecture at altitude, roles, glossary, testing, deploy — plus the pointer table into `docs/agents/` |
-| `docs/agents/*.md` | AI coding agents | Per-surface detail (see the routing table below)                                                                                                                  |
-| `README.md`        | Human developers | Project overview, local setup                                                                                                                                     |
-| `SETUP.md`         | Deployer         | Human deployment guide — Cloudflare resources, secrets, roster import, docs import                                                                                |
-| `SECURITY.md`      | Security context | Reporting process; keep consistent with the roles/visibility model                                                                                                |
-| `CHANGELOG.md`     | Release notes    | Shipped changes                                                                                                                                                   |
+| File                                             | Audience         | What it covers                                                                                                                                                    |
+| ------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                                      | AI coding agents | Only what binds **every** change: commands, coding rules, architecture at altitude, roles, glossary, testing, deploy — plus the pointer table into `docs/agents/` |
+| `docs/agents/*.md`                               | AI coding agents | Per-surface detail (see the routing table below)                                                                                                                  |
+| `README.md`                                      | Human developers | Project overview, local setup                                                                                                                                     |
+| `SETUP.md`                                       | Deployer         | Human deployment guide — Cloudflare resources, secrets, roster import, docs import                                                                                |
+| `SECURITY.md`                                    | Security context | Reporting process; keep consistent with the roles/visibility model                                                                                                |
+| `CHANGELOG.md`                                   | Release notes    | Shipped changes                                                                                                                                                   |
+| Private wiki `Human-TODO` and its operator pages | Operator         | Step-by-step human follow-ups left by agent work (see "Change that leaves a step only a human can take" below)                                                    |
 
 `design/Ashebrook HOA.dc.html` is a reference-only mockup and `docs/superpowers/` holds AI
 plans/specs — do **not** maintain either. `docs/adr/` records durable decisions and is written
@@ -93,6 +94,18 @@ survives**, with the issue number as its citation.
 
 - `CHANGELOG.md`: add an entry
 
+**Change that leaves a step only a human can take** (a new secret or binding, a migration that must
+be applied with its deploy, a dashboard, DNS, or zone setting, a force-push, a sign-off, a decision)
+
+- The two follow-up records required by `docs/agents/issue-tracker.md` § "Human follow-ups from
+  agent work": a `ready-for-human` issue on the **private** tracker, added to the project board, and a
+  step-by-step page on the private wiki linked from `Human-TODO`. `SETUP.md` documents the supported
+  procedure in general; the wiki page documents this instance with its identifiers, order,
+  verification, and rollback, values-free. If either record is missing, create it (you have Bash
+  and `gh`); if you cannot — no `project` scope, no wiki access — report it as unresolved drift,
+  never as done. A closing report that says "the operator must now…" without both links is exactly
+  the drift this trigger exists to catch.
+
 ## How to detect drift
 
 Verify against actual code using the **Grep and Glob tools** (not shell commands — portable
@@ -114,4 +127,5 @@ and permission-free):
 ## Output
 
 When done, report which files you changed (one line each), which you checked and found
-current, and any drift you couldn't resolve from code alone.
+current, any drift you couldn't resolve from code alone, and — for any human-only step the change
+leaves — the follow-up issue and wiki page links, or the fact that they are missing.
