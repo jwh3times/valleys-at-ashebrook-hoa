@@ -24,7 +24,7 @@ const HOME = {
       propertyId: 'p1',
       fullName: 'Jane Doe',
       phone: '+15551234567',
-      email: 'jane@x.com',
+      email: 'jane@x.test',
       status: 'active' as const,
       notes: null,
     },

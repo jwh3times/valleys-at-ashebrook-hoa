@@ -44,6 +44,9 @@ jobs:
       # because Number('') and Number('0') are both 0. Has bitten twice.
       - run: npm run lint:coercions
       - run: npm run lint:migrations
+      # Fails on any phone number or email address in the tracked tree that is
+      # not a reserved synthetic value (NANP 555-01XX, RFC 2606 example names).
+      - run: npm run lint:fixtures
       - run: npm run check
       - run: npm test
       # Worker/D1 integration tests (vitest-pool-workers) — exercises the API

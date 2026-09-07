@@ -26,7 +26,7 @@ describe('auth config', () => {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          email: 'a@b.com',
+          email: 'a@b.test',
           password: 'short',
           name: 'A',
         }),

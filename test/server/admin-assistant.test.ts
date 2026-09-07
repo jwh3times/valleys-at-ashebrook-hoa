@@ -85,7 +85,7 @@ beforeAll(async () => {
     propertyId: 'uuid-1',
     fullName: 'Jane Q Homeowner',
     phone: '(919) 555-0100',
-    email: 'jane@realmail.com',
+    email: 'jane@realmail.test',
     status: 'active',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -137,7 +137,7 @@ describe('assistant.answer', () => {
     expect(payload).not.toContain('Jane Q Homeowner');
     expect(payload).not.toContain('123 Ashebrook Lane');
     expect(payload).not.toContain('919');
-    expect(payload).not.toContain('jane@realmail.com');
+    expect(payload).not.toContain('jane@realmail.test');
   });
 
   it('pseudonymizes former (inactive) owners too', async () => {
@@ -153,7 +153,7 @@ describe('assistant.answer', () => {
         {
           role: 'user',
           content:
-            'Does Jane Q Homeowner at 123 Ashebrook Lane, (919) 555-0100 / jane@realmail.com owe dues?',
+            'Does Jane Q Homeowner at 123 Ashebrook Lane, (919) 555-0100 / jane@realmail.test owe dues?',
         },
         {
           role: 'assistant',
@@ -166,7 +166,7 @@ describe('assistant.answer', () => {
     expect(payload).not.toContain('123 Ashebrook Lane');
     expect(payload).not.toContain('(919) 555-0100');
     expect(payload).not.toContain('919');
-    expect(payload).not.toContain('jane@realmail.com');
+    expect(payload).not.toContain('jane@realmail.test');
   });
 
   it('de-anonymizes the streamed answer before returning it', async () => {
