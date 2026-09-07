@@ -25,8 +25,8 @@ updates:
       - 'dependencies'
       - 'npm'
     ignore:
-      # better-auth is held below 1.7 (see #260, and the version-ceiling note in
-      # AGENTS.md under Server code). 1.7 throws from `onRequestRateLimit` unless
+      # better-auth is held below 1.7 (see #260, and the `auth/` entry in
+      # docs/agents/module-map.md). 1.7 throws from `onRequestRateLimit` unless
       # the secondary storage implements `increment`; `better-auth-cloudflare`'s
       # KV adapter does not, and 0.3.1 is its latest release, so there is nothing
       # to bump to. The throw is per REQUEST, not at start-up, so merging 1.7.x
@@ -42,6 +42,19 @@ updates:
       - dependency-name: 'better-auth'
         update-types:
           - 'version-update:semver-minor'
+          - 'version-update:semver-major'
+      # vitest is held below 5 (see #313). @cloudflare/vitest-pool-workers 0.22
+      # declares `peer vitest@"^4.1.0"`, so `npm ci` failed on the 5.0.0 bump
+      # (#308) before a single gate ran — and the pool is what runs
+      # test/server/** against a real workerd + D1, so it can be neither
+      # dropped nor forced. Majors ONLY: 4.x minors and patches still come
+      # through. Remove both entries when the pool's peer range includes
+      # vitest 5, then take the bump as its own PR with the full test:server run.
+      - dependency-name: 'vitest'
+        update-types:
+          - 'version-update:semver-major'
+      - dependency-name: '@vitest/*'
+        update-types:
           - 'version-update:semver-major'
     groups:
       # --- Peer-locked families — majors only. All minor/patch bumps land in the
