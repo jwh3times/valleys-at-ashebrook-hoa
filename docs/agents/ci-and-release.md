@@ -32,6 +32,16 @@ That hazard has fired twice, both times on grouped dependabot PRs:
   `.github/dependabot.yml` now travels `oxlint`/`oxlint-tsgolint` in **their own minor+patch
   group**, so a linter release with a newly-recategorized rule arrives as its own reviewable PR.
 
+A third grouped PR failed earlier still, at `npm ci`, and is held by a second ignore rule:
+
+- PR #308 bumped `vitest` and `@vitest/coverage-v8` to 5.0.0, and `npm ci` refused the tree before
+  any gate ran: `@cloudflare/vitest-pool-workers` 0.22 declares `peer vitest@"^4.1.0"`, and that
+  pool is what runs `test/server/**` against a real workerd + D1, so it can be neither dropped nor
+  forced. `.github/dependabot.yml` now **ignores `vitest` and `@vitest/*` major updates** until the
+  pool's peer range includes vitest 5 (#313 tracks the upstream gate); 4.x minors and patches still
+  come through. Remove both entries when it does, and take the bump as its own PR with the full
+  `test:server` run.
+
 ## Versioning
 
 The third semver segment is a **build number**: `<major>.<minor>.<build>`.
