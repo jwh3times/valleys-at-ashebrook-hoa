@@ -111,6 +111,7 @@ which migration introduced a shape without reading every file.
 | `0022`        | `properties.retired_day`/`retired_at`. **The one non-idempotent file** — SQLite has no `ADD COLUMN IF NOT EXISTS`, so it is isolated to its own migration. |
 | `0023`        | Eight ADR 0022 views, every statement `CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run.                                                          |
 | `0030`        | Adds `rate_limits` for Better Auth's atomic D1 throttles; apply before deploying the dependent auth handler (#316).                                        |
+| `0031`        | `member_attendance_property_id_idx` / `member_votes_property_id_idx` — property-first lookups for the transfer-effects engine (#237). Additive.            |
 
 ### `0024`-`0029`: the table-rebuild migrations
 

@@ -672,6 +672,24 @@ export interface MeetingDetail extends MeetingSummary {
   motions: MotionDetail[];
 }
 
+/**
+ * One motion as the flat archive-wide list returns it
+ * (`GET /api/admin/meetings?motions=all`).
+ *
+ * Deliberately NOT a `MotionDetail`: the pickers this serves need only enough
+ * to label an option and submit its id, and the full detail shape carries the
+ * mover/second identities and roll-call rows that a `<select>` has no use for.
+ * `date` is the parent meeting's, denormalized onto the row so the caller does
+ * not have to fetch the meeting list to render a label.
+ */
+export interface MotionOption {
+  id: string;
+  meetingId: string;
+  date: string;
+  sequence: number;
+  text: string;
+}
+
 export interface MeetingInput {
   body?: MeetingBody;
   kind?: MeetingKind;

@@ -625,4 +625,74 @@ describe('meetings admin route — board', () => {
     const res = await GET(req(`${url}?id=nope`, 'GET'));
     expect(res.status).toBe(404);
   });
+
+  // #237: the flat archive-wide motions read that replaced the Resolutions
+  // panel's 1+N client-side fan-out.
+  describe('GET ?motions=all', () => {
+    async function seedMotion(
+      meetingId: string,
+      sequence: number,
+      text: string,
+    ) {
+      const now = new Date();
+      await getDb(env).insert(motions).values({
+        id: crypto.randomUUID(),
+        meetingId,
+        sequence,
+        text,
+        outcome: 'passed',
+        createdBy: 'b',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    it('returns an empty list when no motion has been recorded', async () => {
+      await createMeeting();
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual([]);
+    });
+
+    // The order the picker relies on, and the order the fan-out it replaced
+    // produced: newest meeting first, then each meeting's motions in the
+    // sequence they were recorded in.
+    it('orders newest meeting first, then by motion sequence', async () => {
+      const older = await createMeeting({ date: '2026-01-01' });
+      const newer = await createMeeting({ date: '2026-03-01' });
+      await seedMotion(older, 1, 'January first motion');
+      await seedMotion(newer, 2, 'March second motion');
+      await seedMotion(newer, 1, 'March first motion');
+
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as {
+        meetingId: string;
+        date: string;
+        sequence: number;
+        text: string;
+      }[];
+      expect(rows.map((r) => r.text)).toEqual([
+        'March first motion',
+        'March second motion',
+        'January first motion',
+      ]);
+      expect(rows[0]).toEqual(
+        expect.objectContaining({ meetingId: newer, date: '2026-03-01' }),
+      );
+    });
+
+    // The picker labels every option "date — text", so the parent meeting's
+    // date has to ride along; without it the caller is back to fetching the
+    // meeting list to re-join client-side, which is the cost this removed.
+    it('carries the parent meeting date on every row', async () => {
+      const id = await createMeeting({ date: '2026-05-04' });
+      await seedMotion(id, 1, 'Move to adopt Resolution 2026-1');
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      const rows = (await res.json()) as { date: string; id: string }[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0].date).toBe('2026-05-04');
+      expect(rows[0].id).toBeTruthy();
+    });
+  });
 });
