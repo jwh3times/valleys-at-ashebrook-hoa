@@ -398,13 +398,8 @@ as failed.
 
 ## Security Headers
 
-The Worker sets baseline security headers on every response. The page Content-Security-Policy is
-Astro's (`security.csp` in `astro.config.mjs`), enforced with no `'unsafe-inline'` in `script-src` —
-Astro hashes its own inline scripts at build time, so **only a built Worker shows the real policy**;
-`astro dev` and the Astro Container API do not compute the hashes. To verify it locally: `npm run
-build`, then `wrangler dev --local --persist-to .wrangler/state` and confirm each route's response
-header carries the expected hashes and no `'unsafe-inline'` in `script-src`. HSTS is enabled
-separately at the Cloudflare zone level (not by this repository or the Worker) — currently
+The Worker sets baseline security headers, including an enforced Content-Security-Policy. HSTS is
+enabled separately at the Cloudflare zone level (not by this repository or the Worker) — currently
 `max-age=2592000` (one month), subdomains not included, preload off.
 
 ## Local Development

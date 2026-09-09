@@ -312,31 +312,12 @@ EMAIL_NOT_VERIFIED` for an existing-but-unverified account versus `401` for anyt
   frozen, and an absent row is the normal un-frozen state. It is written only by direct D1 access
   (`wrangler d1 execute`); it is not exposed in the admin Site panel, because pausing the site is an
   operator action rather than a board decision.
-- **Every response carries baseline security headers.** `src/middleware.ts` sets
-  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and
-  `Permissions-Policy` on every response. HSTS is enabled at the Cloudflare zone level
-  (`max-age=2592000`, one month; subdomains not included; preload off) — a zone-level operator
-  setting, not a repository or Worker header.
-- **The page Content-Security-Policy is Astro's, not middleware's, and carries no `'unsafe-inline'`
-  in `script-src`.** `security.csp` in `astro.config.mjs` defines it; because this app is
-  `output: 'server'`, every route is on-demand, so Astro delivers the policy as a response header
-  rather than a `<meta>` element, and `frame-ancestors` is honoured. Astro computes a build-time
-  SHA-256 hash for every inline script it generates (island hydration, prefetch/view-transition
-  shims), which is what lets `script-src` allow only `'self'`, `challenges.cloudflare.com`
-  (Turnstile), and `static.cloudflareinsights.com` (the Web Analytics beacon Cloudflare's edge
-  injects after render, so it can only be allowed by origin) — no wildcard, no `'unsafe-inline'`.
-  One script is exempt from Astro's hashing: `verify-property.astro`'s `is:inline` Turnstile
-  callback, which must stay `is:inline` to avoid a load-order race with the async widget on the one
-  flow a homeowner cannot work around; its hash is hand-maintained in
-  `scriptDirective.hashes`, and `test/unit/csp-inline-hashes.test.ts` fails the build if the script
-  changes without its hash being updated. `style-src` keeps `'unsafe-inline'` deliberately — React
-  sets inline `style` attributes, and no hash can cover a style attribute. `src/middleware.ts` never
-  overwrites a `Content-Security-Policy` header already present on the response; it only supplies
-  one for responses Astro did not render (a strict `default-src 'none'`/`frame-ancestors
-'none'`/`base-uri 'none'`/`form-action 'none'` for non-HTML responses) and a permissive HTML
-  fallback — deliberately omitting `default-src`, `script-src`, and `style-src`, since naming any of
-  them without Astro's hashes would break the page — for the unexpected case of an HTML response
-  that somehow lacks Astro's policy.
+- **Every response carries baseline security headers.** Middleware sets `X-Content-Type-Options:
+nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
+  Content-Security-Policy that allowlists only the third-party resources the site uses (Google
+  Fonts, the Google Calendar embed, Turnstile, Web3Forms, and the Cloudflare Web Analytics beacon).
+  HSTS is enabled at the Cloudflare zone level (`max-age=2592000`, one month; subdomains not
+  included; preload off) — a zone-level operator setting, not a repository or Worker header.
 - **The site is served from exactly one origin, and Better Auth trusts only that origin (plus a
   conditional dev exception).** `*.workers.dev` is disabled two ways: both routes (production and
   the preview wildcard) are turned off in the Cloudflare dashboard, and `wrangler.toml` pins
