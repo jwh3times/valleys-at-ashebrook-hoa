@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade Better Auth to 1.7.3 and move auth throttling to atomic D1 counters,
+  allowing Dependabot updates again (#316, #260). Apply additive migration `0030`
+  before deploying. Existing account and session columns are unchanged.
+- Use the matching `auth` CLI for auth schema generation.
+- Store single-use auth verification tokens in D1 for atomic consumption;
+  password reset links issued before the upgrade must be requested again.
+
 ## [0.18.26] - 2026-09-09
 
 ### Changed
