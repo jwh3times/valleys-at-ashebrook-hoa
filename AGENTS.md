@@ -216,6 +216,17 @@ answer generation additionally requires the `ANTHROPIC_API_KEY` secret). The AI 
 is scoped to the `rag/` folder only, so it indexes the Markdown twins and never the human-readable
 originals.
 
+**Content-Security-Policy ownership is split, deliberately.** Astro sets the CSP for every rendered
+page — `security.csp` in `astro.config.mjs` — as a response header, carrying a build-time hash for
+every inline script Astro generates; that is what lets `script-src` refuse `'unsafe-inline'`.
+`src/middleware.ts` must never overwrite a `Content-Security-Policy` header already on the
+response; it only supplies one for non-page responses (JSON, redirects, errors) and a permissive
+HTML fallback — omitting `default-src`/`script-src`/`style-src` — for the rare page response that
+arrives without Astro's policy. A script marked `is:inline` (e.g. `verify-property.astro`'s
+Turnstile callback) is not hashed by Astro and needs its hash added by hand to
+`scriptDirective.hashes`; `test/unit/csp-inline-hashes.test.ts` fails the build on drift. See
+[SECURITY.md](./SECURITY.md).
+
 **Roles and access.** Roles are `visitor`, `homeowner`, `board`; content visibility tiers are
 `public`, `homeowner`, `board`. Access is enforced **server-side and fail-closed**: anonymous
 resolves to visitor, and unknown states resolve to the most restrictive behavior.
