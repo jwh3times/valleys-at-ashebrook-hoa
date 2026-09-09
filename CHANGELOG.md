@@ -7,6 +7,31 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.24] - 2026-09-09
+
+### Security
+
+- **The site's script policy no longer permits inline scripts.** `script-src` carried
+  `'unsafe-inline'`, which meant the Content-Security-Policy could not do the one job a CSP exists
+  for — stopping an injected script from running. The page policy now comes from Astro, which
+  computes a hash for each inline script it generates, so the browser runs exactly those and
+  nothing else. Allowed script origins are unchanged: this site, Turnstile, and the Cloudflare
+  analytics beacon.
+- Inline **styles** are still permitted, deliberately: interface components set style attributes
+  directly, and a hash cannot cover a style attribute. That is a separate change with its own
+  risks, and this one is about scripts, where the permission actually costs something.
+
+### Changed
+
+- The page Content-Security-Policy moved from `src/middleware.ts` to `security.csp` in
+  `astro.config.mjs`, because only the framework can hash the scripts it generates. Middleware now
+  covers what Astro does not render — API responses get a strict policy of their own — and must
+  never overwrite a policy already on a response. Responses that are not pages are more locked down
+  than before, not less.
+- Adding a hand-written `is:inline` script to a page now requires adding its hash to
+  `astro.config.mjs`, or the browser will block it. A test recomputes those hashes from the page
+  sources and fails the build if one drifts, so the mistake cannot ship quietly.
+
 ## [0.18.23] - 2026-09-09
 
 ### Fixed
