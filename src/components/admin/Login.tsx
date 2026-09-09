@@ -13,7 +13,10 @@ export default function Login() {
     handleReset,
   } = useLoginForm({
     copy: {
-      signInFailed: 'Incorrect email or password. Please try again.',
+      // Uniform by design, like the public form: one answer whether the
+      // password was wrong or the account is real but unverified.
+      signInFailed:
+        'Incorrect email or password — or an email address you have not confirmed yet. Check the link from your sign-up email and try again.',
       resetNeedsEmail:
         'Enter your email above first, then click "Forgot password".',
       resetFailed:
