@@ -7,6 +7,19 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.14] - 2026-09-09
+
+### Security
+
+- **The homeowner verification request now answers before it does any roster work, closing a timing
+  oracle.** `/api/verify/request` returns one identical body for every outcome — match, unknown
+  address, unmatched name, ambiguous name, rate limit — but it did not take the same amount of time
+  to say it: a match paid for an email or SMS send plus several KV writes first, an unknown address
+  returned after a couple of database reads, and a rate-limited caller returned fastest of all. The
+  latency alone told an attacker which outcome they had hit, which is exactly what the identical
+  body exists to prevent. The rate-limit check, the roster lookup, and the send now all run after
+  the response is produced, so every path answers at the same point.
+
 ## [0.18.13] - 2026-09-08
 
 ### Security

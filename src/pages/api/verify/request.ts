@@ -30,6 +30,16 @@ export const prerender = false;
 // both already-linked collisions, and every rate limit. A distinguishable
 // byte, status, or timing-order difference across those paths is a security
 // defect. There is no more 429 on this route.
+//
+// TIMING is enforced structurally, not by hoping the paths cost the same.
+// The matched path used to perform a Resend or Twilio HTTP call plus several
+// KV writes before responding, while an unmatched address returned after a
+// few D1 reads and a rate-limited caller returned fastest of all — latency
+// alone distinguished "this address and name matched a Person with a unique
+// contact" from every other outcome, which is precisely the oracle the
+// uniform body exists to close. So the rate-limit check, the roster work, and
+// the send all happen AFTER the response is produced, handed to the runtime's
+// `waitUntil`. Every path now answers at the same point in the handler.
 export const UNIFORM_REQUEST_RESPONSE = {
   ok: true,
   message: 'If the information matches our records, a code has been sent.',
@@ -71,29 +81,44 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   // Every gate above answers a real, distinguishable status. Everything from
   // here on is a roster question, and every roster question gets the same
-  // answer regardless of what actually happened internally.
-  const rl = await checkUserRateLimit(env, ctx.userId);
-  if (rl.ok) {
-    await setCooldown(env, ctx.userId);
+  // answer regardless of what actually happened internally — including how
+  // long it took, which is why none of it is awaited before the response.
+  const accountId = ctx.userId;
+  const rosterWork = async () => {
+    const rl = await checkUserRateLimit(env, accountId);
+    if (!rl.ok) return;
+    await setCooldown(env, accountId);
     const mode = await getCutoverMode(env);
     if (mode === 'derived') {
       await requestPersonVerification(
         env,
         associationDateIso(),
-        ctx.userId,
+        accountId,
         address,
         name,
         channel,
       );
     } else {
-      await requestPropertyVerification(
-        env,
-        ctx.userId,
-        address,
-        name,
-        channel,
-      );
+      await requestPropertyVerification(env, accountId, address, name, channel);
     }
+  };
+
+  // `locals.cfContext` is the ExecutionContext under @astrojs/cloudflare v14
+  // (v6 of Astro removed `locals.runtime.ctx` — its getter now throws, so do
+  // not reach for it). In the Worker it is always present, and deferring is
+  // the whole point of this route. Handlers invoked directly (the Workers test
+  // pool) have no `cfContext`, so the work is awaited instead: every existing
+  // test still observes the effects, and the one test that proves the response
+  // does not wait for the sender supplies its own `waitUntil`.
+  const cfContext = locals?.cfContext;
+  if (cfContext) {
+    cfContext.waitUntil(
+      rosterWork().catch((err: unknown) => {
+        console.error('[verify/request] deferred roster work failed:', err);
+      }),
+    );
+  } else {
+    await rosterWork();
   }
 
   return Response.json(UNIFORM_REQUEST_RESPONSE);
