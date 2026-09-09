@@ -144,6 +144,28 @@ describe('write-freeze coverage', () => {
     expect(freezePolicyFor('/api/authorize')).not.toBe('exempt');
   });
 
+  it('classifies the path Astro will route, not the encoded one on the wire', () => {
+    // Astro decodes the pathname before matching, so an encoded path reaches
+    // the same handler. Classifying the raw string let `/api/%6dember/proxies`
+    // be `mutations`-class, leaving member reads live through a freeze that
+    // SECURITY.md says stops them.
+    expect(freezePolicyFor('/api/%6dember/proxies')).toBe('everything');
+    expect(freezePolicyFor('/api/%76ote')).toBe('everything');
+    // Decoding is repeated, because Astro repeats it: one pass would leave
+    // this as `/api/%6dember/proxies` and mis-classify it exactly as before.
+    expect(freezePolicyFor('/api/%256dember/proxies')).toBe('everything');
+    // The exemptions decode too, so an encoded sign-in is still exempt rather
+    // than frozen out of the flip it exists to serve.
+    expect(freezePolicyFor('/api/%61uth/sign-in')).toBe('exempt');
+  });
+
+  it('falls back to the raw path when the encoding is malformed', () => {
+    // A lone '%' throws in decodeURI. Astro will not route it either, and the
+    // freeze answers on the more inclusive side rather than throwing.
+    expect(freezePolicyFor('/api/%member/proxies')).toBe('mutations');
+    expect(freezePolicyFor('/api/member/%')).toBe('everything');
+  });
+
   it('defaults an unknown path to frozen-on-mutation', () => {
     // The property the whole design rests on: a route nobody has written yet
     // is already covered.

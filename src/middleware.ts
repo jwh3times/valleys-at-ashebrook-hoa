@@ -11,6 +11,7 @@ import {
   sameOriginError,
 } from './server/authz/voting-guards';
 import { writeFreezeError } from './server/authz/write-freeze';
+import { routedPathname } from './server/authz/request-path';
 import { getSiteSettings } from './server/content/settings';
 import { DEFAULT_SITE_SETTINGS } from './lib/types';
 
@@ -75,7 +76,10 @@ function applySecurityHeaders(headers: Headers): void {
 }
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
-  const path = context.url.pathname;
+  // The path Astro will ROUTE to, not the one on the wire: `/api/%61dmin/roles`
+  // reaches the admin handler, and a backstop that classified the raw string
+  // would wave it through as an unnamed path.
+  const path = routedPathname(context.url.pathname);
   // One authority for "today" per request. Computed once so a request landing
   // astride midnight cannot resolve its context against one Association Day
   // and shadow-compare against another.
