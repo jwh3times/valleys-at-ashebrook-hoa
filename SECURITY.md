@@ -249,6 +249,22 @@ the information matches our records, a code has been sent.' }` for success, an u
   exception — a claimed Person already linked to a different account auto-creates that review row,
   since #201 treats that specific collision as worth a board look regardless of the uniform
   response the requester sees.
+- **Sign-in and sign-up disclose no membership information from the site's own forms, but the
+  uniformity is a client-side UI choice, not a server-side one.** Better Auth's wire responses are
+  unchanged and still distinguish the cases on the status code: sign-in returns `403
+EMAIL_NOT_VERIFIED` for an existing-but-unverified account versus `401` for anything else, and
+  sign-up returns `422 USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL` for a taken address. On a
+  roster-backed neighborhood site, confirming from a form response that a given address has an
+  account is itself a membership disclosure, so `useLoginForm` (backing both the public sign-in
+  form and `src/components/admin/Login.tsx`) always shows its own `copy.signInFailed` and
+  `copy.resetFailed` instead of `result.error.message`, and `RegisterForm`
+  (`src/components/react/AuthForms.tsx`) shows one constant message for every sign-up outcome. On
+  a sign-up error, `RegisterForm` also fires `authClient.sendVerificationEmail` and discards its
+  result, so an existing-but-unverified address quietly gets a fresh link while an already-verified
+  address, an unknown address, and a send failure all render identically. This closes what a
+  visitor can learn by using the site's forms; it does not change what Better Auth answers on the
+  wire, so someone inspecting raw HTTP responses (rather than the rendered page) can still tell the
+  cases apart.
 - **`cutover_mode` decides which authorization model answers, and fails safe to the model already
   serving production.** The ADR 0022 phase-3 flip switch (`src/server/authz/cutover-mode.ts`,
   reading the uncached `cutover_settings.cutover_mode` singleton) sits inside the single seam every
