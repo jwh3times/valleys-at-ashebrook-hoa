@@ -145,12 +145,20 @@ SecondaryStorage.increment.")` from `onRequestRateLimit` on every request whenev
   — identical behavior under `legacy`; under `derived`, a board member who owns no Lot is refused
   these member surfaces while still admitted to board ones. `requirePropertyAccess` remains the
   per-property access check (no route calls it yet), and Turnstile checks are unchanged.
+  `request-path.ts` (`routedPathname`) is the shared normalizer for anything that classifies a
+  path rather than just reading it: it repeatedly runs `decodeURI` — matching Astro's own
+  `validateAndDecodePathname`, capped at 10 iterations — so `/api/%61dmin/roles` and the
+  doubly-encoded `/api/%2561dmin/roles` both classify the same way Astro will route them, and falls
+  back to the partially decoded value if a malformed escape throws. Both `middleware.ts` (before
+  `isAdminApi`/`isMemberApi`/`isVotingApi`) and `write-freeze.ts` (inside `freezePolicyFor`) call it
+  before classifying, so neither can be fooled by an encoded segment the other already decoded.
   `write-freeze.ts` (`isWriteFrozen`, `writeFreezeError`, `freezePolicyFor`,
   `isMutatingMethod`) is the operator-only maintenance switch built for the ADR 0022 phase-3 flip
   and retained after phase 4: it reads the uncached `cutover_settings.write_freeze` singleton
   (fail-closed — a read error or an active freeze answers `503`; an absent row is the normal
   un-frozen state, not an error). Coverage is **deny-by-default and path-derived**:
-  `freezePolicyFor(path)` is the single authority both enforcement layers consult, returning
+  `freezePolicyFor(path)` normalizes through `routedPathname` first, then is the single authority
+  both enforcement layers consult, returning
   `everything` for `/api/member/*` and `/api/vote` (no read-only half worth keeping live),
   `exempt` for exactly two paths, and `mutations` for **everything else** — including paths nobody
   has written yet. `writeFreezeError(env, request)` therefore takes no scope argument: it derives

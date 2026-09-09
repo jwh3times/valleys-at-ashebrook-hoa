@@ -98,6 +98,25 @@ describe('middleware gate on /api/admin', () => {
     }
   });
 
+  it('gates a percent-encoded admin path, which Astro routes to the same handler', async () => {
+    // Astro decodes the pathname before matching, so `/api/%61dmin/roles`
+    // reaches the admin route. A backstop reading the raw string classified it
+    // as an unnamed path and waved it through — the per-route guard still
+    // answered, but the backstop ADR 0013 relies on was bypassable.
+    const { res, reached } = await run('/api/%61dmin/roles', 'POST');
+    expect(res.status).toBe(401);
+    expect(reached).toBe(false);
+  });
+
+  it('gates a doubly-encoded admin path', async () => {
+    // Astro decodes REPEATEDLY until the pathname stops changing, so one pass
+    // is not enough: `/api/%2561dmin/roles` decodes once to `/api/%61dmin/roles`
+    // and still routes to the admin handler.
+    const { res, reached } = await run('/api/%2561dmin/roles', 'POST');
+    expect(res.status).toBe(401);
+    expect(reached).toBe(false);
+  });
+
   it('gates a route path that does not exist yet', async () => {
     // The whole point of a prefix gate: a route added tomorrow inherits it
     // before anyone remembers to write requireBoard into the handler.
@@ -140,6 +159,13 @@ describe('middleware gate on /api/member', () => {
     const { res, reached } = await run('/api/member/proxies');
     expect(res.status).toBe(200);
     expect(reached).toBe(true);
+  });
+
+  it('gates a percent-encoded member path when officialMode is on', async () => {
+    await setOfficialMode(true);
+    const { res, reached } = await run('/api/%6dember/proxies');
+    expect(res.status).toBe(401);
+    expect(reached).toBe(false);
   });
 
   it('does not gate a sibling path sharing the prefix', async () => {

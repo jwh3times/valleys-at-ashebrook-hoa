@@ -10,7 +10,12 @@ Two rules govern this whole surface and are stated once here rather than repeate
   handler independently opens with its own guard. The per-route call is the enforced and tested
   layer; the middleware gate is the production backstop. See
   [ADR 0013](../adr/0013-admin-api-gated-in-middleware.md) and the Roles & access section of
-  `AGENTS.md`.
+  `AGENTS.md`. Both the namespace backstop and the write freeze classify the path Astro will
+  actually route to, not the one on the wire: `routedPathname`
+  (`src/server/authz/request-path.ts`) repeatedly decodes the pathname the same way Astro's own
+  route matching does (capped at 10 iterations, falling back to the partial decode on a malformed
+  escape), so an encoded segment like `/api/%61dmin/roles` cannot reach its handler while
+  classifying as an unnamed path.
 - **Re-check at the mutation boundary.** A passed preflight grants nothing. Visibility, authority,
   frozen eligibility, open state, feature flags, and duplicate exclusion are all repeated inside
   the mutation SQL, so a race returns `409` rather than a partial write.

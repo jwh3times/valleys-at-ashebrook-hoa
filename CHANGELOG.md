@@ -7,6 +7,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.15] - 2026-09-09
+
+### Security
+
+- **The middleware backstop and the write freeze now classify the path the request is actually
+  routed to.** Astro decodes a percent-encoded pathname before matching a route, so
+  `/api/%61dmin/roles` reaches the admin handler — but both classifiers read the raw URL, so the
+  middleware saw an unnamed path and the freeze put `/api/%6dember/proxies` in the mutations class,
+  leaving homeowner reads live through a freeze that is meant to stop them. No request was ever
+  authorized that should not have been, because every route's own guard answered regardless; what
+  was bypassable is the second layer that exists for a route shipped without its guard. Decoding is
+  repeated to the same depth Astro uses, so a doubly-encoded path cannot slip through the same gap
+  one level down.
+
 ## [0.18.14] - 2026-09-09
 
 ### Security
