@@ -399,8 +399,8 @@ as failed.
 ## Security Headers
 
 The Worker sets baseline security headers, including an enforced Content-Security-Policy. HSTS is
-not yet enabled by this repository; it must be enabled separately at the Cloudflare zone level after
-confirming HTTPS is stable for the production domain and any relevant subdomains.
+enabled separately at the Cloudflare zone level (not by this repository or the Worker) — currently
+`max-age=2592000` (one month), subdomains not included, preload off.
 
 ## Local Development
 
@@ -411,8 +411,9 @@ npm run dev
 For local work against Cloudflare bindings, use Wrangler after a build so D1/R2/KV bindings and
 `.dev.vars` secrets are available.
 
-`http://localhost:4321` is a trusted auth origin. If you use a different local origin, add it to
-`trustedOrigins` in the Better Auth config.
+`http://localhost:4321` is a trusted auth origin **only when `BETTER_AUTH_URL` points at
+localhost**, so a production deployment never carries a development origin. If you use a different
+local origin, add it to `trustedOrigins` in the Better Auth config alongside the same condition.
 
 ## Day-to-Day Content Updates
 

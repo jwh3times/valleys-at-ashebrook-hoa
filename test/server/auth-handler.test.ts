@@ -35,9 +35,9 @@ describe('auth config', () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
   });
 
-  it('trusts the localhost dev origin for state-changing auth requests', async () => {
-    const auth = createAuth(env, undefined, env.BETTER_AUTH_URL);
-    const res = await auth.handler(
+  function signInFromLocalhost(baseURL: string | undefined) {
+    const auth = createAuth(env, undefined, baseURL);
+    return auth.handler(
       new Request('http://localhost:4321/api/auth/sign-in/email', {
         method: 'POST',
         headers: {
@@ -50,8 +50,27 @@ describe('auth config', () => {
         }),
       }),
     );
+  }
+
+  it('trusts the localhost dev origin when the app is configured to run there', async () => {
+    const res = await signInFromLocalhost('http://localhost:4321');
     // A trusted origin proceeds to the credential check (401 for an unknown
     // user); an untrusted origin is rejected with 403 before that.
+    expect(res.status).not.toBe(403);
+  });
+
+  it('does not trust the localhost dev origin in a production deployment', async () => {
+    const res = await signInFromLocalhost('https://ashebrookresidents.com');
+    expect(res.status).toBe(403);
+  });
+
+  it('falls back to the requested origin when no base URL is configured', async () => {
+    // Better Auth infers its base URL from the request when none is configured,
+    // and a base URL is trusted automatically — so the origin list is not the only
+    // thing in play here. Production always sets BETTER_AUTH_URL (wrangler.toml
+    // [vars]), which is what makes the conditional above meaningful. Pinned so the
+    // conditional is never read as a guarantee that holds without that var.
+    const res = await signInFromLocalhost(undefined);
     expect(res.status).not.toBe(403);
   });
 
