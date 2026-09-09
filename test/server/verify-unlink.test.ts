@@ -284,6 +284,16 @@ describe('self-unlink', () => {
 });
 
 describe('the admin unlink path also refuses the last System Administrator', () => {
+  // A System Administrator caller: ending another administrator's grants is
+  // refused to a plain Board Access holder for want of authority (403) before
+  // the last-administrator invariant is consulted, so only an administrator
+  // reaches the refusal this case is about.
+  function systemAdminContext() {
+    const ctx = legacyAuthContext('board-1', 'board', []);
+    ctx.capabilities.add('systemAdmin');
+    return ctx;
+  }
+
   function adminReq(body: unknown): never {
     return {
       request: new Request('http://localhost/api/admin/person-links', {
@@ -291,7 +301,7 @@ describe('the admin unlink path also refuses the last System Administrator', () 
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       }),
-      locals: { authContext: legacyAuthContext('board-1', 'board', []) },
+      locals: { authContext: systemAdminContext() },
     } as never;
   }
 

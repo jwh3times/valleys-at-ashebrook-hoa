@@ -6,6 +6,8 @@ import {
   resolveAuthContext,
 } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
+import type { AuthContext } from '../../../server/authz/guards';
+import { liveGrantIdsFor } from '../../../server/roster/access';
 import { getDb } from '../../../server/db/client';
 import { users } from '../../../server/db/auth-schema';
 import {
@@ -281,10 +283,18 @@ async function manualVerify(
   );
 }
 
-async function unlink(
-  body: unknown,
-  actorAccountId: string,
-): Promise<Response> {
+/**
+ * Only a System Administrator may end another account's System Administration.
+ * The Access Grants route states and enforces that rule; unlink reaches the
+ * same grants by consequence, so it asks the same question. Board Access is
+ * untouched by this — a Board Access holder may still unlink an account that
+ * holds only Board grants, their own included.
+ */
+const SYSTEM_ADMIN_REFUSAL =
+  'This account holds System Administration — only a System Administrator can end it, on the Access panel.';
+
+async function unlink(body: unknown, ctx: AuthContext): Promise<Response> {
+  const actorAccountId = ctx.userId;
   const linkId = stringField(body, 'linkId');
   if (!linkId) return new Response('linkId is required', { status: 400 });
   const endReason = stringField(body, 'endReason');
@@ -303,6 +313,17 @@ async function unlink(
   if (!link) return new Response('Link not found', { status: 404 });
   if (link.endedAt !== null)
     return new Response('Link already ended', { status: 409 });
+
+  const callerIsSystemAdmin = ctx.capabilities.has('systemAdmin');
+  if (!callerIsSystemAdmin) {
+    const targetAdminGrants = await liveGrantIdsFor(
+      env.DATABASE,
+      link.accountId,
+      'system_admin',
+    );
+    if (targetAdminGrants.length > 0)
+      return new Response(SYSTEM_ADMIN_REFUSAL, { status: 403 });
+  }
 
   const nowMs = Date.now();
   if (
@@ -326,6 +347,7 @@ async function unlink(
     endReason: endReason as PersonLinkEndReason,
     nowMs,
     operationKey: operationKey('person-links', 'unlink'),
+    refuseIfTargetIsSystemAdministrator: !callerIsSystemAdmin,
   });
   let results: D1Result[];
   try {
@@ -353,6 +375,15 @@ async function unlink(
       return new Response('Cannot unlink the last System Administrator', {
         status: 409,
       });
+    if (
+      !callerIsSystemAdmin &&
+      (await liveGrantIdsFor(env.DATABASE, link.accountId, 'system_admin'))
+        .length > 0
+    )
+      // Granted System Administration between the preflight and the batch.
+      return new Response('Access changed concurrently — try again', {
+        status: 409,
+      });
     return new Response('Link is no longer unlinkable', { status: 409 });
   }
   return new Response(null, { status: 204 });
@@ -377,7 +408,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'manualVerify':
       return manualVerify(parsed.value, ctx.userId);
     case 'unlink':
-      return unlink(parsed.value, ctx.userId);
+      return unlink(parsed.value, ctx);
     default:
       return new Response('Unknown action', { status: 400 });
   }
