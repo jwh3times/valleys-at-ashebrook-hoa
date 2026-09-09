@@ -36,7 +36,12 @@ declare namespace Cloudflare {
      * rather than the runtime. And this is an operator switch for one phase,
      * not deployment configuration — the cutover flag itself stays a D1
      * singleton, because that one must flip in seconds without a deploy.
-     * Removed at the phase-3 flip.
+     *
+     * STILL READ. `src/middleware.ts` consults it on every request and
+     * `SECURITY.md` documents it as an operator switch; an earlier version of
+     * this comment claimed it was removed at the phase-3 flip, which it was
+     * not. Removing the variable is ADR 0022 phase 4 work (#212), not
+     * something already done.
      */
     CUTOVER_SHADOW?: string;
     /** Test-only binding: D1 migrations applied via applyD1Migrations in Workers tests. */

@@ -431,6 +431,13 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   release tag can be re-pointed at different code by whoever controls the action's repository; a
   SHA cannot. Dependabot still proposes updates and rewrites both the SHA and the comment, so
   pinning costs no freshness. New workflow steps must be pinned the same way.
+- **CodeQL** — GitHub's default-setup code scanning analyses JavaScript/TypeScript, Actions
+  workflows, and Python on every push and pull request, and the `main` ruleset requires it to pass.
+- **Secret scanning with push protection** — a commit containing a recognized credential is blocked
+  at push time rather than found afterwards.
+- **Protected `main`** — a GitHub ruleset requires the build gate, the changelog check, CodeQL, and
+  code-quality analysis to pass before a merge, and requires the branch to be up to date first. Its
+  bypass list is empty, so the checks apply to the maintainer as well.
 - **Synthetic-fixture gate** — `npm run lint:fixtures` (`scripts/check-fixture-values.ts`) fails CI
   when any phone number or email address in the tracked tree is outside the NANP fictional ranges
   or the RFC 2606 reserved domains, aside from a short allowlist of published contact addresses and

@@ -8,5 +8,8 @@ TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_FROM=
 TURNSTILE_SECRET_KEY=
+# One-time first-System-Administrator bootstrap (SETUP.md section 3). Left blank
+# deliberately: set it only while running the bootstrap, then unset it again.
+BOOTSTRAP_SECRET=
 # Board-only AI document assistant (admin panel); leave blank to disable it locally.
 ANTHROPIC_API_KEY=

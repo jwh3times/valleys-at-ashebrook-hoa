@@ -7,6 +7,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.23] - 2026-09-09
+
+### Fixed
+
+- `.dev.vars.example` now lists `BOOTSTRAP_SECRET`, which `SETUP.md` documents and the app declares
+  but the example file omitted, so a new operator could not see that it exists.
+- Corrected a comment in `src/ambient.d.ts` claiming `CUTOVER_SHADOW` was removed at the phase-3
+  flip. It is still read on every request; removing it is phase-4 work (#212).
+- `SECURITY.md`'s automated-safeguards list named only Dependabot and CI. It now also names CodeQL,
+  secret scanning with push protection, and what the `main` ruleset actually requires — verified
+  against the live ruleset rather than described from memory.
+
+## [0.18.22]
+
 ## [0.18.22] - 2026-09-09
 
 ### Security
