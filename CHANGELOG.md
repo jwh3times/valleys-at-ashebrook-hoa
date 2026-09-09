@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.13] - 2026-09-08
+
+### Security
+
+- **Ending a Person Link can no longer strip a System Administrator's access unless the caller is
+  one.** `/api/admin/access-grants` has always held that System Administration grants may be
+  touched only by a System Administrator, but the two paths that end grants as a _consequence_ of
+  ending a link — `/api/admin/person-links` `unlink` and `/api/admin/members` `revoke` under
+  `derived` — asked only for board access, so any board admin could demote an administrator by
+  unlinking them. Both now answer `403` when the target holds a live System Administration grant
+  and the caller does not, and the same condition is repeated inside the link-ending statement's
+  `WHERE`, so a grant created between the check and the write loses the whole command with a `409`
+  rather than being ended by a caller who may not touch it. Board access is unaffected: a board
+  admin may still unlink an account that holds only board grants, their own included. The refusal
+  is checked before the last-System-Administrator invariant, so a board admin aiming at the sole
+  administrator now sees the authority refusal rather than the invariant.
+
 ## [0.18.12] - 2026-09-08
 
 ### Security
