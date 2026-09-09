@@ -253,3 +253,32 @@ describe('member meeting schema', () => {
     expect((await db.select().from(people)).length).toBe(1);
   });
 });
+
+// Migration 0031 (#237). These two indexes exist for a lookup neither table's
+// unique index can serve: both of those lead with the OCCASION column
+// (meeting_id / motion_id), so a query that knows only the lot scans. The
+// roster's transfer-effects engine runs three such queries when a Lot changes
+// hands. Asserted against the live schema rather than the Drizzle model,
+// because the migrations directory is what actually runs.
+describe('member record property-first indexes', () => {
+  async function indexNames(table: string): Promise<string[]> {
+    const rows = await env.DATABASE.prepare(
+      `SELECT name FROM pragma_index_list(?)`,
+    )
+      .bind(table)
+      .all<{ name: string }>();
+    return rows.results.map((r) => r.name);
+  }
+
+  it('indexes member_attendance by property alone', async () => {
+    expect(await indexNames('member_attendance')).toContain(
+      'member_attendance_property_id_idx',
+    );
+  });
+
+  it('indexes member_votes by property alone', async () => {
+    expect(await indexNames('member_votes')).toContain(
+      'member_votes_property_id_idx',
+    );
+  });
+});

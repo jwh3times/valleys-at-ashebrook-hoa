@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -493,6 +493,40 @@ export const GET: APIRoute = async ({ request, locals }) => {
     return Response.json(
       [...byLot].map(([lotId, persons]) => ({ lotId, persons })),
     );
+  }
+  // Every motion in the archive as one flat list, for the pickers that need to
+  // offer or resolve a motion without caring which meeting owns it (the
+  // Resolutions panel's adopting/superseding motion picker). It mirrors the
+  // `?roster=people` flat-list precedent above: the alternative the panel used
+  // to run was a client-side fan-out — the meeting list, then one detail fetch
+  // per meeting with motions — which is 1+N requests on every mount purely to
+  // populate a `<select>` (#237).
+  //
+  // `date` is carried on each row even though it belongs to the parent
+  // meeting: the picker labels every option "date — text", so returning the
+  // bare motion columns would only force the caller to fetch the meeting list
+  // as well and re-join it client-side.
+  //
+  // Ordered to match what the fan-out produced, so the picker's option order
+  // is unchanged: newest meeting first (the `fetchAdminMeetings` order), then
+  // each meeting's motions in their recorded sequence.
+  if (url.searchParams.get('motions') === 'all') {
+    const rows = await getDb(env)
+      .select({
+        id: motions.id,
+        meetingId: motions.meetingId,
+        date: meetings.date,
+        sequence: motions.sequence,
+        text: motions.text,
+      })
+      .from(motions)
+      .innerJoin(meetings, eq(meetings.id, motions.meetingId))
+      .orderBy(
+        desc(meetings.date),
+        desc(meetings.createdAt),
+        asc(motions.sequence),
+      );
+    return Response.json(rows);
   }
   const id = url.searchParams.get('id');
   if (id) {

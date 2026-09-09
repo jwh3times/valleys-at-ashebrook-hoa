@@ -6,8 +6,7 @@ import {
   adoptResolution,
   supersedeResolution,
   repealResolution,
-  fetchMeetings,
-  fetchMeeting,
+  fetchAllMotions,
 } from '../../lib/admin';
 import type {
   ResolutionDetail,
@@ -77,11 +76,12 @@ export default function ResolutionsManager() {
 
   // Flattened motion picker for the adopt/supersede transitions and for
   // resolving an already-recorded adoptedByMotionId back to something
-  // human. There is no bulk "every motion" read, so this fetches the
-  // meeting list, then — for meetings that actually have motions — their
-  // full detail, and flattens. fetchMeetings already returns newest-first
-  // (see fetchAdminMeetings), so this preserves that order without
-  // re-sorting.
+  // human. `fetchAllMotions` is the bulk archive-wide read (#237): it
+  // replaced a client-side fan-out — the meeting list, then one detail fetch
+  // per meeting with motions — that cost 1+N requests on every mount. The
+  // route returns newest-meeting-first, then each meeting's motions in
+  // sequence, which is exactly the order the fan-out produced, so this still
+  // preserves it without re-sorting.
   const [motionOptions, setMotionOptions] = useState<
     { id: string; label: string }[]
   >([]);
@@ -92,19 +92,13 @@ export default function ResolutionsManager() {
     let cancelled = false;
     async function loadMotionOptions() {
       try {
-        const meetingList = await fetchMeetings();
-        const withMotions = meetingList.filter((m) => m.motionCount > 0);
-        const details = await Promise.all(
-          withMotions.map((m) => fetchMeeting(m.id)),
-        );
+        const allMotions = await fetchAllMotions();
         if (cancelled) return;
         setMotionOptions(
-          details.flatMap((d) =>
-            d.motions.map((mo) => ({
-              id: mo.id,
-              label: `${d.date} — ${mo.text}`,
-            })),
-          ),
+          allMotions.map((mo) => ({
+            id: mo.id,
+            label: `${mo.date} — ${mo.text}`,
+          })),
         );
       } catch (err: unknown) {
         if (cancelled) return;

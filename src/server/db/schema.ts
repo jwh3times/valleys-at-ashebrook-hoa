@@ -390,6 +390,11 @@ export const memberAttendance = sqliteTable(
       t.meetingId,
       t.propertyId,
     ),
+    // The unique index above leads with `meeting_id`, so it cannot serve a
+    // lookup that knows the LOT and not the meeting. The roster's
+    // transfer-effects engine asks exactly that when a Lot changes hands
+    // (#237); added by migration 0031.
+    index('member_attendance_property_id_idx').on(t.propertyId),
   ],
 );
 
@@ -432,6 +437,10 @@ export const memberVotes = sqliteTable(
       t.motionId,
       t.propertyId,
     ),
+    // Leading with `motion_id`, the unique index cannot answer "what has this
+    // lot voted on"; the transfer-effects engine's open-motion vote reset and
+    // its backdated-action sweep both ask that (#237). Added by 0031.
+    index('member_votes_property_id_idx').on(t.propertyId),
   ],
 );
 
