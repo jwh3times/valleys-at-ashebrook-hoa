@@ -4,13 +4,16 @@ import { requireBoard } from '../../../server/authz/api-guards';
 import { getDb } from '../../../server/db/client';
 import { settings } from '../../../server/db/schema';
 import { normalizeDuesSettings } from '../../../lib/types';
+import { readJson } from '../../../server/http';
 
 export const prerender = false;
 
 export const PUT: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
-  const value = JSON.stringify(normalizeDuesSettings(await request.json()));
+  const parsed = await readJson(request);
+  if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });
+  const value = JSON.stringify(normalizeDuesSettings(parsed.value));
   const now = new Date();
   await getDb(env)
     .insert(settings)
