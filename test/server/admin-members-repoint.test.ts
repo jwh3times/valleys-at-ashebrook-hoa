@@ -2,9 +2,16 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 
+/** Flipped per test: a plain Board Access caller unless a test says otherwise. */
+const caller = vi.hoisted(() => ({ systemAdmin: false }));
+
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('board-1', 'board', []),
+  getAuthContext: async () => {
+    const ctx = legacyAuthContext('board-1', 'board', []);
+    if (caller.systemAdmin) ctx.capabilities.add('systemAdmin');
+    return ctx;
+  },
 }));
 
 import { POST } from '../../src/pages/api/admin/members';
@@ -73,6 +80,7 @@ async function setMode(value: 'legacy' | 'derived') {
 }
 
 beforeEach(async () => {
+  caller.systemAdmin = false;
   const db = getDb(env);
   for (const table of CLEAR) {
     if (table === 'audit_events') {
@@ -259,6 +267,9 @@ describe('revoke under derived', () => {
   });
 
   it('ends the Access Grants the link supported', async () => {
+    // A System Administrator caller: the target holds System Administration,
+    // and only another administrator may end that.
+    caller.systemAdmin = true;
     await setMode('derived');
     await seedPersonLink('acct-1', 'per-1');
     await getDb(env)
@@ -294,7 +305,53 @@ describe('revoke under derived', () => {
     expect(grant.endReason).toBe('person_link_ended');
   });
 
+  it('refuses a Board Access caller revoking a System Administrator', async () => {
+    await setMode('derived');
+    await seedPersonLink('acct-1', 'per-1');
+    const db = getDb(env);
+    await db.insert(accessGrants).values({
+      id: 'g-sa',
+      accountId: 'acct-1',
+      grantType: 'system_admin',
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      grantedByAccountId: 'board-1',
+      grantReason: 'technical_administration',
+    });
+    // Another administrator exists, so it is the caller's authority that
+    // refuses here, not the last-administrator invariant.
+    await db.insert(accessGrants).values({
+      id: 'g-sa-2',
+      accountId: 'board-1',
+      grantType: 'system_admin',
+      startedAt: new Date('2026-01-01T00:00:00Z'),
+      grantedByAccountId: 'board-1',
+      grantReason: 'technical_administration',
+    });
+
+    const res = await post({ action: 'revoke', userId: 'acct-1' });
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain(
+      'only a System Administrator can end it',
+    );
+
+    const [link] = await db
+      .select()
+      .from(personLinks)
+      .where(eq(personLinks.id, 'link-acct-1'));
+    expect(link.endedAt).toBeNull();
+    const [grant] = await db
+      .select()
+      .from(accessGrants)
+      .where(eq(accessGrants.id, 'g-sa'));
+    expect(grant.endedAt).toBeNull();
+    // The write-behind mirror is untouched too.
+    expect(await roleOf('acct-1')).toBe('homeowner');
+  });
+
   it('refuses when it would strip the last System Administrator', async () => {
+    // A System Administrator caller, because a Board Access caller no longer
+    // reaches this invariant — it is refused for want of authority first.
+    caller.systemAdmin = true;
     await setMode('derived');
     await seedPersonLink('acct-1', 'per-1');
     await getDb(env)

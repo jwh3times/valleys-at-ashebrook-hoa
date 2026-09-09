@@ -142,6 +142,23 @@ explicit `grant` action or `/api/admin/roles`'s `promote` under `derived` — bo
 last-System-Administrator invariant lives on exactly that one route as a mutation-boundary guard,
 never in evaluation, and a refused attempt is permanently recorded as a denied Access Event.
 
+**Only a System Administrator may end another account's System Administration**, on every path
+that can end one. `/api/admin/access-grants` `revoke` has always asked this; the two paths that
+end grants as a _consequence_ of ending a Person Link — `/api/admin/person-links` `unlink` and
+`/api/admin/members` `revoke` under `derived` — did not, so any Board Access holder could demote a
+System Administrator by unlinking them. Both now refuse with `403` when the target holds a live
+`system_admin` grant and the caller is not one, and pass
+`refuseIfTargetIsSystemAdministrator` to `endLinkStatements`, which repeats the condition inside
+the link-ending `UPDATE`'s `WHERE` so a grant created between the preflight and the batch loses
+the whole command (`409`) rather than being ended by a caller who may not touch it. Board Access
+is unaffected: a Board Access holder may still unlink an account holding only Board grants, their
+own included.
+
+This refusal comes **before** the last-System-Administrator invariant, so a Board Access caller
+aiming at the sole administrator now gets `403` (want of authority) rather than `409` (the
+invariant). Only an administrator reaches the `409`. Like the Access Grants route's own capability
+check, and unlike the invariant, the `403` is not recorded as a denied Access Event.
+
 **Grants are re-validated on every evaluation, not trusted.** `derive.ts` returns
 `invalidBoardGrantId` for a live Board grant whose qualifying term has lapsed, been cancelled, or
 been voided (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on
