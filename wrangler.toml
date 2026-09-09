@@ -3,6 +3,14 @@ main = "src/worker.ts"
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+# The site is served from exactly one origin. Both *.workers.dev routes are
+# disabled in the dashboard; these pin that off in the repo so a deploy cannot
+# quietly restore them (GHSA-jfj8-pwhw-mv7w). `workers_dev` is the production
+# route; `preview_urls` is the wildcard that would otherwise serve every uploaded
+# version against the production D1, R2, and secrets.
+workers_dev = false
+preview_urls = false
+
 # Workers Logs — makes production observable (invocation logs, console output,
 # errors) from the Cloudflare dashboard. No code change; sampling defaults to 100%.
 [observability]

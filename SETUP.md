@@ -411,8 +411,9 @@ npm run dev
 For local work against Cloudflare bindings, use Wrangler after a build so D1/R2/KV bindings and
 `.dev.vars` secrets are available.
 
-`http://localhost:4321` is a trusted auth origin. If you use a different local origin, add it to
-`trustedOrigins` in the Better Auth config.
+`http://localhost:4321` is a trusted auth origin **only when `BETTER_AUTH_URL` points at
+localhost**, so a production deployment never carries a development origin. If you use a different
+local origin, add it to `trustedOrigins` in the Better Auth config alongside the same condition.
 
 ## Day-to-Day Content Updates
 
