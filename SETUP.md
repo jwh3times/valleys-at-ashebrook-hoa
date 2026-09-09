@@ -399,8 +399,8 @@ as failed.
 ## Security Headers
 
 The Worker sets baseline security headers, including an enforced Content-Security-Policy. HSTS is
-not yet enabled by this repository; it must be enabled separately at the Cloudflare zone level after
-confirming HTTPS is stable for the production domain and any relevant subdomains.
+enabled separately at the Cloudflare zone level (not by this repository or the Worker) — currently
+`max-age=2592000` (one month), subdomains not included, preload off.
 
 ## Local Development
 

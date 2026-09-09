@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # The site is served from exactly one origin. Both *.workers.dev routes are
 # disabled in the dashboard; these pin that off in the repo so a deploy cannot
-# quietly restore them (GHSA-jfj8-pwhw-mv7w). `workers_dev` is the production
+# quietly restore them. `workers_dev` is the production
 # route; `preview_urls` is the wildcard that would otherwise serve every uploaded
 # version against the production D1, R2, and secrets.
 workers_dev = false

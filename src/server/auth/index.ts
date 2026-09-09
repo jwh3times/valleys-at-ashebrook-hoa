@@ -38,11 +38,11 @@ function createAuthUncached(
     // auth request can actually be served from, and nothing else:
     //   - the canonical apex, always;
     //   - `http://localhost:4321` only when the app is configured to run there, so
-    //     a production deployment never carries a development origin (GHSA-ppjr-3q6v-j47r).
+    //     a production deployment never carries a development origin.
     // `www` is deliberately absent: the zone 301-redirects it at the edge, so no
     // request ever completes on that host. The `workers.dev` origin is absent for
     // the same reason — the route is disabled in the dashboard and pinned off by
-    // `workers_dev`/`preview_urls` in wrangler.toml (GHSA-jfj8-pwhw-mv7w).
+    // `workers_dev`/`preview_urls` in wrangler.toml.
     trustedOrigins: trustedOriginsFor(baseURL ?? env?.BETTER_AUTH_URL),
     ...withCloudflare(
       {
