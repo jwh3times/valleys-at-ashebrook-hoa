@@ -209,14 +209,20 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   after voting closes. Admin election history exposes turnout and final aggregate results without a
   lot-to-choice link.
 - **Homeowner verification is possession-based, throttled, and answers uniformly regardless of
-  whether anything matched.** `POST /api/verify/request` takes `{ address, name, channel,
-turnstileToken }` and, once past the write freeze/session/Turnstile gates — none of which touch
-  the roster — returns the exact same `200 { ok: true, message: 'If the information matches our
-records, a code has been sent.' }` for success, an unknown address, an unmatched or ambiguous
-  name, an organization-owned lot, a shared/unattributable contact, an already-linked account or
-  Person, and every rate limit. This closes the address-existence oracle the previous
-  `queued`/`rateLimited` distinction (and its `429`) exposed; there is no longer a way to learn from
-  the response alone whether an address, a name, or a rate limit caused a given outcome.
+  whether anything matched — including in how long it takes.** `POST /api/verify/request` takes
+  `{ address, name, channel, turnstileToken }` and, once past the write freeze/session/Turnstile
+  gates — none of which touch the roster — returns the exact same `200 { ok: true, message: 'If
+the information matches our records, a code has been sent.' }` for success, an unknown address,
+  an unmatched or ambiguous name, an organization-owned lot, a shared/unattributable contact, an
+  already-linked account or Person, and every rate limit. This closes the address-existence oracle
+  the previous `queued`/`rateLimited` distinction (and its `429`) exposed; there is no longer a way
+  to learn from the response alone whether an address, a name, or a rate limit caused a given
+  outcome. The uniform body used to be paired with divergent latency — a matched name paid for a
+  Resend/Twilio send plus several KV writes before answering, an unmatched address returned after
+  a few D1 reads, and a rate-limited caller returned fastest of all — which was itself a timing
+  oracle for the same question. The rate-limit check, the roster match, and the send are now all
+  deferred to the runtime's `waitUntil` after the response is built, so every path answers at the
+  same point in the handler regardless of what it goes on to do.
   `POST /api/verify/confirm` is equally non-committal: every internal failure collapses to
   `{ ok: false, reason: 'mismatch' }` except `expired`/`locked`, which keep their own reason. Which
   backend answers is decided by `cutover_mode` (see below), which since the phase 3f flip reads
