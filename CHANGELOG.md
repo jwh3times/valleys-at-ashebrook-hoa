@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.26] - 2026-09-09
+
+### Changed
+
+- `SECURITY.md` now records why the script policy still permits inline scripts, rather than leaving
+  it as an unexplained gap: the attempt to remove it and what defeated it, that a partial version is
+  not possible, and the reasoning for accepting the residual — no injection point exists in the
+  application today, so what is forgone is insurance against a future mistake, while the control
+  that would have to be disabled to gain it is working now. Also names the two things that would
+  reopen the decision.
+
 ## [0.18.25] - 2026-09-09
 
 ### Reverted
