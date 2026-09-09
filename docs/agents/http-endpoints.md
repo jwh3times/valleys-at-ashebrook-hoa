@@ -366,7 +366,17 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   name, an organization-owned lot, a shared/unattributable contact, both already-linked
   collisions, and every rate limit) converges on the same byte-identical
   `200 { ok: true, message: 'If the information matches our records, a code has been sent.' }`;
-  there is no more `queued`/`rateLimited` distinction and no `429` on this route. Under `derived`,
+  there is no more `queued`/`rateLimited` distinction and no `429` on this route. The convergence
+  is timing-uniform as well as byte-uniform: the rate-limit check, the roster match (either
+  backend), and the send are done inside a closure handed to `locals.cfContext.waitUntil(...)`
+  rather than awaited, so the response is built and returned before any of that work runs and
+  every path costs the same regardless of what it goes on to do — see
+  `test/server/verify-request-timing.test.ts`, which proves this with a sender that never
+  resolves. `locals.cfContext` is the `ExecutionContext` under `@astrojs/cloudflare` v14; Astro v6
+  removed `locals.runtime.ctx` (its getter now throws), so reach for `cfContext`, not `runtime.ctx`,
+  anywhere a route needs to defer work past the response. A handler invoked directly, as the
+  Workers test pool does, has no `cfContext`, so the closure is awaited inline instead — existing
+  tests still observe the effects synchronously. Under `derived`,
   the matcher (`matchPersonForVerification`) resolves the claimed Lot, filters current Person
   owners (never Organizations — the join through `people` excludes them structurally), applies a
   two-tier name match (exact normalized full match; if zero, a first-and-last-token match; either
