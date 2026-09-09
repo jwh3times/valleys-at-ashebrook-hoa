@@ -318,6 +318,32 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Fonts, the Google Calendar embed, Turnstile, Web3Forms, and the Cloudflare Web Analytics beacon).
   HSTS is enabled at the Cloudflare zone level (`max-age=2592000`, one month; subdomains not
   included; preload off) — a zone-level operator setting, not a repository or Worker header.
+- **`script-src` permits `'unsafe-inline'`, and that is an accepted residual rather than an
+  oversight.** It means the policy does not mitigate injected script, which is the protection a CSP
+  mainly exists for. The rest of the policy — image, font, frame, connection, form and framing
+  sources — is unaffected and enforced.
+
+  Removing it was attempted on 2026-09-09 (v0.18.24) and reverted the same day (v0.18.25). The
+  approach was sound and the site's own scripts were all covered: Astro computes a hash for every
+  inline script it generates, and a hand-configured hash covered the one `is:inline` script on
+  `/verify-property`. What defeats it is **Cloudflare's JavaScript Detections**, which injects an
+  inline script into every HTML response at the edge, after the application has rendered and hashed
+  the page. That script embeds the per-request Ray ID, so its hash differs on every request and can
+  never be configured. Under the hashed policy the browser blocked it on every page view: no visible
+  breakage, but a console violation for every visitor and a degraded bot-detection signal.
+
+  There is no partial version. CSP Level 3 specifies that a policy containing any hash or nonce
+  source **ignores `'unsafe-inline'`**, so the two cannot coexist — it is a hashed policy or an
+  inline-permitting one.
+
+  The residual is accepted on this reasoning: the review that raised it found **no XSS sink** in the
+  application (`ReportMarkdown` builds elements rather than setting HTML, there is no `set:html` or
+  `dangerouslySetInnerHTML`, `safeHref` rejects `javascript:` and protocol-relative URLs, and dues
+  URLs are normalised to `http(s)` at entry). The protection forgone is therefore insurance against
+  a future rendering mistake, while the control that would have to be switched off to obtain it is
+  live and working today. Revisit if a component ever renders board- or resident-supplied text as
+  HTML, or if the edge injection can be given a nonce, which would remove the conflict entirely.
+
 - **The site is served from exactly one origin, and Better Auth trusts only that origin (plus a
   conditional dev exception).** `*.workers.dev` is disabled two ways: both routes (production and
   the preview wildcard) are turned off in the Cloudflare dashboard, and `wrangler.toml` pins
