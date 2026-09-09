@@ -28,3 +28,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0020: Digital Ballots Are Retained Without an Explicit Turnout-to-Choice Link](./0020-digital-ballot-box.md)
 - [ADR 0021: Authored Agent Skills Generate Tool-Specific Trees](./0021-authored-agent-skills-generate-tool-specific-trees.md)
 - [ADR 0022: A Party Roster Separates Identity, Ownership, Representation, Service, and Access](./0022-party-roster-derived-access.md)
+- [ADR 0023: Two Issue Trackers, Routed by Body, With the Board as a View](./0023-two-trackers-routed-by-body.md)

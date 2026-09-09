@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.19] - 2026-09-09
+
+### Added
+
+- **ADR 0023 records the issue-tracking model** — two trackers routed by the content of an issue's
+  body rather than its topic, the project board as a view over both with the issue itself as the
+  record, and the fixed Gate vocabulary. The rule was already followed and already written down as
+  instructions; what was missing was the reasoning, which is what makes it possible to tell whether
+  a future change respects it. `docs/agents/issue-tracker.md` remains the how-to and now points at
+  the ADR. Closes #304.
+
 ## [0.18.18] - 2026-09-09
 
 ### Security
