@@ -90,22 +90,18 @@ boolean`.
 
 `src/server/` contains:
 
-- `auth/`: Better Auth config, Resend and Twilio senders. **Better Auth cannot be upgraded past
-  1.6.x right now** — 1.7 throws `BetterAuthError("Secondary-storage rate limiting requires
-SecondaryStorage.increment.")` from `onRequestRateLimit` on every request whenever rate limiting
-  resolves to secondary storage and the adapter has no `increment`. This config enables
-  `rateLimit: { enabled: true, window: 60, max: 100 }` and passes the `KV` binding through to
-  `better-auth-cloudflare`, whose `createKVStorage` implements no `increment` — and 0.3.1 is that
-  package's latest published release, so there is no upstream fix to bump to. Verified against
-  1.7.0: 6 tests in `test/server/auth-handler.test.ts` and `test/server/admin-surface-closed.test.ts`
-  fail on 1.7.0 and pass on 1.6.29; in production this would break sign-in, sign-up, and password
-  reset, not just tests. The escape routes — supplying `rateLimit.customStorage` (checked before
-  the secondary-storage path) or wrapping the KV secondary storage with an `increment` — are each a
-  security-sensitive change to auth rate limiting and belong in their own reviewed change, not a
-  dependency bump. `.github/dependabot.yml` therefore IGNORES better-auth minor and major updates,
-  so 1.7.x is no longer re-proposed into the `npm-minor-and-patch` group (where it blocked four
-  safe bumps in #255); 1.6.x PATCHES still come through, so a fix on the current line is not
-  suppressed. Remove that ignore entry, and this note, once one of those routes is taken (#260).
+- `auth/`: Better Auth 1.7.3 config, Resend and Twilio senders. Auth rate limits use
+  D1 database storage (`rate_limits`, migration `0030`) with guarded atomic increments;
+  KV remains the secondary storage for auth data. The global limit is 100 requests
+  per 60 seconds, with Better Auth's stricter endpoint rules (3 per 10 seconds for
+  sign-in/sign-up and 3 per 60 seconds for reset/verification email requests).
+  Apply migration `0030` before deploying this configuration. The generated core
+  account/session columns are unchanged from 1.6; `auth:generate` uses the matching
+  `auth` CLI, replacing the retired `@better-auth/cli` package.
+  Verification tokens also use the existing D1 `verifications` table because the
+  KV adapter lacks 1.7's atomic `getAndDelete`. Pre-upgrade reset links held only
+  in KV must be requested again. The Cloudflare adapter's Drizzle/core peers are
+  explicitly aligned with Better Auth 1.7.3.
 - `authz/`: `context.ts` is the single seam every guard, page, and route resolves its caller
   through. `getAuthContext(request, env, associationDay)` resolves the session, then reads
   `cutover-mode.ts`'s `getCutoverMode` (the uncached `cutover_settings.cutover_mode` singleton,

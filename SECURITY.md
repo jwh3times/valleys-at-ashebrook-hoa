@@ -18,6 +18,13 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
 
 ## Security model
 
+- **Auth throttles and single-use tokens use atomic D1 operations.** Better Auth
+  checks and increments request counters through guarded database updates, and
+  consumes verification/reset tokens with `DELETE ... RETURNING`. KV remains
+  secondary auth storage but is not the authority for either atomic operation.
+  Limits apply per client IP and endpoint, including stricter sign-in and email
+  request limits; server-side `auth.api` calls bypass the HTTP rate limiter.
+
 - **Access is enforced server-side and fail-closed.** Roles are `visitor | homeowner | board`;
   content visibility tiers are `public | homeowner | board`. Anonymous users resolve to `visitor`
   and unknown states resolve to the most restrictive tier. Document downloads are tier-checked on

@@ -102,6 +102,10 @@ function createAuthUncached(
             }
           },
         },
+        // Single-use reset tokens require atomic consumption in 1.7. The KV
+        // adapter lacks getAndDelete; the existing D1 verifications table has
+        // an atomic DELETE RETURNING path through the Drizzle adapter.
+        verification: { storeInDatabase: true },
         plugins: [
           admin({
             ac,
@@ -110,10 +114,12 @@ function createAuthUncached(
             adminRoles: ['board'],
           }),
         ],
-        rateLimit: { enabled: true, window: 60, max: 100 },
+        // D1 provides atomic guarded increments across Worker instances. The KV
+        // adapter has no increment primitive required by Better Auth 1.7.
+        rateLimit: { enabled: true, window: 60, max: 100, storage: 'database' },
       },
     ),
-    // Fallback database for the no-arg `auth` export (used by @better-auth/cli only).
+    // Fallback database for the no-arg `auth` export (used by the auth CLI only).
     // In normal runtime, the database comes from withCloudflare's d1 option above.
     ...(env
       ? {}
