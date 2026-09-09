@@ -426,6 +426,11 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **Dependabot** — dependency update PRs and security alerts (`.github/dependabot.yml`).
 - **CI** — every push and PR runs format, type-check, unit tests, Worker/D1 integration tests
   (`test:server`), and build gates (`.github/workflows/build.yml`).
+- **Actions pinned to commit SHAs** — every `uses:` in `.github/workflows/` names a full commit SHA
+  with the human-readable version beside it in a comment, rather than a moving tag like `@v7`. A
+  release tag can be re-pointed at different code by whoever controls the action's repository; a
+  SHA cannot. Dependabot still proposes updates and rewrites both the SHA and the comment, so
+  pinning costs no freshness. New workflow steps must be pinned the same way.
 - **Synthetic-fixture gate** — `npm run lint:fixtures` (`scripts/check-fixture-values.ts`) fails CI
   when any phone number or email address in the tracked tree is outside the NANP fictional ranges
   or the RFC 2606 reserved domains, aside from a short allowlist of published contact addresses and

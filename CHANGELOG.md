@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.18] - 2026-09-09
+
+### Security
+
+- **Every GitHub Action is pinned to a commit SHA rather than a moving tag.** A release tag can be
+  re-pointed at different code by whoever controls the action's repository, and the next push would
+  run it — and this project's CI has repository write, since the version workflow pushes release
+  tags. Both `v7` majors resolved to exactly the releases they claimed, so nothing about what runs
+  changed; what changed is that it can no longer change without a commit here. Dependabot still
+  proposes updates and rewrites both the SHA and its version comment.
+
 ## [0.18.17] - 2026-09-09
 
 ### Security
