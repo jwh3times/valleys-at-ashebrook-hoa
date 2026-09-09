@@ -42,6 +42,26 @@ A third grouped PR failed earlier still, at `npm ci`, and is held by a second ig
   come through. Remove both entries when it does, and take the bump as its own PR with the full
   `test:server` run.
 
+## Actions are pinned to commit SHAs
+
+Every `uses:` in `.github/workflows/` names a full 40-character commit SHA, with the version it
+corresponds to in a trailing comment:
+
+```yaml
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+```
+
+A release tag is mutable — whoever controls the action's repository can re-point `v7` at different
+code, and every workflow that trusts the tag runs it on the next push. A SHA cannot be re-pointed.
+CI here has repository write (`version.yml` pushes tags) and reads no secrets it should not, but it
+runs on every PR, so the blast radius of a compromised action is the whole pipeline.
+
+Dependabot's `github-actions` ecosystem understands pinned SHAs: it proposes updates by rewriting
+both the SHA and the comment, so pinning costs nothing in freshness. **A new workflow step must be
+pinned the same way** — resolve the tag with
+`gh api repos/<owner>/<action>/git/ref/tags/<tag> --jq .object.sha` and keep the version comment
+accurate, since the comment is the only human-readable record of what the SHA is.
+
 ## Versioning
 
 The third semver segment is a **build number**: `<major>.<minor>.<build>`.
