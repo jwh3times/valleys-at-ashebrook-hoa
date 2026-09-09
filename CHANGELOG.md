@@ -7,6 +7,31 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.16] - 2026-09-09
+
+### Fixed
+
+- **A Turnstile outage no longer turns a gated form into an error page.** If Cloudflare's
+  verification endpoint was unreachable or answered with something that was not JSON, the failure
+  escaped as a `500` from routes whose contract is a `400` for a failed captcha. An unreachable
+  verifier is now treated as an unverified token, so the form says "complete it again and retry"
+  as it does for any other captcha failure. A verification response whose `success` field is not
+  the boolean `true` is also no longer accepted.
+- **Editing a document that does not exist now says so.** `PATCH /api/admin/documents` updated by
+  id without checking, and answered `204`, telling the board their change had been saved when
+  nothing was. It answers `404` instead.
+- **Malformed JSON to the site-settings and dues endpoints answers `400`, not `500`**, matching
+  every other admin route.
+
+### Security
+
+- **The AI assistant's conversation history is bounded in size, not just in turn count.** The
+  ten-turn cap limited how many turns were scanned but not how large they were, so a board caller
+  could hand the pseudonymization pass an arbitrarily large payload. History is now held to a
+  character budget spent newest-first, enforced by dropping whole turns — never by trimming inside
+  one, which could cut a resident's address or phone number in half and let the unmasked fragment
+  through.
+
 ## [0.18.15] - 2026-09-09
 
 ### Security

@@ -223,6 +223,12 @@ the information matches our records, a code has been sent.' }` for success, an u
   oracle for the same question. The rate-limit check, the roster match, and the send are now all
   deferred to the runtime's `waitUntil` after the response is built, so every path answers at the
   same point in the handler regardless of what it goes on to do.
+  Turnstile verification itself fails closed: `verifyTurnstile` (`src/server/authz/turnstile.ts`)
+  treats a siteverify network failure or a non-JSON reply as an unverified token rather than
+  throwing, and requires the response's `success` field to be the literal boolean `true`. A
+  Cloudflare-side Turnstile outage therefore denies the captcha (the caller sees the same `400`
+  as a genuinely failed challenge) instead of a request being let through as unverified, or the
+  route throwing a `500`.
   `POST /api/verify/confirm` is equally non-committal: every internal failure collapses to
   `{ ok: false, reason: 'mismatch' }` except `expired`/`locked`, which keep their own reason. Which
   backend answers is decided by `cutover_mode` (see below), which since the phase 3f flip reads
@@ -324,8 +330,14 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **The admin document assistant is board-only and pseudonymizes known PII before it leaves the
   Worker.** `POST /api/admin/assistant` is gated by `requireBoard` (fail-closed, same as every other
   admin endpoint). Answering a question sends retrieved document excerpts, the question, and recent
-  chat history to Anthropic; before any of that text is transmitted, every roster name, contact
-  value, and Lot address is swapped for a realistic, consistent placeholder — including each individual
+  chat history to Anthropic; the question is capped at `INPUT_LIMITS.assistantQuestion`, and
+  history is capped both to the last 10 turns and to a total budget of ten times that same
+  per-question limit across every kept turn, spent newest-first. That budget is enforced by
+  dropping an oversized turn WHOLE rather than trimming it: a per-turn character cap could shear a
+  roster value in half, and the surviving fragment would no longer match anything in the
+  pseudonymizer's dictionary, letting an unmasked head reach Anthropic. Before any of that text is
+  transmitted, every roster name, contact value, and Lot address is swapped for a realistic,
+  consistent placeholder — including each individual
   name token (so a resident's standalone first name or surname is also replaced, not just their full
   name) — except tokens that are common English words, which are left intact so ordinary document
   text is not garbled — and any email address found anywhere in the text is pseudonymized the same
