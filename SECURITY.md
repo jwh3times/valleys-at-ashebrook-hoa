@@ -288,8 +288,18 @@ records, a code has been sent.' }` for success, an unknown address, an unmatched
 nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy that allowlists only the third-party resources the site uses (Google
   Fonts, the Google Calendar embed, Turnstile, Web3Forms, and the Cloudflare Web Analytics beacon).
-  HSTS is not enabled by the Worker or repository yet; it remains a Cloudflare zone-level operator
-  action.
+  HSTS is enabled at the Cloudflare zone level (`max-age=2592000`, one month; subdomains not
+  included; preload off) — a zone-level operator setting, not a repository or Worker header.
+- **The site is served from exactly one origin, and Better Auth trusts only that origin (plus a
+  conditional dev exception).** `*.workers.dev` is disabled two ways: both routes (production and
+  the preview wildcard) are turned off in the Cloudflare dashboard, and `wrangler.toml` pins
+  `workers_dev = false` / `preview_urls = false` so a deploy cannot quietly restore them.
+  `www.ashebrookresidents.com` is a proxied CNAME that 301-redirects to the
+  apex at the edge, preserving path and query, rather than serving the app directly. Better Auth's
+  `trustedOrigins` (`src/server/auth/index.ts`) matches that reality: it always trusts the apex,
+  and trusts `http://localhost:4321` only when the resolved base URL starts with
+  `http://localhost`, so a production deployment — which always sets `BETTER_AUTH_URL` — never
+  carries a development origin.
 - **Document files are constrained on upload and download.** Uploads are limited to an extension
   allowlist with a server-derived canonical content type and a size cap (HTML and SVG are excluded
   as stored-XSS vectors; disallowed types are rejected with `415`). Downloads are sent with
