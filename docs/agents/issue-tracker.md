@@ -2,6 +2,10 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
+The decisions behind the arrangement below — two trackers routed by body, the board as a view, and
+the Gate vocabulary — are recorded in
+[ADR 0023](../adr/0023-two-trackers-routed-by-body.md). This file is the how-to.
+
 ## Which repository an issue goes in
 
 Two trackers, and the choice is decided by **the content of the body**, never by the topic.
