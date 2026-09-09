@@ -7,6 +7,33 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.22] - 2026-09-09
+
+### Security
+
+- **Forced `sharp` to the patched 0.35.4 through the existing miniflare override**, closing the last
+  open Dependabot alert (a high-severity libheif issue). Dependabot could not fix this one itself:
+  every Cloudflare tool in the tree — the Vite plugin, the Workers test pool, and wrangler — pins
+  miniflare to an exact `sharp` version, so the available update path kept resolving backwards. The
+  override that already existed for this dependency was simply pointing at what used to be the safe
+  version. The Workers/D1 suite, the unit suite, the build, and the deploy dry-run all pass on
+  0.35.4.
+
+## [0.18.21] - 2026-09-09
+
+### Security
+
+- Bumped `js-yaml` from 4.3.1 to 4.3.2, fixing a high-severity advisory where `maxTotalMergeKeys`
+  did not bound CPU use for empty merge sources (#327).
+
+## [0.18.20] - 2026-09-09
+
+### Security
+
+- Bumped `svgo` from 4.0.2 to 4.1.0, fixing two advisories in its `removeScripts` plugin — one high
+  (executable links passed through namespace and content handling) and one moderate (incomplete
+  sanitization of executable HTML in SVG `foreignObject`) (#326).
+
 ## [0.18.19] - 2026-09-09
 
 ### Added
