@@ -15,10 +15,19 @@ function sseFrame(event: string, data: unknown): Uint8Array {
   );
 }
 
+/**
+ * How much raw history the pseudonymizer will be asked to scan, across all
+ * turns. Ten times the per-question limit is far more than a real conversation
+ * carries and still bounds the regex pass, which a board caller could otherwise
+ * hand megabytes: the ten-turn cap alone limits the COUNT of turns, not their
+ * size.
+ */
+const HISTORY_CHAR_BUDGET = INPUT_LIMITS.assistantQuestion * 10;
+
 function parseHistory(body: unknown): Turn[] {
   const raw = (body as { history?: unknown } | null)?.history;
   if (!Array.isArray(raw)) return [];
-  return raw
+  const turns = raw
     .slice(-10)
     .map((t) => {
       const role = (t as { role?: unknown })?.role;
@@ -35,6 +44,21 @@ function parseHistory(body: unknown): Turn[] {
       return null;
     })
     .filter((t): t is Turn => t !== null);
+
+  // The budget is spent newest-first and enforced by dropping WHOLE turns, for
+  // the same reason the map above does not slice: truncating inside a turn
+  // could cut a phone number or an address in half, and the surviving fragment
+  // would sail past a pseudonymizer that no longer recognizes it. An oversized
+  // single turn is dropped rather than trimmed.
+  const kept: Turn[] = [];
+  let budget = HISTORY_CHAR_BUDGET;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i];
+    if (turn.content.length > budget) continue;
+    budget -= turn.content.length;
+    kept.unshift(turn);
+  }
+  return kept;
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
