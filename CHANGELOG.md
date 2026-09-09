@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-09
+
+### Fixed
+
+- The end-session skill locates this project's memory from the active harness or
+  existing local directories on Windows and Linux, then reads the memory index
+  before updating a file. It no longer assumes one workstation's path or filenames
+  (#317).
+
 ## [1.0.0] - 2026-09-09
 
 ### Changed
