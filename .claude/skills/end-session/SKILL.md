@@ -56,16 +56,20 @@ of the skill works that list.
 
 ### 2. Update memory
 
-Memory lives outside the repo, in this project's memory directory
-(`~/.claude/projects/C--Users-jerry-OneDrive-Documents-VSCodeProjects-valleys-at-ashebrook-hoa/memory/`),
-one fact per file with `name` / `description` / `metadata.type` (`user`, `feedback`, `project`,
-`reference`) frontmatter, indexed by a one-line pointer in `MEMORY.md`.
+Locate the project's memory directory from the active harness's session instructions first.
+For Claude Code, if no directory is supplied, list existing candidates with
+`ls -d ~/.claude/projects/*ashebrook*/memory/` in Bash or
+`Get-Item -Path ~/.claude/projects/*ashebrook*/memory/` in PowerShell.
+The directory is machine-local and keyed by checkout path; a worktree may use the main
+checkout's memory. Confirm the candidate belongs to this project from its `MEMORY.md` and
+session context before writing. If several candidates remain ambiguous, ask which one to use
+and continue the other lanes; if none exists, report memory unavailable and continue.
 
-- **Prefer updating an existing file to creating a new one.** This repo's long-running memories are
-  the usual landing spots: `adr0022-migration-program.md` (migration phase state — the flip is
-  executed, phase 4 / #212 is what remains), `workers-scripts-windows-traps.md` (D1, Wrangler,
-  Windows, and Vitest traps), `changelog-per-release-tag.md`, `main-branch-protection-ruleset.md`,
-  `codex-vs-claude-agent-asset-paths.md`, `subagent-model-preference.md`.
+Read `MEMORY.md` first, then follow its pointers to the relevant existing files. Preserve the
+directory's established file format and add an index pointer when creating a new memory.
+
+- **Prefer updating an existing file to creating a new one.** Choose the landing spot from
+  the index and file contents on this machine. Keep each machine's memory independent.
 - **Don't save what the repo already records.** `AGENTS.md`, `CONTEXT.md`, `docs/adr/`, the
   changelog, and git history are already durable — this repo's `AGENTS.md` in particular is
   extremely detailed. Memory is for what _isn't_ written down: a trap that cost an hour, a
