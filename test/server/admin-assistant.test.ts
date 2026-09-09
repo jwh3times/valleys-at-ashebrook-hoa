@@ -449,4 +449,32 @@ describe('POST /api/admin/assistant', () => {
     const payload = JSON.stringify(captured.params);
     expect(payload).not.toContain('123 Ashe');
   });
+
+  it('drops an oversized history turn whole rather than trimming it', async () => {
+    // The ten-turn cap bounds how MANY turns are scanned, not how big they are,
+    // so a board caller could hand the pseudonymizer's regex pass megabytes.
+    // The budget (ten times the per-question limit, across all turns) is spent
+    // newest-first and enforced by dropping whole turns — trimming inside one
+    // would shear a roster value and leak the unmasked head, which is exactly
+    // what the test above forbids.
+    const oversized = `OVERSIZED-MARKER ${'y'.repeat(30_000)}`;
+    const res = await POST({
+      request: new Request('http://localhost/api/admin/assistant', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          question: 'and now?',
+          history: [
+            { role: 'user', content: oversized },
+            { role: 'user', content: 'KEPT-MARKER a short recent turn' },
+          ],
+        }),
+      }),
+    } as never);
+    await res.text();
+    const payload = JSON.stringify(captured.params);
+    expect(payload).toContain('KEPT-MARKER');
+    expect(payload).not.toContain('OVERSIZED-MARKER');
+    expect(payload).not.toContain('yyyy');
+  });
 });

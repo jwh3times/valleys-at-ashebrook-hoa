@@ -236,7 +236,15 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       return new Response('Invalid visibility', { status: 400 });
     patch.visibility = v;
   }
-  await getDb(env).update(documents).set(patch).where(eq(documents.id, id));
+  // Answer 404 for an id that is not there rather than 204: a silent success
+  // for a document that does not exist tells the caller their edit landed.
+  const updated = await getDb(env)
+    .update(documents)
+    .set(patch)
+    .where(eq(documents.id, id))
+    .returning({ id: documents.id });
+  if (updated.length === 0)
+    return new Response('Document not found', { status: 404 });
   return new Response(null, { status: 204 });
 };
 
