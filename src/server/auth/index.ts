@@ -12,6 +12,20 @@ import { ac, visitor, homeowner, board } from './permissions';
 import { sendEmail } from './senders';
 import { SITE_NAME } from '../../lib/site';
 
+// Which origins may make state-changing auth requests, given the origin this
+// deployment is actually served from. localhost is trusted only when the app is
+// configured to run there, and production sets BETTER_AUTH_URL in wrangler.toml's
+// [vars], so a production deployment never carries a development origin. With no
+// base URL configured at all, Better Auth infers one from the request and trusts
+// it — this list is an addition to that, not a replacement for it.
+function trustedOriginsFor(baseURL: string | undefined): string[] {
+  const origins = ['https://ashebrookresidents.com'];
+  if (baseURL?.startsWith('http://localhost')) {
+    origins.push('http://localhost:4321');
+  }
+  return origins;
+}
+
 function createAuthUncached(
   env?: Env,
   cf?: IncomingRequestCfProperties,
@@ -20,18 +34,16 @@ function createAuthUncached(
   return betterAuth({
     baseURL: baseURL ?? env?.BETTER_AUTH_URL,
     secret: env?.BETTER_AUTH_SECRET,
-    // Origins allowed to make auth requests. baseURL is trusted automatically;
-    // list the custom domain (apex + www) and the workers.dev fallback explicitly
-    // so sign-up/sign-in work no matter which host a visitor lands on. The
-    // localhost dev origin is included so sign-in works under `npm run dev`
-    // (baseURL is the production URL there); it's harmless in production since a
-    // browser only sends that Origin from a page actually served at localhost.
-    trustedOrigins: [
-      'https://ashebrookresidents.com',
-      'https://www.ashebrookresidents.com',
-      'https://valleys-at-ashebrook-hoa.jerryholland00.workers.dev',
-      'http://localhost:4321',
-    ],
+    // Origins allowed to make auth requests. The list carries exactly the hosts an
+    // auth request can actually be served from, and nothing else:
+    //   - the canonical apex, always;
+    //   - `http://localhost:4321` only when the app is configured to run there, so
+    //     a production deployment never carries a development origin (GHSA-ppjr-3q6v-j47r).
+    // `www` is deliberately absent: the zone 301-redirects it at the edge, so no
+    // request ever completes on that host. The `workers.dev` origin is absent for
+    // the same reason — the route is disabled in the dashboard and pinned off by
+    // `workers_dev`/`preview_urls` in wrangler.toml (GHSA-jfj8-pwhw-mv7w).
+    trustedOrigins: trustedOriginsFor(baseURL ?? env?.BETTER_AUTH_URL),
     ...withCloudflare(
       {
         autoDetectIpAddress: true,
