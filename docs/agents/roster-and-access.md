@@ -63,8 +63,11 @@ flip and retained after phase 4. It reads the uncached `cutover_settings.write_f
 **fail-closed**: a read error or an active freeze answers `503`, while an absent row is the normal
 un-frozen state rather than an error.
 
-Coverage is **deny-by-default and path-derived**. `freezePolicyFor(path)` is the single authority
-both enforcement layers consult:
+Coverage is **deny-by-default and path-derived**. `freezePolicyFor(path)` first normalizes the
+path through `routedPathname` (`src/server/authz/request-path.ts`) — Astro decodes a pathname
+repeatedly, up to 10 times, before matching a route, so an encoded namespace like
+`/api/%6dember/proxies` would otherwise classify as `mutations` while still routing to the frozen
+`everything`-class handler — then is the single authority both enforcement layers consult:
 
 | Policy       | Paths                                                                  |
 | ------------ | ---------------------------------------------------------------------- |
