@@ -2,6 +2,13 @@ import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
 import { useLoginForm } from './useLoginForm';
 
+/**
+ * One answer for every sign-up outcome. Better Auth returns
+ * `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL` (422) for a taken address, and
+ * echoing it told an anonymous visitor which neighbours have accounts here.
+ */
+const SIGN_UP_RESULT = 'Check your email to verify your account, then sign in.';
+
 export function RegisterForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -10,11 +17,19 @@ export function RegisterForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const { error } = await authClient.signUp.email({ email, password, name });
-    setMsg(
-      error
-        ? (error.message ?? 'Error')
-        : 'Check your email to verify your account, then sign in.',
-    );
+    // An existing UNVERIFIED account gets a fresh verification link, so the
+    // one message above is true for the person it most often belongs to: the
+    // neighbour who registered, never clicked the link, and is trying again.
+    // Fired and ignored — its outcome must not reach the page either.
+    if (error) {
+      try {
+        await authClient.sendVerificationEmail({ email, callbackURL: '/' });
+      } catch {
+        // Deliberately empty: an already-verified account, an unknown address,
+        // and a send failure must all look the same from here.
+      }
+    }
+    setMsg(SIGN_UP_RESULT);
   }
   return (
     <form onSubmit={onSubmit}>
