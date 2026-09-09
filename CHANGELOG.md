@@ -7,6 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.17] - 2026-09-09
+
+### Security
+
+- **Sign-in and sign-up no longer reveal whether an email address has an account here.** Better
+  Auth answers differently for a taken address, an existing-but-unverified account, and a wrong
+  password, and both forms passed those messages straight through — so anyone could type a
+  neighbour's address and learn whether they are a member of this site. Every sign-in failure now
+  shows the same wording, and so does every sign-up outcome. The admin sign-in page was already
+  written to be uniform, but the server's message was overriding its copy; it no longer can.
+- Signing up with an address that already exists but has never been confirmed now quietly sends a
+  fresh verification link, so the unchanged "check your email" message is true for the person it
+  most often belongs to — someone who registered, missed the email, and tried again. Whether that
+  resend succeeds is never shown, because that would reopen the same question from the other side.
+
 ## [0.18.16] - 2026-09-09
 
 ### Fixed
