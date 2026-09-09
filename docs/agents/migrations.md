@@ -51,6 +51,11 @@ refusal; `MIGRATE_ALLOW_BEHIND=1` is the documented override.
 
 ## Deployment ordering
 
+Migration `0030` adds Better Auth's `rate_limits` table. Apply it **before**
+deploying #316's database limiter: the previous version ignores the new table,
+but the new auth handler requires it. Rollback can restore the previous code
+while leaving this additive table in place.
+
 The default rule is **safe in either order**: merged code can run ahead of the production schema
 for days, so a schema change and the code that depends on it must both work against either shape.
 That is the whole reason ADR 0022 phase 1 is behaviorally inert. Schema parity is also a
@@ -78,7 +83,7 @@ the next of this kind.
 ## The ledger
 
 One line per migration. The files themselves are the detail; this table exists so you can find
-which migration introduced a shape without reading all thirty.
+which migration introduced a shape without reading every file.
 
 | #             | What it did                                                                                                                                                |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -105,6 +110,7 @@ which migration introduced a shape without reading all thirty.
 | `0021`        | `cutover_settings` (the `cutover_mode`/`write_freeze` singletons) and `cutover_shadow_mismatches`.                                                         |
 | `0022`        | `properties.retired_day`/`retired_at`. **The one non-idempotent file** — SQLite has no `ADD COLUMN IF NOT EXISTS`, so it is isolated to its own migration. |
 | `0023`        | Eight ADR 0022 views, every statement `CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run.                                                          |
+| `0030`        | Adds `rate_limits` for Better Auth's atomic D1 throttles; apply before deploying the dependent auth handler (#316).                                        |
 
 ### `0024`-`0029`: the table-rebuild migrations
 
@@ -144,7 +150,7 @@ are full-replacement corrections, so a flag must survive the referenced record's
 source event intact rather than freezing that record in place.
 
 `0028` and `0029` are #248, the ADR 0022 phase 4 precondition, and they are the two migrations
-that break the safe-in-either-order rule — see [Deployment ordering](#deployment-ordering) above.
+that rename roster columns — see [Deployment ordering](#deployment-ordering) above.
 `0028` repoints five FK columns off the legacy `board_people` onto `people(party_id)` and drops
 the parallel `motions.mover_owner_id`/`second_owner_id` pair outright, since nothing ever wrote
 it. `0029` does the same for the `owners` half, rebuilding `member_attendance`, `member_votes`,
