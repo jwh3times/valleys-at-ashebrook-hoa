@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { routedPathname } from './request-path';
 import { getDb } from '../db/client';
 import { cutoverSettings } from '../db/cutover-schema';
 
@@ -79,7 +80,11 @@ const FROZEN_ENTIRELY = ['/api/member', '/api/vote'];
  * setting) — but if an Astro form action ever lands, it is frozen by default
  * rather than by amendment.
  */
-export function freezePolicyFor(path: string): FreezePolicy {
+export function freezePolicyFor(rawPath: string): FreezePolicy {
+  // Classify what Astro will route, not what the URL says: an encoded
+  // `/api/%6dember/proxies` would otherwise be `mutations`-class and keep
+  // member reads live through a freeze that SECURITY.md says stops them.
+  const path = routedPathname(rawPath);
   for (const { base } of ALWAYS_LIVE) if (isUnder(path, base)) return 'exempt';
   for (const base of FROZEN_ENTIRELY)
     if (isUnder(path, base)) return 'everything';
