@@ -7,6 +7,7 @@ import {
 } from '../../../server/authz/api-guards';
 import { getCutoverMode } from '../../../server/authz/cutover-mode';
 import { readJson } from '../../../server/http';
+import type { AuthContext } from '../../../server/authz/guards';
 import { getDb } from '../../../server/db/client';
 import {
   manualApprovalQueue,
@@ -43,15 +44,38 @@ const BOARD_MEMBER_REFUSAL =
  * property links ride along as WRITE-BEHIND MIRRORS in that same batch, never
  * read as authorization facts.
  */
+/**
+ * Only a System Administrator may end another account's System Administration.
+ * `revokeDerived` ends every grant the link supports, so without this a Board
+ * Access holder could demote an administrator here that the Access Grants
+ * route would have refused them.
+ */
+const SYSTEM_ADMIN_REFUSAL =
+  'This account holds System Administration — only a System Administrator can end it, on the Access panel.';
+
 async function revokeDerived(
   accountId: string,
-  actorAccountId: string,
+  ctx: AuthContext,
 ): Promise<Response> {
+  const actorAccountId = ctx.userId;
   // The same refusal as the legacy branch's, asked of the model that answers:
   // board access is ended on the board handoff surface, not here.
   const boardGrants = await liveGrantIdsFor(env.DATABASE, accountId, 'board');
   if (boardGrants.length > 0)
     return new Response(BOARD_MEMBER_REFUSAL, { status: 409 });
+
+  // A pure System Administration holder passes the board check above, so this
+  // is the only thing standing between a Board Access caller and ending it.
+  const callerIsSystemAdmin = ctx.capabilities.has('systemAdmin');
+  if (!callerIsSystemAdmin) {
+    const adminGrants = await liveGrantIdsFor(
+      env.DATABASE,
+      accountId,
+      'system_admin',
+    );
+    if (adminGrants.length > 0)
+      return new Response(SYSTEM_ADMIN_REFUSAL, { status: 403 });
+  }
 
   const link = await currentPersonLinkFor(env.DATABASE, accountId);
   if (!link)
@@ -85,6 +109,7 @@ async function revokeDerived(
     endReason: 'no_longer_qualifies',
     nowMs,
     operationKey: operationKey('members', 'revoke'),
+    refuseIfTargetIsSystemAdministrator: !callerIsSystemAdmin,
   });
   const ended = endedLinkGuard(link.id, nowMs);
   const mirrorRole = env.DATABASE.prepare(
@@ -120,6 +145,15 @@ async function revokeDerived(
       })
     )
       return new Response('Cannot revoke the last System Administrator', {
+        status: 409,
+      });
+    if (
+      !callerIsSystemAdmin &&
+      (await liveGrantIdsFor(env.DATABASE, accountId, 'system_admin')).length >
+        0
+    )
+      // Granted System Administration between the preflight and the batch.
+      return new Response('Access changed concurrently — try again', {
         status: 409,
       });
     return new Response('Revocation conflicts with the current state', {
@@ -176,7 +210,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       // only writes.
       const ctx = await resolveAuthContext(locals, request, env);
       if (!ctx) return new Response('Unauthorized', { status: 401 });
-      return revokeDerived(body.userId, ctx.userId);
+      return revokeDerived(body.userId, ctx);
     }
     // Legacy branch: users.role IS the authoritative store here, so reading
     // it to refuse is the pre-3e behavior, kept bit-for-bit.

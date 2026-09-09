@@ -21,13 +21,22 @@ import { GET, POST } from '../../src/pages/api/admin/person-links';
  * and every Access Grant it currently supports in one batch.
  */
 
-vi.mock('../../src/server/authz/context', async (importActual) => ({
-  ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
-}));
+/** Flipped per test: the caller is a plain Board Access holder unless a test
+ * says otherwise, because that is the caller the surface normally sees. */
+const caller = vi.hoisted(() => ({ systemAdmin: false }));
+
+vi.mock('../../src/server/authz/context', async (importActual) => {
+  const actual =
+    await importActual<typeof import('../../src/server/authz/context')>();
+  return {
+    ...actual,
+    getAuthContext: async () => {
+      const ctx = actual.legacyAuthContext('board-1', 'board', []);
+      if (caller.systemAdmin) ctx.capabilities.add('systemAdmin');
+      return ctx;
+    },
+  };
+});
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -54,6 +63,7 @@ const CLEAR = [
 ];
 
 beforeEach(async () => {
+  caller.systemAdmin = false;
   const db = getDb(env);
   for (const table of CLEAR) {
     if (table === 'audit_events') {
@@ -345,6 +355,9 @@ describe('manualVerify', () => {
 
 describe('unlink', () => {
   it('ends the link and every current grant in one batch', async () => {
+    // A System Administrator caller: the target holds System Administration,
+    // and only another administrator may end that.
+    caller.systemAdmin = true;
     await seedPerson('per-1');
     await seedLink('acct-1', 'per-1');
     await seedTerm('term-1', 'per-1');
@@ -403,7 +416,60 @@ describe('unlink', () => {
     ).toEqual([]);
   });
 
+  it('refuses a Board Access caller unlinking a System Administrator', async () => {
+    await seedPerson('per-1');
+    await seedLink('acct-1', 'per-1');
+    await seedGrant('g-sa', 'acct-1', 'system_admin');
+    // Another administrator exists, so the last-administrator guard is NOT
+    // what refuses here — the caller's own authority is.
+    await seedGrant('g-sa-other', 'sa-1', 'system_admin');
+
+    const res = await POST(
+      req({
+        action: 'unlink',
+        linkId: 'link-acct-1',
+        endReason: 'recorded_in_error',
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.text()).toBe(
+      'This account holds System Administration — only a System Administrator can end it, on the Access panel.',
+    );
+
+    const db = getDb(env);
+    const [link] = await db
+      .select()
+      .from(personLinks)
+      .where(eq(personLinks.id, 'link-acct-1'));
+    expect(link.endedAt).toBeNull();
+    const [grant] = await db
+      .select()
+      .from(accessGrants)
+      .where(eq(accessGrants.id, 'g-sa'));
+    expect(grant.endedAt).toBeNull();
+  });
+
+  it('lets a Board Access caller unlink an account holding only Board Access', async () => {
+    await seedPerson('per-1');
+    await seedLink('acct-1', 'per-1');
+    await seedTerm('term-1', 'per-1');
+    await seedGrant('g-board', 'acct-1', 'board', 'term-1');
+
+    const res = await POST(
+      req({
+        action: 'unlink',
+        linkId: 'link-acct-1',
+        endReason: 'recorded_in_error',
+      }),
+    );
+    expect(res.status).toBe(204);
+  });
+
   it('refuses to unlink the last System Administrator', async () => {
+    // A System Administrator caller, because that is now the only caller who
+    // gets this far: a Board Access caller is refused for want of authority
+    // (403) before the last-administrator invariant (409) is ever consulted.
+    caller.systemAdmin = true;
     await seedPerson('per-1');
     await seedLink('sa-1', 'per-1');
     await seedGrant('g-sa', 'sa-1', 'system_admin');

@@ -183,6 +183,16 @@ export interface EndLinkOptions {
   endReason: PersonLinkEndReason;
   nowMs: number;
   operationKey: string;
+  /**
+   * Refuse the WHOLE command if the target account holds a live
+   * `system_admin` grant. Set by callers who are not themselves a System
+   * Administrator: their route has already refused on a preflight read, and
+   * this closes the race where the target is granted System Administration
+   * between that read and the batch. A System Administrator caller leaves it
+   * unset, because ending another administrator's grants is their prerogative
+   * (the last-administrator guard still applies to everyone).
+   */
+  refuseIfTargetIsSystemAdministrator?: boolean;
 }
 
 /**
@@ -195,6 +205,11 @@ export interface EndLinkOptions {
  * also hold), because reporting success while silently keeping the account's
  * System Administration a moment longer than every other consequence would
  * be a worse lie than refusing outright.
+ *
+ * `refuseIfTargetIsSystemAdministrator` adds a second refusal in the same
+ * WHERE for callers who are not System Administrators: they may not end
+ * another account's System Administration here any more than they may on the
+ * Access Grants route.
  *
  * `statements[0]` (the `person_links` UPDATE) is the command's success
  * marker: `results[0].meta.changes === 1` decides success. Reads the
@@ -215,6 +230,7 @@ export async function endLinkStatements(
     endReason,
     nowMs,
     operationKey,
+    refuseIfTargetIsSystemAdministrator = false,
   } = opts;
 
   const currentGrants = await database
@@ -231,13 +247,28 @@ export async function endLinkStatements(
       AND NOT EXISTS (SELECT 1 FROM access_grants WHERE grant_type = 'system_admin' AND ended_at IS NULL AND account_id <> ?)
     )`;
 
+  // Only a System Administrator may end another's System Administration
+  // (`src/pages/api/admin/access-grants.ts` states the rule; this is the same
+  // rule reaching the paths that end grants as a consequence of ending a link).
+  const notSystemAdminGuard = refuseIfTargetIsSystemAdministrator
+    ? `AND NOT EXISTS (SELECT 1 FROM access_grants WHERE account_id = ? AND grant_type = 'system_admin' AND ended_at IS NULL)`
+    : '';
+
   const primary = database
     .prepare(
       `UPDATE person_links
        SET ended_at = ?, ended_by_account_id = ?, end_reason = ?
-       WHERE id = ? AND ended_at IS NULL AND ${lastAdminGuard}`,
+       WHERE id = ? AND ended_at IS NULL AND ${lastAdminGuard} ${notSystemAdminGuard}`,
     )
-    .bind(nowMs, actorAccountId, endReason, linkId, accountId, accountId);
+    .bind(
+      nowMs,
+      actorAccountId,
+      endReason,
+      linkId,
+      accountId,
+      accountId,
+      ...(refuseIfTargetIsSystemAdministrator ? [accountId] : []),
+    );
 
   const linkGuard = endedLinkGuard(linkId, nowMs);
 
