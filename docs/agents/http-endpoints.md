@@ -19,6 +19,13 @@ Two rules govern this whole surface and are stated once here rather than repeate
 - **Re-check at the mutation boundary.** A passed preflight grants nothing. Visibility, authority,
   frozen eligibility, open state, feature flags, and duplicate exclusion are all repeated inside
   the mutation SQL, so a race returns `409` rather than a partial write.
+- **A malformed JSON body answers `400`, never `500`.** Every route that reads a JSON body does so
+  through `readJson` (`src/server/http.ts`), which turns a `request.json()` parse failure into
+  `{ ok: false }` instead of a thrown rejection, so the handler answers a readable `400` rather
+  than letting the exception fall through to the runtime's generic `500`. `/api/admin/site` and
+  `/api/admin/dues` were the last two board-write routes parsing the body directly and are now on
+  `readJson` too (the 2026-09-04 L5 route-hygiene review); a new route that reads a body should
+  use it from the start rather than reintroduce the gap.
 
 ## Routes
 
@@ -62,7 +69,10 @@ API routes live under `src/pages/api/`:
   `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
   and stores `content_hash` on success; a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
-  duplicate group resurfaces for review.
+  duplicate group resurfaces for review. `PATCH /api/admin/documents` answers `404 "Document not
+found"` for an id that does not match any row — the update uses `.returning({ id })` and checks
+  the result rather than trusting an unconditional `UPDATE` to have matched anything, so an unknown
+  id can no longer read back as the same silent `204` a real edit gets.
 - Board-only meeting record (board and member meetings — proxies recorded by the board or granted
   online by a homeowner attach to member attendance/votes and election ballots):
   `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`.
@@ -371,7 +381,12 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   name, an organization-owned lot, a shared/unattributable contact, both already-linked
   collisions, and every rate limit) converges on the same byte-identical
   `200 { ok: true, message: 'If the information matches our records, a code has been sent.' }`;
-  there is no more `queued`/`rateLimited` distinction and no `429` on this route. The convergence
+  there is no more `queued`/`rateLimited` distinction and no `429` on this route. The Turnstile gate
+  itself fails closed rather than throwing: `verifyTurnstile` (`src/server/authz/turnstile.ts`)
+  treats a siteverify network failure or a non-JSON response as an unverified token instead of
+  letting the exception surface, and requires `data.success === true` rather than returning the
+  field verbatim, so a Cloudflare-side outage or a malformed/non-boolean upstream response answers
+  the route's ordinary bad-captcha `400` instead of a `500`. The convergence
   is timing-uniform as well as byte-uniform: the rate-limit check, the roster match (either
   backend), and the send are done inside a closure handed to `locals.cfContext.waitUntil(...)`
   rather than awaited, so the response is built and returned before any of that work runs and
