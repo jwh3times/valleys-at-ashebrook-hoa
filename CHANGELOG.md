@@ -7,6 +7,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-09
+
 ### Changed
 
 - Upgrade Better Auth to 1.7.3 and move auth throttling to atomic D1 counters,
@@ -39,6 +41,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   which is a bad trade for the protection gained. Adding `'unsafe-inline'` back alongside the hashes
   is not an option — browsers ignore it whenever a hash is present — so the policy returns to its
   previous form until the injection is turned off at the edge.
+
+## [0.18.24] - 2026-09-09
+
+### Security
+
+- Moved page Content-Security-Policy generation to Astro to authorize inline scripts
+  by hash, with a restrictive fallback for non-page responses. This change was
+  reverted in 0.18.25 after production verification found a conflict with
+  Cloudflare's injected JavaScript Detections probe.
 
 ## [0.18.23] - 2026-09-09
 

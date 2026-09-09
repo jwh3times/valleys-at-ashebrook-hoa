@@ -13,6 +13,9 @@ Cloudflare:
 - **KV** — session/rate-limit storage required by the Cloudflare adapter and verification flow
 - **Better Auth** — email/password accounts and roles
 
+Better Auth HTTP throttles and single-use password-reset tokens use D1. KV still supports
+auth sessions and the separate homeowner-verification rate limits.
+
 External services are optional but expected in production: an email provider such as Resend,
 Twilio for SMS verification codes, Cloudflare Turnstile, a public Google Calendar, and Web3Forms
 for the contact form.
@@ -134,8 +137,18 @@ that ordering breaks the admin meeting-record people picker and the candidate-li
 `0028`, and the member attendance, member vote, ballot, and proxy surfaces for `0029`, until the
 migration runs.
 
-**Pull `main` before you apply.** `wrangler d1 migrations apply` reads migrations from your LOCAL
-disk, so a checkout that predates the merge has nothing to offer and reports:
+**Migration `0030` must run before deploying Better Auth 1.7.3.** It adds the `rate_limits`
+table required by the auth handler. Apply it with `npm run db:migrate:remote` from the current
+release branch before merging, since a merge triggers Workers Builds. The previous application
+can run with the added table; rolling back the application can leave the table in place.
+Password-reset links issued into KV before this upgrade must be requested again because new
+reset tokens are stored and consumed in D1. Existing sessions are unchanged.
+
+**Use a current checkout before you apply.** For already-merged migrations, pull `main` first.
+For a required pre-merge migration such as `0030`, stay on the release branch, fetch `origin/main`,
+and ensure the branch contains its latest changes as well as the pending migration.
+`wrangler d1 migrations apply` reads migrations from your LOCAL disk, so a checkout that lacks
+the migration has nothing to offer and reports:
 
 ```
 ✅ No migrations to apply!
