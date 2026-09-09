@@ -21,11 +21,9 @@ Run the relevant gates locally before pushing.
 
 That hazard has fired twice, both times on grouped dependabot PRs:
 
-- A stale `worker-configuration.d.ts` failed `types:worker:check` and masked the **better-auth 1.7
-  incompatibility** (see the `auth/` entry in [`module-map.md`](./module-map.md) for why 1.7 cannot
-  be taken). `.github/dependabot.yml` now **ignores better-auth minor and major updates** so 1.7.x
-  is no longer re-proposed into the `npm-minor-and-patch` group, where it blocked four safe bumps
-  in #255. 1.6.x _patches_ still come through.
+- A stale `worker-configuration.d.ts` failed `types:worker:check` and masked the
+  Better Auth 1.7 incompatibility in #255. #316 resolves the rate-limit storage
+  mismatch using D1 and removes the temporary Better Auth Dependabot ignore.
 - PR #267 bumped oxlint 1.78.0 → 1.79.0, which split `react/set-state-in-effect` out of
   `react/react-compiler` into the `correctness` category `.oxlintrc.jsonc` enables wholesale. Four
   pre-existing call sites failed `lint`, taking ten unrelated grouped packages down with them.

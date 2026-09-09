@@ -18,6 +18,12 @@ because the legacy `board_terms` table still exists with a different shape and e
 
 ## Core tables
 
+Auth throttling uses `rate_limits`: a unique request key, request count, and
+`last_request` epoch milliseconds, with an opaque text primary key. Better Auth
+performs guarded atomic increments through the Drizzle adapter. Expired counters
+are pruned opportunistically when an existing bucket starts a new window.
+These are operational counters, not account or roster records.
+
 D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`,
 `documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`
 and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate

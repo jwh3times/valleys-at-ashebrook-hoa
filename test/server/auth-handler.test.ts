@@ -19,6 +19,83 @@ beforeAll(async () => {
 });
 
 describe('auth config', () => {
+  it('verifies email, signs in, and signs in with a replacement password after reset', async () => {
+    const auth = createAuth({ ...env }, undefined, 'http://localhost:4321');
+    const email = 'upgrade-flow@example.com';
+    const password = 'original-password-123';
+    const post = (path: string, body: Record<string, string>) =>
+      auth.handler(
+        new Request(`http://localhost:4321/api/auth/${path}`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'cf-connecting-ip': '192.0.2.80',
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+    vi.mocked(sendEmail).mockClear();
+    expect(
+      (await post('sign-up/email', { email, password, name: 'Upgrade Tester' }))
+        .status,
+    ).toBe(200);
+    expect((await post('sign-in/email', { email, password })).status).toBe(403);
+    const verificationEmail = vi
+      .mocked(sendEmail)
+      .mock.calls.find(([, , subject]) =>
+        subject.startsWith('Verify your account'),
+      );
+    expect(verificationEmail).toBeDefined();
+    const verification = await auth.handler(
+      new Request(verificationEmail![3].replace('Verify link: ', '')),
+    );
+    expect(verification.status).toBe(302);
+    const signedIn = await post('sign-in/email', { email, password });
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.headers.get('set-cookie')).toContain('HttpOnly');
+    expect(signedIn.headers.get('set-cookie')).toContain('SameSite=Lax');
+    const cookie = signedIn.headers.get('set-cookie')!.split(';')[0];
+    const session = await auth.api.getSession({
+      headers: new Headers({ cookie }),
+    });
+    expect(session?.user.email).toBe(email);
+    expect(
+      (
+        await post('request-password-reset', {
+          email,
+          redirectTo: '/reset-password',
+        })
+      ).status,
+    ).toBe(200);
+    const resetEmail = vi
+      .mocked(sendEmail)
+      .mock.calls.find(([, , subject]) =>
+        subject.startsWith('Reset your password'),
+      );
+    expect(resetEmail).toBeDefined();
+    const callback = await auth.handler(
+      new Request(resetEmail![3].replace('Reset link: ', '')),
+    );
+    const token = new URL(callback.headers.get('location')!).searchParams.get(
+      'token',
+    )!;
+    const newPassword = 'replacement-password-456';
+    const resets = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        post('reset-password', { token, newPassword }),
+      ),
+    );
+    expect(resets.filter((response) => response.status === 200)).toHaveLength(
+      1,
+    );
+    expect(resets.filter((response) => response.status === 400)).toHaveLength(
+      2,
+    );
+    expect(
+      (await post('sign-in/email', { email, password: newPassword })).status,
+    ).toBe(200);
+  });
+
   it('rejects sign-up with a too-short password', async () => {
     const auth = createAuth(env, undefined, env.BETTER_AUTH_URL);
     const res = await auth.handler(

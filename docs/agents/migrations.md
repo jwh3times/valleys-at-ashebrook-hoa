@@ -51,6 +51,11 @@ refusal; `MIGRATE_ALLOW_BEHIND=1` is the documented override.
 
 ## Deployment ordering
 
+Migration `0030` adds Better Auth's `rate_limits` table. Apply it **before**
+deploying #316's database limiter: the previous version ignores the new table,
+but the new auth handler requires it. Rollback can restore the previous code
+while leaving this additive table in place.
+
 The default rule is **safe in either order**: merged code can run ahead of the production schema
 for days, so a schema change and the code that depends on it must both work against either shape.
 That is the whole reason ADR 0022 phase 1 is behaviorally inert. Schema parity is also a
