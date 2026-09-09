@@ -7,6 +7,36 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [0.18.12] - 2026-09-08
+
+### Security
+
+- **The trusted auth origin list now names only origins a request can actually complete on.**
+  `trustedOrigins` carried `www.ashebrookresidents.com` and the `workers.dev` fallback; the zone
+  now 301-redirects `www` at the edge and both `*.workers.dev` routes are disabled, so neither
+  host serves the app. `http://localhost:4321` is trusted only when the resolved base URL points
+  at localhost, so a production deployment no longer carries a development origin. Sign-in under
+  `npm run dev` is unaffected, because `.dev.vars` sets `BETTER_AUTH_URL` to the localhost origin.
+- **`workers_dev` and `preview_urls` are pinned off in `wrangler.toml`.** Disabling the routes in
+  the dashboard alone was undone by the next deploy, since an unset `workers_dev` defaults to on.
+  `preview_urls` is the wildcard that would otherwise serve every uploaded version of the Worker
+  on its own hostname against the production D1, R2, and secrets. Both flags carry into the
+  adapter-emitted `dist/server/wrangler.json`, so a Workers Builds deploy cannot restore either.
+
+### Changed
+
+- HSTS is enabled on the `ashebrookresidents.com` zone — max-age one month, subdomains off,
+  preload off — and `www.ashebrookresidents.com` resolves for the first time, as a proxied CNAME
+  that redirects to the apex preserving path and query string. Both are zone settings rather than
+  code; noted here because they are what makes the origin list above correct.
+
+## [0.18.11] - 2026-09-08
+
+### Changed
+
+- Bumped `@anthropic-ai/sdk` from 0.123.0 to 0.124.0 and the `@cloudflare/workers-types`
+  development dependency from 5.20260904.1 to 5.20260905.1 (#318).
+
 ## [0.18.10] - 2026-09-07
 
 ### Changed
