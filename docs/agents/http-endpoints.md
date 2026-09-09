@@ -77,7 +77,14 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   online by a homeowner attach to member attendance/votes and election ballots):
   `/api/admin/meetings` supports `GET`/`POST`/`PATCH`/`DELETE`.
   `GET` lists every
-  meeting including drafts, or returns one full meeting detail with `?id=`; `POST`
+  meeting including drafts, or returns one full meeting detail with `?id=`, or — with
+  `?motions=all` — every motion in the archive as one flat list (`id`, `meetingId`, the parent
+  meeting's `date`, `sequence`, `text`), newest meeting first then by motion sequence. That branch
+  exists for the pickers that offer or resolve a motion independently of its meeting (the
+  Resolutions panel's adopting/superseding motion picker), which otherwise fanned out to the
+  meeting list plus one detail fetch per meeting with motions on every mount (#237); it carries
+  the parent date because the picker labels options `date — text`, and it is `requireBoard`-gated
+  like every other branch, since it spans draft and board-tier meetings alike. `POST`
   creates a meeting, or with `{ action: 'setAttendance' }` fully replaces a board meeting's
   per-person attendance roll, or with `{ action: 'setMemberAttendance' }` fully replaces a member
   meeting's per-property attendance roll, or with `{ action: 'approve' }`/`{ action: 'unapprove' }`
