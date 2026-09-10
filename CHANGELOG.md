@@ -7,6 +7,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-09-09
+
+### Fixed
+
+- **`test/unit/sync-main.test.ts` no longer fails at random during a local
+  `npm test` on Windows.** Every failure was a 5-second timeout, never a wrong
+  assertion, and only in the cases that build real Git repositories — each drives
+  around two dozen real `git` subprocesses, which already used 1–2 seconds of that
+  budget on an idle machine and routinely blew through it when ninety-odd test
+  files ran in parallel. Those cases now get a timeout that reflects what they do,
+  spawn roughly half as many subprocesses, and run outside jsdom, which they never
+  needed. They are also pinned against the developer's own Git configuration,
+  which could previously change what they exercised. Three of three full runs
+  failed before the change; four of four passed after (#336).
+
 ## [1.0.5] - 2026-09-09
 
 ### Added
