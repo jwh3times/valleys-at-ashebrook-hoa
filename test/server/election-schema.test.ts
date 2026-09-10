@@ -328,3 +328,20 @@ describe('elections schema', () => {
     ).toEqual(expect.objectContaining({ pk: 1 }));
   });
 });
+
+// Migration 0032 (#340). `ballots` carries two indexes and both lead with
+// `election_id`, so neither can answer "what has this lot cast" — the question
+// the roster's transfer-effects engine asks twice when a Lot changes hands
+// (the pending-ballot scan and the backdated-window sweep). Asserted against
+// the live schema rather than the Drizzle model, because the migrations
+// directory is what actually runs. Sibling of the two in member-schema.test.ts.
+describe('ballots property-first index', () => {
+  it('indexes ballots by property alone', async () => {
+    const rows = await env.DATABASE.prepare(
+      `SELECT name FROM pragma_index_list('ballots')`,
+    ).all<{ name: string }>();
+    expect(rows.results.map((r) => r.name)).toContain(
+      'ballots_property_id_idx',
+    );
+  });
+});
