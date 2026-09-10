@@ -746,6 +746,11 @@ export const ballots = sqliteTable(
   (t) => [
     uniqueIndex('ballots_election_property_unq').on(t.electionId, t.propertyId),
     index('ballots_election_id_idx').on(t.electionId),
+    // Both indexes above lead with the election, so neither answers "what has
+    // this lot cast" — the question the transfer-effects engine asks twice
+    // when a Lot changes hands. Added by migration 0032 (#340), completing
+    // what 0031 started for the two member tables.
+    index('ballots_property_id_idx').on(t.propertyId),
   ],
 );
 

@@ -1,0 +1,22 @@
+-- Property-first lookup index on `ballots` (#340), the sibling 0031 left open.
+--
+-- Same shape as the two member tables 0031 fixed: every index `ballots`
+-- carries leads with the ELECTION —
+-- ballots_election_property_unq (election_id, property_id) and
+-- ballots_election_id_idx (election_id) — so a query that knows the LOT and
+-- not the election has nothing to search and scans the table instead.
+--
+-- Two such queries live in the roster's transfer-effects engine
+-- (src/server/roster/transfer-effects.ts): the pending-ballot scan over
+-- conducted, non-terminal elections, and the retrospective sweep for ballots
+-- recorded inside the backdated-transfer window.
+--
+-- That completes the set. `proxies` needed nothing —
+-- proxies_property_meeting_unq and proxies_property_election_unq already lead
+-- with property_id — so no property-first lookup in that engine scans now.
+--
+-- Additive and safe in either order with any deploy: an index changes no
+-- shape and no behavior, only the plan SQLite picks. 0031 is still unapplied
+-- to production at the time of writing, so both are expected to land in one
+-- operator pass.
+CREATE INDEX IF NOT EXISTS ballots_property_id_idx ON ballots (property_id);
