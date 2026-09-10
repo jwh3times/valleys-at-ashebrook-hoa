@@ -23,7 +23,9 @@ fullName}` list from `GET /api/admin/meetings?roster=people` — plus `fetchLotP
   flagged `current: false`, so a past occasion stays recordable and the Proxies panel can warn that
   current status does not decide whether a past occasion-day use is valid), and `fetchRosterPeople` and
   `fetchRosterLots` over `GET /api/admin/roster`), meeting-record helpers
-  (`fetchMeetings`, `fetchMeeting`, `saveMeeting`, `deleteMeeting`, `approveMeeting`,
+  (`fetchMeetings`, `fetchMeeting`, `fetchAllMotions` — the flat archive-wide motion list from
+  `GET /api/admin/meetings?motions=all`, which replaced the Resolutions panel's per-meeting
+  fan-out (#237) — `saveMeeting`, `deleteMeeting`, `approveMeeting`,
   `unapproveMeeting`, `setAttendance`, `setMemberAttendance`, `saveMotion`, `deleteMotion`,
   `openMotionVoting`, `closeMotionVoting`, `setVotes`, `setMemberVotes`), resolutions-book helpers (`fetchResolutions`,
   `saveResolution`, `deleteResolution`, `adoptResolution`, `supersedeResolution`,

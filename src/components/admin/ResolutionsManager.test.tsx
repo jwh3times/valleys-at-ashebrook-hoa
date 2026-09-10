@@ -365,6 +365,20 @@ describe('ResolutionsManager', () => {
     expect(motionArg).not.toBe('');
   });
 
+  // The picker's own failure is surfaced rather than swallowed: without the
+  // motion list the adopt/supersede forms still render, and a board member
+  // who cannot see why a motion is missing would submit an adoption with no
+  // citation. Untested while this was a fan-out; the bulk read (#237) is the
+  // moment to pin it.
+  it('reports an error when the motion list fails to load', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
+    ]);
+    mocked.fetchAllMotions.mockRejectedValue(new Error('network is down'));
+    render(<ResolutionsManager />);
+    expect(await screen.findByText(/network is down/i)).toBeInTheDocument();
+  });
+
   // #237: the picker used to fan out — the meeting list, then one detail
   // fetch per meeting with motions — on every mount. It is one request now,
   // and stays one however many meetings the archive holds.
