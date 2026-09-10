@@ -225,6 +225,13 @@
       "when": 1789012800000,
       "tag": "0031_member_property_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1789034400000,
+      "tag": "0032_ballots_property_index",
+      "breakpoints": true
     }
   ]
 }

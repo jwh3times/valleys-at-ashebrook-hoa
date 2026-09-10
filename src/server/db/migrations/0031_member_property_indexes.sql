@@ -8,11 +8,9 @@
 -- exactly that of these two tables: the open-motion vote reset for a departing
 -- Lot, and the two retrospective backdated-action sweeps.
 --
--- `ballots` has the SAME defect and is deliberately not fixed here. Its
--- ballots_election_property_unq (election_id, property_id) also leads with the
--- occasion, so the engine's two property-first ballot lookups scan; #237 item 3
--- names only the two member tables, so that one is tracked separately (#340)
--- rather than widened into here. `proxies` needs nothing —
+-- `ballots` has the SAME defect and is deliberately not fixed here: #237 item 3
+-- names only the two member tables, so it was tracked separately as #340 and
+-- fixed one migration later, in 0032. `proxies` needs nothing —
 -- proxies_property_meeting_unq already leads with property_id.
 --
 -- Additive and safe in either order with any deploy: an index changes no
