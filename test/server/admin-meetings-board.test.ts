@@ -625,4 +625,149 @@ describe('meetings admin route — board', () => {
     const res = await GET(req(`${url}?id=nope`, 'GET'));
     expect(res.status).toBe(404);
   });
+
+  // #237: the flat archive-wide motions read that replaced the Resolutions
+  // panel's 1+N client-side fan-out.
+  describe('GET ?motions=all', () => {
+    async function seedMotion(
+      meetingId: string,
+      sequence: number,
+      text: string,
+    ) {
+      const now = new Date();
+      await getDb(env).insert(motions).values({
+        id: crypto.randomUUID(),
+        meetingId,
+        sequence,
+        text,
+        outcome: 'passed',
+        createdBy: 'b',
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    it('returns an empty list when no motion has been recorded', async () => {
+      await createMeeting();
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual([]);
+    });
+
+    // The order the picker relies on, and the order the fan-out it replaced
+    // produced: newest meeting first, then each meeting's motions in the
+    // sequence they were recorded in.
+    it('orders newest meeting first, then by motion sequence', async () => {
+      const older = await createMeeting({ date: '2026-01-01' });
+      const newer = await createMeeting({ date: '2026-03-01' });
+      await seedMotion(older, 1, 'January first motion');
+      await seedMotion(newer, 2, 'March second motion');
+      await seedMotion(newer, 1, 'March first motion');
+
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      expect(res.status).toBe(200);
+      const rows = (await res.json()) as {
+        meetingId: string;
+        date: string;
+        sequence: number;
+        text: string;
+      }[];
+      expect(rows.map((r) => r.text)).toEqual([
+        'March first motion',
+        'March second motion',
+        'January first motion',
+      ]);
+      expect(rows[0]).toEqual(
+        expect.objectContaining({ meetingId: newer, date: '2026-03-01' }),
+      );
+    });
+
+    // The design question this branch turns on. The Resolutions panel needs
+    // to cite the motion that adopted a resolution, and that motion is
+    // routinely recorded in minutes still in draft — so the list spans every
+    // status and tier rather than filtering the way the public reads do. It
+    // is safe because the route is requireBoard-gated and `board` is the top
+    // tier; the fan-out this replaced went through fetchAdminMeeting and
+    // offered exactly the same set.
+    it('includes motions from draft and board-tier meetings, not only approved public ones', async () => {
+      const draft = await createMeeting({ date: '2026-02-01' });
+      const approved = await createMeeting({
+        date: '2026-02-02',
+        visibility: 'public',
+      });
+      await seedMotion(draft, 1, 'Motion in a draft board-tier meeting');
+      await seedMotion(approved, 1, 'Motion in an approved public meeting');
+      expect(
+        (
+          await POST(
+            req(url, 'POST', { action: 'approve', meetingId: approved }),
+          )
+        ).status,
+      ).toBe(204);
+
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      const rows = (await res.json()) as { text: string }[];
+      expect(rows.map((r) => r.text)).toEqual([
+        'Motion in an approved public meeting',
+        'Motion in a draft board-tier meeting',
+      ]);
+    });
+
+    // Two meetings on the same day is the ordinary case — the annual member
+    // meeting and the board meeting around it — so `date` alone does not
+    // settle the order. The createdAt tiebreak is what makes the "same order
+    // the fan-out produced" claim true there, and without this test it could
+    // be deleted silently.
+    //
+    // The two createdAt values are stamped a minute apart rather than left to
+    // the route's own `new Date()`. That column is second-granularity, so two
+    // meetings created in the same second tie on BOTH sort keys and SQLite is
+    // free to return them either way — true of `fetchAdminMeetings` since it
+    // was written, and not something this branch changes. Controlling the
+    // timestamps is what makes the assertion about the tiebreak instead of
+    // about how fast the test ran.
+    it('breaks a same-date tie by which meeting was recorded later', async () => {
+      const db = getDb(env);
+      const earlier = crypto.randomUUID();
+      const later = crypto.randomUUID();
+      const base = new Date('2026-04-01T18:00:00Z');
+      for (const [id, createdAt] of [
+        [earlier, base],
+        [later, new Date(base.getTime() + 60_000)],
+      ] as const) {
+        await db.insert(meetings).values({
+          id,
+          body: 'board',
+          kind: 'regular',
+          date: '2026-04-01',
+          title: 'April meeting',
+          createdBy: 'b',
+          createdAt,
+          updatedAt: createdAt,
+        });
+      }
+      await seedMotion(earlier, 1, 'Motion in the earlier-recorded meeting');
+      await seedMotion(later, 1, 'Motion in the later-recorded meeting');
+
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      const rows = (await res.json()) as { text: string }[];
+      expect(rows.map((r) => r.text)).toEqual([
+        'Motion in the later-recorded meeting',
+        'Motion in the earlier-recorded meeting',
+      ]);
+    });
+
+    // The picker labels every option "date — text", so the parent meeting's
+    // date has to ride along; without it the caller is back to fetching the
+    // meeting list to re-join client-side, which is the cost this removed.
+    it('carries the parent meeting date on every row', async () => {
+      const id = await createMeeting({ date: '2026-05-04' });
+      await seedMotion(id, 1, 'Move to adopt Resolution 2026-1');
+      const res = await GET(req(`${url}?motions=all`, 'GET'));
+      const rows = (await res.json()) as { date: string; id: string }[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0].date).toBe('2026-05-04');
+      expect(rows[0].id).toBeTruthy();
+    });
+  });
 });

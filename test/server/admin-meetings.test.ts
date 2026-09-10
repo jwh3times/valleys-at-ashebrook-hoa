@@ -27,6 +27,14 @@ describe('meetings admin route — gate', () => {
     expect((await GET(req(`${url}?id=m1`, 'GET'))).status).toBe(401);
   });
 
+  // The bulk motions read (#237) returns every motion in the archive,
+  // including ones belonging to draft and board-tier meetings, so it is gated
+  // exactly like every other branch of this route rather than by virtue of
+  // sitting behind it.
+  it('rejects an unauthenticated bulk motions read with 401', async () => {
+    expect((await GET(req(`${url}?motions=all`, 'GET'))).status).toBe(401);
+  });
+
   it('rejects an unauthenticated create with 401', async () => {
     expect(
       (

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import ResolutionsManager from './ResolutionsManager';
 import * as admin from '../../lib/admin';
 import { RESOLUTION_STATUSES } from '../../lib/types';
-import type { ResolutionDetail } from '../../lib/types';
+import type { MotionOption, ResolutionDetail } from '../../lib/types';
 
 vi.mock('../../lib/admin');
 
@@ -12,10 +12,10 @@ const mocked = vi.mocked(admin);
 
 beforeEach(() => {
   vi.resetAllMocks();
-  // The motion picker fetches meetings (and, for any with motions, their
-  // detail) on every mount — default to none so tests that don't care about
-  // the picker aren't forced to mock it.
-  mocked.fetchMeetings.mockResolvedValue([]);
+  // The motion picker reads every motion in the archive on mount (#237) —
+  // default to none so tests that don't care about the picker aren't forced
+  // to mock it.
+  mocked.fetchAllMotions.mockResolvedValue([]);
 });
 
 function resolution(
@@ -37,63 +37,16 @@ function resolution(
   };
 }
 
-// A meeting with one motion, used by the motion-picker tests below.
-const meetingWithMotion = {
-  id: 'm1',
-  body: 'board' as const,
-  kind: 'regular' as const,
-  date: '2026-09-14',
-  title: 'September meeting',
-  status: 'approved' as const,
-  visibility: 'board' as const,
-  motionCount: 1,
-};
-
-function meetingDetailWithMotion(
-  overrides: Partial<Awaited<ReturnType<typeof admin.fetchMeeting>>> = {},
-) {
+// The one motion the picker tests below offer, in the flat shape
+// `fetchAllMotions` returns. It labels itself "2026-09-14 — Approve the
+// budget"; the tests match on that text.
+function motionOption(overrides: Partial<MotionOption> = {}): MotionOption {
   return {
-    ...meetingWithMotion,
-    startTime: null,
-    location: null,
-    summaryMd: null,
-    documentId: null,
-    quorumRequired: null,
-    attendance: [],
-    memberAttendance: [],
-    totalActiveWeight: 0,
-    motions: [
-      {
-        id: 'mo1',
-        sequence: 1,
-        text: 'Approve the budget',
-        votingState: 'none' as const,
-        moverName: null,
-        secondName: null,
-        outcome: 'passed' as const,
-        eligibleCount: 0,
-        eligibleWeight: 0,
-        eligibilityFrozen: false,
-        tally: {
-          yes: 0,
-          no: 0,
-          abstain: 0,
-          recused: 0,
-          absent: 0,
-          recorded: false,
-        },
-        votes: [],
-        memberVotes: [],
-        memberTally: {
-          yes: 0,
-          no: 0,
-          abstain: 0,
-          recused: 0,
-          absent: 0,
-          recorded: false,
-        },
-      },
-    ],
+    id: 'mo1',
+    meetingId: 'm1',
+    date: '2026-09-14',
+    sequence: 1,
+    text: 'Approve the budget',
     ...overrides,
   };
 }
@@ -346,8 +299,7 @@ describe('ResolutionsManager', () => {
     mocked.fetchResolutions.mockResolvedValue([
       resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
     ]);
-    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
-    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.fetchAllMotions.mockResolvedValue([motionOption()]);
     mocked.adoptResolution.mockResolvedValue(undefined);
     render(<ResolutionsManager />);
     await screen.findByText('2024-01 — Pool Hours');
@@ -381,8 +333,7 @@ describe('ResolutionsManager', () => {
     mocked.fetchResolutions.mockResolvedValue([
       resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
     ]);
-    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
-    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.fetchAllMotions.mockResolvedValue([motionOption()]);
     mocked.adoptResolution.mockResolvedValue(undefined);
     render(<ResolutionsManager />);
     await screen.findByText('2024-01 — Pool Hours');
@@ -414,6 +365,51 @@ describe('ResolutionsManager', () => {
     expect(motionArg).not.toBe('');
   });
 
+  // The picker's own failure is surfaced rather than swallowed: without the
+  // motion list the adopt/supersede forms still render, and a board member
+  // who cannot see why a motion is missing would submit an adoption with no
+  // citation. Untested while this was a fan-out; the bulk read (#237) is the
+  // moment to pin it.
+  it('reports an error when the motion list fails to load', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
+    ]);
+    mocked.fetchAllMotions.mockRejectedValue(new Error('network is down'));
+    render(<ResolutionsManager />);
+    expect(await screen.findByText(/network is down/i)).toBeInTheDocument();
+  });
+
+  // #237: the picker used to fan out — the meeting list, then one detail
+  // fetch per meeting with motions — on every mount. It is one request now,
+  // and stays one however many meetings the archive holds.
+  it('populates the motion picker from a single bulk read', async () => {
+    mocked.fetchResolutions.mockResolvedValue([
+      resolution({ id: 'r1', number: '2024-01', status: 'draft' }),
+    ]);
+    mocked.fetchAllMotions.mockResolvedValue([
+      motionOption(),
+      motionOption({
+        id: 'mo2',
+        meetingId: 'm2',
+        date: '2026-10-12',
+        text: 'Approve the reserve study',
+      }),
+    ]);
+    render(<ResolutionsManager />);
+    await screen.findByText('2024-01 — Pool Hours');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /adopt resolution:/i }),
+    );
+    await screen.findByRole('option', {
+      name: '2026-10-12 — Approve the reserve study',
+    });
+    expect(
+      screen.getByRole('option', { name: '2026-09-14 — Approve the budget' }),
+    ).toBeInTheDocument();
+    expect(mocked.fetchAllMotions).toHaveBeenCalledTimes(1);
+  });
+
   it('the motion picker is offered for supersede too, and superseding with one selected calls supersedeResolution with its id', async () => {
     mocked.fetchResolutions.mockResolvedValue([
       resolution({ id: 'r-draft', number: '2024-02', status: 'draft' }),
@@ -425,8 +421,7 @@ describe('ResolutionsManager', () => {
         effectiveDate: '2023-01-01',
       }),
     ]);
-    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
-    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.fetchAllMotions.mockResolvedValue([motionOption()]);
     mocked.supersedeResolution.mockResolvedValue(undefined);
     render(<ResolutionsManager />);
     await screen.findByText('2024-02 — Pool Hours');
@@ -472,8 +467,7 @@ describe('ResolutionsManager', () => {
         effectiveDate: '2023-01-01',
       }),
     ]);
-    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
-    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.fetchAllMotions.mockResolvedValue([motionOption()]);
     mocked.supersedeResolution.mockResolvedValue(undefined);
     render(<ResolutionsManager />);
     await screen.findByText('2024-02 — Pool Hours');
@@ -518,8 +512,7 @@ describe('ResolutionsManager', () => {
         adoptedByMotionId: 'mo1',
       }),
     ]);
-    mocked.fetchMeetings.mockResolvedValue([meetingWithMotion]);
-    mocked.fetchMeeting.mockResolvedValue(meetingDetailWithMotion());
+    mocked.fetchAllMotions.mockResolvedValue([motionOption()]);
     render(<ResolutionsManager />);
 
     expect(
