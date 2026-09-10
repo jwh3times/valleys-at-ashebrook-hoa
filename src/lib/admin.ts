@@ -11,6 +11,7 @@ import type {
   MeetingSummary,
   MeetingDetail,
   MeetingInput,
+  MotionOption,
   MotionInput,
   VoteChoice,
   MemberVoteChoice,
@@ -422,6 +423,21 @@ export async function fetchMeeting(id: string): Promise<MeetingDetail> {
     'GET',
     undefined,
     'Load meeting failed',
+  );
+}
+
+/**
+ * Every motion in the archive, flat and newest-meeting-first, for the pickers
+ * that offer or resolve a motion independently of its meeting. One request in
+ * place of the meeting list plus a detail fetch per meeting with motions
+ * (#237).
+ */
+export async function fetchAllMotions(): Promise<MotionOption[]> {
+  return adminRequest(
+    '/api/admin/meetings?motions=all',
+    'GET',
+    undefined,
+    'Load motions failed',
   );
 }
 

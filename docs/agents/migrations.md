@@ -85,32 +85,33 @@ the next of this kind.
 One line per migration. The files themselves are the detail; this table exists so you can find
 which migration introduced a shape without reading every file.
 
-| #             | What it did                                                                                                                                                |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0000` `0001` | Initial schema.                                                                                                                                            |
-| `0002`        | Split homes and people into `properties` and `owners`.                                                                                                     |
-| `0003`        | Uniqueness (`properties.address_normalized`, `user_property_links (user_id, property_id)`) and hot-path indexes.                                           |
-| `0004`        | `documents.content_hash` + `documents_content_hash_idx` for duplicate detection.                                                                           |
-| `0005`        | Reconciled foreign keys and enums on the roster/verification tables.                                                                                       |
-| `0006`        | `documents.keep_verified_at` / `keep_verified_by`.                                                                                                         |
-| `0007`        | `documents.rag_status`.                                                                                                                                    |
-| `0008`        | `reports` table + `reports_created_at_idx`.                                                                                                                |
-| `0009`        | `board_people`, `board_terms` + indexes on `person_id` and `term_end`.                                                                                     |
-| `0010`        | Meeting record: `meetings`, `board_attendance`, `motions`, `board_votes` + status/body/sequence indexes.                                                   |
-| `0011`        | `properties.vote_weight`; `member_attendance`, `member_votes`; `motions.mover_owner_id`/`second_owner_id`.                                                 |
-| `0012`        | `resolutions` + `resolutions_number_unq`, `resolutions_supersedes_unq`, `resolutions_status_idx`.                                                          |
-| `0013`        | `elections`, `candidates`, `ballots` + indexes; nullable `board_terms.election_id`.                                                                        |
-| `0014`        | `proxies` + per-occasion unique indexes and the `proxies_one_occasion` CHECK.                                                                              |
-| `0015`        | Dropped `via_proxy` from three tables; added each one's `proxy_id`.                                                                                        |
-| `0016`        | `ballot_choices`, `election_eligibility`, `motion_eligibility`, `motions.voting_state`.                                                                    |
-| `0017`        | `motions.voting_revision` — the live-motion compare-and-swap token.                                                                                        |
-| `0018`        | `meetings.approved_by_motion_id` FK (delete-set-null), clearing dangling values.                                                                           |
-| `0019`        | ADR 0022 party-roster core: 13 tables + the `system_admin_bootstrap` singleton, all `IF NOT EXISTS`.                                                       |
-| `0020`        | Immutable audit ledger: `audit_events`, seven typed detail tables, subject/delta tables, `review_flags`, `redaction_tasks`.                                |
-| `0021`        | `cutover_settings` (the `cutover_mode`/`write_freeze` singletons) and `cutover_shadow_mismatches`.                                                         |
-| `0022`        | `properties.retired_day`/`retired_at`. **The one non-idempotent file** — SQLite has no `ADD COLUMN IF NOT EXISTS`, so it is isolated to its own migration. |
-| `0023`        | Eight ADR 0022 views, every statement `CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run.                                                          |
-| `0030`        | Adds `rate_limits` for Better Auth's atomic D1 throttles; apply before deploying the dependent auth handler (#316).                                        |
+| #             | What it did                                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0000` `0001` | Initial schema.                                                                                                                                                                                                                       |
+| `0002`        | Split homes and people into `properties` and `owners`.                                                                                                                                                                                |
+| `0003`        | Uniqueness (`properties.address_normalized`, `user_property_links (user_id, property_id)`) and hot-path indexes.                                                                                                                      |
+| `0004`        | `documents.content_hash` + `documents_content_hash_idx` for duplicate detection.                                                                                                                                                      |
+| `0005`        | Reconciled foreign keys and enums on the roster/verification tables.                                                                                                                                                                  |
+| `0006`        | `documents.keep_verified_at` / `keep_verified_by`.                                                                                                                                                                                    |
+| `0007`        | `documents.rag_status`.                                                                                                                                                                                                               |
+| `0008`        | `reports` table + `reports_created_at_idx`.                                                                                                                                                                                           |
+| `0009`        | `board_people`, `board_terms` + indexes on `person_id` and `term_end`.                                                                                                                                                                |
+| `0010`        | Meeting record: `meetings`, `board_attendance`, `motions`, `board_votes` + status/body/sequence indexes.                                                                                                                              |
+| `0011`        | `properties.vote_weight`; `member_attendance`, `member_votes`; `motions.mover_owner_id`/`second_owner_id`.                                                                                                                            |
+| `0012`        | `resolutions` + `resolutions_number_unq`, `resolutions_supersedes_unq`, `resolutions_status_idx`.                                                                                                                                     |
+| `0013`        | `elections`, `candidates`, `ballots` + indexes; nullable `board_terms.election_id`.                                                                                                                                                   |
+| `0014`        | `proxies` + per-occasion unique indexes and the `proxies_one_occasion` CHECK.                                                                                                                                                         |
+| `0015`        | Dropped `via_proxy` from three tables; added each one's `proxy_id`.                                                                                                                                                                   |
+| `0016`        | `ballot_choices`, `election_eligibility`, `motion_eligibility`, `motions.voting_state`.                                                                                                                                               |
+| `0017`        | `motions.voting_revision` — the live-motion compare-and-swap token.                                                                                                                                                                   |
+| `0018`        | `meetings.approved_by_motion_id` FK (delete-set-null), clearing dangling values.                                                                                                                                                      |
+| `0019`        | ADR 0022 party-roster core: 13 tables + the `system_admin_bootstrap` singleton, all `IF NOT EXISTS`.                                                                                                                                  |
+| `0020`        | Immutable audit ledger: `audit_events`, seven typed detail tables, subject/delta tables, `review_flags`, `redaction_tasks`.                                                                                                           |
+| `0021`        | `cutover_settings` (the `cutover_mode`/`write_freeze` singletons) and `cutover_shadow_mismatches`.                                                                                                                                    |
+| `0022`        | `properties.retired_day`/`retired_at`. **The one non-idempotent file** — SQLite has no `ADD COLUMN IF NOT EXISTS`, so it is isolated to its own migration.                                                                            |
+| `0023`        | Eight ADR 0022 views, every statement `CREATE VIEW IF NOT EXISTS`, so the file is safe to re-run.                                                                                                                                     |
+| `0030`        | Adds `rate_limits` for Better Auth's atomic D1 throttles; apply before deploying the dependent auth handler (#316).                                                                                                                   |
+| `0031`        | `member_attendance_property_id_idx` / `member_votes_property_id_idx` — property-first lookups for the transfer-effects engine (#237). Additive. `ballots` has the same occasion-leading shape and is deliberately NOT covered (#340). |
 
 ### `0024`-`0029`: the table-rebuild migrations
 
