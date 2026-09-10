@@ -7,6 +7,40 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-09-09
+
+### Changed
+
+- **The board's Resolutions panel now loads its motion picker in one request
+  instead of one per meeting.** Citing the motion that adopted or superseded a
+  resolution needs a list of every motion on record, and the panel built that on
+  every mount by fetching the meeting list and then the full detail of each
+  meeting that had motions. A new `GET /api/admin/meetings?motions=all` returns
+  the flat list directly. Board members see exactly the same options in the same
+  order; only the number of round trips changed (#237).
+
+### Added
+
+- Two database indexes, `member_attendance_property_id_idx` and
+  `member_votes_property_id_idx`, in migration `0031`. Both tables' existing
+  unique indexes lead with the meeting or motion, so neither could serve a lookup
+  that knows only the lot — which is what the roster asks three times over when a
+  lot changes hands. The migration is additive and safe to apply before or after
+  this release deploys (#237). `ballots` has the same shape and is deliberately
+  left for later (#340).
+
+## [1.0.3] - 2026-09-09
+
+### Changed
+
+- Bump the transitive `smol-toml` dependency from 1.7.0 to 1.8.0 (#339).
+
+## [1.0.2] - 2026-09-09
+
+### Changed
+
+- Bump `@cloudflare/workers-types` from 5.20260905.1 to 5.20260906.1 (#331).
+
 ## [1.0.1] - 2026-09-09
 
 ### Fixed
@@ -71,8 +105,6 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - `SECURITY.md`'s automated-safeguards list named only Dependabot and CI. It now also names CodeQL,
   secret scanning with push protection, and what the `main` ruleset actually requires — verified
   against the live ruleset rather than described from memory.
-
-## [0.18.22]
 
 ## [0.18.22] - 2026-09-09
 
