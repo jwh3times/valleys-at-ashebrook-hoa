@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-09-09
+
+### Changed
+
+- Record migrations `0030` through `0032` as applied to production. The
+  applied-to-production ledger in `docs/agents/migrations.md` stopped at `0029`,
+  and the deployment-ordering note for `0030` still read as an instruction rather
+  than a record of an ordering that was honoured. Documentation only.
+
 ## [1.0.6] - 2026-09-09
 
 ### Fixed

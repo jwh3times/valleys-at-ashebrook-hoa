@@ -51,10 +51,12 @@ refusal; `MIGRATE_ALLOW_BEHIND=1` is the documented override.
 
 ## Deployment ordering
 
-Migration `0030` adds Better Auth's `rate_limits` table. Apply it **before**
+Migration `0030` adds Better Auth's `rate_limits` table, and had to be applied **before**
 deploying #316's database limiter: the previous version ignores the new table,
 but the new auth handler requires it. Rollback can restore the previous code
-while leaving this additive table in place.
+while leaving this additive table in place. That ordering was honoured — the
+operator applied it and confirmed invariants before PR #337 merged on
+2026-09-09 — so this is now a worked example rather than an instruction.
 
 The default rule is **safe in either order**: merged code can run ahead of the production schema
 for days, so a schema change and the code that depends on it must both work against either shape.
@@ -185,6 +187,8 @@ reasoning deliberately when it recreates the three `proxy_id` FKs as actionless.
 | `0023`-`0027`  | 2026-08-17 | After sitting unapplied for days under deployed v0.12.0 code.           |
 | `0028`         | 2026-08-21 | Immediately after its change merged — the ordering hazard above.        |
 | `0029`         | 2026-08-21 | On the **second** attempt; the first was the stale-checkout trap above. |
+| `0030`         | 2026-09-09 | Before the dependent auth deploy, as its ordering note requires (#316). |
+| `0031`-`0032`  | 2026-09-09 | Batched: both additive, so they waited for one pass rather than two.    |
 
 ## The drizzle-kit ALTER trap
 
