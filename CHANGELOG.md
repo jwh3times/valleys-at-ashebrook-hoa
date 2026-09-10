@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-09-09
+
+### Added
+
+- A `ballots_property_id_idx` index, in migration `0032`. Every index the table
+  carried led with the election, so the two places the roster looks up a lot's
+  ballots when it changes hands had nothing to search. This is the sibling
+  `0031` deliberately left for later (#340); with it the roster's
+  transfer-effects work no longer scans a table anywhere. Additive, and safe to
+  apply before or after this release deploys — `0031` and `0032` are expected to
+  be applied together.
+
 ## [1.0.4] - 2026-09-09
 
 ### Changed
