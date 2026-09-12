@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.12] - 2026-09-12
+
+### Changed
+
+- The private companion's `handoffs/` directory is now `session-history/`, and
+  `end-session` names it accordingly. The old name read as "where handoffs
+  live", which is how a handoff came to be filed there in the first place;
+  nothing new belongs in it, because the `handoff` skill writes the current one
+  to the OS temporary directory. Companion-side only apart from the skill text.
+
 ## [1.0.11] - 2026-09-12
 
 ### Changed
