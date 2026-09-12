@@ -30,9 +30,9 @@ This skill is a sweep over those four, in that order, at the end of a work sessi
 - **Nothing invented.** If a lane has nothing to record, say "nothing to record" for that lane and
   move on. A speculative memory or a filler issue comment is worse than silence.
 - **Nothing destroyed without a yes.** Every deletion or discard is shown as a list first.
-- This skill does **not** push, merge, or open PRs — `/ship` owns that — and does **not** rewrite
-  `AGENTS.md`, `README.md`, `SETUP.md`, `SECURITY.md`, or `CHANGELOG.md`, which belong to `/ship`'s
-  `docs-updater` pass.
+- This skill does **not** write the handoff document — `handoff` owns that — does **not** push,
+  merge, or open PRs — `/ship` owns that — and does **not** rewrite `AGENTS.md`, `README.md`,
+  `SETUP.md`, `SECURITY.md`, or `CHANGELOG.md`, which belong to `/ship`'s `docs-updater` pass.
 
 ## Steps
 
@@ -150,8 +150,9 @@ What lives in the companion and what changes it:
 - **`operations/history/`** — cutover execution records (`RUNBOOK.md`, `EVIDENCE-LOG.md`,
   `ALLOW-LIST.md`). Append evidence when the session produced any (an invariant run, a sweep
   result, a measurement).
-- **`handoffs/`** — the current resumable session context; archive superseded ones under
-  `handoffs/archive/`.
+- **`handoffs/`** — history only. **This skill does not write a handoff**; the `handoff` skill owns
+  that, and it saves to the OS temporary directory, not the workspace. Archive anything superseded
+  under `handoffs/archive/` and leave the rest alone. See [Hand off](#hand-off) below.
 - **`incidents/`**, **`research/`**, **`design-history/`**, **`inventories/`** — private analyses,
   research, reviewed plans/specs, and non-resident migration manifests.
 - **`config/1password/`** — unresolved `op://` templates only. Add a variable there (and in the
@@ -213,10 +214,30 @@ Show findings before acting. Work through:
   `private/`, `.env`, `.dev.vars`, `dist/`, `.wrangler/`, roster/dump SQL, or any file with real
   resident data.
 
-### 7. Report
+### 7. Hand off
+
+**Do not write the handoff document yourself.** The `handoff` skill owns it, including where it
+goes: the OS temporary directory, never the workspace and never the companion. Duplicating that
+here is how the two drifted apart — an end-session pass wrote a handoff into
+`private/handoffs/` on 2026-09-12 while `handoff` was saying temp.
+
+`handoff` is user-invocable only (`disable-model-invocation: true`), so you cannot call it with the
+Skill tool. Do one of these, in order of preference:
+
+1. Ask the user to run `/handoff`, optionally with a note on what the next session is for. Their
+   invocation loads the skill properly and it takes over.
+2. If they would rather you just wrote it, read `.agents/skills/handoff/SKILL.md` and follow it to
+   the letter — temp directory, a "suggested skills" section, references to specs/plans/ADRs/issues
+   by path or URL rather than restating them, and no secrets or personal data.
+
+Either way the content is the handoff skill's business, not this one's. Your job is only to make
+sure a handoff happens and to say in the report where it landed.
+
+### 8. Report
 
 One short paragraph per lane — memory, issues and board, private companion, workspace — naming what
-changed and what was deliberately left alone. Say explicitly if the board lane was skipped for a
+changed and what was deliberately left alone, plus one line saying where the handoff landed and who
+wrote it. Say explicitly if the board lane was skipped for a
 missing `project` scope; that is the one failure that otherwise looks identical to success. List
 the human follow-ups filed this session with their issue and wiki links, or say there were none. End
 with **what's still open**: the branch mid-flight, the unanswered question, the issue awaiting a reply.
@@ -225,6 +246,8 @@ That paragraph is what makes the next session cheap to start.
 ## Do not
 
 - Push, merge, or open PRs — that's `/ship`.
+- Write the handoff document from this skill — that's `handoff`, and it saves to the OS temp
+  directory, not `private/handoffs/`.
 - Run anything that touches production data: `npm run db:migrate:remote`, `npm run roster:backfill
 --write`, `npm run shadow:sweep --remote`, or any `wrangler ... --remote` write. Post-flip these
   reach live resident data; a cleanup pass has no business there. (`npm run verify:invariants
