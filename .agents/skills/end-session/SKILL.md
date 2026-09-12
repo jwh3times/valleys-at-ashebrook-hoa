@@ -150,9 +150,11 @@ What lives in the companion and what changes it:
 - **`operations/history/`** — cutover execution records (`RUNBOOK.md`, `EVIDENCE-LOG.md`,
   `ALLOW-LIST.md`). Append evidence when the session produced any (an invariant run, a sweep
   result, a measurement).
-- **`handoffs/`** — history only. **This skill does not write a handoff**; the `handoff` skill owns
-  that, and it saves to the OS temporary directory, not the workspace. Archive anything superseded
-  under `handoffs/archive/` and leave the rest alone. See [Hand off](#hand-off) below.
+- **`session-history/`** — history only, and nothing new belongs in it. **This skill does not write
+  a handoff**; the `handoff` skill owns that, and it saves to the OS temporary directory, not the
+  workspace. Move a superseded note in here if one turns up elsewhere, and otherwise leave it
+  alone. Called `handoffs/` until 2026-09-12, when the name itself caused the mistake below.
+  See [Hand off](#hand-off) below.
 - **`incidents/`**, **`research/`**, **`design-history/`**, **`inventories/`** — private analyses,
   research, reviewed plans/specs, and non-resident migration manifests.
 - **`config/1password/`** — unresolved `op://` templates only. Add a variable there (and in the
@@ -219,7 +221,8 @@ Show findings before acting. Work through:
 **Do not write the handoff document yourself.** The `handoff` skill owns it, including where it
 goes: the OS temporary directory, never the workspace and never the companion. Duplicating that
 here is how the two drifted apart — an end-session pass wrote a handoff into
-`private/handoffs/` on 2026-09-12 while `handoff` was saying temp.
+`private/session-history/` (then called `private/handoffs/`) on 2026-09-12, while `handoff` was
+saying temp.
 
 `handoff` is user-invocable only (`disable-model-invocation: true`), so you cannot call it with the
 Skill tool. Do one of these, in order of preference:
@@ -247,7 +250,7 @@ That paragraph is what makes the next session cheap to start.
 
 - Push, merge, or open PRs — that's `/ship`.
 - Write the handoff document from this skill — that's `handoff`, and it saves to the OS temp
-  directory, not `private/handoffs/`.
+  directory, not the private companion.
 - Run anything that touches production data: `npm run db:migrate:remote`, `npm run roster:backfill
 --write`, `npm run shadow:sweep --remote`, or any `wrangler ... --remote` write. Post-flip these
   reach live resident data; a cleanup pass has no business there. (`npm run verify:invariants
