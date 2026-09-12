@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-09-12
+
+### Changed
+
+- `SECURITY.md` now says owner names, emails, and phone numbers are never in the
+  **tracked tree**, and names the CI gate that enforces it, rather than claiming
+  they are never in committed files. The narrower statement is the one that is
+  true on every reading and is machine-checked on each change;
+  `npm run lint:fixtures` has failed CI on a non-synthetic phone number or email
+  address in the tree since v0.18.6.
+
 ## [1.0.7] - 2026-09-09
 
 ### Changed
