@@ -369,7 +369,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Cloudflare Worker secrets via `wrangler secret put` (see `SETUP.md`); only `PUBLIC_*` build-time
   variables are non-secret. `.env` files are git-ignored.
 - **The roster is personal data, used for verification and lot-scoped association workflows.**
-  Owner names, emails, and phone numbers live only in the D1 database — never in committed files.
+  Owner names, emails, and phone numbers live only in the D1 database — never in the tracked
+  tree, which `npm run lint:fixtures` enforces in CI on every change.
   Contact data delivers the one-time verification code to the contact already on file and also
   contributes matching values to the AI pseudonymizer described below; it is never returned by the
   proxy holder lookup. Names and opaque IDs of Persons who currently hold Lot Authority support
