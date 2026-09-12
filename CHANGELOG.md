@@ -7,6 +7,33 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.11] - 2026-09-12
+
+### Changed
+
+- The `end-session` skill no longer writes the handoff document. The `handoff`
+  skill owns that, including where it goes — the OS temporary directory, not the
+  workspace and not the private companion. The two had drifted into contradicting
+  each other, and an end-session pass duly filed a handoff in the wrong place.
+  `end-session` now treats `private/handoffs/` as history, points at `handoff`,
+  and notes that `handoff` is user-invocable only, so it has to be requested
+  rather than called.
+
+## [1.0.10] - 2026-09-12
+
+### Changed
+
+- Bump `@cloudflare/workers-types` to 5.20260908.1, `@types/node` to 26.5.0, and
+  `wrangler` to 4.129.1 (#347). The wrangler bump regenerates
+  `worker-configuration.d.ts`, which Dependabot cannot do itself, so the
+  generated types were refreshed by hand to clear the `types:worker:check` gate.
+
+## [1.0.9] - 2026-09-12
+
+### Changed
+
+- Bump `oxlint` from 1.81.0 to 1.82.0 (#346).
+
 ## [1.0.8] - 2026-09-12
 
 ### Changed
