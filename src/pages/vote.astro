@@ -26,24 +26,22 @@ const items = verified ? await fetchOpenVotingFor(env, ctx) : [];
   <div class="page-section vote-page">
     <p class="eyebrow">Member voting</p>
     <h1 class="page-title">Open ballots</h1>
-    {
-      !ctx ? (
-        <p class="page-lead">
-          Sign in to review and cast ballots for your verified property.{' '}
-          <a href="/login">Sign in</a> or <a href="/register">register</a>.
-        </p>
-      ) : !verified ? (
-        <p class="page-lead">
-          Verify your property before you can vote.{' '}
-          <a href="/verify-property">Verify your property</a>.
-        </p>
-      ) : items.length === 0 ? (
-        <p class="page-lead">
-          There are no open ballots for your verified properties.
-        </p>
-      ) : (
-        <VoteManager client:load items={items} />
-      )
-    }
+    {!ctx ? (
+      <p class="page-lead">
+        Sign in to review and cast ballots for your verified property.{' '}
+        <a href="/login">Sign in</a> or <a href="/register">register</a>.
+      </p>
+    ) : !verified ? (
+      <p class="page-lead">
+        Verify your property before you can vote.{' '}
+        <a href="/verify-property">Verify your property</a>.
+      </p>
+    ) : items.length === 0 ? (
+      <p class="page-lead">
+        There are no open ballots for your verified properties.
+      </p>
+    ) : (
+      <VoteManager client:load items={items} />
+    )}
   </div>
 </BaseLayout>

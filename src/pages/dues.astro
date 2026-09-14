@@ -24,16 +24,14 @@ const description = official
       Dues &amp; Assessments
     </h1>
 
-    {
-      official && dues ? (
-        <DuesInfo dues={dues} />
-      ) : (
-        <p class="page-lead">
-          Dues are handled by the {OFFICIAL_ORG_NAME}. This resident-run site
-          does not collect payments and is not involved in dues. For questions
-          about your dues or a payment, please contact the HOA board directly.
-        </p>
-      )
-    }
+    {official && dues ? (
+      <DuesInfo dues={dues} />
+    ) : (
+      <p class="page-lead">
+        Dues are handled by the {OFFICIAL_ORG_NAME}. This resident-run site does
+        not collect payments and is not involved in dues. For questions about
+        your dues or a payment, please contact the HOA board directly.
+      </p>
+    )}
   </div>
 </BaseLayout>

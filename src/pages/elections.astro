@@ -33,48 +33,46 @@ const electionList = await fetchElectionsFor(env, role);
       results, and turnout, never how any individual lot voted.
     </p>
 
-    {
-      electionList.length === 0 ? (
-        <p class="muted">No elections have been recorded yet.</p>
-      ) : (
-        <div class="election-list">
-          {electionList.map((e) => (
-            <div class="election card">
-              <h2 class="election__title">{e.title}</h2>
-              <p class="election__meta">
-                {formatDate(e.electionDate)} · {e.seats}{' '}
-                {e.seats === 1 ? 'seat' : 'seats'}
-              </p>
+    {electionList.length === 0 ? (
+      <p class="muted">No elections have been recorded yet.</p>
+    ) : (
+      <div class="election-list">
+        {electionList.map((e) => (
+          <div class="election card">
+            <h2 class="election__title">{e.title}</h2>
+            <p class="election__meta">
+              {formatDate(e.electionDate)} · {e.seats}{' '}
+              {e.seats === 1 ? 'seat' : 'seats'}
+            </p>
 
-              <ul class="election__candidates">
-                {e.candidates.map((c) => (
-                  <li class="candidate">
-                    <span class="candidate__name">{c.fullName}</span>
-                    {c.won && <span class="candidate__badge">Winner</span>}
-                    {c.withdrawn && (
-                      <span class="candidate__status">Withdrawn</span>
-                    )}
-                    <span class="candidate__votes">
-                      {c.votes === null ? 'not recorded' : `${c.votes} votes`}
-                    </span>
-                    {c.statementMd && (
-                      <div class="candidate__statement">
-                        <ReportMarkdown text={c.statementMd} />
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+            <ul class="election__candidates">
+              {e.candidates.map((c) => (
+                <li class="candidate">
+                  <span class="candidate__name">{c.fullName}</span>
+                  {c.won && <span class="candidate__badge">Winner</span>}
+                  {c.withdrawn && (
+                    <span class="candidate__status">Withdrawn</span>
+                  )}
+                  <span class="candidate__votes">
+                    {c.votes === null ? 'not recorded' : `${c.votes} votes`}
+                  </span>
+                  {c.statementMd && (
+                    <div class="candidate__statement">
+                      <ReportMarkdown text={c.statementMd} />
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
 
-              <p class="election__turnout">
-                Turnout: {e.turnout.ballotsCast} of {e.turnout.eligibleCount}{' '}
-                lots, {e.turnout.weightCast} of {e.turnout.eligibleWeight} vote
-                weight
-              </p>
-            </div>
-          ))}
-        </div>
-      )
-    }
+            <p class="election__turnout">
+              Turnout: {e.turnout.ballotsCast} of {e.turnout.eligibleCount}{' '}
+              lots, {e.turnout.weightCast} of {e.turnout.eligibleWeight} vote
+              weight
+            </p>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 </BaseLayout>

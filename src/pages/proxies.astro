@@ -46,22 +46,22 @@ const [lots, occasions] = verified
 >
   <div class="page-section">
     <p class="eyebrow">Members</p>
-    <h1 class="page-title" style="margin-bottom: 36px;">Proxies</h1>
+    <h1 class="page-title" style="margin-bottom: 36px;">
+      Proxies
+    </h1>
 
-    {
-      !ctx ? (
-        <p class="page-lead">
-          Sign in to grant or review proxies for your lot.{' '}
-          <a href="/login">Sign in</a> or <a href="/register">register</a>.
-        </p>
-      ) : !verified ? (
-        <p class="page-lead">
-          Verify your property to grant a proxy.{' '}
-          <a href="/verify-property">Verify your property</a>.
-        </p>
-      ) : (
-        <ProxyManager client:load lots={lots} occasions={occasions} />
-      )
-    }
+    {!ctx ? (
+      <p class="page-lead">
+        Sign in to grant or review proxies for your lot.{' '}
+        <a href="/login">Sign in</a> or <a href="/register">register</a>.
+      </p>
+    ) : !verified ? (
+      <p class="page-lead">
+        Verify your property to grant a proxy.{' '}
+        <a href="/verify-property">Verify your property</a>.
+      </p>
+    ) : (
+      <ProxyManager client:load lots={lots} occasions={occasions} />
+    )}
   </div>
 </BaseLayout>

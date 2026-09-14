@@ -39,55 +39,51 @@ const toggleLabel = includeHistoric
       <a href={toggleHref}>{toggleLabel}</a>
     </p>
 
-    {
-      resolutionList.length === 0 ? (
-        <p class="muted">No resolutions have been recorded yet.</p>
-      ) : (
-        <div class="resolution-list">
-          {resolutionList.map((r) => (
-            <div class="resolution card">
-              <h2 class="resolution__title">
-                {r.number} — {r.title}
-              </h2>
-              {r.effectiveDate && (
-                <p class="resolution__meta">
-                  Effective {formatDate(r.effectiveDate)}
-                </p>
-              )}
+    {resolutionList.length === 0 ? (
+      <p class="muted">No resolutions have been recorded yet.</p>
+    ) : (
+      <div class="resolution-list">
+        {resolutionList.map((r) => (
+          <div class="resolution card">
+            <h2 class="resolution__title">
+              {r.number} — {r.title}
+            </h2>
+            {r.effectiveDate && (
+              <p class="resolution__meta">
+                Effective {formatDate(r.effectiveDate)}
+              </p>
+            )}
 
-              {r.status === 'repealed' && (
-                <p class="resolution__status">Repealed</p>
-              )}
-              {r.status === 'superseded' && (
-                <p class="resolution__status">
-                  Superseded
-                  {r.supersededByNumber ? (
-                    <> by {r.supersededByNumber}</>
-                  ) : null}
-                </p>
-              )}
+            {r.status === 'repealed' && (
+              <p class="resolution__status">Repealed</p>
+            )}
+            {r.status === 'superseded' && (
+              <p class="resolution__status">
+                Superseded
+                {r.supersededByNumber ? <> by {r.supersededByNumber}</> : null}
+              </p>
+            )}
 
-              <div class="resolution__body">
-                <ReportMarkdown text={r.bodyMd} />
-              </div>
-
-              {r.chain.length > 0 && (
-                <p class="resolution__chain">
-                  Supersedes:{' '}
-                  {r.chain.map((link, i) => (
-                    <>
-                      {i > 0 && ', '}
-                      {link.visible
-                        ? `${link.number} — ${link.title}`
-                        : 'an earlier resolution'}
-                    </>
-                  ))}
-                </p>
-              )}
+            <div class="resolution__body">
+              <ReportMarkdown text={r.bodyMd} />
             </div>
-          ))}
-        </div>
-      )
-    }
+
+            {r.chain.length > 0 && (
+              <p class="resolution__chain">
+                Supersedes:{' '}
+                {r.chain.map((link, i) => (
+                  <>
+                    {i > 0 && ', '}
+                    {link.visible
+                      ? `${link.number} — ${link.title}`
+                      : 'an earlier resolution'}
+                  </>
+                ))}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 </BaseLayout>
