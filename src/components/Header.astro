@@ -19,7 +19,9 @@ const isCurrent = (href: string) =>
 
 <header class="site-header">
   <a class="brand" href="/">
-    <span class="mark mark--lg" aria-hidden="true"><i></i></span>
+    <span class="mark mark--lg" aria-hidden="true">
+      <i></i>
+    </span>
     <span>
       <span class="brand__name">Valleys at Ashebrook</span>
       <span class="brand__tag">{tag}</span>
@@ -37,28 +39,24 @@ const isCurrent = (href: string) =>
   <div class="nav-cluster">
     <nav class="site-nav" aria-label="Primary">
       <ul>
-        {
-          links.map((link) => (
-            <li>
-              <a
-                href={link.href}
-                aria-current={isCurrent(link.href) ? 'page' : undefined}
-              >
-                {link.label}
-              </a>
-            </li>
-          ))
-        }
+        {links.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              aria-current={isCurrent(link.href) ? 'page' : undefined}
+            >
+              {link.label}
+            </a>
+          </li>
+        ))}
       </ul>
     </nav>
     <div class="nav-account">
-      {
-        account.links.map((l) => (
-          <a class="nav-login" href={l.href}>
-            {l.label}
-          </a>
-        ))
-      }
+      {account.links.map((l) => (
+        <a class="nav-login" href={l.href}>
+          {l.label}
+        </a>
+      ))}
       {account.signedIn && <SignOutButton client:idle />}
     </div>
   </div>

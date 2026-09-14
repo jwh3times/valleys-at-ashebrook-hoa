@@ -103,99 +103,92 @@ if (meeting.body === 'board' && total > 0) {
 
     {attendanceLine && <p class="attendance-line">{attendanceLine}</p>}
 
-    {
-      meeting.documentId && (
-        <p>
-          <a
-            class="btn btn--outline btn--small"
-            href={`/api/files/${meeting.documentId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Download minutes (PDF) ↓
-          </a>
-        </p>
-      )
-    }
+    {meeting.documentId && (
+      <p>
+        <a
+          class="btn btn--outline btn--small"
+          href={`/api/files/${meeting.documentId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Download minutes (PDF) ↓
+        </a>
+      </p>
+    )}
 
-    {
-      meeting.summaryMd && (
-        <div class="card" style="margin-bottom: 24px;">
-          <ReportMarkdown text={meeting.summaryMd} />
-        </div>
-      )
-    }
+    {meeting.summaryMd && (
+      <div class="card" style="margin-bottom: 24px;">
+        <ReportMarkdown text={meeting.summaryMd} />
+      </div>
+    )}
 
     <h2 class="side-h2">Motions</h2>
-    {
-      meeting.motions.length === 0 ? (
-        <p class="muted">No motions were recorded at this meeting.</p>
-      ) : (
-        <div class="motion-list">
-          {meeting.motions.map((mo) => {
-            // Per motion, render the tally and roll call for THIS meeting's
-            // body only — a board meeting's per-person tally/votes for a
-            // member meeting (or vice versa) is never the right one to show,
-            // same reasoning as the attendance line above. A tally whose
-            // `recorded` is false must render "Vote not recorded", never a
-            // fabricated 0–0, regardless of which body this is.
-            const tally = meeting.body === 'board' ? mo.tally : mo.memberTally;
-            return (
-              <div class="motion card">
-                <p class="motion__text">{mo.text}</p>
-                {(mo.moverName || mo.secondName) && (
-                  <p class="motion__meta">
-                    {mo.moverName && <>Moved by {mo.moverName}</>}
-                    {mo.moverName && mo.secondName && ' · '}
-                    {mo.secondName && <>Seconded by {mo.secondName}</>}
-                  </p>
-                )}
-                <p class="motion__tally">
-                  {tally.recorded ? (
-                    meeting.body === 'board' ? (
-                      <>
-                        {tally.yes} yes · {tally.no} no · {tally.abstain}{' '}
-                        abstain · {tally.recused} recused · {tally.absent}{' '}
-                        absent
-                      </>
-                    ) : (
-                      <>
-                        weighted {tally.yes} yes · {tally.no} no ·{' '}
-                        {tally.abstain} abstain
-                      </>
-                    )
-                  ) : (
-                    'Vote not recorded'
-                  )}
-                  {' — '}
-                  {OUTCOME_LABELS[mo.outcome]}
+    {meeting.motions.length === 0 ? (
+      <p class="muted">No motions were recorded at this meeting.</p>
+    ) : (
+      <div class="motion-list">
+        {meeting.motions.map((mo) => {
+          // Per motion, render the tally and roll call for THIS meeting's
+          // body only — a board meeting's per-person tally/votes for a
+          // member meeting (or vice versa) is never the right one to show,
+          // same reasoning as the attendance line above. A tally whose
+          // `recorded` is false must render "Vote not recorded", never a
+          // fabricated 0–0, regardless of which body this is.
+          const tally = meeting.body === 'board' ? mo.tally : mo.memberTally;
+          return (
+            <div class="motion card">
+              <p class="motion__text">{mo.text}</p>
+              {(mo.moverName || mo.secondName) && (
+                <p class="motion__meta">
+                  {mo.moverName && <>Moved by {mo.moverName}</>}
+                  {mo.moverName && mo.secondName && ' · '}
+                  {mo.secondName && <>Seconded by {mo.secondName}</>}
                 </p>
-                {meeting.body === 'board'
-                  ? mo.votes.length > 0 && (
-                      <ul class="motion__rollcall">
-                        {mo.votes.map((v) => (
-                          <li>
-                            {v.fullName}: {VOTE_LABELS[v.choice]}
-                          </li>
-                        ))}
-                      </ul>
-                    )
-                  : mo.memberVotes.length > 0 && (
-                      <ul class="motion__rollcall">
-                        {mo.memberVotes.map((v) => (
-                          <li>
-                            {v.address}: {VOTE_LABELS[v.choice]} ({v.weight}{' '}
-                            {v.weight === 1 ? 'vote' : 'votes'})
-                            {v.viaProxy && ' — via proxy'}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-              </div>
-            );
-          })}
-        </div>
-      )
-    }
+              )}
+              <p class="motion__tally">
+                {tally.recorded ? (
+                  meeting.body === 'board' ? (
+                    <>
+                      {tally.yes} yes · {tally.no} no · {tally.abstain} abstain
+                      · {tally.recused} recused · {tally.absent} absent
+                    </>
+                  ) : (
+                    <>
+                      weighted {tally.yes} yes · {tally.no} no · {tally.abstain}{' '}
+                      abstain
+                    </>
+                  )
+                ) : (
+                  'Vote not recorded'
+                )}
+                {' — '}
+                {OUTCOME_LABELS[mo.outcome]}
+              </p>
+              {meeting.body === 'board'
+                ? mo.votes.length > 0 && (
+                    <ul class="motion__rollcall">
+                      {mo.votes.map((v) => (
+                        <li>
+                          {v.fullName}: {VOTE_LABELS[v.choice]}
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                : mo.memberVotes.length > 0 && (
+                    <ul class="motion__rollcall">
+                      {mo.memberVotes.map((v) => (
+                        <li>
+                          {v.address}: {VOTE_LABELS[v.choice]} ({v.weight}{' '}
+                          {v.weight === 1 ? 'vote' : 'votes'})
+                          {v.viaProxy && ' — via proxy'}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+            </div>
+          );
+        })}
+      </div>
+    )}
   </div>
 </BaseLayout>

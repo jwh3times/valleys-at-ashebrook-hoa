@@ -23,29 +23,26 @@ const turnstileSiteKey = env.TURNSTILE_SITE_KEY;
         window.turnstileToken = token;
       };
     </script>
-
-    {
-      turnstileSiteKey ? (
-        <>
-          <script
-            src="https://challenges.cloudflare.com/turnstile/v0/api.js"
-            is:inline
-            async
-            defer
-          />
-          <div
-            class="cf-turnstile"
-            data-sitekey={turnstileSiteKey}
-            data-callback="onTurnstile"
-          />
-          <VerifyPropertyForm client:only="react" />
-        </>
-      ) : (
-        <div class="form-message form-message--error">
-          Property verification is temporarily unavailable. Please try again
-          later.
-        </div>
-      )
-    }
+    {turnstileSiteKey ? (
+      <>
+        <script
+          src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+          is:inline
+          async
+          defer
+        ></script>
+        <div
+          class="cf-turnstile"
+          data-sitekey={turnstileSiteKey}
+          data-callback="onTurnstile"
+        />
+        <VerifyPropertyForm client:only="react" />
+      </>
+    ) : (
+      <div class="form-message form-message--error">
+        Property verification is temporarily unavailable. Please try again
+        later.
+      </div>
+    )}
   </div>
 </BaseLayout>

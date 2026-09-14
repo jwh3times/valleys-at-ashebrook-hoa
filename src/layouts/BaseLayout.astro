@@ -37,18 +37,16 @@ const fullTitle = siteTitle(title, site);
     />
   </head>
   <body class={bare ? 'body--bare' : undefined}>
-    {
-      bare ? (
-        <slot />
-      ) : (
-        <div class="site-canvas">
-          <Header />
-          <main class="site-main">
-            <slot />
-          </main>
-          <Footer />
-        </div>
-      )
-    }
+    {bare ? (
+      <slot />
+    ) : (
+      <div class="site-canvas">
+        <Header />
+        <main class="site-main">
+          <slot />
+        </main>
+        <Footer />
+      </div>
+    )}
   </body>
 </html>

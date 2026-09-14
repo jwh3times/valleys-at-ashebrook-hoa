@@ -14,7 +14,9 @@ const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
     <p class="eyebrow">About</p>
     <h1 class="page-title">About this site</h1>
     <div class="prose">
-      {aboutParagraphs(site).map((para) => <p class="page-lead">{para}</p>)}
+      {aboutParagraphs(site).map((para) => (
+        <p class="page-lead">{para}</p>
+      ))}
     </div>
   </div>
 </BaseLayout>

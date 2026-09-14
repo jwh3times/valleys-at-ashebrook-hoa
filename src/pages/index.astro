@@ -27,31 +27,29 @@ const description = official
     <div class="hero__inner">
       <p class="eyebrow eyebrow--onnavy">Raleigh, North Carolina</p>
       <h1>A well-kept community, kept simple.</h1>
-      {
-        official ? (
-          <p>
-            Announcements, the community calendar, governing documents, and dues
-            — all in one place for every Ashebrook homeowner.
-          </p>
-        ) : (
-          <p>
-            Announcements, the community calendar, and documents — gathered in
-            one place for neighbors in {NEIGHBORHOOD}.
-          </p>
-        )
-      }
+      {official ? (
+        <p>
+          Announcements, the community calendar, governing documents, and dues —
+          all in one place for every Ashebrook homeowner.
+        </p>
+      ) : (
+        <p>
+          Announcements, the community calendar, and documents — gathered in one
+          place for neighbors in {NEIGHBORHOOD}.
+        </p>
+      )}
       <div class="hero__cta">
-        {
-          official && (
-            <a class="btn btn--light" href="/dues">
-              Pay Dues
-            </a>
-          )
-        }
+        {official && (
+          <a class="btn btn--light" href="/dues">
+            Pay Dues
+          </a>
+        )}
         <a
           class={official ? 'btn btn--ghost-light' : 'btn btn--light'}
-          href="/documents">View Documents</a
+          href="/documents"
         >
+          View Documents
+        </a>
       </div>
     </div>
   </section>
@@ -60,7 +58,9 @@ const description = official
     <div>
       <div class="section-head">
         <h2>Latest Announcements</h2>
-        <a class="link-more" href="/announcements">View all →</a>
+        <a class="link-more" href="/announcements">
+          View all →
+        </a>
       </div>
       <AnnouncementsList
         items={announcements}
@@ -74,39 +74,35 @@ const description = official
       <h2>Upcoming</h2>
       <div class="cal-note">
         <div class="cal-note__title">Meetings &amp; events</div>
-        Community events are posted on our shared Google Calendar. Open any event
-        for details and a Google Meet link.
+        Community events are posted on our shared Google Calendar. Open any
+        event for details and a Google Meet link.
       </div>
-      <a class="subscribe-box" href="/calendar"
-        >+ Subscribe to the community calendar</a
-      >
+      <a class="subscribe-box" href="/calendar">
+        + Subscribe to the community calendar
+      </a>
     </div>
   </div>
 
   <div class="tiles">
-    {
-      official && (
-        <a class="tile" href="/dues">
-          <div class="tile__title">Pay Your Dues →</div>
-          <div class="tile__desc">PayPal, Venmo, Zelle, or check.</div>
-        </a>
-      )
-    }
+    {official && (
+      <a class="tile" href="/dues">
+        <div class="tile__title">Pay Your Dues →</div>
+        <div class="tile__desc">PayPal, Venmo, Zelle, or check.</div>
+      </a>
+    )}
     <a class="tile" href="/documents">
       <div class="tile__title">Documents →</div>
       <div class="tile__desc">Governing documents, minutes, and forms.</div>
     </a>
     <a class="tile" href="/contact">
       <div class="tile__title">Contact →</div>
-      {
-        official ? (
-          <div class="tile__desc">Questions go straight to our inbox.</div>
-        ) : (
-          <div class="tile__desc">
-            Reach the resident who maintains this site.
-          </div>
-        )
-      }
+      {official ? (
+        <div class="tile__desc">Questions go straight to our inbox.</div>
+      ) : (
+        <div class="tile__desc">
+          Reach the resident who maintains this site.
+        </div>
+      )}
     </a>
   </div>
 </BaseLayout>

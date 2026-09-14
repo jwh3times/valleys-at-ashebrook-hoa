@@ -28,55 +28,53 @@ const icalUrl = calendarId
     <div class="cal-head">
       <div>
         <p class="eyebrow">Schedule</p>
-        <h1 class="page-title" style="margin: 0;">Community Calendar</h1>
+        <h1 class="page-title" style="margin: 0;">
+          Community Calendar
+        </h1>
       </div>
-      {
-        calendarId && (
-          <div style="display:flex; gap:11px; flex-wrap:wrap;">
-            <a
-              class="btn"
-              href={addToGoogleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              + Add to Google Calendar
-            </a>
-            <a class="btn btn--outline" href={icalUrl}>
-              Subscribe (Apple / Outlook)
-            </a>
-          </div>
-        )
-      }
+      {calendarId && (
+        <div style="display:flex; gap:11px; flex-wrap:wrap;">
+          <a
+            class="btn"
+            href={addToGoogleUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            + Add to Google Calendar
+          </a>
+          <a class="btn btn--outline" href={icalUrl}>
+            Subscribe (Apple / Outlook)
+          </a>
+        </div>
+      )}
     </div>
 
-    {
-      calendarId ? (
-        <div class="cal-grid">
-          <iframe
-            class="calendar-frame"
-            src={embedSrc}
-            title={`${NEIGHBORHOOD} community calendar`}
-            loading="lazy"
-          />
-          <div>
-            <h2 class="side-h2">How the calendar works</h2>
-            <div class="cal-note">
-              <div class="cal-note__title">No login needed</div>
-              Events are posted on the community Google Calendar. Online
-              meetings include a Google Meet link inside the event — just open
-              the event and click to join. Use the buttons above to add the
-              calendar to your phone or computer.
-            </div>
+    {calendarId ? (
+      <div class="cal-grid">
+        <iframe
+          class="calendar-frame"
+          src={embedSrc}
+          title={`${NEIGHBORHOOD} community calendar`}
+          loading="lazy"
+        ></iframe>
+        <div>
+          <h2 class="side-h2">How the calendar works</h2>
+          <div class="cal-note">
+            <div class="cal-note__title">No login needed</div>
+            Events are posted on the community Google Calendar. Online meetings
+            include a Google Meet link inside the event — just open the event
+            and click to join. Use the buttons above to add the calendar to your
+            phone or computer.
           </div>
         </div>
-      ) : (
-        <div class="notice">
-          <strong>Setup needed:</strong> the community calendar isn’t connected
-          yet. Make the community Google Calendar public and add its Calendar ID
-          as <code>PUBLIC_GOOGLE_CALENDAR_ID</code> in your <code>.env</code>{' '}
-          file (see <code>SETUP.md</code>).
-        </div>
-      )
-    }
+      </div>
+    ) : (
+      <div class="notice">
+        <strong>Setup needed:</strong> the community calendar isn’t connected
+        yet. Make the community Google Calendar public and add its Calendar ID
+        as <code>PUBLIC_GOOGLE_CALENDAR_ID</code> in your <code>.env</code> file
+        (see <code>SETUP.md</code>).
+      </div>
+    )}
   </div>
 </BaseLayout>
