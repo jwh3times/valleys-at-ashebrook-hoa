@@ -1,9 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run check:*)",
+      "Bash(npm run db:migrate:local:*)",
+      "Bash(npm run deploy:check:*)",
+      "Bash(npm run format:check:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run lint:fix:*)",
+      "Bash(npm run lint:coercions:*)",
+      "Bash(npm run lint:migrations:*)",
+      "Bash(npm run lint:fixtures:*)",
+      "Bash(npm run sync:agents:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run test:server:*)",
+      "Bash(npm run test:watch:*)",
+      "Bash(npm run types:worker:*)",
+      "Bash(npm run types:worker:check:*)",
+      "Bash(npm run verify:invariants:*)",
       "Bash(npm test:*)",
-      "Bash(npm install:*)",
       "Bash(npx vitest run:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -11,6 +26,18 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node --experimental-strip-types \"$CLAUDE_PROJECT_DIR/scripts/require-production-confirmation.ts\" || exit 2",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",

@@ -317,6 +317,19 @@ and `test/unit/worker.test.ts` only asserts that `src/worker.ts` delegates to it
 
 ## Deploy
 
+Agents are authorized production operators, but **high-impact production mutations require the
+user's explicit confirmation of the operation and target**. Claude Code always presents its
+`PreToolUse` permission prompt as that final confirmation, even when the current request names the
+action. In every other agent client, a current request that clearly names the production action is
+confirmation; otherwise stop and ask before deploying, applying remote D1 migrations or writes,
+changing Worker secrets, clean-replacing the document corpus, writing the remote roster/audit
+state, or making a destructive Cloudflare setting change. Read-only remote checks, local dry runs,
+PR operations, and the merge itself do not need a second confirmation. The hook in
+`.claude/settings.json` enforces recognized wrappers and treats direct Wrangler commands as
+production-impacting unless they are classified read-only; every other agent client must enforce
+the same boundary from this rule. Installing dependencies is confirmation-gated too because
+dependency lifecycle scripts execute while production credentials are available.
+
 ```bash
 npm run build
 npm run deploy:check
