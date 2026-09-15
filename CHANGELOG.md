@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.16] - 2026-09-14
+
+### Security
+
+- **Harden the protected `main` branch against direct and destructive updates.** The active,
+  empty-bypass ruleset now requires every change to arrive through a pull request, blocks force
+  pushes and branch deletion, and retains the strict build, changelog, CodeQL, and code-quality
+  gates. The documented secret-scanning posture now also records GitHub's current generic-pattern
+  eligibility limit for this user-owned repository.
+
 ## [1.0.15] - 2026-09-14
 
 ### Security
