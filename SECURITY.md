@@ -470,6 +470,11 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   or the RFC 2606 reserved domains, aside from a short allowlist of published contact addresses and
   infrastructure hosts, so test data and documentation examples cannot carry a resident's contact
   details.
+- **Confirmation-gated production mutations** — agents are authorized to operate the single
+  production environment, but deployments, remote data writes, secret changes, destructive corpus
+  imports, and equivalent high-impact operations require explicit user confirmation. Claude Code's
+  project hook turns recognized command forms back into an interactive permission request even
+  though routine `npm run` commands are otherwise pre-approved.
 
 ## Responsible disclosure
 

@@ -317,6 +317,15 @@ and `test/unit/worker.test.ts` only asserts that `src/worker.ts` delegates to it
 
 ## Deploy
 
+Agents are authorized production operators, but **high-impact production mutations require the
+user's explicit confirmation of the operation and target**. A current request that clearly names
+the production action is confirmation; otherwise stop and ask before deploying, applying remote D1
+migrations or writes, changing Worker secrets, clean-replacing the document corpus, writing the
+remote roster/audit state, or making a destructive Cloudflare setting change. Read-only remote
+checks, local dry runs, PR operations, and the merge itself do not need a second confirmation.
+Claude Code enforces the known shell-command forms with the `PreToolUse` hook in
+`.claude/settings.json`; every other agent client must enforce the same boundary from this rule.
+
 ```bash
 npm run build
 npm run deploy:check
