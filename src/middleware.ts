@@ -21,13 +21,14 @@ import { DEFAULT_SITE_SETTINGS } from './lib/types';
 // (static.cloudflareinsights.com script; it reports same-origin to /cdn-cgi/rum
 // on the proxied domain, so 'self' covers the beacon, and cloudflareinsights.com
 // is allowed for the non-proxied/edge case). Enforced (not Report-Only) after
-// auditing every resource against these directives; keep 'unsafe-inline' because
-// Astro injects inline styles + island hydration scripts. To temporarily revert
-// if a new third-party resource is added, swap the header name back to
+// auditing every resource against these directives. Inline scripts receive a
+// fresh nonce below; inline styles retain 'unsafe-inline' because React emits
+// style attributes that a nonce cannot authorize. To temporarily revert if a
+// new third-party resource is added, swap the header name back to
 // `Content-Security-Policy-Report-Only` while updating the list.
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
+  "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data:",
   "font-src 'self' https://fonts.gstatic.com",
@@ -72,7 +73,69 @@ function applySecurityHeaders(headers: Headers): void {
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=(), payment=()',
   );
+  // One audited policy owns every route. A route-local header must not be able
+  // to omit a baseline directive or reintroduce script 'unsafe-inline'.
   headers.set('Content-Security-Policy', CSP);
+}
+
+function generateCspNonce(): string {
+  // CSP Level 3 recommends at least 128 unpredictable bits and a fresh value
+  // for every transmitted policy. Sixteen random bytes satisfy both here.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function addScriptNonce(policy: string, nonce: string): string {
+  const directives = policy
+    .split(';')
+    .map((directive) => directive.trim())
+    .filter(Boolean);
+  const scriptDirective = directives.findIndex(
+    (directive) => directive.split(/\s+/, 1)[0] === 'script-src',
+  );
+  const nonceSource = `'nonce-${nonce}'`;
+
+  if (scriptDirective === -1) {
+    directives.push(`script-src ${nonceSource}`);
+  } else {
+    directives[scriptDirective] += ` ${nonceSource}`;
+  }
+
+  return directives.join('; ');
+}
+
+function authorizePageScripts(response: Response): Response {
+  if (!response.headers.get('content-type')?.includes('text/html')) {
+    return response;
+  }
+
+  const policy = response.headers.get('Content-Security-Policy');
+  if (!policy) return response;
+
+  // Always replace the policy's nonce on this pass. Astro can route a response
+  // through middleware more than once (notably for its internal 404 rewrite),
+  // so the outermost pass must leave one fresh, unambiguous nonce source.
+  const nonce = generateCspNonce();
+  response.headers.set(
+    'Content-Security-Policy',
+    addScriptNonce(policy, nonce),
+  );
+
+  // Cloudflare JavaScript Detections runs after this Worker. It parses the
+  // nonce from the response header and adds it to the scripts it injects at the
+  // edge; this rewriter covers the scripts already present in Astro's HTML.
+  return new HTMLRewriter()
+    .on('script', {
+      element(element) {
+        element.setAttribute('nonce', nonce);
+      },
+    })
+    .transform(response);
+}
+
+function finalizeResponse(response: Response): Response {
+  applySecurityHeaders(response.headers);
+  return authorizePageScripts(response);
 }
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
@@ -117,8 +180,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
         }
       }
     }
-    applySecurityHeaders(response.headers);
-    return response;
+    return finalizeResponse(response);
   }
 
   const ctx = await getAuthContext(context.request, env, associationDay);
@@ -206,6 +268,5 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     // otherwise. freezePolicyFor decides; the two genuine exemptions live there.
     response = (await writeFreezeError(env, context.request)) ?? (await next());
   }
-  applySecurityHeaders(response.headers);
-  return response;
+  return finalizeResponse(response);
 };
