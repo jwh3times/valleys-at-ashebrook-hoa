@@ -46,9 +46,18 @@ describe('production confirmation hook', () => {
     'npm run roster:backfill -- --remote --write --operator=operator-id',
     'npm run shadow:sweep -- --write --remote',
     'npx wrangler deploy -c dist/server/wrangler.json',
+    'npx --yes wrangler deploy -c dist/server/wrangler.json',
     'wrangler d1 execute DATABASE --remote --file migration.sql',
+    'wrangler d1 delete DATABASE',
+    'wrangler d1 time-travel restore DATABASE --bookmark=example',
+    'wrangler queues delete hoa-events',
+    'wrangler vectorize delete hoa-documents',
+    'wrangler pages project delete resident-site',
+    'wrangler future-resource mutate production',
     'node --experimental-strip-types scripts/put-secret.ts EMAIL_API_KEY',
     'npm install example-package',
+    'npm --silent install example-package',
+    'npm --silent run deploy',
   ])('requires confirmation for %s', (command) => {
     expect(productionConfirmationReason(command)).not.toBeNull();
   });
@@ -59,6 +68,11 @@ describe('production confirmation hook', () => {
     'npm run roster:backfill -- --remote',
     'npm run shadow:sweep -- --local --write',
     'npx wrangler d1 migrations list DATABASE --remote',
+    'npx wrangler d1 list',
+    'npx wrangler d1 export DATABASE --remote --output backup.sql',
+    'npx wrangler tail resident-site',
+    'npx wrangler deploy --dry-run',
+    'npx wrangler vectorize query hoa-documents --vector "[0.1, 0.2]"',
     'npm ci',
     'npm test',
   ])(
