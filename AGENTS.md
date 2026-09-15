@@ -327,7 +327,8 @@ state, or making a destructive Cloudflare setting change. Read-only remote check
 PR operations, and the merge itself do not need a second confirmation. The hook in
 `.claude/settings.json` enforces recognized wrappers and treats direct Wrangler commands as
 production-impacting unless they are classified read-only; every other agent client must enforce
-the same boundary from this rule.
+the same boundary from this rule. Installing dependencies is confirmation-gated too because
+dependency lifecycle scripts execute while production credentials are available.
 
 ```bash
 npm run build

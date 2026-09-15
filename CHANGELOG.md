@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-09-14
+
+### Security
+
+- **Require explicit confirmation for high-impact production mutations by agents.** Claude Code's
+  project hook now returns deploys, remote D1 writes, secret changes, destructive imports, and
+  other non-read-only Wrangler operations to an interactive permission prompt while leaving local,
+  dry-run, and read-only checks unattended. The single production environment and the accepted
+  code-agent credential trust boundary are documented without requiring a separate vault.
+
 ## [1.0.16] - 2026-09-14
 
 ### Security

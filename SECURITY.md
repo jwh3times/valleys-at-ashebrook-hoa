@@ -474,7 +474,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   production environment, but deployments, remote data writes, secret changes, destructive corpus
   imports, and equivalent high-impact operations require explicit user confirmation. Claude Code's
   project hook turns recognized command forms back into an interactive permission request even
-  though routine `npm run` commands are otherwise pre-approved.
+  though routine `npm run` commands are otherwise pre-approved. Dependency installation is gated
+  as well because its lifecycle scripts run while the production credentials are available.
 
 ## Responsible disclosure
 
