@@ -416,7 +416,13 @@ and links it from the PR body. Documentation is kept in sync at ship time throug
 The user-invokable **`end-session`** skill closes out a work session across the four stores that
 live outside the tracked tree and therefore rot silently: project memory, GitHub issues, the
 private companion repository and `private/`, and the local workspace — and it audits that every
-human-only step the session produced has its follow-up issue and wiki page. It is a maintainer routine,
-not a build step: it never pushes, merges, or opens PRs (that is `/ship`), never rewrites the docs
-`docs-updater` owns, never runs a remote-D1 write, and shows every deletion as a list before
-acting.
+human-only step the session produced has its follow-up issue and wiki page. It is a maintainer
+routine, not a build step: it never pushes, merges, or opens PRs (that is `/ship`), never rewrites
+the docs `docs-updater` owns, never runs a remote-D1 write, and shows every deletion as a list
+before acting. It is also the last step the **`handoff`** skill runs.
+
+The user-invokable **`handoff`** and **`lets-go`** skills carry a session between the user's
+machines. `/handoff` audits for work not yet merged to `main`, writes a handoff document to the
+user's cloud drive, registers it in that drive's handoff map (one active handoff per repository),
+then closes out with `end-session`. `/lets-go`, run on the other machine, reads the map, resumes
+from the document, and clears the entry.
