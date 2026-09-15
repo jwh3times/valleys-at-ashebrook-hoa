@@ -455,11 +455,16 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   pinning costs no freshness. New workflow steps must be pinned the same way.
 - **CodeQL** — GitHub's default-setup code scanning analyses JavaScript/TypeScript, Actions
   workflows, and Python on every push and pull request, and the `main` ruleset requires it to pass.
-- **Secret scanning with push protection** — a commit containing a recognized credential is blocked
-  at push time rather than found afterwards.
-- **Protected `main`** — a GitHub ruleset requires the build gate, the changelog check, CodeQL, and
-  code-quality analysis to pass before a merge, and requires the branch to be up to date first. Its
-  bypass list is empty, so the checks apply to the maintainer as well.
+- **Secret scanning with push protection** — a commit containing a recognized provider credential
+  is blocked at push time rather than found afterwards. GitHub's generic-pattern scanning (formerly
+  called non-provider patterns) remains unavailable for this user-owned public repository: GitHub
+  currently limits it to organization-owned repositories on GitHub Team with
+  [Secret Protection enabled](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns).
+- **Protected `main`** — an active GitHub ruleset with an empty bypass list requires every change to
+  arrive through a pull request, blocks force pushes and branch deletion, requires the branch to be
+  up to date, and requires the build gate, changelog check, CodeQL, and code-quality analysis to
+  pass. Required approvals remain zero for the solo maintainer; the PR and checks still apply to
+  the repository owner.
 - **Synthetic-fixture gate** — `npm run lint:fixtures` (`scripts/check-fixture-values.ts`) fails CI
   when any phone number or email address in the tracked tree is outside the NANP fictional ranges
   or the RFC 2606 reserved domains, aside from a short allowlist of published contact addresses and
