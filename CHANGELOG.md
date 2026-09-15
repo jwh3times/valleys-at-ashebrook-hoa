@@ -7,6 +7,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-09-14
+
+### Security
+
+- **Replace script `'unsafe-inline'` with a fresh per-response CSP nonce.** Every script rendered
+  by Astro now receives the matching nonce, and Cloudflare documents that JavaScript Detections
+  copies the response-header nonce to scripts it injects later at the edge. This restores strict
+  script injection protection without disabling the live bot-detection signal; the primary-source
+  compatibility research is recorded under #335.
+
+## [1.0.14] - 2026-09-14
+
+### Changed
+
+- Bump `prettier-plugin-astro` from 0.14.1 to 1.0.0 and apply the new formatter output across the
+  Astro pages (#352).
+
+## [1.0.13] - 2026-09-14
+
+### Changed
+
+- Bump `@anthropic-ai/sdk` to 0.125.0, `@astrojs/cloudflare` to 14.3.1, Astro to 7.3.2,
+  `@better-auth/core`, `@better-auth/drizzle-adapter`, and `better-auth` to 1.7.4, and React and
+  React DOM to 19.3.0 (#351).
+- Bump `@cloudflare/workers-types` to 5.20260911.1, `@napi-rs/canvas` to 1.0.9, `@types/node` to
+  26.5.1, `@types/react` and `@types/react-dom` to 19.3.0, and Wrangler to 4.131.0; regenerate the
+  compatibility-date-aligned Worker bindings (#351).
+
 ## [1.0.12] - 2026-09-12
 
 ### Changed
