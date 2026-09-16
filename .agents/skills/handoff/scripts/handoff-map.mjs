@@ -7,10 +7,12 @@
  *   node .agents/skills/handoff/scripts/handoff-map.mjs get
  *   node .agents/skills/handoff/scripts/handoff-map.mjs set <file-name|null>
  *
- * The Handoffs folder is `HANDOFF_DIR` when set, otherwise the one
- * `<home>/<*proton*>/[<account>/]My files/Documents/Handoffs` that holds a
- * `handoff_map.json`. The map is shared by every repository, so this never
- * creates one.
+ * The Handoffs folder is `HANDOFFS_DIR` (or the older `HANDOFF_DIR`) when
+ * set, otherwise the one `<home>/<*proton*>/[<account>/]My files/Documents/Handoffs`
+ * that holds a `handoff_map.json`. On a machine without the Proton Drive
+ * desktop client the variable names a local mirror that the skills pull and
+ * push through the `proton-drive` CLI. The map is shared by every repository,
+ * so this never creates one.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -19,7 +21,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 const MAP_FILE = 'handoff_map.json';
-const DIR_ENV = 'HANDOFF_DIR';
+const DIR_ENV = 'HANDOFFS_DIR';
+const LEGACY_DIR_ENV = 'HANDOFF_DIR';
 
 function fail(message) {
   console.error(`handoff-map: ${message}`);
@@ -73,10 +76,17 @@ function childNamed(dir, name) {
 }
 
 function locateDir() {
-  const override = process.env[DIR_ENV]?.trim();
+  const envName = [DIR_ENV, LEGACY_DIR_ENV].find((name) =>
+    process.env[name]?.trim(),
+  );
+  const override = envName && process.env[envName].trim();
   if (override) {
     if (!fs.existsSync(path.join(override, MAP_FILE))) {
-      fail(`${DIR_ENV}=${override} contains no ${MAP_FILE}`);
+      fail(
+        `${envName}=${override} contains no ${MAP_FILE}; ` +
+          'on a CLI-mirror machine pull it first with ' +
+          `proton-drive filesystem download -f remove /my-files/Documents/Handoffs/${MAP_FILE} "${override}"`,
+      );
     }
     return override;
   }
