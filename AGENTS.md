@@ -425,4 +425,6 @@ The user-invokable **`handoff`** and **`lets-go`** skills carry a session betwee
 machines. `/handoff` audits for work not yet merged to `main`, writes a handoff document to the
 user's cloud drive, registers it in that drive's handoff map (one active handoff per repository),
 then closes out with `end-session`. `/lets-go`, run on the other machine, reads the map, resumes
-from the document, and clears the entry.
+from the document, and clears the entry. On a machine with no Proton Drive desktop client,
+`HANDOFFS_DIR` is a local mirror and both skills pull and push it through the `proton-drive` CLI
+against `/my-files/Documents/Handoffs`.

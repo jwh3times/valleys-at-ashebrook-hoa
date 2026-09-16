@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+### Changed
+
+- **`/handoff` and `/lets-go` work without the Proton Drive desktop client.** Proton ships no
+  Linux sync client, so on that machine `HANDOFFS_DIR` is a local mirror that both skills pull from
+  and push to the cloud `Handoffs` folder through the `proton-drive` CLI at each point the map or a
+  document is read or written. The helper script also accepts `HANDOFFS_DIR` alongside the older
+  `HANDOFF_DIR`.
+
 ## [1.0.18] - 2026-09-15
 
 ### Added
