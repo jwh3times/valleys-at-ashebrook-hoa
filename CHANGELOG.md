@@ -7,13 +7,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.20] - 2026-09-16
+
 ### Changed
 
 - **`/handoff` and `/lets-go` work without the Proton Drive desktop client.** Proton ships no
   Linux sync client, so on that machine `HANDOFFS_DIR` is a local mirror that both skills pull from
   and push to the cloud `Handoffs` folder through the `proton-drive` CLI at each point the map or a
-  document is read or written. The helper script also accepts `HANDOFFS_DIR` alongside the older
-  `HANDOFF_DIR`.
+  document is read or written. Downloads replace a stale local copy and uploads create a new cloud
+  revision, so neither transfer can stall on a conflict prompt. The helper script also accepts
+  `HANDOFFS_DIR` alongside the older `HANDOFF_DIR`, and names the pull command when the mirror
+  folder holds no map yet.
+
+## [1.0.19] - 2026-09-16
+
+### Changed
+
+- Bumped the `wrangler` dev dependency from 4.131.0 to 4.131.1 and regenerated
+  `worker-configuration.d.ts` for it (dependabot, #356).
 
 ## [1.0.18] - 2026-09-15
 
