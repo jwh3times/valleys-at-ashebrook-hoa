@@ -7,6 +7,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.18] - 2026-09-15
+
+### Added
+
+- **Hand a session between computers through Proton Drive with `/handoff` and `/lets-go`.**
+  `/handoff` now writes its document into the Proton Drive `Handoffs` folder instead of the OS
+  temporary directory, registers it as this repository's active handoff in `handoff_map.json`, and
+  runs `end-session` to close out the session. `/lets-go` on the other computer reads the map,
+  resumes from the document, and clears the entry. A shared helper script reads and writes the map
+  identically on Windows and Linux.
+
+### Changed
+
+- **`/handoff` alerts on work that has not reached `main`.** Before writing and again after
+  `end-session`, it reports uncommitted files, unpushed or unmerged branches, stashes, and open PRs
+  across the checkout and the private companion, flagging what exists only on the current machine.
+  `end-session` recognizes when `/handoff` invoked it rather than asking for a handoff in return.
+
 ## [1.0.17] - 2026-09-14
 
 ### Security
