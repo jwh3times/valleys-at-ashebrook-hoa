@@ -29,7 +29,15 @@ D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`
 and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
 review; the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
 (key/value singletons `dues` and `site`; the site JSON includes `officialMode` and the
-fail-closed/default-false `liveVotingEnabled` flag), `reports` (saved AI-generated
+fail-closed/default-false `liveVotingEnabled` flag — per #363/ADR 0024 both are transition-only:
+`PUT /api/admin/site` preserves whatever is already stored for every key in `SITE_GATE_KEYS`
+regardless of the request body, and a gate changes only through the audited compare-and-swap
+described in [`http-endpoints.md`](./http-endpoints.md)), `setting_changes` (the append-only audit
+ledger for that compare-and-swap: `id`, `key`, `old_value`/`new_value` as literal `'true'`/`'false'`
+text, `acting_account_id` with no FK, indexed `recorded_at`; no route may `UPDATE` or `DELETE` a
+row here, only `INSERT` — a static scan in `test/unit/setting-changes-append-only.test.ts` holds
+that. Deliberately separate from `audit_events`: that table's `family` CHECK is the party roster's
+ledger, and a site setting has no Party, Lot, or roster fact to attach to), `reports` (saved AI-generated
 governing-documents
 reports: `topic`, nullable `template_key` — null means freeform — `content_md` (final
 de-anonymized markdown), `sources_json` (a `{id, title, category}` snapshot), indexed
