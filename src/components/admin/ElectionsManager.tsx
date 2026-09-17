@@ -326,7 +326,12 @@ export default function ElectionsManager() {
   }
 
   async function handleVoid(e: ElectionDetail) {
-    if (!confirm(`Void "${e.title}"? This cannot be undone.`)) return;
+    if (
+      !confirm(
+        `Void "${e.title}"? This cannot be undone. If the result is being challenged, follow the challenge procedure on this panel first.`,
+      )
+    )
+      return;
     await run(async () => {
       await voidElection(e.id);
       await reload();
@@ -336,7 +341,7 @@ export default function ElectionsManager() {
   async function handleUncertify(e: ElectionDetail) {
     if (
       !confirm(
-        `Uncertify "${e.title}"? This voids the terms of service it created.`,
+        `Uncertify "${e.title}"? This voids the terms of service it created. If the result is being challenged, follow the challenge procedure on this panel first.`,
       )
     )
       return;
@@ -489,6 +494,33 @@ export default function ElectionsManager() {
         and void elections remain in History as a durable association record.
         Certifying seats the winners on the board.
       </p>
+      <details
+        className="admin-panel__intro"
+        aria-label="If a result is challenged"
+      >
+        <summary>If a result is challenged</summary>
+        <ol>
+          <li>
+            Recount first. A paper election is recounted from its paper ballots.
+            For an election conducted on the site, ask the site operator to
+            recount from the stored selections and compare the totals with the
+            recorded result. Record the outcome in the minutes.
+          </li>
+          <li>
+            If the recount matches and the challenge was only about the count,
+            the result stands.
+          </li>
+          <li>
+            Otherwise, the board votes on a motion to void the result,
+            uncertifying it first if it is certified. The same motion decides
+            whether the new election is held on the site or on paper.
+          </li>
+        </ol>
+        <p>
+          Selections cast on the site are not linked to any lot, so no one can
+          see or correct how a particular household voted.
+        </p>
+      </details>
 
       {msg && (
         <div
