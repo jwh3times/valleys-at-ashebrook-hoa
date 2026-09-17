@@ -501,6 +501,29 @@ export const settings = sqliteTable('settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+/**
+ * The append-only audit ledger for site feature-gate transitions (#363, ADR
+ * 0024 "Two flags, both required, both fail-closed"). One row per
+ * `POST /api/admin/site` `setGate` compare-and-swap that actually applied —
+ * `key` names the gate (see `SITE_GATE_KEYS` in `src/lib/types.ts`),
+ * `old_value`/`new_value` are the literal `'true'`/`'false'` text the stored
+ * JSON carries. Deliberately separate from `audit_events`: that table's
+ * `family` CHECK is the party roster's ledger, and a site setting has no
+ * roster fact to attach to. No route may UPDATE or DELETE a row here.
+ */
+export const settingChanges = sqliteTable(
+  'setting_changes',
+  {
+    id: text('id').primaryKey(),
+    key: text('key').notNull(),
+    oldValue: text('old_value').notNull(),
+    newValue: text('new_value').notNull(),
+    actingAccountId: text('acting_account_id').notNull(),
+    recordedAt: integer('recorded_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [index('setting_changes_key_recorded_at_idx').on(t.key, t.recordedAt)],
+);
+
 export const reports = sqliteTable(
   'reports',
   {

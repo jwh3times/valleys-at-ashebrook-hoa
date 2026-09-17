@@ -7,7 +7,10 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
 }));
 
 import { PUT } from '../../src/pages/api/admin/dues';
-import { PUT as putSiteSettings } from '../../src/pages/api/admin/site';
+import {
+  PUT as putSiteSettings,
+  POST as postSiteSettings,
+} from '../../src/pages/api/admin/site';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import { normalizeSiteSettings } from '../../src/lib/types';
@@ -38,7 +41,7 @@ describe('admin dues — board', () => {
     });
   });
 
-  it('persists the live voting setting', async () => {
+  it('persists presentation fields but ignores gate values in the body (#363)', async () => {
     const body = {
       siteName: 'The Valleys at Ashebrook Residents',
       tagline: 'Welcome to our community',
@@ -62,9 +65,37 @@ describe('admin dues — board', () => {
       .select()
       .from(settings)
       .where(eq(settings.key, 'site'));
+    const stored = normalizeSiteSettings(JSON.parse(row.value));
 
-    expect(normalizeSiteSettings(JSON.parse(row.value)).liveVotingEnabled).toBe(
-      true,
-    );
+    // The presentation fields the body carried landed...
+    expect(stored.welcomeBody).toBe('Welcome neighbors.');
+    // ...but the gate values did not, even on this very first save: PUT
+    // never sets a gate, only the audited transition does.
+    expect(stored.officialMode).toBe(false);
+    expect(stored.liveVotingEnabled).toBe(false);
+  });
+
+  it('turns live voting on only through the audited transition, never the blob PUT', async () => {
+    const res = await postSiteSettings({
+      request: new Request('http://localhost/api/admin/site', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'setGate',
+          key: 'liveVotingEnabled',
+          expected: false,
+          value: true,
+        }),
+      }),
+    } as never);
+    expect(res.status).toBe(204);
+    const [row] = await getDb(env)
+      .select()
+      .from(settings)
+      .where(eq(settings.key, 'site'));
+    const stored = normalizeSiteSettings(JSON.parse(row.value));
+    expect(stored.liveVotingEnabled).toBe(true);
+    // The presentation fields the earlier PUT wrote survive untouched.
+    expect(stored.welcomeBody).toBe('Welcome neighbors.');
   });
 });
