@@ -29,3 +29,6 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0021: Authored Agent Skills Generate Tool-Specific Trees](./0021-authored-agent-skills-generate-tool-specific-trees.md)
 - [ADR 0022: A Party Roster Separates Identity, Ownership, Representation, Service, and Access](./0022-party-roster-derived-access.md)
 - [ADR 0023: Two Issue Trackers, Routed by Body, With the Board as a View](./0023-two-trackers-routed-by-body.md)
+- [ADR 0024: Lot Records Are a Per-Lot Private Audience, Not a Fourth Content Tier](./0024-lot-records-per-lot-private-audience.md) — proposed
+- [ADR 0025: A Per-Lot Dues Ledger, with Online Payments Reconciled from Verified Provider Events](./0025-dues-ledger-and-online-payments.md) — proposed
+- [ADR 0026: A Lot's Own Holders May See Whether Its Paper Ballot Was Recorded](./0026-paper-ballot-receipt-for-own-lot.md)
