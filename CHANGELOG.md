@@ -7,6 +7,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.22] - 2026-09-17
+
+### Added
+
+- **Designs for three board-approved features, none of them built yet.** The board approved all
+  three at its 2026-08-11 meeting.
+  - **ADR 0024 (proposed, #291):** per-Lot private records such as dues balances and violations
+    become their own audience, scoped by Lot Authority inside the query and gated by a new
+    default-off `lotRecordsEnabled` flag alongside `officialMode`.
+  - **ADR 0025 (proposed, #295):** an append-only per-Lot dues ledger in integer cents, and online
+    payments where the provider is an adapter. A payment is credited only from a verified provider
+    event, deduplicated by both event and effect, with its own `onlinePaymentsEnabled` flag and a
+    daily reconciliation job. The provider remains the board's choice.
+  - **ADR 0026 and the paper ballot receipt spec (#302):** a lot's holders on the election date
+    may see whether that lot's paper ballot was recorded, and nothing more. The board corrects a
+    missed ballot before certification, or after uncertifying.
+
 ## [1.0.21] - 2026-09-17
 
 ### Added
