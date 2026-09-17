@@ -1,7 +1,30 @@
 import { fetchSiteSettings } from '../../lib/content';
-import { saveSite } from '../../lib/admin';
-import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../lib/types';
+import { saveSite, setSiteGate } from '../../lib/admin';
+import {
+  DEFAULT_SITE_SETTINGS,
+  SITE_GATE_KEYS,
+  type SiteGateKey,
+  type SiteSettings,
+} from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
+
+/**
+ * #363: these two gates no longer travel through the whole-blob `PUT` —
+ * the server preserves whatever is stored for them regardless of what this
+ * form sends. Each toggle instead calls the audited compare-and-swap
+ * transition directly, with the value the form loaded with as `expected`,
+ * so a stale tab cannot revert a gate someone else already changed.
+ */
+const GATE_COPY: Record<SiteGateKey, { label: string; help: string }> = {
+  officialMode: {
+    label: 'Official mode',
+    help: 'When off, the site presents as an unofficial resident-run hub: it shows a “not affiliated with the HOA” disclaimer and hides the dues and board features. Turn this on only if the HOA board formally adopts this site.',
+  },
+  liveVotingEnabled: {
+    label: 'Live voting',
+    help: 'Enables homeowner election ballots and member-motion votes. Turning this off pauses every open vote without closing it or deleting received votes.',
+  },
+};
 
 export default function SiteManager() {
   const {
@@ -11,11 +34,28 @@ export default function SiteManager() {
     busy,
     msg,
     run,
+    reload,
   } = useAdminResource<SiteSettings>(fetchSiteSettings, DEFAULT_SITE_SETTINGS);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     await run(() => saveSite(site), 'Site settings saved.');
+  }
+
+  function toggleGate(key: SiteGateKey, next: boolean) {
+    const expected = site[key];
+    void run(
+      async () => {
+        // Reload even on a conflict: the checkbox must settle back to
+        // whatever is actually stored, not the click the caller just made.
+        try {
+          await setSiteGate(key, expected, next);
+        } finally {
+          await reload();
+        }
+      },
+      `${GATE_COPY[key].label} turned ${next ? 'on' : 'off'}.`,
+    );
   }
 
   if (loading)
@@ -35,47 +75,45 @@ export default function SiteManager() {
         plus the public contact email.
       </p>
 
-      {msg && <div className="form-message form-message--success">{msg}</div>}
+      {msg && (
+        <div
+          className={
+            msg.startsWith('Error:')
+              ? 'form-message form-message--error'
+              : 'form-message form-message--success'
+          }
+        >
+          {msg}
+        </div>
+      )}
 
       <div
         className="panel-card"
         style={{ maxWidth: '620px', marginBottom: '18px' }}
       >
-        <div className="field" style={{ margin: 0 }}>
-          <label style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={site.officialMode}
-              onChange={(e) =>
-                setSite({ ...site, officialMode: e.target.checked })
-              }
-            />
-            <span>Official mode</span>
-          </label>
-          <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
-            When off, the site presents as an unofficial resident-run hub: it
-            shows a “not affiliated with the HOA” disclaimer and hides the dues
-            and board features. Turn this on only if the HOA board formally
-            adopts this site.
-          </p>
-        </div>
-        <div className="field" style={{ margin: '18px 0 0' }}>
-          <label style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={site.liveVotingEnabled}
-              onChange={(event) =>
-                setSite({ ...site, liveVotingEnabled: event.target.checked })
-              }
-            />
-            <span>Live voting</span>
-          </label>
-          <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
-            Enables homeowner election ballots and member-motion votes. Turning
-            this off pauses every open vote without closing it or deleting
-            received votes.
-          </p>
-        </div>
+        {SITE_GATE_KEYS.map((key, i) => (
+          <div
+            className="field"
+            style={{ margin: i === 0 ? 0 : '18px 0 0' }}
+            key={key}
+          >
+            <label
+              style={{ display: 'flex', gap: '10px', alignItems: 'center' }}
+            >
+              <input
+                type="checkbox"
+                checked={site[key]}
+                disabled={busy}
+                aria-label={`Turn ${GATE_COPY[key].label} ${site[key] ? 'off' : 'on'}`}
+                onChange={(e) => toggleGate(key, e.target.checked)}
+              />
+              <span>{GATE_COPY[key].label}</span>
+            </label>
+            <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+              {GATE_COPY[key].help}
+            </p>
+          </div>
+        ))}
       </div>
 
       <div className="panel-card" style={{ maxWidth: '620px' }}>

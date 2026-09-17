@@ -442,19 +442,27 @@ resident-run information hub, shows the disclaimer, and hides official-HOA surfa
 navigation.
 
 If the HOA board formally adopts the site, a board member can enable official mode from `/admin` ->
-**Site Settings**. The change is stored in D1 and takes effect on the next SSR page request.
+**Site Settings** using its own **Official mode** toggle. The toggle is a dedicated, audited
+transition (#363/ADR 0024) rather than part of the settings form's Save — it is unaffected by
+whatever else is filled in on that form — and takes effect on the next SSR page request. Every
+successful flip is recorded in D1's append-only `setting_changes` ledger with who changed it and
+when; the toggle shows a conflict message and reloads to the actual stored value if someone else
+changed it first.
 
 ## Live Voting Rollout
 
 Live Voting is a separate, default-off operational gate. Homeowner `/vote` and `/api/vote`
-surfaces are available only while both **Official Mode** and **Live Voting** are enabled in
-`/admin` -> **Site Settings**. Do not enable Live Voting in production until the board has formally
-adopted the site for official business and recorded its authorization of the live-voting process.
+surfaces are available only while both **Official Mode** and **Live Voting** are enabled, each by
+its own toggle in `/admin` -> **Site Settings**. Do not enable Live Voting in production until the
+board has formally adopted the site for official business and recorded its authorization of the
+live-voting process.
 
-Turning Live Voting off is the emergency pause. It blocks new opens and casts but does not close an
-open election or motion, replace its frozen electorate, or delete received ballots, motion votes,
-or lifecycle history. Turning it back on resumes every item that was already open, so review all
-active elections and motions before re-enabling it.
+Turning the **Live voting** toggle off is the emergency pause. It blocks new opens and casts but
+does not close an open election or motion, replace its frozen electorate, or delete received
+ballots, motion votes, or lifecycle history. Turning it back on resumes every item that was already
+open, so review all active elections and motions before re-enabling it. Like Official Mode, each
+flip is its own audited transition, independent of the rest of the settings form, and is recorded
+in `setting_changes`.
 
 After every production deploy, confirm in **Site Settings** that **Live Voting** remains off
 (`liveVotingEnabled: false`). The safe code default is false, but the D1 setting persists across

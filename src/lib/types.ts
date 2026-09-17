@@ -86,6 +86,19 @@ export interface SiteSettings {
   aboutBody: string;
 }
 
+/**
+ * Site feature gates: default-off, fail-closed flags that must be literal
+ * JSON booleans. Per ADR 0024 ("Two flags, both required, both fail-closed")
+ * and #363, a gate changes ONLY through the audited compare-and-swap
+ * transition on `POST /api/admin/site` (`{ action: 'setGate', key, expected,
+ * value }`) — never through the whole-blob `PUT`, which preserves whatever
+ * is already stored for every key here. This is the one list both mechanisms
+ * read, so a future gate (ADR 0024's `lotRecordsEnabled`, ADR 0025's
+ * `onlinePaymentsEnabled`) joins both by being added here.
+ */
+export const SITE_GATE_KEYS = ['officialMode', 'liveVotingEnabled'] as const;
+export type SiteGateKey = (typeof SITE_GATE_KEYS)[number];
+
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'The Valleys at Ashebrook Residents',
   tagline: 'Welcome to our community',

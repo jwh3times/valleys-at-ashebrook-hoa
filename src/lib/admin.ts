@@ -4,6 +4,7 @@ import type {
   AdminDocumentItem,
   DuesSettings,
   SiteSettings,
+  SiteGateKey,
   PropertyWithOwners,
   MembersView,
   MemberUser,
@@ -235,6 +236,25 @@ export async function saveDues(dues: DuesSettings): Promise<void> {
 
 export async function saveSite(site: SiteSettings): Promise<void> {
   await adminRequest('/api/admin/site', 'PUT', site, 'Save site failed');
+}
+
+/**
+ * The audited gate transition (#363, ADR 0024): compare-and-swaps one
+ * feature gate from `expected` (the value the form loaded with) to `value`.
+ * A stale `expected` — someone else changed the gate first — answers `409`
+ * with a message the caller should show and then reload from.
+ */
+export async function setSiteGate(
+  key: SiteGateKey,
+  expected: boolean,
+  value: boolean,
+): Promise<void> {
+  await adminRequest(
+    '/api/admin/site',
+    'POST',
+    { action: 'setGate', key, expected, value },
+    'Save failed',
+  );
 }
 
 // ---------- Roster (board-only reads + writes) ----------

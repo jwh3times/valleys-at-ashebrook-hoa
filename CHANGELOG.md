@@ -7,7 +7,32 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-## [1.0.22] - 2026-09-17
+## [1.1.0] - 2026-09-17
+
+### Added
+
+- **Turning `officialMode` or `liveVotingEnabled` on or off is now a recorded, deliberate act.**
+  Each gate has its own toggle in Site Settings, which sends the value the form loaded as the
+  expected current value. If someone else changed it first the save is refused with a conflict
+  message rather than applied, and every successful change appends a row to the new append-only
+  `setting_changes` table naming the key, the old and new values, the acting account, and the
+  time.
+
+### Fixed
+
+- **A stale Site Settings tab can no longer silently revert a feature gate.** Saving the form
+  used to write back the whole settings blob, including the gate values the tab loaded with, so
+  an unrelated edit to the tagline could turn official mode or live voting back off — or on. The
+  save now preserves whatever the gates are at the moment it lands, inside the write itself, and
+  a first-ever save writes the gates' defaults whatever the request says. Reported as #363 while
+  drafting ADR 0024, which needs the same mechanism for its own flags.
+
+### Migration
+
+- `0033_setting_changes.sql` adds the `setting_changes` table and its index. **It is not safe in
+  either order**: deployed ahead of the migration, the gate transition fails and the settings save
+  can no longer change a gate either, leaving no way to turn live voting off. Apply it before this
+  version is deployed. It was applied to production on 2026-09-17, before merge.
 
 ### Added
 

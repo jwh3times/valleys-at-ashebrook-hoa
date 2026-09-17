@@ -82,6 +82,16 @@ merge and `db:migrate:remote` as ONE operator step, ideally under the write free
 otherwise-safe any-time-before-the-next-freeze schedule. Phase 4's `properties` → `lots` rename is
 the next of this kind.
 
+**`0033` is the same rule for a table the merged code writes to, not just a renamed column.** It
+creates `setting_changes`, the audit ledger `POST /api/admin/site { action: 'setGate', ... }`
+(#363) inserts into as the last statement of its D1 batch. Deployed ahead of `0033`, `setGate`'s
+`INSERT INTO setting_changes` fails against the missing table, the whole batch rolls back, and the
+route answers `500` for every gate transition — including turning `liveVotingEnabled` off, so
+between the deploy and running `npm run db:migrate:remote` there is no way to pause live voting
+through the admin UI (`PUT` no longer writes gates at all, by the same change). `0033` must be
+applied **before** the merge/deploy that ships `setGate`, not after — the reverse of the default
+safe-in-either-order rule.
+
 ## The ledger
 
 One line per migration. The files themselves are the detail; this table exists so you can find
@@ -115,6 +125,7 @@ which migration introduced a shape without reading every file.
 | `0030`        | Adds `rate_limits` for Better Auth's atomic D1 throttles; apply before deploying the dependent auth handler (#316).                                                                                    |
 | `0031`        | `member_attendance_property_id_idx` / `member_votes_property_id_idx` — property-first lookups for the transfer-effects engine (#237). Additive. `ballots` has the same shape and is covered by `0032`. |
 | `0032`        | `ballots_property_id_idx` — the same property-first lookup for `ballots` (#340), completing what `0031` began. Additive.                                                                               |
+| `0033`        | `setting_changes` + `setting_changes_key_recorded_at_idx` — the append-only audit ledger for site feature-gate transitions (#363). **Not safe in either order** — see above; apply before the deploy.  |
 
 ### `0024`-`0029`: the table-rebuild migrations
 
