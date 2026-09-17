@@ -129,3 +129,25 @@ live conducted tally or editable conducted ballot/choice rows. A conducted elect
 A member motion is opened from its draft member meeting and may be closed and reopened while the
 meeting stays draft; the original snapshot and votes survive those cycles. When either feature
 flag is off, open rows are marked **Paused globally**.
+
+## Recount and challenge
+
+A conducted election's aggregate **can** be recounted: close derives every candidate's tally from
+`SUM(ballot_choices.weight)`, and choice rows are never deleted, so re-summing them by candidate
+reproduces the stored `candidates.votes` deterministically. ADR 0017's "cannot be recounted"
+paragraph analyses an increment-only tally that was never built and is marked superseded. No
+recount action exists in the admin UI; a recount is a read-only aggregate query against the
+election's choice rows. It never needs, and must never add, a join from choices to turnout.
+
+An individual ballot **cannot** be adjudicated, because choices carry no link to a lot. The
+challenge procedure the board decided on 2026-08-11 (#303) follows from that:
+
+1. Recount from the retained choice rows and record the outcome in the minutes.
+2. If the recount matches and the challenge concerned only the count, the result stands.
+3. Otherwise — the recount differs, or the challenge concerns eligibility, a specific ballot, or
+   conduct — the board votes on a motion to void (uncertifying first when certified), and that
+   motion decides whether the re-run is conducted on the site or on paper.
+
+`void` applies only to a `closed` election and `uncertify` only to a `certified` one. The Elections
+panel carries a board-facing copy of this procedure, and its void and uncertify confirmations point
+at it; keep the two in step.

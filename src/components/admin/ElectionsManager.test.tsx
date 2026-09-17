@@ -1192,3 +1192,61 @@ describe('ElectionsManager', () => {
     expect(castBySelect).toHaveValue('o1');
   });
 });
+
+describe('ElectionsManager challenge procedure', () => {
+  it('shows the challenge procedure: recount first, then a board motion to void', async () => {
+    mocked.fetchElections.mockResolvedValue([]);
+    render(<ElectionsManager />);
+
+    const procedure = await screen.findByRole('group', {
+      name: /if a result is challenged/i,
+    });
+    expect(procedure).toHaveTextContent(/recount/i);
+    expect(procedure).toHaveTextContent(/motion to void/i);
+    expect(procedure).toHaveTextContent(/on the site or on paper/i);
+  });
+
+  it('points the void confirmation at the challenge procedure', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
+    ]);
+    render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /void board election 2026/i }),
+    );
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/challenge procedure/i),
+    );
+    expect(mocked.voidElection).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('points the uncertify confirmation at the challenge procedure', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'certified' }),
+    ]);
+    render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /uncertify board election 2026/i }),
+    );
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/challenge procedure/i),
+    );
+    expect(mocked.uncertifyElection).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+});

@@ -1,6 +1,6 @@
 # ADR 0017: Elections Are Secret by Construction, and What That Does and Does Not Mean
 
-**Status:** Accepted
+**Status:** Accepted; its recount analysis for conducted elections is superseded by [ADR 0020](./0020-digital-ballot-box.md)
 **Date:** 2026-08-02
 
 ## Context
@@ -82,6 +82,13 @@ election is exposed to:
   election it recovers exactly the increment-by-increment history that live tallying produces,
   and no application-level design can prevent it: it is a platform capability operating below
   anything this codebase controls.
+
+> **Superseded for conducted elections (2026-09-17).** The paragraph below analyses an
+> increment-only tally, which was never built. [ADR 0020](./0020-digital-ballot-box.md) retains
+> identity-unlinked `ballot_choices` rows and derives the tally from them at close, so a conducted
+> election's aggregate **can** be recounted. What remains true is that no individual ballot can be
+> adjudicated. The challenge procedure is in
+> [`docs/agents/voting-and-ballots.md`](../agents/voting-and-ballots.md#recount-and-challenge).
 
 A conducted election also **cannot be recounted**. An increment-only tally is a running sum with no
 ballot-level record behind it to re-examine; the only thing it can ever answer is "trust the

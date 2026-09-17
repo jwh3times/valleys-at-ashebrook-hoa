@@ -7,6 +7,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.0.21] - 2026-09-17
+
+### Added
+
+- **The admin Elections panel shows the board's challenge procedure.** A collapsible "If a result
+  is challenged" block sets out the procedure the board decided on 2026-08-11 (#303): recount
+  first; if the recount matches and the challenge was only about the count, the result stands;
+  otherwise the board votes on a motion to void, uncertifying first when certified, and the same
+  motion decides whether the new election is held on the site or on paper. The void and uncertify
+  confirmations now point at it.
+
+### Fixed
+
+- **Documentation no longer claims a conducted election cannot be recounted.** ADR 0017's
+  analysis of an increment-only tally is marked superseded by ADR 0020, whose retained,
+  identity-unlinked choice rows let the aggregate be recounted deterministically; what still cannot
+  be done is adjudicating an individual ballot. `docs/agents/voting-and-ballots.md` gains a
+  "Recount and challenge" section recording both facts and the procedure.
+
 ## [1.0.20] - 2026-09-16
 
 ### Changed
