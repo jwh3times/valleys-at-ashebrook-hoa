@@ -130,6 +130,16 @@ export const PUT: APIRoute = async ({ request, locals }) => {
  *     `setMemberVotes`/`setBallots` use to gate one set-based `INSERT` on a
  *     preceding CAS.
  *
+ * A gate key ABSENT from the stored blob reads as `false`, not as a
+ * mismatch: `json_type` returns NULL for a missing path, so without the
+ * `COALESCE` the CAS would match no row for EITHER `expected` and answer
+ * 409 forever, with no way out but saving the presentation form. Today's
+ * row carries both keys, but a gate added later (ADR 0024's
+ * `lotRecordsEnabled`, ADR 0025's `onlinePaymentsEnabled`) is absent from
+ * every row written before it existed, and absent-means-false is the same
+ * fail-closed reading `normalizeSiteSettings` and `LIVE_VOTING_ENABLED_SQL`
+ * already give it.
+ *
  * `expected === value` is refused before any statement runs: a "swap" to
  * the value already requested as `expected` writes nothing, and a boolean
  * has no third state to distinguish "no-op" from "conflict" after the fact
@@ -181,7 +191,7 @@ async function setSiteGate(
      SET value = json_set(value, ?, json(?)), updated_at = ?
      WHERE key = 'site'
        AND json_valid(value)
-       AND json_type(value, ?) = ?`,
+       AND COALESCE(json_type(value, ?), 'false') = ?`,
   ).bind(path, newType, nowSeconds, path, expectedType);
 
   const insertChange = env.DATABASE.prepare(

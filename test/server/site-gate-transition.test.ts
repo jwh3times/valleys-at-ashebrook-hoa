@@ -218,3 +218,80 @@ describe('POST /api/admin/site { action: "setGate" }', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('setGate against an incomplete stored blob', () => {
+  it('treats a gate key absent from the stored row as off, so it can still be turned on', async () => {
+    // A row written before this gate key existed — the shape every stored
+    // row will have when ADR 0024/0025 add their flags to SITE_GATE_KEYS.
+    await getDb(env)
+      .insert(settings)
+      .values({
+        key: 'site',
+        value: JSON.stringify({
+          siteName: 'The Valleys at Ashebrook Residents',
+        }),
+        updatedAt: new Date(),
+      });
+
+    const res = await post(
+      {
+        action: 'setGate',
+        key: 'liveVotingEnabled',
+        expected: false,
+        value: true,
+      },
+      board,
+    );
+
+    expect(res.status).toBe(204);
+    expect(await storedGate('liveVotingEnabled')).toBe(true);
+    expect(await changeRows()).toHaveLength(1);
+  });
+
+  it('still refuses a mismatched expectation against an incomplete row', async () => {
+    await getDb(env)
+      .insert(settings)
+      .values({
+        key: 'site',
+        value: JSON.stringify({
+          siteName: 'The Valleys at Ashebrook Residents',
+        }),
+        updatedAt: new Date(),
+      });
+
+    const res = await post(
+      {
+        action: 'setGate',
+        key: 'liveVotingEnabled',
+        expected: true,
+        value: false,
+      },
+      board,
+    );
+
+    expect(res.status).toBe(409);
+    expect(await changeRows()).toHaveLength(0);
+  });
+});
+
+describe('setGate seeding on a brand-new site', () => {
+  it('records no change and leaves the gates at their defaults when the expectation is stale', async () => {
+    // No settings row exists. The batch seeds the defaults, then the CAS
+    // loses against `expected: true`. The seeded row is what getSiteSettings
+    // already falls back to, so this must be observably inert.
+    const res = await post(
+      {
+        action: 'setGate',
+        key: 'officialMode',
+        expected: true,
+        value: false,
+      },
+      board,
+    );
+
+    expect(res.status).toBe(409);
+    expect(await changeRows()).toHaveLength(0);
+    expect(await storedGate('officialMode')).toBe(false);
+    expect(await storedGate('liveVotingEnabled')).toBe(false);
+  });
+});
