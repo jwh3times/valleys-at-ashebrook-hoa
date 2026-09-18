@@ -154,10 +154,18 @@ across terms for a returning board member is now carried by the Party itself, no
 server-assigned `sequence` unique per election, a nullable `votes` (`NULL` = not yet recorded,
 `0` = recorded as zero — and always `NULL` while a conducted election is open), `won`, and
 `withdrawn`; it deliberately carries no `updated_at`. `ballots` references `elections` on
-delete-cascade and `properties` on delete-restrict, is unique per `(election_id, property_id)`, and
-records only turnout: a `weight` snapshot, nullable actionless `proxy_id`, nullable
-`cast_by_person_id` referencing `people(party_id)` on delete-set-null (repointed from `owners` by
-#248 part 2), and `recorded_at`.
+delete-cascade and `properties` on delete-restrict, is unique per `(election_id, property_id)`
+(`ballots_election_property_unq`), and records only turnout: a `weight` snapshot, nullable
+actionless `proxy_id`, nullable `cast_by_person_id` referencing `people(party_id)` on
+delete-set-null (repointed from `owners` by #248 part 2), and `recorded_at`. `id` and `recorded_at`
+are facts about the ballot, not about whichever `setBallots` call most recently touched the
+election's register: since #302 slice 1, `setBallots` is set-convergent
+(`INSERT ... ON CONFLICT (election_id, property_id) DO UPDATE`) rather than delete-and-reinsert, so
+a lot that stays on the register through an amendment keeps its original `id` and `recorded_at` —
+only `weight`/`proxy_id`/`cast_by_person_id` are overwritten — and only a newly-entered lot's
+`recorded_at` is the amendment instant. See [`http-endpoints.md`](./http-endpoints.md) for the
+statement shape and why: `review_flags.impacted_ballot_id`'s `ON DELETE SET NULL` and
+`roster/transfer-effects.ts`'s `recorded_at`-keyed discovery window both depend on it.
 `ballot_choices` is the identity-unlinked retained digital ballot box: `id`, `election_id` on
 delete-cascade, `candidate_id` on delete-`no action` (changed from `restrict` by #248's `candidates`
 rebuild — RESTRICT is checked immediately and NO ACTION at end-of-statement, and only the latter
