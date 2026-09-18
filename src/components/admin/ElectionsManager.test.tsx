@@ -1250,3 +1250,56 @@ describe('ElectionsManager challenge procedure', () => {
     confirmSpy.mockRestore();
   });
 });
+
+describe('ElectionsManager missing paper ballot procedure', () => {
+  it('shows the four steps for correcting a missed paper ballot', async () => {
+    mocked.fetchElections.mockResolvedValue([]);
+    render(<ElectionsManager />);
+
+    const procedure = await screen.findByRole('group', {
+      name: /if a homeowner reports a missing paper ballot/i,
+    });
+    expect(procedure).toHaveTextContent(/verify against the physical ballots/i);
+    expect(procedure).toHaveTextContent(/uncertify it first/i);
+    expect(procedure).toHaveTextContent(/add the lot to the ballots/i);
+    // The board-access consequence is the step most easily forgotten, and
+    // certification never restores it.
+    expect(procedure).toHaveTextContent(/re-grant board access/i);
+  });
+
+  it('tells the board the receipt never reveals what a ballot said', async () => {
+    mocked.fetchElections.mockResolvedValue([]);
+    render(<ElectionsManager />);
+
+    const procedure = await screen.findByRole('group', {
+      name: /if a homeowner reports a missing paper ballot/i,
+    });
+    expect(procedure).toHaveTextContent(/never see what any ballot said/i);
+  });
+
+  it('names both procedures in the uncertify confirmation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mocked.fetchElections.mockResolvedValue([
+      election({ id: 'e1', title: 'Board Election 2026', status: 'certified' }),
+    ]);
+    render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
+    await screen.findByText('Board Election 2026');
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /uncertify board election 2026/i }),
+    );
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/missing-paper-ballot procedure/i),
+    );
+    // The access consequence belongs in the confirmation, not only in the
+    // panel copy the board may not have opened.
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/does not resume automatically/i),
+    );
+    confirmSpy.mockRestore();
+  });
+});

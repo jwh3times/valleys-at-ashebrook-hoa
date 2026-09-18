@@ -151,3 +151,40 @@ challenge procedure the board decided on 2026-08-11 (#303) follows from that:
 `void` applies only to a `closed` election and `uncertify` only to a `certified` one. The Elections
 panel carries a board-facing copy of this procedure, and its void and uncertify confirmations point
 at it; keep the two in step.
+
+### Missing paper ballot
+
+A verified homeowner sees, on `/elections`, whether each lot they held **on a recorded election's
+date** is recorded as having returned a paper ballot — never what it said, and never anything about
+another lot. The read is `fetchPaperBallotReceipts`
+(`src/server/content/ballot-receipts.ts`); ADR 0026 records why this narrows ADR 0017's
+"per-lot turnout is board-only" to "board-only, except that a lot's own holders on the election
+date see that lot's status".
+
+Two things about it are deliberate and easy to break:
+
+- **Neither `officialMode` nor `liveVotingEnabled` gates it.** Live voting gates _conducted_
+  voting, which a paper election never is; official mode gates homeowner **writes** (ADR 0019),
+  while this is a tier-scoped read of a record `/elections` already shows in resident mode.
+  `election-pages.test.ts` carries a flags-off positive control so a later edit cannot gate it
+  silently.
+- **Lot Authority is read on the election's Association Day, not today.** A recorded election has
+  no frozen electorate, so the day must be named explicitly. A seller still sees the lot they held
+  then; a buyer sees nothing for an election before their Ownership began.
+
+The board's correction path, which the Elections panel states as "If a homeowner reports a missing
+paper ballot" — **keep the two in step**:
+
+1. Verify against the physical ballots. If none was returned, record that in the minutes.
+2. If the ballot was missed and the result is `certified`, `uncertify` first. This voids the terms
+   certification created and ends the Board Access grants they qualified; access **never resumes
+   automatically**.
+3. `setBallots` with the missed lot added, and `setTallies` if the physical recount shows it was
+   never counted. Both are legal while the election is `closed`. `setBallots` preserves row
+   identity, so correcting one lot leaves every other ballot's `id` and `recorded_at` intact.
+4. `certify` again, then re-grant Board Access explicitly through `/api/admin/access-grants`.
+
+An amendment writes **no audit-ledger event**: the ledger's families are ADR 0022's roster,
+identity, service, and access facts, and adding an election family would mean rebuilding the
+append-only `audit_events` table to change its CHECK. Accountability comes from the minutes, as it
+does for a recount.

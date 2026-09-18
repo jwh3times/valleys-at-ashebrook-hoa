@@ -110,6 +110,11 @@ const MACHINERY = [
   'server/roster/audit.ts',
   'server/roster/reads.ts',
   'pages/api/admin/roster-export.ts',
+  // #302: the paper-ballot receipt answers "did this lot return a ballot" and
+  // must never reach for what the ballot said. A recorded election stores no
+  // such link (ADR 0017), so naming a choice or candidate term here would mean
+  // the module had grown a capability it must not have.
+  'server/content/ballot-receipts.ts',
 ];
 
 function sourceFiles(dir: string): string[] {
