@@ -7,6 +7,37 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-09-18
+
+### Fixed
+
+- **Correcting one lot on a recorded election's ballot register no longer disturbs the rest of
+  it.** Recording ballots replaced the whole register by deleting it and re-inserting every row,
+  so adding a single missed lot gave every other ballot a new identity and a new recording time.
+  Two things quietly depended on those: an open review flag pointing at a ballot lost its
+  reference, erasing the evidence trail on the very election under review; and because a
+  backdated ownership transfer looks for activity by when a ballot was recorded, the next such
+  transfer flagged every ballot in the election instead of the one genuinely recorded in the
+  window. A lot that stays on the register now keeps both, a lot the board adds is timed to the
+  correction that added it, and a lot dropped from the register is still removed. Two board
+  members submitting the same correction at once now converge on one row rather than failing on a
+  database error. Recording ballots behaves the same from the outside — it is still a full
+  replacement, with the same responses and the same protection against a competing certify or
+  void (#302).
+
+## [1.1.2] - 2026-09-18
+
+### Changed
+
+- Bumped the `devalue` transitive dependency from 5.8.1 to 5.9.2.
+
+## [1.1.1] - 2026-09-18
+
+### Changed
+
+- Bumped the `@cloudflare/workers-types` dev dependency from 5.20260911.1 to 5.20260914.1 and
+  `wrangler` from 4.131.1 to 4.131.2.
+
 ## [1.1.0] - 2026-09-17
 
 ### Added
@@ -33,6 +64,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   either order**: deployed ahead of the migration, the gate transition fails and the settings save
   can no longer change a gate either, leaving no way to turn live voting off. Apply it before this
   version is deployed. It was applied to production on 2026-09-17, before merge.
+
+## [1.0.22] - 2026-09-17
 
 ### Added
 

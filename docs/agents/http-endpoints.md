@@ -210,7 +210,17 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   restored to `NULL`), and both return `409` for a `certified`/`void` election and for every
   non-`recorded` election. Each replacement reserves the election inside that same D1 batch, so a
   competing certification or void that wins first leaves the existing tallies/ballots intact and
-  makes the replacement return `409`. `setBallots` stamps `weight` from
+  makes the replacement return `409`. `setBallots` is a full replace at the contract level but is
+  **set-convergent, not delete-and-reinsert** (#302 slice 1): a lot omitted from `entries` is
+  deleted, and every submitted lot is `INSERT ... ON CONFLICT (election_id, property_id) DO UPDATE`
+  against `ballots_election_property_unq`, so a lot that stays on the register keeps its `id` and
+  `recorded_at` — the `DO UPDATE` writes only `weight`/`proxy_id`/`cast_by_person_id`. This matters
+  because `review_flags.impacted_ballot_id` is `ON DELETE SET NULL` (a re-inserted row would strip
+  the reference from every open flag on the election) and because
+  `roster/transfer-effects.ts`'s retrospective discovery keys backdated-transfer detection off a
+  ballot's real `recorded_at` (re-stamping every row on one amendment would falsely flag the whole
+  election). A newly-entered lot's `recorded_at` is the amendment instant, which is the honest
+  "entered on" answer for it. `setBallots` stamps `weight` from
   `properties.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
   same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
 meetingId: election.meetingId, associationDay: election.electionDate }` so a proxy signed for the

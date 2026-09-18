@@ -9,7 +9,12 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
 import { sql, eq } from 'drizzle-orm';
 import { POST } from '../../src/pages/api/admin/elections';
 import { getDb } from '../../src/server/db/client';
-import { elections, candidates, properties } from '../../src/server/db/schema';
+import {
+  elections,
+  candidates,
+  properties,
+  ballots,
+} from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   parties,
@@ -530,6 +535,107 @@ describe('uncertify', () => {
       }),
     );
     expect(again.status).toBe(204);
+  });
+
+  it('lets the board amend the register between uncertifying and certifying again', async () => {
+    // #302: the board's correction path for a missed paper ballot. The
+    // amendment is an ordinary `setBallots` on the re-opened `closed`
+    // election, and it must not disturb the ballots already on the register.
+    const electionId = await createElection();
+    const c1 = await createCandidate(electionId, 1, 'Avery Winner');
+    await seedQualifiedPerson('per-1', 'lot-1');
+    await seedQualifiedPerson('per-2', 'lot-2');
+    const db = getDb(env);
+    const recordedLongAgo = new Date('2026-03-02T12:00:00Z');
+    await db.insert(ballots).values({
+      id: 'bal-1',
+      electionId,
+      propertyId: 'lot-1',
+      weight: 1,
+      proxyId: null,
+      castByPersonId: null,
+      recordedAt: recordedLongAgo,
+    });
+
+    expect(
+      (
+        await POST(
+          req('POST', {
+            action: 'certify',
+            id: electionId,
+            winners: [winner(c1, 'per-1', 'lot-1', { office: 'president' })],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
+    const [term] = await db.select().from(boardServiceTerms);
+    await db.insert(accessGrants).values({
+      id: 'grant-1',
+      accountId: 'b',
+      grantType: 'board',
+      qualifyingBoardTermId: term.id,
+      startedAt: new Date(),
+      grantReason: 'board_service',
+    });
+
+    // Amending a certified election is refused: uncertify first.
+    expect(
+      (
+        await POST(
+          req('POST', {
+            action: 'setBallots',
+            electionId,
+            entries: [{ propertyId: 'lot-1' }, { propertyId: 'lot-2' }],
+          }),
+        )
+      ).status,
+    ).toBe(409);
+
+    expect(
+      (await POST(req('POST', { action: 'uncertify', id: electionId }))).status,
+    ).toBe(204);
+    expect(
+      (
+        await POST(
+          req('POST', {
+            action: 'setBallots',
+            electionId,
+            entries: [{ propertyId: 'lot-1' }, { propertyId: 'lot-2' }],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
+    const register = await db.select().from(ballots);
+    expect(register.length).toBe(2);
+    const original = register.find((r) => r.propertyId === 'lot-1');
+    expect(original?.id).toBe('bal-1');
+    expect(original?.recordedAt.getTime()).toBe(recordedLongAgo.getTime());
+
+    expect(
+      (
+        await POST(
+          req('POST', {
+            action: 'certify',
+            id: electionId,
+            winners: [winner(c1, 'per-1', 'lot-1')],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
+    // Per CONTEXT.md, Board Access never resumes automatically: the grant the
+    // uncertification ended stays ended across the re-certification.
+    const [grant] = await db
+      .select()
+      .from(accessGrants)
+      .where(eq(accessGrants.id, 'grant-1'));
+    expect(grant.endedAt).not.toBeNull();
+    expect(grant.endReason).toBe('recorded_in_error');
+    expect(
+      await db.all(sql`SELECT * FROM audit_integrity_violations_v`),
+    ).toEqual([]);
   });
 
   it('uncertifies a legacy-certified election that has no roster terms', async () => {
