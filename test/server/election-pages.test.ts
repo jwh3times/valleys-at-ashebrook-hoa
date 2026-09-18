@@ -8,6 +8,14 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
 import * as fx from './fixtures';
+import { sql } from 'drizzle-orm';
+import { getDb } from '../../src/server/db/client';
+import { users } from '../../src/server/db/auth-schema';
+import { settings } from '../../src/server/db/schema';
+import {
+  personLinks,
+  personVerifications,
+} from '../../src/server/db/roster-schema';
 
 import { fetchAdminElections } from '../../src/server/content/reads';
 import ElectionsPage from '../../src/pages/elections.astro';
@@ -16,7 +24,50 @@ beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
-beforeEach(fx.truncateAll);
+beforeEach(async () => {
+  const db = getDb(env);
+  // Not cleared by truncateAll: the roster link tables the receipt derives the
+  // caller's lots from, and the accounts they hang off.
+  for (const table of [
+    'person_links',
+    'person_verifications',
+    'access_grants',
+    'board_service_terms',
+    'ownerships',
+  ])
+    await db.run(sql.raw(`DELETE FROM "${table}"`));
+  await fx.truncateAll();
+  await db.run(sql.raw('DELETE FROM users'));
+  await db.insert(users).values({
+    id: 'acct-1',
+    name: 'acct-1',
+    email: 'acct-1@example.test',
+    emailVerified: true,
+    createdAt: fx.now,
+    updatedAt: fx.now,
+  });
+});
+
+/** A verified Person Link, which is what makes LOT_SQL answer at all. */
+async function linkAccount(accountId: string, personId: string) {
+  const db = getDb(env);
+  await db.insert(personVerifications).values({
+    id: `ver-${accountId}`,
+    accountId,
+    personId,
+    method: 'manual',
+    approverAccountId: accountId,
+    reason: 'manual_board_decision',
+    verifiedAt: fx.now,
+  });
+  await db.insert(personLinks).values({
+    id: `link-${accountId}`,
+    accountId,
+    personId,
+    verificationId: `ver-${accountId}`,
+    startedAt: fx.now,
+  });
+}
 
 async function makeContainer() {
   const container = await AstroContainer.create();
@@ -35,23 +86,60 @@ const seedProperty = fx.seedProperty;
 
 const seedBallot = fx.seedBallot;
 
+/**
+ * #302: the page now asks `ctx.capabilities`, so a signed-in caller's locals
+ * must carry a real capability Set. `member` is the default for a signed-in
+ * caller because that is what a verified homeowner has; the receipt tests
+ * below override it to cover the callers who must see nothing.
+ */
+function localsFor(
+  role: 'visitor' | 'homeowner' | 'board',
+  overrides: {
+    capabilities?: string[];
+    lotIds?: string[];
+    personId?: string | null;
+  } = {},
+) {
+  if (role === 'visitor') return undefined;
+  const capabilities = overrides.capabilities ?? [
+    'member',
+    ...(role === 'board' ? ['board'] : []),
+  ];
+  return {
+    authContext: {
+      userId: 'acct-1',
+      personId: overrides.personId === undefined ? 'per-1' : overrides.personId,
+      capabilities: new Set(capabilities),
+      lotIds: overrides.lotIds ?? [],
+      contentTier: role,
+      hasCurrentBoardTerm: false,
+      role,
+      propertyIds: overrides.lotIds ?? [],
+    },
+  } as unknown as App.Locals;
+}
+
 function renderAs(
   container: Awaited<ReturnType<typeof makeContainer>>,
   role: 'visitor' | 'homeowner' | 'board',
   url = 'http://localhost/elections',
+  overrides?: Parameters<typeof localsFor>[1],
 ) {
   return container.renderToString(ElectionsPage, {
     request: new Request(url),
-    locals:
-      role === 'visitor'
-        ? undefined
-        : ({
-            authContext: {
-              userId: 'u',
-              role,
-              propertyIds: [],
-            },
-          } as unknown as App.Locals),
+    locals: localsFor(role, overrides),
+  });
+}
+
+/** Same render, as a Response, so the cache header can be asserted. */
+function responseAs(
+  container: Awaited<ReturnType<typeof makeContainer>>,
+  role: 'visitor' | 'homeowner' | 'board',
+  overrides?: Parameters<typeof localsFor>[1],
+) {
+  return container.renderToResponse(ElectionsPage, {
+    request: new Request('http://localhost/elections'),
+    locals: localsFor(role, overrides),
   });
 }
 
@@ -222,4 +310,172 @@ describe('/elections', () => {
     expect(html).toContain('Withdrawn Candidate');
     expect(html).toContain('Withdrawn');
   });
+});
+
+/**
+ * #302 / ADR 0026: the paper-ballot receipt. A lot's own holders on the
+ * election date may see whether that lot is recorded as having returned a
+ * ballot — never what it said, and never anything about another lot.
+ */
+describe('/elections paper ballot receipt', () => {
+  const ELECTION_DAY = '2026-03-01';
+
+  async function seedHeldLotElection(
+    overrides: Record<string, unknown> = {},
+    withBallot = true,
+  ) {
+    await seedProperty('lot-1');
+    await fx.seedLotAuthority('per-1', 'lot-1', { startDay: '2025-01-01' });
+    await linkAccount('acct-1', 'per-1');
+    await seedElection('e1', {
+      electionDate: ELECTION_DAY,
+      status: 'closed',
+      visibility: 'public',
+      title: 'Paper Election 2026',
+      ...overrides,
+    });
+    if (withBallot) await seedBallot('b1', 'e1', 'lot-1');
+  }
+
+  it('tells a holder their lot is recorded as having returned a ballot', async () => {
+    await seedHeldLotElection();
+    const container = await makeContainer();
+    const html = await renderAs(container, 'homeowner');
+    expect(html).toContain("Your lot's ballot");
+    expect(html).toContain(
+      'Your ballot for lot-1 Ashebrook Lane is recorded as returned',
+    );
+  });
+
+  it('tells a holder with no record how to dispute it', async () => {
+    // A register the board HAS keyed — another lot returned one.
+    await seedProperty('lot-2');
+    await seedHeldLotElection({}, false);
+    await seedBallot('b2', 'e1', 'lot-2');
+
+    const container = await makeContainer();
+    const html = await renderAs(container, 'homeowner');
+    expect(html).toContain('No ballot is recorded for lot-1 Ashebrook Lane');
+    expect(html).toContain('href="/contact"');
+    // The neighbour's participation never surfaces.
+    expect(html).not.toContain('lot-2 Ashebrook Lane');
+  });
+
+  it('says the register is not entered yet rather than "not recorded"', async () => {
+    await seedHeldLotElection({}, false);
+    const container = await makeContainer();
+    const html = await renderAs(container, 'homeowner');
+    expect(html).toContain(
+      "The board has not entered this election's ballot register yet",
+    );
+    expect(html).not.toContain('No ballot is recorded');
+  });
+
+  it('adds the uncertify note on a certified election with no record', async () => {
+    await seedProperty('lot-2');
+    await seedHeldLotElection({ status: 'certified' }, false);
+    await seedBallot('b2', 'e1', 'lot-2');
+
+    const container = await makeContainer();
+    const html = await renderAs(container, 'homeowner');
+    expect(html).toContain('No ballot is recorded for lot-1 Ashebrook Lane');
+    expect(html).toContain('requires the board to uncertify it first');
+  });
+
+  it('shows a neutral line to a member who held no lot on that date', async () => {
+    await seedProperty('lot-1');
+    // Bought after the election, so no authority on the day.
+    await fx.seedLotAuthority('per-1', 'lot-1', { startDay: '2026-06-01' });
+    await linkAccount('acct-1', 'per-1');
+    await seedElection('e1', {
+      electionDate: ELECTION_DAY,
+      status: 'closed',
+      visibility: 'public',
+    });
+    await seedBallot('b1', 'e1', 'lot-1');
+
+    const container = await makeContainer();
+    const html = await renderAs(container, 'homeowner');
+    expect(html).toContain("You held no lot on this election's date");
+    expect(html).not.toContain('is recorded as returned');
+  });
+
+  describe('who gets the block at all', () => {
+    it('shows nothing to an anonymous visitor', async () => {
+      await seedHeldLotElection();
+      const container = await makeContainer();
+      const html = await renderAs(container, 'visitor');
+      expect(html).toContain('Paper Election 2026');
+      expect(html).not.toContain("Your lot's ballot");
+    });
+
+    it('shows nothing to a signed-in account with no member capability', async () => {
+      await seedHeldLotElection();
+      const container = await makeContainer();
+      // An unlinked account, a board admin who holds no lot, and a System
+      // Administrator who holds no lot all look like this: no `member`.
+      for (const capabilities of [[], ['board'], ['board', 'systemAdmin']]) {
+        const html = await renderAs(container, 'board', undefined, {
+          capabilities,
+          personId: null,
+        });
+        expect(html).toContain('Paper Election 2026');
+        expect(html).not.toContain("Your lot's ballot");
+      }
+    });
+
+    it('shows the block to a board caller who does hold a lot', async () => {
+      await seedHeldLotElection();
+      const container = await makeContainer();
+      const html = await renderAs(container, 'board');
+      expect(html).toContain(
+        'Your ballot for lot-1 Ashebrook Lane is recorded as returned',
+      );
+    });
+  });
+
+  it('marks a caller-specific render private and uncacheable', async () => {
+    await seedHeldLotElection();
+    const container = await makeContainer();
+
+    const member = await responseAs(container, 'homeowner');
+    expect(member.headers.get('Cache-Control')).toBe('private, no-store');
+
+    // The public render is untouched, so a zone cache rule stays viable.
+    const visitor = await responseAs(container, 'visitor');
+    expect(visitor.headers.get('Cache-Control')).not.toBe('private, no-store');
+  });
+
+  it('renders with officialMode and liveVotingEnabled both off', async () => {
+    await seedHeldLotElection();
+    await getDb(env)
+      .insert(settings)
+      .values({
+        key: 'site',
+        value: JSON.stringify({
+          officialMode: false,
+          liveVotingEnabled: false,
+        }),
+        updatedAt: fx.now,
+      });
+
+    const container = await makeContainer();
+    const html = await renderAs(container, 'homeowner');
+    // Decision 2: neither flag gates this read. Live voting gates CONDUCTED
+    // voting, which a paper election never is, and official mode gates
+    // homeowner WRITES. A later edit that gates it would fail here.
+    expect(html).toContain(
+      'Your ballot for lot-1 Ashebrook Lane is recorded as returned',
+    );
+  });
+
+  for (const status of ['draft', 'void'] as const) {
+    it(`renders no receipt for a ${status} election the caller holds a lot in`, async () => {
+      await seedHeldLotElection({ status, title: `Hidden ${status}` });
+      const container = await makeContainer();
+      const html = await renderAs(container, 'homeowner');
+      expect(html).not.toContain(`Hidden ${status}`);
+      expect(html).not.toContain("Your lot's ballot");
+    });
+  }
 });

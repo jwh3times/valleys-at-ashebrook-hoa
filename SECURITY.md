@@ -156,6 +156,23 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   [ADR 0017](./docs/adr/0017-elections-secret-by-construction.md) for the paper-election baseline and
   [ADR 0020](./docs/adr/0020-digital-ballot-box.md) for the retained digital ballot box and its
   limits.
+- **A lot's own holders may see whether its paper ballot was recorded — never what it said, and
+  never anything about another lot.** For a `recorded` (paper) election, `/elections` renders a
+  verified homeowner, per lot they held on that election's own Association Day, only whether a
+  ballot is recorded for it (`fetchPaperBallotReceipts`, `src/server/content/ballot-receipts.ts`,
+  SSR-only — there is no API route, and the page sets `Cache-Control: private, no-store` whenever a
+  receipt renders). Lot Authority is evaluated on that day, not today, so a seller still sees a lot
+  they later sold and a buyer sees nothing for an election before their Ownership began. This
+  narrows ADR 0017's board-only per-lot turnout register by exactly one fact: a co-holder of the
+  same lot who did not hand in its ballot learns the lot returned one — the same arithmetic-
+  disclosure residual `hasCast` already accepts for conducted elections — and it never reaches
+  anyone outside the lot's holders on the election date. Neither `officialMode` nor
+  `liveVotingEnabled` gates it: it is a scoped read of a record `/elections` already publishes in
+  resident mode, not homeowner-initiated business under ADR 0019. The board corrects a missed
+  ballot through the existing `setBallots` path (uncertifying first if the result is already
+  certified, which ends the Board Access grants its terms qualified until re-granted by hand); no
+  audit-ledger event exists for an election family. See
+  [ADR 0026](./docs/adr/0026-paper-ballot-receipt-for-own-lot.md).
 - **The ADR 0022 phase 3d transfer-effects and review-flag machinery is held to the same
   ballot-secrecy boundary.** A property transfer's automatic discovery of a not-yet-concluded
   conducted ballot (`ballot_final_after_transfer`) reaches only the identity-linked turnout

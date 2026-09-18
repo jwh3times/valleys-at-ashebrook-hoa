@@ -115,6 +115,12 @@ A `day` of `null` asks "did this authority EVER exist" — the weaker question. 
 the board's pickers still offer a former owner for a past occasion while every _use_ of that
 authority is refused.
 
+`src/server/content/ballot-receipts.ts`'s `fetchPaperBallotReceipts` (#302, ADR 0026) is a second
+direct consumer of derived access, but not of the readers above: it embeds `derive.ts`'s `LOT_SQL`
+itself as a subquery, bound to the caller's account and to each recorded election's own Association
+Day, so a lot's own holders on that day — and no one else — see whether their lot's paper ballot is
+recorded. See [`voting-and-ballots.md`](./voting-and-ballots.md).
+
 ## Writing to the roster
 
 Every mutation on the phase 3b/3c/3d roster routes is **ONE D1 batch of conditional statements**:

@@ -7,6 +7,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-18
+
+### Added
+
+- **A homeowner can now check that their paper ballot was received.** Beside each recorded
+  election on the elections page, a verified homeowner sees, for each lot they held **on that
+  election's date**, whether the lot is recorded as having returned a ballot. It never shows what
+  any ballot said, and never says anything about a lot the reader did not hold. Where no ballot is
+  recorded, the page says so plainly and points the homeowner at the board, because a missing
+  record is a real state to dispute rather than an error; where the board has not yet entered the
+  register at all, it says that instead, so an unkeyed election does not tell everyone "not
+  recorded". On a certified result the note adds that correcting it means the board must uncertify
+  it first. A homeowner who held no lot on the date sees one neutral line, which reveals nothing
+  about any lot. Which lots count is decided on the election's date, not today, so someone who
+  sold afterwards still sees the ballot that was their act, and a buyer learns nothing about the
+  seller's participation. Any page carrying a receipt is marked private and uncacheable.
+- **The board's Elections panel spells out how to correct a missed paper ballot.** A new "If a
+  homeowner reports a missing paper ballot" section gives the four steps: verify against the
+  physical ballots, uncertify first if the result is certified, add the lot to the register and
+  re-enter tallies if the recount needs it, then certify again and re-grant board access. The
+  uncertify confirmation now names both this and the challenge procedure, and warns that
+  uncertifying ends the board access the certified terms qualified — which never comes back on its
+  own (#302).
+
 ## [1.1.3] - 2026-09-18
 
 ### Fixed

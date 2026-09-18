@@ -23,9 +23,10 @@ It provides:
   amending a resolution creates a new one that supersedes the old, forming a walkable chain
 - 🏛️ **Elections** — recorded paper elections plus a default-off conducted-election lifecycle and
   identity-unlinked ballot-box schema; `/elections` publishes only closed/certified candidates,
-  results, and aggregate turnout; when the board enables live voting, verified homeowners cast
-  final ballots at `/vote` while the board opens, monitors, closes, and reviews elections in the
-  admin panel
+  results, and aggregate turnout, plus (for a verified homeowner) whether a lot they held on a
+  recorded election's date is recorded as having returned a paper ballot — never what it said; when
+  the board enables live voting, verified homeowners cast final ballots at `/vote` while the board
+  opens, monitors, closes, and reviews elections in the admin panel
 - 📝 **Homeowner proxies** — in official mode, a verified homeowner can grant or revoke a proxy
   for one of their lots at an upcoming member meeting or election and review proxies they granted
   or hold at `/proxies`; the board can still record and administer paper proxies

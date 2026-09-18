@@ -4,6 +4,7 @@ import ReportMarkdown from '../components/react/ReportMarkdown.tsx';
 import { NEIGHBORHOOD } from '../lib/site';
 import { env } from 'cloudflare:workers';
 import { fetchElectionsFor } from '../server/content/reads';
+import { fetchPaperBallotReceipts } from '../server/content/ballot-receipts';
 import { formatDate } from '../lib/format';
 
 // Read tier-filtered, recorded-only (closed/certified) elections server-side
@@ -16,8 +17,28 @@ import { formatDate } from '../lib/format';
 // `ballots` is always null on this read (see ElectionDetail's own doc
 // comment) — this page renders aggregate turnout only and must never reach
 // for `ballots`, even defensively.
-const role = Astro.locals.authContext?.role ?? 'visitor';
+const ctx = Astro.locals.authContext ?? null;
+const role = ctx?.role ?? 'visitor';
 const electionList = await fetchElectionsFor(env, role);
+
+// #302 / ADR 0026: a lot's own holders on the election date may see whether
+// that lot is recorded as having returned a paper ballot. Gated on the
+// `member` capability alone — NOT on `officialMode` or `liveVotingEnabled`.
+// Live voting gates conducted voting, which a paper election never is; and
+// official mode gates homeowner WRITES (ADR 0019), while this is a tier-scoped
+// READ of a record `/elections` already shows in resident mode. Gating it
+// would hide the check while leaving the record visible, for no secrecy gain.
+// `election-pages.test.ts` holds that line with a flags-off positive control.
+const receipts =
+  ctx && ctx.capabilities.has('member')
+    ? await fetchPaperBallotReceipts(env, ctx, electionList)
+    : null;
+
+// Caller-specific HTML must never become cacheable if a zone cache rule is
+// added later. `/elections` is a public page, so the header is set only on the
+// renders that actually carry a receipt.
+if (receipts !== null)
+  Astro.response.headers.set('Cache-Control', 'private, no-store');
 ---
 
 <BaseLayout
@@ -70,6 +91,46 @@ const electionList = await fetchElectionsFor(env, role);
               lots, {e.turnout.weightCast} of {e.turnout.eligibleWeight} vote
               weight
             </p>
+
+            {receipts?.has(e.id) && (
+              <div class="election__receipt">
+                <h3 class="election__receipt-title">Your lot's ballot</h3>
+                {receipts.get(e.id)!.length === 0 ? (
+                  <p class="muted">You held no lot on this election's date.</p>
+                ) : (
+                  <ul class="election__receipt-list">
+                    {receipts.get(e.id)!.map((lot) => (
+                      <li class="election__receipt-lot">
+                        {lot.recorded ? (
+                          <span>
+                            Your ballot for {lot.address} is recorded as
+                            returned.
+                          </span>
+                        ) : e.turnout.ballotsCast === 0 ? (
+                          <span>
+                            The board has not entered this election's ballot
+                            register yet.
+                          </span>
+                        ) : (
+                          <span>
+                            No ballot is recorded for {lot.address}. If you
+                            returned one,{' '}
+                            <a href="/contact">contact the board</a>.
+                            {e.status === 'certified' && (
+                              <>
+                                {' '}
+                                This result is certified; correcting it requires
+                                the board to uncertify it first.
+                              </>
+                            )}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>

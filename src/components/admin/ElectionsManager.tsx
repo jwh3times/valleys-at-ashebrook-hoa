@@ -341,7 +341,7 @@ export default function ElectionsManager() {
   async function handleUncertify(e: ElectionDetail) {
     if (
       !confirm(
-        `Uncertify "${e.title}"? This voids the terms of service it created. If the result is being challenged, follow the challenge procedure on this panel first.`,
+        `Uncertify "${e.title}"? This voids the terms of service it created and ends the board access they qualified, which does not resume automatically. Follow the procedure on this panel first: the challenge procedure if the result is being challenged, or the missing-paper-ballot procedure if you are correcting the ballot register.`,
       )
     )
       return;
@@ -520,6 +520,39 @@ export default function ElectionsManager() {
           Selections cast on the site are not linked to any lot, so no one can
           see or correct how a particular household voted.
         </p>
+      </details>
+      <details
+        className="admin-panel__intro"
+        aria-label="If a homeowner reports a missing paper ballot"
+      >
+        <summary>If a homeowner reports a missing paper ballot</summary>
+        <p>
+          A homeowner can see, for each lot they held on a paper election's
+          date, whether that lot is recorded as having returned a ballot. They
+          never see what any ballot said. A homeowner who disputes a missing
+          record contacts the board.
+        </p>
+        <ol>
+          <li>
+            Verify against the physical ballots. If none was returned, tell the
+            homeowner and record it in the minutes; there is nothing to correct.
+          </li>
+          <li>
+            If the ballot was missed and the result is certified, uncertify it
+            first. <strong>This interrupts board members' site access</strong>:
+            it voids the terms certification created and ends the board access
+            those terms qualified, and access never resumes automatically.
+          </li>
+          <li>
+            Add the lot to the ballots for that election, and re-enter the
+            tallies if the physical recount shows the ballot was never counted.
+            Correcting one lot leaves every other recorded ballot untouched.
+          </li>
+          <li>
+            Certify again if you uncertified, then re-grant board access
+            explicitly under Roles. Certifying does not restore it.
+          </li>
+        </ol>
       </details>
 
       {msg && (
