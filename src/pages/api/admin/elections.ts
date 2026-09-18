@@ -365,20 +365,58 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
     election.meetingId,
     ...proxyGuard.binds,
   );
-  const children: D1PreparedStatement[] = [
-    env.DATABASE.prepare(
-      `DELETE FROM ballots WHERE election_id = ? AND ${guard.sql}`,
-    ).bind(electionId, ...guard.binds),
-  ];
+  // Set-convergent, NOT delete-and-reinsert. A lot that stays on the
+  // register keeps its `id` and `recorded_at`, because both are facts about
+  // the ballot rather than about this edit:
+  //
+  // - `review_flags.impacted_ballot_id` is ON DELETE SET NULL, so re-inserting
+  //   an unchanged row would silently strip the ballot reference from every
+  //   open flag on the election — the board correcting one missed lot would
+  //   erase the evidence trail on all the others.
+  // - `transfer-effects.ts` discovers intervening action by `recorded_at`
+  //   inside a backdated transfer's window. Re-stamping every row would make a
+  //   later backdated transfer flag the whole election.
+  //
+  // The external contract is unchanged: still a full replace, same codes, same
+  // reservation. Only the statements differ.
+  const deleteOmitted =
+    rows.length === 0
+      ? env.DATABASE.prepare(
+          `DELETE FROM ballots WHERE election_id = ? AND ${guard.sql}`,
+        ).bind(electionId, ...guard.binds)
+      : env.DATABASE.prepare(
+          `DELETE FROM ballots
+             WHERE election_id = ?
+               AND property_id NOT IN (${rows.map(() => '?').join(', ')})
+               AND ${guard.sql}`,
+        ).bind(
+          electionId,
+          ...rows.map((row) => row.propertyId),
+          ...guard.binds,
+        );
+  const children: D1PreparedStatement[] = [deleteOmitted];
   for (const row of rows) {
     children.push(
       env.DATABASE.prepare(
+        // The `WHERE` on the SELECT is load-bearing twice over: it carries the
+        // reservation guard, and SQLite needs a WHERE clause on an
+        // INSERT...SELECT before it will parse a following ON CONFLICT rather
+        // than read the `ON` as a join constraint.
+        //
+        // The conflict target is `ballots_election_property_unq`. The DO
+        // UPDATE never assigns `id` or `recorded_at`, which is what preserves
+        // identity; an amended-IN lot takes `now`, where it means "entered
+        // on" and is the honest answer.
         `INSERT INTO ballots (
            id, election_id, property_id, cast_by_person_id, proxy_id,
            weight, recorded_at
          )
          SELECT ?, ?, ?, ?, ?, ?, ?
-         WHERE ${guard.sql}`,
+         WHERE ${guard.sql}
+         ON CONFLICT (election_id, property_id) DO UPDATE SET
+           weight = excluded.weight,
+           proxy_id = excluded.proxy_id,
+           cast_by_person_id = excluded.cast_by_person_id`,
       ).bind(
         row.id,
         electionId,

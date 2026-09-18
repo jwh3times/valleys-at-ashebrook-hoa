@@ -6,6 +6,7 @@ import { users } from '../../src/server/db/auth-schema';
 import { associationDateIso } from '../../src/lib/format';
 import {
   ballotChoices,
+  ballots,
   memberAttendance,
   memberVotes,
   motions,
@@ -23,6 +24,7 @@ import {
   truncateAll,
 } from './fixtures';
 import { POST } from '../../src/pages/api/admin/roster-ownerships';
+import { POST as ELECTIONS_POST } from '../../src/pages/api/admin/elections';
 import { DELETE as PROXY_DELETE } from '../../src/pages/api/admin/proxies';
 
 /**
@@ -139,6 +141,20 @@ async function seedOwnership(id: string, ownerPartyId: string, lotId: string) {
 function req(body: unknown): never {
   return {
     request: new Request('http://localhost/api/admin/roster-ownerships', {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }),
+  } as never;
+}
+
+/** The board amending a recorded register, through the real admin action. */
+function electionsReq(body: unknown): never {
+  return {
+    request: new Request('http://localhost/api/admin/elections', {
       method: 'POST',
       headers: {
         origin: 'http://localhost',
@@ -570,6 +586,94 @@ describe('recorded elections', () => {
 
     const rows = (await flags()).filter(
       (f) => f.impacted_ballot_id === 'bal-rec',
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].category).toBe('intervening_action_backdated');
+    await integrityClean();
+  });
+});
+
+describe('amended recorded registers', () => {
+  // `setBallots` preserves row identity (#302 slice 1) precisely so this
+  // engine keeps asking about a ballot's REAL recording instant. Under the old
+  // delete-and-reinsert, amending one lot re-stamped every row in the
+  // election, and the next backdated transfer flagged all of them.
+  it('leaves a ballot the board did not touch outside the discovery window', async () => {
+    await seedTransferrableLot();
+    await seedProperty('lot-2');
+    await seedElection('elec-rec', { source: 'recorded', status: 'closed' });
+    await seedBallot('bal-old', 'elec-rec', 'lot-1', {
+      recordedAt: new Date(Date.now() - 30 * 86_400_000),
+    });
+
+    // The board finds lot-2 returned a ballot too, and amends the register.
+    expect(
+      (
+        await ELECTIONS_POST(
+          electionsReq({
+            action: 'setBallots',
+            electionId: 'elec-rec',
+            entries: [{ propertyId: 'lot-1' }, { propertyId: 'lot-2' }],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
+    // Identified by its LOT, not by the seeded id: under delete-and-reinsert
+    // the row survived only as a fresh uuid, so asserting on `bal-old` alone
+    // would pass vacuously on the very behavior this pins.
+    const [untouched] = await getDb(env)
+      .select({ id: ballots.id })
+      .from(ballots)
+      .where(sql`property_id = 'lot-1'`);
+    expect(untouched.id).toBe('bal-old');
+
+    const res = await POST(
+      req({ action: 'end', ownershipId: 'osh-1', endDay: TODAY }),
+    );
+    expect(res.status).toBe(204);
+
+    // lot-1's ballot still carries its month-old instant, so the window that
+    // covers today's amendment does not reach it.
+    expect(
+      (await flags()).filter((f) => f.impacted_ballot_id === untouched.id),
+    ).toEqual([]);
+    await integrityClean();
+  });
+
+  it('flags the lot the board amended in, whose instant really is in the window', async () => {
+    await seedTransferrableLot();
+    await seedProperty('lot-2');
+    await seedOwnership('osh-2', 'per-1', 'lot-2');
+    await seedElection('elec-rec', { source: 'recorded', status: 'closed' });
+    await seedBallot('bal-old', 'elec-rec', 'lot-1', {
+      recordedAt: new Date(Date.now() - 30 * 86_400_000),
+    });
+
+    expect(
+      (
+        await ELECTIONS_POST(
+          electionsReq({
+            action: 'setBallots',
+            electionId: 'elec-rec',
+            entries: [{ propertyId: 'lot-1' }, { propertyId: 'lot-2' }],
+          }),
+        )
+      ).status,
+    ).toBe(204);
+
+    const [added] = await getDb(env)
+      .select({ id: ballots.id })
+      .from(ballots)
+      .where(sql`property_id = 'lot-2'`);
+
+    const res = await POST(
+      req({ action: 'end', ownershipId: 'osh-2', endDay: TODAY }),
+    );
+    expect(res.status).toBe(204);
+
+    const rows = (await flags()).filter(
+      (f) => f.impacted_ballot_id === added.id,
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].category).toBe('intervening_action_backdated');
