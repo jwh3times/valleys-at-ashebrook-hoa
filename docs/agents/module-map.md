@@ -256,6 +256,15 @@ boolean`.
   and
   `fetchMemberProxies` (lot-scoped granted/held lists with the ADR 0019 own-lot occasion exception
   and held-row tier redaction); these are not a public or complete tier-gated proxy register.
+  `content/` also has `ballot-receipts.ts` (`fetchPaperBallotReceipts`, #302/ADR 0026): a
+  caller-specific read for `/elections`, deliberately a sibling of `voting-reads.ts` rather than an
+  export of `reads.ts` (its signature fits none of the three shapes `reads-all-scoped.test.ts`
+  classifies). For each visible `recorded` election, it returns a `{ address, recorded }` row per
+  lot the caller's Person held Lot Authority over on that election's own Association Day — never a
+  selection, weight, or proxy/caster provenance, and never logged. It embeds `derive.ts`'s
+  `LOT_SQL` directly as a subquery rather than reusing `/vote`'s `resolveCastingAuthority`, which
+  scopes through `user_property_links` — a legacy write-behind mirror ADR 0022 phase 4 (#212) drops
+  — so there stays exactly one definition of "the caller's Lots".
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), migrations, and
   `invariants.ts` (`INVARIANT_CHECKS`, `runInvariants(env)`, `formatInvariantRun` — see the
   invariant-gate section of [`roster-and-access.md`](./roster-and-access.md)).
