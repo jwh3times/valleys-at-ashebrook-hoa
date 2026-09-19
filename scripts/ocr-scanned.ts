@@ -10,6 +10,7 @@ import {
   RENDER_DPI,
   ragKeyFor,
   isOcrCandidate,
+  OCR_EXCLUDED_DOCUMENT_IDS,
   transcriptionPrompt,
   assembleMarkdown,
   isUsableOcr,
@@ -33,8 +34,14 @@ const runWrangler = (args: string[]) =>
 const runWranglerJson = (args: string[]): string =>
   execFileSync(process.execPath, [wranglerBin, ...args], { encoding: 'utf8' });
 
-/** Unsupported PDFs from remote D1, filtered through the shared candidate rule. */
-function candidates(): DocRow[] {
+/**
+ * Unsupported PDFs from remote D1, filtered through the shared candidate rule.
+ *
+ * The SQL deliberately stays broad and the narrowing happens in
+ * `isOcrCandidate`, so the deliberate-exclusion list (#278) cannot be bypassed
+ * by a future caller writing its own query.
+ */
+function candidates(options: { onlyIds?: ReadonlySet<string> } = {}): DocRow[] {
   const out = runWranglerJson([
     'd1',
     'execute',
@@ -53,7 +60,7 @@ function candidates(): DocRow[] {
       contentType: String(r.content_type),
       ragStatus: (r.rag_status as string | null) ?? null,
     }))
-    .filter(isOcrCandidate);
+    .filter((row) => isOcrCandidate(row, options));
 }
 
 function getPdf(row: DocRow): Buffer {
@@ -144,9 +151,28 @@ async function main() {
   const sample = process.argv.includes('--sample');
   const limArg = process.argv.find((a) => a.startsWith('--limit='));
   const limit = limArg ? Number(limArg.split('=')[1]) : Infinity;
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  const onlyIds = new Set(
+    (onlyArg?.split('=')[1] ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id !== ''),
+  );
+  if (onlyArg && onlyIds.size === 0) {
+    console.error('--only= was given with no ids. Refusing to run unscoped.');
+    process.exitCode = 1;
+    return;
+  }
 
-  const rows = candidates();
+  const rows = candidates({ onlyIds });
   console.log(`${rows.length} scanned/unsupported PDF candidate(s).`);
+  if (onlyIds.size > 0)
+    console.log(`Scoped by --only to ${onlyIds.size} id(s).`);
+  // Said out loud on every run: the list is the reason a status backfill is
+  // safe, and silence would make it easy to assume it had been forgotten.
+  console.log(
+    `${OCR_EXCLUDED_DOCUMENT_IDS.size} document(s) are deliberately excluded and can never be selected (#278).`,
+  );
 
   if (!commit && !sample) {
     for (const r of rows) console.log(`  ${r.id}  ${r.filename}`);
