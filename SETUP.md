@@ -315,10 +315,23 @@ token, so a Workers-AI-only token would 403 those steps), then run:
   so you can judge quality (no changes).
 - `npm run ocr:scanned -- --commit` — OCRs and writes each usable twin, flipping
   `rag_status` to `ok`. Add `--limit=N` to do a small batch first.
+- `npm run ocr:scanned -- --only=<id,id>` — scopes any of the above to specific
+  document ids. It can only narrow a run, never widen it (see below); `--only=`
+  with no ids refuses to run unscoped.
 
 OCR runs on Cloudflare Workers AI (document content stays within Cloudflare).
 Results become assistant-searchable at the next AI Search sync (default ≤6h). A
 scan with no readable text is left "Not searchable" rather than indexed empty.
+
+A fixed set of document ids is permanently excluded from candidacy — fourteen
+preliminary monthly financial reports superseded by the final board copies,
+named in `OCR_EXCLUDED_DOCUMENT_IDS` in `scripts/ocr-meta.ts` (#278) — and
+`--only=` cannot override the exclusion. Every run prints the exclusion count
+so the protection is visible rather than assumed. Because the exclusion is
+enforced in code rather than by leaving `rag_status` NULL, a future
+`rag_status = 'unsupported'` badge backfill for those "Not searchable" rows is
+now safe to do without making them the default OCR candidate set — that
+backfill has not been done as of this writing.
 
 ## 8. AI Document Assistant (optional)
 

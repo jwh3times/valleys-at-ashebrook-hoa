@@ -7,6 +7,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-19
+
+### Fixed
+
+- **The offline document OCR job can no longer pick up documents that were left out of the search
+  index on purpose.** It selected its work as "every PDF whose conversion is marked unsupported",
+  which quietly treated that mark as meaning "should be indexed". Fourteen preliminary monthly
+  financial reports, superseded by the final board copies, have no search twin because the corpus
+  build excluded them deliberately — so giving them an accurate "Not searchable" badge in the admin
+  Documents panel, an otherwise sensible thing to do, would have made them the job's default work
+  list and indexed superseded figures alongside the real ones. Those documents are now named and
+  refused by the job whatever their status, the refusal is reported on every run rather than
+  assumed, and a new `--only=` flag scopes a run to named documents without being able to override
+  the exclusion. Nothing is re-indexed by this change; it makes the badge correction safe to do
+  later (#278).
+
 ## [1.2.0] - 2026-09-18
 
 ### Added
