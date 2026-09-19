@@ -7,6 +7,7 @@ import {
   parseOcrResponse,
   ragKeyFor,
   MIN_OCR_CHARS,
+  OCR_EXCLUDED_DOCUMENT_IDS,
   type DocRow,
 } from '../../scripts/ocr-meta.ts';
 
@@ -27,6 +28,47 @@ describe('ocr-meta', () => {
     expect(isOcrCandidate(row({ contentType: 'application/msword' }))).toBe(
       false,
     );
+  });
+
+  it('never selects a deliberately excluded document, whatever its status', () => {
+    // #278: `rag_status = 'unsupported'` was being read as "should be OCR'd".
+    // These rows have no twin because the corpus build left them out on
+    // purpose, not because a conversion failed, so a later status backfill
+    // must not quietly enlist them.
+    const excluded = [...OCR_EXCLUDED_DOCUMENT_IDS][0];
+    expect(isOcrCandidate(row({ id: excluded }))).toBe(false);
+    // The same row would otherwise qualify on every other test.
+    expect(isOcrCandidate(row({ id: 'not-excluded' }))).toBe(true);
+  });
+
+  it('excludes every superseded preliminary financial report', () => {
+    // The 14 PDFs are the whole hazard: the 15th twin-less document is an RTF,
+    // which the content-type rule already refuses.
+    expect(OCR_EXCLUDED_DOCUMENT_IDS.size).toBe(14);
+    for (const id of OCR_EXCLUDED_DOCUMENT_IDS) {
+      expect(isOcrCandidate(row({ id }))).toBe(false);
+    }
+  });
+
+  it('scopes candidates to an explicit id set when one is given', () => {
+    // `--only=` is the operator's scoping tool; an empty or absent set means
+    // "no explicit scope", not "nothing qualifies".
+    expect(isOcrCandidate(row({ id: 'a' }), { onlyIds: new Set(['a']) })).toBe(
+      true,
+    );
+    expect(isOcrCandidate(row({ id: 'b' }), { onlyIds: new Set(['a']) })).toBe(
+      false,
+    );
+    expect(isOcrCandidate(row({ id: 'b' }), { onlyIds: new Set() })).toBe(true);
+  });
+
+  it('will not let --only override a deliberate exclusion', () => {
+    const excluded = [...OCR_EXCLUDED_DOCUMENT_IDS][0];
+    expect(
+      isOcrCandidate(row({ id: excluded }), {
+        onlyIds: new Set([excluded]),
+      }),
+    ).toBe(false);
   });
 
   it('assembles per-page text into page-marked markdown', () => {
