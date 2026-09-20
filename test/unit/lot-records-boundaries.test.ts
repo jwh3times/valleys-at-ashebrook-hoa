@@ -168,6 +168,54 @@ describe('the append-only tables really are', () => {
   });
 });
 
+describe('every Lot Record mutation re-checks the flags in SQL', () => {
+  /**
+   * A passed preflight grants nothing (AGENTS.md): the route's `404` when a
+   * flag is off is the front door, and the SAME check has to be inside each
+   * mutation so a board write landing while the feature is being switched off
+   * answers 409 rather than writing.
+   *
+   * Nothing proved that predicate was present. The routes' own suites assert
+   * the 404, which the preflight alone satisfies — so deleting
+   * `LOT_RECORDS_ENABLED_SQL` from a mutation statement broke no test, and the
+   * bulk assessment's copy is the one most easily lost in a refactor. This is
+   * a source scan rather than a behavioural test because forcing the two
+   * layers apart at runtime needs a mocked settings read, which is worth doing
+   * once per route, not once per statement.
+   */
+  const ROUTES = [
+    'pages/api/admin/lot-violations.ts',
+    'pages/api/admin/dues-ledger.ts',
+  ];
+
+  it('carries the gate predicate in every INSERT and UPDATE it issues', () => {
+    for (const rel of ROUTES) {
+      const text = readFileSync(join(SRC, ...rel.split('/')), 'utf8');
+      // Each mutating statement is a template literal containing INSERT INTO
+      // or UPDATE against a Lot Record table; count them, and count how many
+      // name the gate.
+      const statements = text
+        .split('env.DATABASE.prepare(')
+        .slice(1)
+        .map((chunk) => chunk.slice(0, chunk.indexOf('`,')))
+        .filter(
+          (chunk) =>
+            /INSERT INTO (dues_ledger_entries|lot_violations)/.test(chunk) ||
+            /UPDATE (dues_ledger_entries|lot_violations)/.test(chunk),
+        );
+      expect(
+        statements.length,
+        `${rel} has no mutation statements`,
+      ).toBeGreaterThan(0);
+      for (const statement of statements)
+        expect(
+          statement.includes('LOT_RECORDS_ENABLED_SQL'),
+          `a mutation in ${rel} does not re-check the flags:\n${statement.slice(0, 160)}`,
+        ).toBe(true);
+    }
+  });
+});
+
 describe('the Lot Record vocabulary matches the database', () => {
   /**
    * SQL cannot import TypeScript, so each of these lists is written twice —
