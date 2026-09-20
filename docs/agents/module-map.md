@@ -336,11 +336,15 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   authority plus an `openingBalanceCents` collapsing everything earlier — the running-figure rule
   ADR 0024 requires, so a caller with an earlier owner's history behind them still sees a whole
   balance rather than a partial one — and `fetchAdminLotDuesLedger(env, lotId?)` is the unscoped,
-  board-only read carrying every column including `reference` and provider-sourced rows. Read-only
-  in this slice: no write route exists yet. `fetchMember*`/`fetchAdminLot*` is a naming convention
-  the module now documents and `test/server/lot-records-reads-scoped.test.ts` actually asserts —
-  every export's prefix is checked, not just its membership in one of the two lists — rather than
-  only claiming it in prose.
+  board-only read carrying every column including `reference` and provider-sourced rows.
+  `fetchMember*`/`fetchAdminLot*` is a naming convention the module now documents and
+  `test/server/lot-records-reads-scoped.test.ts` actually asserts — every export's prefix is
+  checked, not just its membership in one of the two lists — rather than only claiming it in prose.
+  Slice 2 (#295, v1.2.11) added the write path, `src/pages/api/admin/dues-ledger.ts` (new route; see
+  [`http-endpoints.md`](./http-endpoints.md)), which gives `fetchAdminLotRecordEvents` a second
+  caller alongside `/api/admin/lot-violations`'s `GET`; `test/unit/lot-records-boundaries.test.ts`
+  source-scans both routes' mutation statements for `LOT_RECORDS_ENABLED_SQL` so the flags re-check
+  claimed above is proven, not just asserted by each route's `404` test.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible

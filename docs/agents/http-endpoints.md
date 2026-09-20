@@ -338,6 +338,64 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   `500` names the rare case where the mutation applied but its event insert did not. See
   [`data-model.md`](./data-model.md) for the tables and
   [`module-map.md`](./module-map.md) for `lot-records/gate.ts` and `reads.ts`.
+- Board write path for the dues ledger (ADR 0025, #295 slice 2, v1.2.11 — slice 1 shipped the table
+  and the reads in v1.2.10): `/api/admin/dues-ledger` supports `GET`/`POST`. Gate order matches
+  `/api/admin/lot-violations`: `requireBoard` (write freeze `503` on mutating verbs, then `401`,
+  then `403`), THEN both flags together (`404`), then — on `POST` — `readJson` (`400` on malformed
+  body), then action dispatch. `GET` with no query is the board's unscoped read of the whole ledger
+  (`fetchAdminLotDuesLedger`, every column including `reference` and provider-sourced rows);
+  `?lotId=<id>` narrows to one lot; `?events=<entryId>` returns that entry's `lot_record_events` log
+  (`fetchAdminLotRecordEvents`, the same reader `/api/admin/lot-violations` uses), and `?events=`
+  with no value is `400` (presence, not truthiness). `POST` is an action bus: `postCharge`,
+  `postPayment`, `postAdjustment`, `reverse`, `postBulkAssessment`. The ledger is append-only — there
+  is no `edit` and no `delete` here, ever; a mistake is corrected by `reverse`, a real-world credit
+  or debit by `postAdjustment`.
+
+  Money rules apply to every action that takes `amountCents`: it must be present (blank is `400`,
+  never defaulted — the same `Number(x) || default` trap the numeric-coercion rule bans elsewhere),
+  a whole number, and non-zero, else `400`; and its magnitude is capped at `MAX_ENTRY_CENTS`
+  (100,000,000, i.e. $1,000,000) because `Number.isInteger(1e21)` is true and a value that size would
+  land in the INTEGER column as a SQLite REAL — a typo/type limit, not a policy one. `postCharge` and
+  `postBulkAssessment` require a positive amount and a `category` from `DUES_CHARGE_CATEGORIES`.
+  `postPayment` requires a positive amount and a `method` from `DUES_PAYMENT_METHODS`, refuses
+  `method: 'online'` (`400` — that row is written only by the payment provider's own event, not by
+  hand), and stores the amount negated so the ledger balance stays a plain sum. `postAdjustment`
+  takes the board's sign as given, since a waiver credits and a correction may debit. `reverse` takes
+  no `amountCents` at all: its amount is derived in SQL as `-original.amount_cents`, which is why it
+  is deliberately NOT subject to `MAX_ENTRY_CENTS` — a reversal must match its original exactly, and
+  a provider-sourced entry may exceed the board's typo cap. `reverse` also refuses (`409`, all
+  indistinguishable on purpose with "not found" and "flags disabled") a target that does not exist,
+  is itself a `kind = 'reversal'`, or has `source = 'provider'` — a provider-sourced payment is
+  undone only through its own `funds_withdrawn` event, which needs the one `reverses_entry_id` slot
+  the UNIQUE index allows.
+
+  Every mutation carries a required `operationKey` (`400` if missing) and is unique per lot
+  (`(operation_key, lot_id)`). A UNIQUE violation is resolved by which index it hit, since the three
+  mean different things: a hit on `reverses_entry_id` is `409` "already reversed"; a hit on
+  `payment_id` is `409` "already credited"; a hit on `operation_key` re-queries the row already
+  posted under that key/lot and returns `409` "already posted" only when its `kind` and
+  `amount_cents` match what this request intended — otherwise `409` says the key was reused for a
+  different entry, so a stale-tab resubmission is never told its (unposted) money was recorded. A
+  constraint violation matching none of the three is re-thrown, not guessed at. `postCharge`,
+  `postPayment`, `postAdjustment`, and `reverse` each run their `INSERT … SELECT` (existence and both
+  flags re-checked in the `WHERE`) and their `lot_record_events` append as one D1 batch, gated on
+  `changes() = 1` exactly as `/api/admin/lot-violations` does, answering `409` "Lot not found, or lot
+  records are not enabled" when the insert applies to zero rows.
+
+  `postBulkAssessment` posts one `charge` to every `properties.retired_at IS NULL` lot in a single
+  `INSERT … SELECT … ON CONFLICT (operation_key, lot_id) DO NOTHING` under ONE shared operation key,
+  so a re-post reaches only a lot created since the first run and silently skips the rest rather than
+  raising — raising would refuse the whole statement and leave that new lot without the assessment,
+  reported as "already posted". It appends one `lot_record_events` row per newly-inserted entry in
+  the same batch (matched by the shared key and `NOT EXISTS` an event yet, since the single-entry
+  `changes() = 1` guard does not generalize to N rows), and generates row ids in SQL
+  (`lower(hex(randomblob(16)))`) rather than `crypto.randomUUID()`, since ids assigned per-row in a
+  set-based insert have to come from SQL to keep this one statement. `0` rows inserted is `409`
+  ("already on every active lot, or there are no active lots, or lot records are not enabled"); a
+  logged-count mismatch is the same `500` as the single-entry actions. See
+  [`data-model.md`](./data-model.md) for `dues_ledger_entries` and
+  [`module-map.md`](./module-map.md) for `lot-records/reads.ts`.
+
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.

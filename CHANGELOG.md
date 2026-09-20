@@ -7,6 +7,31 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-09-20
+
+### Added
+
+- **The board can now record what a lot owes and what it has paid — once lot
+  records are switched on.** Charges, payments, adjustments, and the one
+  correction the ledger has: reversing an entry. There is no edit and no
+  delete, by design. A mistake is corrected by recording its reversal, so the
+  history reads as what happened rather than as what someone tidied it into,
+  and the balance is always the sum of the entries rather than a number kept
+  alongside them.
+
+  One assessment can be posted to every active lot at once. Re-running it is
+  safe: lots that already have it are left alone, and a lot added since the
+  first run still receives it.
+
+  Money is handled as whole cents throughout. A blank amount is refused rather
+  than treated as zero, a fraction of a cent is refused, and an amount too
+  large to be a whole number of cents is refused as a slipped decimal point. An
+  online payment cannot be typed in by hand — it exists because the payment
+  provider confirmed it, and one entered by hand would never reconcile.
+
+  Still no screen for any of this, no homeowner view, and no online payments
+  (ADR 0025, #295).
+
 ## [1.2.10] - 2026-09-20
 
 ### Added
