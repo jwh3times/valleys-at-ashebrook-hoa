@@ -7,6 +7,37 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-09-20
+
+### Added
+
+- **The board's data entry for a lot's own violation records, still switched
+  off.** Building on the previous release's groundwork, the site can now record
+  a violation against one lot, move it through its life — cured, closed,
+  reopened — correct its wording, and void one entered by mistake. Nothing is
+  ever deleted: a voided record stays visible to the board, disappears from the
+  lot's own view, and cannot be resurrected or edited afterwards. Voiding
+  requires a reason chosen from a fixed list rather than typed, so the log stays
+  reportable and free of anything written about a person.
+
+  Every one of those acts leaves one entry in the record's history, recording
+  who did it, when, and why, and the entry and the change are written together —
+  if the change is refused, no history is invented for it. A change attempted
+  while the feature is being switched off is refused outright rather than half
+  applied.
+
+  There is still no screen for any of this and no way for a homeowner to see
+  anything: the board's panel is the next step, and both the **Lot records**
+  switch and official mode must be on before any of it exists (ADR 0024, #291).
+
+### Fixed
+
+- The permission matrix, which checks every API route against every kind of
+  caller, was seeding only two of the site's three feature switches. A route
+  behind the third answered "not found" before its permission check ever ran,
+  which the matrix accepted — so such a route could pass without its permissions
+  being tested at all. It now seeds every switch.
+
 ## [1.2.6] - 2026-09-20
 
 ### Added

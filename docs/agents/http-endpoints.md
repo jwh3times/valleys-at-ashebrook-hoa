@@ -304,6 +304,38 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   changed what it reads rather than where it lives. Verified homeowners can repeat such lookups, an
   accepted disclosure documented with the lot-control/self-asserted-owner trust model in
   [ADR 0019](../adr/0019-homeowner-writes-official-mode-gate.md).
+- Board data entry for Lot Records, gated on both `officialMode` and the default-off
+  `lotRecordsEnabled` (ADR 0024, #291 slice 2 — the homeowner-facing surface does not exist yet):
+  `/api/admin/lot-violations` supports `GET`/`POST`. Gate order is board-first, matching the
+  `/api/admin/*` middleware backstop's own order rather than the flags-then-auth order used
+  elsewhere: `requireBoard` (write freeze `503` on mutating verbs, then unauthenticated `401`, then
+  non-board `403`), THEN both flags together (`404`, masking existence uniformly since the
+  namespace already answers `401` for anonymous regardless), then — on `POST` — `readJson` (`400`
+  on malformed body), then action dispatch. `GET` with no query returns every violation for every
+  lot in every status including `voided`, with the board-only `internal_note`
+  (`fetchAdminLotViolations`); `?lotId=<id>` narrows to one lot; `?events=<recordId>` returns that
+  record's `lot_record_events` log oldest-first (`fetchAdminLotRecordEvents`), and `?events=` with
+  no value is `400` (presence, not truthiness, is checked — an empty value must not silently fall
+  through to the full violation list). `POST` is an action bus: `create`, `cure`, `close`, `reopen`,
+  `void`, `edit`. `create` requires `lotId`, a `category` from `LOT_VIOLATION_CATEGORIES`, an ISO
+  `effectiveDay`, and a non-blank `summary`; `internalNote` and a `reason` (from
+  `LOT_RECORD_REASON_CODES`) are optional; an unknown `lotId` or a flags race is a `409` from the
+  `INSERT ... WHERE EXISTS (...) AND` the gate SQL, not a raw FK error. `cure` (`open` → `cured`),
+  `close` (`open`/`cured` → `closed`), `reopen` (`cured`/`closed` → `open`), and `void`
+  (`open`/`cured`/`closed` → `voided`, terminal — no transition and no `edit` ever applies to a
+  voided record) are the only ways `status` moves; each is a `409` naming the record as not found,
+  not in a state the action applies to, or gate-disabled, all indistinguishable on purpose. `void`
+  requires a `reason`; the other three actions accept one optionally. `edit` corrects only
+  `category`/`effectiveDay`/`summary`/`internalNote` on a non-voided record — never `status` — and
+  is `400 "No fields to update"` if none of those keys are present; a non-string `internalNote` is
+  `400` rather than a silent clear (`stringField` would otherwise read it as `''` and blank the
+  board's note). Every mutation re-checks both flags inside its own SQL and, in the same D1 batch,
+  appends a `lot_record_events` row gated on `changes() = 1` from the statement before it — a
+  refused mutation logs nothing — and a logged-but-not-applied state is structurally impossible
+  because every mutation here keys on the primary key, so it changes exactly one row or none;
+  `500` names the rare case where the mutation applied but its event insert did not. See
+  [`data-model.md`](./data-model.md) for the tables and
+  [`module-map.md`](./module-map.md) for `lot-records/gate.ts` and `reads.ts`.
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.

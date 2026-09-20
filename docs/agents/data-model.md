@@ -223,8 +223,8 @@ always) — see the `assembleMeetingDetail`/`includeProxyIds` note in [`module-m
 
 ## Lot records
 
-`lot_violations` and `lot_record_events` (migration `0034`, ADR 0024, #291 slice 1 — dark: no route
-or page reads or writes them yet) are the first of a family whose audience is not a content tier
+`lot_violations` and `lot_record_events` (migration `0034`, ADR 0024, #291 slice 1) are the first of
+a family whose audience is not a content tier
 but a Lot: whoever holds Lot Authority over that one Lot, plus Board Access. Storage is typed per
 record type — there is no generic `lot_records` table with a JSON payload, matching the ADR 0022
 ledger's refusal of arbitrary JSON — and neither table carries a `visibility` column, deliberately,
@@ -233,6 +233,13 @@ so a future tier edit can never publish one Lot's record to every member. Both t
 `liveVotingEnabled`: a Lot Record surface requires both `officialMode` and `lotRecordsEnabled`
 literally `true`, since presenting the site officially and publishing Lot-level financial and
 enforcement detail are separate decisions (`src/server/lot-records/gate.ts`).
+
+Board data entry landed in #291 slice 2 (v1.2.7):
+`POST /api/admin/lot-violations` creates and transitions `lot_violations` rows and appends their
+`lot_record_events`, and `GET /api/admin/lot-violations` is the board's unscoped read — see
+[`http-endpoints.md`](./http-endpoints.md). The homeowner-facing surface (a member page or API
+route reading `fetchMemberLotViolations`/`fetchMemberLotViolation`) still does not exist, and both
+flags still default off, so the family stays unreachable in production either way.
 
 `lot_violations` has `lot_id` referencing `properties(id)` on delete-restrict (the same
 outlive-an-editing-mistake action `ballots`/`proxies`/`member_votes` use), `category` (CHECK-bounded
@@ -248,8 +255,12 @@ construction (excluded in the read's own scoping predicate), never by a caller-s
 `lot_record_events` is the append-only log every Lot Record type shares, subject to
 `(record_type, record_id)` with **no foreign key** — SQLite cannot express an FK whose target
 depends on another column's value — `record_type` CHECK-bounded to `LOT_RECORD_TYPES` (today just
-`lot_violations`; ADR 0025's `dues_ledger_entries`, #295, widens this CHECK when it lands), and
-`action` CHECK-bounded to `LOT_RECORD_ACTIONS`. Append-only is by convention, the same discipline
+`lot_violations`; ADR 0025's `dues_ledger_entries`, #295, widens this CHECK when it lands),
+`action` CHECK-bounded to `LOT_RECORD_ACTIONS`, and — since migration `0035` (#291 slice 2) rebuilt
+the table — `reason_code` CHECK-bounded to `LOT_RECORD_REASON_CODES` rather than free text, so a
+board-typed reason can never accumulate resident-identifying prose in a column Roster Redaction
+does not cover; prose that belongs on the record itself goes in the record's own `internal_note`.
+Append-only is by convention, the same discipline
 the ADR 0022 ledger and `setting_changes` use, since D1 has one binding and this codebase forbids
 triggers. Per-record board reads are not logged; only a bulk export, if one is ever added, would be.
 
