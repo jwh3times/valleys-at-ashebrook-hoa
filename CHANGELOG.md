@@ -7,6 +7,38 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-09-20
+
+### Changed
+
+- **The designs for per-lot records and the dues ledger now record the board's answers instead of
+  asking the questions.** ADR 0024, ADR 0025, and the paper ballot receipt design each carried an
+  "Open questions for the board" section the board had already answered (minutes 2026-09-18). Each
+  is now a "Board decisions" section, and the design text that deferred to those questions states
+  what was decided. Three answers change what the designs say rather than confirming it: Stripe
+  with ACH as the default method is the chosen payment provider, which ADR 0025 had deliberately
+  left to the board; a partial payment must apply in the association's adopted order — attorney
+  fees, then fines, then late fees and interest, and lastly assessments — which is a new constraint
+  on the ledger taken from the association's collection policy rather than a restatement of the
+  design; and the pre-certification dispute window is board practice, not something the site
+  enforces. ADR 0025 also now states that the association is self-managed, so the
+  previous-management owner portal in the document corpus is historical rather than current. The
+  collection policy's fee figures are not legible in the corpus and are not invented here, and both
+  ADRs remain Proposed (#374).
+
+## [1.2.3] - 2026-09-19
+
+### Changed
+
+- Updated `oxlint` to 1.83.0 (#368).
+
+## [1.2.2] - 2026-09-19
+
+### Changed
+
+- Updated Better Auth to 1.7.5 (`better-auth`, `@better-auth/core`, `@better-auth/drizzle-adapter`)
+  and `@cloudflare/workers-types` to 5.20260915.1 (#369).
+
 ## [1.2.1] - 2026-09-19
 
 ### Fixed

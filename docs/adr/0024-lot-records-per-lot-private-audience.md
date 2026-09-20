@@ -79,15 +79,22 @@ A caller may read a Lot's records only when all of these hold on the request's A
 Earlier records are not silently dropped. Where a record type has a running figure (the dues
 balance in ADR 0025), the figure stays whole, and entries before the caller's period collapse into
 one line such as "balance before <day>". A partial balance would be wrong in exactly the way #295
-warns about. Record types with no running figure (violations) simply omit earlier rows.
+warns about. Record types with no running figure (violations) simply omit earlier rows. The board
+adopted both treatments (minutes 2026-09-18), rejecting own-period-only — which would show a misleading
+partial balance — and full itemized history, which would expose the prior owner's payment
+behaviour. Where the board wants a violation recorded before a sale to reach the buyer, it carries
+that violation forward explicitly, judged per violation rather than by a blanket rule. That is a
+board act on the record, not a widening of the three conditions above, and the reader is
+unchanged.
 
 **A prior owner loses all access once their authority ends.** That includes records from their
-own period. This is the fail-closed default: a former owner has no Member Access, no Lot
-Authority, and often no current Person Link basis. Whether a former owner should keep read access
-to records from their own ownership period — to dispute a balance after a sale, say — is policy,
-not engineering, and is listed below. If the board says yes, it is a narrow addition: condition 2
-becomes "held Lot Authority over the Lot at any time", and condition 3 bounds detail to the
-intersection with that past period. `authority.ts`'s history readers already answer the question.
+own period. This is the fail-closed default, and the board adopted it (minutes 2026-09-18): a
+former owner has no Member Access, no Lot Authority, and often no current Person Link basis, and
+one who disputes a balance after a sale contacts the board. The narrow alternative this ADR
+weighed — condition 2 widened to "held Lot Authority over the Lot at any time", with condition 3
+bounding detail to the intersection with that past period — is **not** adopted.
+`authority.ts`'s history readers could answer it if the board ever revisits the question; nothing
+here calls them for this purpose.
 
 Board Access (`capabilities.has('board')`) reads every Lot's records through the admin surface
 only. A board admin who holds Lot Authority sees their own Lot on the homeowner surface under the
@@ -234,10 +241,11 @@ re-runs the scoping query. They never go through `/api/files/[id]`, whose check 
 Each record type stores only the fields its table names. The homeowner-visible summary and the
 board-only note are separate columns, so board working notes never share a field with what the
 Lot sees. Payment-method details beyond a coarse method and a board-only reference, such as a
-check number, are never stored (ADR 0025). No automatic purge ships in the first slice, because
-how long the association keeps closed violations and settled ledger history is policy. The
-`src/server/scheduled.ts` job list can take a retention sweep as another independent job once the
-board sets a period.
+check number, are never stored (ADR 0025). **No automatic purge ships, and none is planned.** The
+board decided that closed violations and settled ledger history are kept, with no automatic
+deletion (minutes 2026-09-18), so `src/server/scheduled.ts` gains no retention job for Lot
+Records. Were the association ever to adopt a retention period, the sweep would be another
+independent job in that list.
 
 ## Consequences
 
@@ -246,8 +254,8 @@ board sets a period.
 - Co-owners and Representatives see identical Lot Records. Nothing on this surface can be
   addressed to one of them privately. A board that wants to write to one co-owner does so outside
   the site.
-- A sale cuts the former owner off completely by default, and the buyer sees the Lot's running
-  balance but not the seller's itemized history. Both follow from roster facts the board already
+- A sale cuts the former owner off completely, and the buyer sees the Lot's running balance but
+  not the seller's itemized history. Both follow from roster facts the board already
   records, so a backdated transfer changes visibility from the next request, with no stored access
   state to repair.
 - The site cannot serve Lot Records until production runs `derived` authorization with Person
@@ -260,22 +268,31 @@ board sets a period.
   onto the same audited action is tracked as #363, which should land before the `officialMode`
   flip in #361.
 
-## Open questions for the board
+## Board decisions (minutes 2026-09-18)
 
-1. **Former owners.** After a sale, should a former owner keep read access to the Lot Records from
-   their own ownership period — for example, to settle a balance dispute — or lose all access at
-   transfer (the default)?
-2. **What a buyer sees.** Should a new owner see the Lot's running dues balance, including anything
-   carried over from before their purchase, as a single "balance before <day>" line (the default)?
-   Or should they see only activity from their own period? Or the full itemized history? Counsel
-   may have a view where unpaid assessments run with the Lot.
-3. **Violations before purchase.** Should an open violation recorded before a sale be visible to
-   the buyer? The default is no, because its `effective_day` predates their period. Should the
-   board instead be able to carry it forward explicitly?
-4. **Retention.** How long does the association keep closed violations and settled ledger history
-   for a Lot, before and after a transfer?
-5. **Which record types come after dues and violations.** Architectural review requests and
-   correspondence are candidates. Each is a new typed table under this ADR, not a new audience.
+The five policy questions this ADR left to the board are answered. None of them changes the
+engineering above; they fix which of the designed behaviours ships.
+
+1. **Former owners.** Access ends at transfer, including to records from the former owner's own
+   period. A former owner disputing a balance contacts the board. The narrow widening of
+   condition 2 described above is not adopted.
+2. **What a buyer sees.** The running balance stays whole: everything before the caller's period
+   collapses into a single "balance before <day>" line, and their own period is itemized. Neither
+   own-period-only nor full itemized history is adopted.
+3. **Violations before purchase.** Not visible, unless the board explicitly carries a violation
+   forward. The board judges that per violation rather than by a blanket rule.
+4. **Retention.** Closed violations and settled ledger history are kept, with no automatic
+   deletion. No retention sweep ships.
+5. **Which record types come after dues and violations.** None for now. Dues balances and
+   violations are the whole of the first scope. The audience machinery is shared, so a later type
+   is a cheap addition when one is actually wanted.
+
+Decisions 1 and 3 agree with the equivalent decision for the paper ballot receipt
+([ADR 0026](./0026-paper-ballot-receipt-for-own-lot.md), question 13 on its
+[design spec](../specs/2026-09-17-paper-ballot-receipt-design.md)): a former owner loses access at
+transfer on every surface, under one rule rather than three.
+
+This ADR remains **Proposed**. These answers remove the policy blockers, not the acceptance gate.
 
 ## Related decisions
 

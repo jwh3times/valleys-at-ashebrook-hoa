@@ -340,8 +340,8 @@ An amendment gets **no new audit-ledger event** in this design.
   verification and correction in the minutes, as the challenge procedure (#303) already does for
   recounts. The preserved row identity in decision 5 also makes `recorded_at` an honest "entered
   on" instant for the amended-in lot.
-- Whether the board wants an in-app attributable record is left as an
-  [open question](#open-questions-for-the-board).
+- The board settled that it does not want an in-app attributable record: minutes only
+  ([decision 2](#board-decisions-minutes-2026-09-18)).
 
 ## Secrecy analysis
 
@@ -536,19 +536,28 @@ It is documented in panel copy and does not need a follow-up issue at ship.
 - Repointing `/vote`'s `user_property_links` scoping to derived access. That is phase 4's
   `needs-repointing` work (#212), not this feature.
 
-## Open questions for the board
+## Board decisions (minutes 2026-09-18)
 
-Each question has an engineering default that ships unless the board decides otherwise.
+The three policy questions this design left open are answered. Every engineering default stands,
+and two of them describe behaviour that was already live: slices 1–3 shipped in v1.1.3 and v1.2.0
+earlier the same day, before these decisions were taken. No engineering change follows from any of
+the three.
 
-1. **Former holders who no longer hold any lot.** Should an owner who has sold every lot still be
-   able to check a paper ballot they returned while an owner? The default is no: the receipt
-   requires current Member Access, and such a person contacts the board. Saying yes would mean
-   granting a receipt-only surface to accounts with no current association basis.
-2. **An attributable in-site record of amendments.** Are the minutes sufficient as the record of
-   who amended a paper turnout register and why? Or does the board want the site to record it
-   too, as a new audit-ledger event naming the board account and the lot? The default is minutes
-   only. Saying yes adds a ledger-family migration.
-3. **A dispute window before certification.** Should a recorded election stay `closed` for a
-   minimum period, published to homeowners, before the board certifies it, so disputes can be
-   raised without uncertifying and interrupting board members' site access? The default is no
-   enforced window. The panel copy recommends allowing time, and the site enforces nothing.
+1. **Former holders who no longer hold any lot.** No — they contact the board. This confirms the
+   shipped behaviour rather than changing it: the `member` capability is derived only for a caller
+   holding at least one lot on the current Association Day, so an owner who has sold every lot
+   gets no receipt block at all. It agrees with the equivalent decision on
+   [ADR 0024](../adr/0024-lot-records-per-lot-private-audience.md), so a former owner loses access
+   at transfer on every surface under one rule.
+2. **An attributable in-site record of amendments.** Minutes only. The site records no attributable
+   event for a turnout amendment, which is the shipped behaviour — the audit ledger has no election
+   family, and adding one would mean rebuilding the append-only `audit_events` table to change its
+   CHECK constraint. Since slice 1 an amended-in lot's `recorded_at` is an honest "entered on"
+   instant, so the record shows _when_ a lot was added, though never by whom.
+3. **A dispute window before certification.** Adopted as **board practice, not software**. The
+   board publishes the period and does not certify until it has passed. That gets the benefit the
+   question was after — fewer uncertifications, which matter because uncertifying voids the terms
+   certification created and ends the Board Access those terms qualified, and that access never
+   resumes automatically — without adding a new election state or a new way for a certification to
+   be stuck. The Elections panel's existing missing-paper-ballot procedure already describes the
+   correction path.
