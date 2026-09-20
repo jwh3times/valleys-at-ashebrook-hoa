@@ -35,7 +35,18 @@ const SRC = join(process.cwd(), 'src');
 /** Table names and their Drizzle identifiers, for the scans below. */
 const LOT_RECORD_TABLES: Record<string, string> = {
   lot_violations: 'lotViolations',
+  dues_ledger_entries: 'duesLedgerEntries',
   lot_record_events: 'lotRecordEvents',
+};
+
+/**
+ * The tables ADR 0025 and ADR 0024 both declare append-only. Nothing may
+ * UPDATE or DELETE a row in any of them: a mistaken ledger entry is corrected
+ * by a reversal, and a mistaken violation by a void.
+ */
+const APPEND_ONLY_TABLES: Record<string, string> = {
+  lot_record_events: 'lotRecordEvents',
+  dues_ledger_entries: 'duesLedgerEntries',
 };
 
 function sourceFiles(dir: string): string[] {
@@ -98,7 +109,15 @@ describe('the AI surfaces never touch a Lot Record', () => {
         for (const [table, identifier] of Object.entries(LOT_RECORD_TABLES)) {
           if (text.includes(table))
             offenders.push(`${relative(file)}: names ${table}`);
-          if (new RegExp(`\b${identifier}\b`).test(text))
+          // Concatenated, NOT a template literal. This is the dangerous half
+          // of that rule: inside a template literal `\b` is not an invalid
+          // escape, it is the BACKSPACE character — so the pattern became
+          // <BS>identifier<BS>, matched nothing, and NO lint rule objects.
+          // This check was vacuous from the day it was written (#291 slice 1)
+          // until a planted reference in src/server/ai/pii.ts exposed it; the
+          // table-name half above, a plain `includes`, is what was actually
+          // holding the line.
+          if (new RegExp('\\b' + identifier + '\\b').test(text))
             offenders.push(`${relative(file)}: imports ${identifier}`);
         }
         if (text.includes('lot-records'))
@@ -115,20 +134,31 @@ describe('the AI surfaces never touch a Lot Record', () => {
   });
 });
 
-describe('lot_record_events is append-only', () => {
-  it('has no UPDATE or DELETE against the table anywhere in src/, raw or Drizzle', () => {
+describe('the append-only tables really are', () => {
+  it('has no UPDATE or DELETE against any of them in src/, raw or Drizzle', () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(SRC)) {
       const text = readFileSync(file, 'utf8');
       const rel = relative(file);
-      if (/UPDATE\s+["`]?lot_record_events["`]?/i.test(text))
-        offenders.push(`${rel}: raw UPDATE against lot_record_events`);
-      if (/DELETE\s+FROM\s+["`]?lot_record_events["`]?/i.test(text))
-        offenders.push(`${rel}: raw DELETE against lot_record_events`);
-      if (/\.update\(\s*lotRecordEvents\s*\)/.test(text))
-        offenders.push(`${rel}: Drizzle .update(lotRecordEvents)`);
-      if (/\.delete\(\s*lotRecordEvents\s*\)/.test(text))
-        offenders.push(`${rel}: Drizzle .delete(lotRecordEvents)`);
+      // Patterns are built by CONCATENATION with doubled backslashes, never
+      // inside a plain template literal. In one, `\s` is an invalid escape
+      // that silently becomes the letter `s`, so the pattern compiles to
+      // `UPDATEs+…` and matches nothing while the suite reports green. This
+      // guard shipped that way once; oxlint's no-useless-escape caught it,
+      // which is luck rather than coverage. (`String.raw` would also be
+      // correct and is used elsewhere in test/unit — concatenation is used
+      // here so the escaping is visible at the point of use.)
+      const bare = text.replace(/["`]/g, '');
+      for (const [table, identifier] of Object.entries(APPEND_ONLY_TABLES)) {
+        if (new RegExp('UPDATE\\s+' + table, 'i').test(bare))
+          offenders.push(`${rel}: raw UPDATE against ${table}`);
+        if (new RegExp('DELETE\\s+FROM\\s+' + table, 'i').test(bare))
+          offenders.push(`${rel}: raw DELETE against ${table}`);
+        if (new RegExp('\\.update\\(\\s*' + identifier + '\\s*\\)').test(text))
+          offenders.push(`${rel}: Drizzle .update(${identifier})`);
+        if (new RegExp('\\.delete\\(\\s*' + identifier + '\\s*\\)').test(text))
+          offenders.push(`${rel}: Drizzle .delete(${identifier})`);
+      }
     }
     expect(offenders).toEqual([]);
   });

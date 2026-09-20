@@ -169,13 +169,18 @@ describe('every export is classified', () => {
   const AUTHORITY_SCOPED = [
     'fetchMemberLotViolations',
     'fetchMemberLotViolation',
+    'fetchMemberDuesLedger',
     // Not a record read, but scoped the same way and for the same reason: the
     // homeowner page labels each row with its Lot's address, and asking the
     // roster from `personId` is what keeps a caller-supplied lot list out of
     // the page entirely.
     'fetchMemberLotAddresses',
   ];
-  const ADMIN_ONLY = ['fetchAdminLotViolations', 'fetchAdminLotRecordEvents'];
+  const ADMIN_ONLY = [
+    'fetchAdminLotViolations',
+    'fetchAdminDuesLedger',
+    'fetchAdminLotRecordEvents',
+  ];
 
   it('names every read either fetchMember* or fetchAdminLot*', () => {
     const exported = Object.entries(lotRecords)
@@ -187,9 +192,21 @@ describe('every export is classified', () => {
 
   it('gives every Lot Record type a member read', () => {
     // One member read per record type, so a type added without its scoped read
-    // cannot ship. ADR 0025's dues ledger joins this list with its own.
-    expect([...LOT_RECORD_TYPES]).toEqual(['lot_violations']);
-    expect(AUTHORITY_SCOPED).toContain('fetchMemberLotViolations');
+    // cannot ship. The map is the link: a type added to LOT_RECORD_TYPES with
+    // no entry here fails, and so does an entry naming a read that does not
+    // exist.
+    const MEMBER_READ_BY_TYPE: Record<string, string> = {
+      lot_violations: 'fetchMemberLotViolations',
+      dues_ledger_entries: 'fetchMemberDuesLedger',
+    };
+    for (const type of LOT_RECORD_TYPES) {
+      const read = MEMBER_READ_BY_TYPE[type];
+      expect(read, `${type} has no member read`).toBeDefined();
+      expect(AUTHORITY_SCOPED).toContain(read);
+    }
+    expect(Object.keys(MEMBER_READ_BY_TYPE).sort()).toEqual(
+      [...LOT_RECORD_TYPES].sort(),
+    );
   });
 });
 

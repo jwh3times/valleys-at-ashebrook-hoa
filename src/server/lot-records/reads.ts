@@ -3,6 +3,10 @@ import {
   lotAuthorityExists,
 } from '../roster/authority';
 import type {
+  DuesChargeCategory,
+  DuesEntrySource,
+  DuesLedgerKind,
+  DuesPaymentMethod,
   LotRecordAction,
   LotRecordType,
   LotViolationCategory,
@@ -299,5 +303,218 @@ export async function fetchAdminLotRecordEvents(
     actingAccountId: r.acting_account_id,
     reasonCode: r.reason_code,
     recordedAt: new Date(r.recorded_at),
+  }));
+}
+
+/**
+ * THE DUES LEDGER READ (ADR 0025, #295), and the one place ADR 0024's rule for
+ * a RUNNING FIGURE is implemented.
+ *
+ * A violation before the reader's period is simply omitted. A ledger entry
+ * cannot be, because the balance is the sum of every entry ever posted to the
+ * Lot: dropping the earlier ones would show a partial balance, wrong in
+ * exactly the way #295 warns about — a homeowner reading "you owe $40" when
+ * the Lot owes $1,240.
+ *
+ * So the earlier entries are COLLAPSED rather than dropped. Their sum comes
+ * back as `openingBalanceCents`, and the itemized entries are the reader's
+ * own. The seller's itemized history stays invisible; the figure stays whole.
+ *
+ * Both halves use the same two predicates as every other Lot Record read — the
+ * unbounded authority question for "is this my Lot", the period-bounded one
+ * for "is this mine to read in detail" — so the split cannot drift from the
+ * rule it implements.
+ */
+export interface MemberDuesEntry {
+  id: string;
+  lotId: string;
+  kind: DuesLedgerKind;
+  amountCents: number;
+  effectiveDay: string;
+  description: string;
+  category: DuesChargeCategory | null;
+  method: DuesPaymentMethod | null;
+}
+
+export interface MemberLotLedger {
+  lotId: string;
+  /** The sum of everything before this reader's period, as one line. */
+  openingBalanceCents: number;
+  /** The first itemized day, which the opening line is "before". */
+  openingBeforeDay: string | null;
+  entries: MemberDuesEntry[];
+  /** Opening plus every itemized entry: what the Lot owes today. */
+  balanceCents: number;
+}
+
+/** A ledger entry as the board sees it: every column. */
+export interface AdminDuesEntry extends MemberDuesEntry {
+  reference: string | null;
+  source: DuesEntrySource;
+  paymentId: string | null;
+  reversesEntryId: string | null;
+  recordedBy: string | null;
+  recordedAt: Date;
+  operationKey: string;
+}
+
+interface LedgerRow {
+  id: string;
+  lot_id: string;
+  kind: DuesLedgerKind;
+  amount_cents: number;
+  effective_day: string;
+  description: string;
+  category: DuesChargeCategory | null;
+  method: DuesPaymentMethod | null;
+}
+
+const LEDGER_COLUMNS = `id, lot_id, kind, amount_cents, effective_day,
+            description, category, method`;
+
+const toMemberEntry = (r: LedgerRow): MemberDuesEntry => ({
+  id: r.id,
+  lotId: r.lot_id,
+  kind: r.kind,
+  amountCents: r.amount_cents,
+  effectiveDay: r.effective_day,
+  description: r.description,
+  category: r.category,
+  method: r.method,
+});
+
+/**
+ * Every ledger entry the reader may itemize, with the earlier ones collapsed
+ * into an opening balance, per Lot.
+ *
+ * Two statements rather than one: the detail rows, and the sums of what came
+ * before. One query could produce both with a window function, at the cost of
+ * a shape nobody can check by reading it — and this is the query whose
+ * correctness a homeowner will one day dispute.
+ */
+export async function fetchMemberDuesLedger(
+  env: Env,
+  personId: string | null,
+  associationDay: string,
+): Promise<MemberLotLedger[]> {
+  if (!personId) return [];
+
+  const detail = lotAuthorityCoversRecordDay(
+    CALLER_PERSON,
+    { column: 'dues_ledger_entries.lot_id' },
+    associationDay,
+    { column: 'dues_ledger_entries.effective_day' },
+  );
+  const { results: rows } = await env.DATABASE.prepare(
+    `${CALLER_PERSON_CTE}
+     SELECT ${LEDGER_COLUMNS}
+       FROM dues_ledger_entries
+      WHERE ${detail.sql}
+      ORDER BY effective_day ASC, recorded_at ASC`,
+  )
+    .bind(personId, ...detail.binds)
+    .all<LedgerRow>();
+
+  // The complement: entries on Lots this caller holds TODAY that fall before
+  // their own period. `holds` is the unbounded authority question, so an entry
+  // on a Lot they do not hold is in neither set — not itemized, and not summed
+  // into anything either.
+  const holds = lotAuthorityExists(
+    CALLER_PERSON,
+    { column: 'dues_ledger_entries.lot_id' },
+    associationDay,
+  );
+  const alsoDetail = lotAuthorityCoversRecordDay(
+    CALLER_PERSON,
+    { column: 'dues_ledger_entries.lot_id' },
+    associationDay,
+    { column: 'dues_ledger_entries.effective_day' },
+  );
+  const { results: openings } = await env.DATABASE.prepare(
+    `${CALLER_PERSON_CTE}
+     SELECT dues_ledger_entries.lot_id AS lot_id,
+            SUM(dues_ledger_entries.amount_cents) AS opening_cents
+       FROM dues_ledger_entries
+      WHERE ${holds.sql}
+        AND NOT (${alsoDetail.sql})
+      GROUP BY dues_ledger_entries.lot_id`,
+  )
+    .bind(personId, ...holds.binds, ...alsoDetail.binds)
+    .all<{ lot_id: string; opening_cents: number | null }>();
+
+  const byLot = new Map<string, MemberLotLedger>();
+  const lotOf = (lotId: string): MemberLotLedger => {
+    const existing = byLot.get(lotId);
+    if (existing) return existing;
+    const created: MemberLotLedger = {
+      lotId,
+      openingBalanceCents: 0,
+      openingBeforeDay: null,
+      entries: [],
+      balanceCents: 0,
+    };
+    byLot.set(lotId, created);
+    return created;
+  };
+
+  for (const opening of openings)
+    lotOf(opening.lot_id).openingBalanceCents = opening.opening_cents ?? 0;
+
+  for (const row of rows) {
+    const lot = lotOf(row.lot_id);
+    if (lot.openingBeforeDay === null) lot.openingBeforeDay = row.effective_day;
+    lot.entries.push(toMemberEntry(row));
+  }
+
+  for (const lot of byLot.values()) {
+    // A Lot whose every entry predates the reader is still THEIR Lot and still
+    // has a balance; it simply has no itemized line to be "before".
+    if (lot.entries.length === 0) lot.openingBeforeDay = null;
+    lot.balanceCents =
+      lot.openingBalanceCents +
+      lot.entries.reduce((sum, e) => sum + e.amountCents, 0);
+  }
+
+  return [...byLot.values()].sort((a, b) => a.lotId.localeCompare(b.lotId));
+}
+
+/**
+ * The whole ledger for one Lot, or for the association — board-only, including
+ * the board-only `reference` and every provider-sourced row. Unscoped by
+ * construction, so it is reachable only from a `requireBoard`-gated route.
+ */
+export async function fetchAdminDuesLedger(
+  env: Env,
+  lotId?: string,
+): Promise<AdminDuesEntry[]> {
+  const statement = env.DATABASE.prepare(
+    `SELECT ${LEDGER_COLUMNS}, reference, source, payment_id, reverses_entry_id,
+            recorded_by, recorded_at, operation_key
+       FROM dues_ledger_entries
+       ${lotId === undefined ? '' : 'WHERE lot_id = ?'}
+      ORDER BY effective_day ASC, recorded_at ASC`,
+  );
+  const { results } = await (
+    lotId === undefined ? statement : statement.bind(lotId)
+  ).all<
+    LedgerRow & {
+      reference: string | null;
+      source: DuesEntrySource;
+      payment_id: string | null;
+      reverses_entry_id: string | null;
+      recorded_by: string | null;
+      recorded_at: number;
+      operation_key: string;
+    }
+  >();
+  return results.map((r) => ({
+    ...toMemberEntry(r),
+    reference: r.reference,
+    source: r.source,
+    paymentId: r.payment_id,
+    reversesEntryId: r.reverses_entry_id,
+    recordedBy: r.recorded_by,
+    recordedAt: new Date(r.recorded_at),
+    operationKey: r.operation_key,
   }));
 }

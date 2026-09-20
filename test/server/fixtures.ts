@@ -22,6 +22,7 @@ import {
   settings,
   lotViolations,
   lotRecordEvents,
+  duesLedgerEntries,
   reports,
   resolutions,
   elections,
@@ -156,6 +157,7 @@ export async function truncateAll() {
   // FK) but belongs with the records it logs.
   await db.delete(lotRecordEvents);
   await db.delete(lotViolations);
+  await db.delete(duesLedgerEntries);
   // Roster: links and verifications cite properties.
   await db.delete(propertyVerifications);
   await db.delete(manualApprovalQueue);
