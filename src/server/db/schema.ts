@@ -17,6 +17,15 @@ import { users } from './auth-schema';
 // calls after both modules have evaluated. Phase 4 (#212) is where the two
 // files should be relayered so the roster is unambiguously the foundation.
 import { people } from './roster-schema';
+// ADR 0024 (#291): the Lot Record vocabulary lives in the pure types module so
+// these table definitions, the `src/server/lot-records/` module, and the admin
+// UI all read one list. See its comment for why.
+import {
+  LOT_RECORD_ACTIONS,
+  LOT_RECORD_TYPES,
+  LOT_VIOLATION_CATEGORIES,
+  LOT_VIOLATION_STATUSES,
+} from '../../lib/types';
 
 // Re-export the Better-Auth-generated tables so one schema covers everything.
 export * from './auth-schema';
@@ -522,6 +531,111 @@ export const settingChanges = sqliteTable(
     recordedAt: integer('recorded_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => [index('setting_changes_key_recorded_at_idx').on(t.key, t.recordedAt)],
+);
+
+/**
+ * The first Lot Record type (ADR 0024, #291): a violation observed against one
+ * Lot.
+ *
+ * A Lot Record's audience is the parties holding Lot Authority over its
+ * `lot_id`, plus Board Access — decided by the roster at read time, never by a
+ * `visibility` column, which these tables deliberately do not have. Reads live
+ * in `src/server/lot-records/`, never in `content/reads.ts`, and scope inside
+ * the query rather than filtering in TypeScript.
+ *
+ * `internalNote` is board-only: the homeowner read projects it out as `null`
+ * rather than relying on a component not to render it, the same admin-only
+ * field discipline ADR 0017 and ADR 0018 already follow.
+ *
+ * `status` changes only through named transitions on the admin action bus,
+ * never through a generic `PATCH`, matching resolutions and elections. Nothing
+ * is hard-deleted: a mistaken record is `voided` with a reason, stays visible
+ * to the board, and disappears from the homeowner surface.
+ */
+export const lotViolations = sqliteTable(
+  'lot_violations',
+  {
+    id: text('id').primaryKey(),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    category: text('category', {
+      enum: LOT_VIOLATION_CATEGORIES,
+    }).notNull(),
+    /** The Association Day the violation was observed, `YYYY-MM-DD`. */
+    effectiveDay: text('effective_day').notNull(),
+    summary: text('summary').notNull(),
+    /** Board-only. Never sent to a homeowner caller. */
+    internalNote: text('internal_note'),
+    status: text('status', { enum: LOT_VIOLATION_STATUSES })
+      .notNull()
+      .default('open'),
+    /** The acting ACCOUNT, provenance only — no FK, as `reports.created_by`. */
+    createdBy: text('created_by').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('lot_violations_lot_effective_day_idx').on(t.lotId, t.effectiveDay),
+    check(
+      'lot_violations_category_check',
+      sql`${t.category} IN ('architectural', 'maintenance', 'landscaping', 'parking', 'trash', 'pets', 'noise', 'other')`,
+    ),
+    check(
+      'lot_violations_status_check',
+      sql`${t.status} IN ('open', 'cured', 'closed', 'voided')`,
+    ),
+    check(
+      'lot_violations_effective_day_shape',
+      sql`${t.effectiveDay} LIKE '____-__-__'`,
+    ),
+    check(
+      'lot_violations_summary_not_blank',
+      sql`length(trim(${t.summary})) > 0`,
+    ),
+  ],
+);
+
+/**
+ * The shared event log for every Lot Record type (ADR 0024, #291): one row per
+ * create, transition, and void.
+ *
+ * The subject is `(recordType, recordId)` with **no** foreign key, because one
+ * table serves several subject tables and SQLite cannot express a FK whose
+ * target depends on another column. `recordType` is CHECK-bounded to the Lot
+ * Record types that exist — `LOT_RECORD_TYPES` in `src/server/lot-records/` is
+ * the TypeScript half of the same list, and the two are pinned together by
+ * test — so the pair stays meaningful.
+ *
+ * Append-only by convention, as ADR 0022's ledger is: no route may UPDATE or
+ * DELETE a row here, pinned by a static scan rather than by a trigger.
+ */
+export const lotRecordEvents = sqliteTable(
+  'lot_record_events',
+  {
+    id: text('id').primaryKey(),
+    recordType: text('record_type', { enum: LOT_RECORD_TYPES }).notNull(),
+    recordId: text('record_id').notNull(),
+    action: text('action', { enum: LOT_RECORD_ACTIONS }).notNull(),
+    actingAccountId: text('acting_account_id').notNull(),
+    /** Why, for a transition or a void. Free of resident-identifying text. */
+    reasonCode: text('reason_code'),
+    recordedAt: integer('recorded_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    index('lot_record_events_subject_idx').on(
+      t.recordType,
+      t.recordId,
+      t.recordedAt,
+    ),
+    check(
+      'lot_record_events_record_type_check',
+      sql`${t.recordType} IN ('lot_violations')`,
+    ),
+    check(
+      'lot_record_events_action_check',
+      sql`${t.action} IN ('created', 'cured', 'closed', 'reopened', 'voided', 'edited')`,
+    ),
+  ],
 );
 
 export const reports = sqliteTable(

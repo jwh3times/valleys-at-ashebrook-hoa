@@ -80,6 +80,14 @@ export interface SiteSettings {
   /** When true, the site presents as the official HOA site (dues/board surfaces on, disclaimer off). */
   officialMode: boolean;
   liveVotingEnabled: boolean;
+  /**
+   * ADR 0024 (#291): publishes Lot Records — the per-Lot private audience for
+   * dues balances and violations. Separate from `officialMode` on purpose:
+   * adopting the site is one decision, publishing Lot-level financial and
+   * enforcement records is another, and BOTH must be true for any Lot Record
+   * surface to exist.
+   */
+  lotRecordsEnabled: boolean;
   /** Footer "not affiliated" disclaimer (unofficial mode only); blank ⇒ built-in copy. */
   disclaimerText: string;
   /** /about page body; blank lines separate paragraphs; blank ⇒ built-in copy. */
@@ -96,8 +104,80 @@ export interface SiteSettings {
  * read, so a future gate (ADR 0024's `lotRecordsEnabled`, ADR 0025's
  * `onlinePaymentsEnabled`) joins both by being added here.
  */
-export const SITE_GATE_KEYS = ['officialMode', 'liveVotingEnabled'] as const;
+export const SITE_GATE_KEYS = [
+  'officialMode',
+  'liveVotingEnabled',
+  'lotRecordsEnabled',
+] as const;
 export type SiteGateKey = (typeof SITE_GATE_KEYS)[number];
+
+/**
+ * LOT RECORDS (ADR 0024, #291).
+ *
+ * A Lot Record is a record whose audience is the parties holding Lot Authority
+ * over ONE Lot, plus Board Access — dues balances and violations first. It is
+ * not a fourth content tier: `Visibility` is unchanged, and these tables carry
+ * no visibility column.
+ *
+ * These lists live here, in the pure types module, because they are the single
+ * source of truth for three consumers that must not disagree: the Drizzle
+ * table definitions in `src/server/db/schema.ts`, the server module in
+ * `src/server/lot-records/` (which re-exports `LOT_RECORD_TYPES`, where ADR
+ * 0024 says to look for it), and the admin UI. The database CHECK constraints
+ * in migration `0034` are the fourth, and a test pins them to these values,
+ * since SQL cannot import TypeScript.
+ */
+
+/**
+ * Every Lot Record table. The structural suites iterate this, so a new record
+ * type added without its scoping test fails the build. ADR 0025's
+ * `dues_ledger_entries` (#295) joins it — and widens the
+ * `lot_record_events.record_type` CHECK — when that ledger lands.
+ */
+export const LOT_RECORD_TYPES = ['lot_violations'] as const;
+export type LotRecordType = (typeof LOT_RECORD_TYPES)[number];
+
+/** What a `lot_record_events` row can record having happened. */
+export const LOT_RECORD_ACTIONS = [
+  'created',
+  'cured',
+  'closed',
+  'reopened',
+  'voided',
+  'edited',
+] as const;
+export type LotRecordAction = (typeof LOT_RECORD_ACTIONS)[number];
+
+/**
+ * The governing-document category a violation is recorded under. Deliberately
+ * short and CHECK-bounded rather than free text: a category is what the board
+ * reports on and what a homeowner sees, so it is vocabulary, not a note.
+ * Widening it is a migration plus an edit here, which is the point.
+ */
+export const LOT_VIOLATION_CATEGORIES = [
+  'architectural',
+  'maintenance',
+  'landscaping',
+  'parking',
+  'trash',
+  'pets',
+  'noise',
+  'other',
+] as const;
+export type LotViolationCategory = (typeof LOT_VIOLATION_CATEGORIES)[number];
+
+/**
+ * A violation's lifecycle. `voided` is the correction path — nothing is
+ * hard-deleted; a voided record stays visible to the board and disappears from
+ * the homeowner surface. Status moves only through named transitions.
+ */
+export const LOT_VIOLATION_STATUSES = [
+  'open',
+  'cured',
+  'closed',
+  'voided',
+] as const;
+export type LotViolationStatus = (typeof LOT_VIOLATION_STATUSES)[number];
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   siteName: 'The Valleys at Ashebrook Residents',
@@ -108,6 +188,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
     'This is an independent, resident-run website for neighbors in The Valleys at Ashebrook. Here you can read the latest announcements, view the community calendar, and find documents.',
   officialMode: false,
   liveVotingEnabled: false,
+  lotRecordsEnabled: false,
   disclaimerText: '',
   aboutBody: '',
 };
@@ -136,6 +217,7 @@ export function normalizeSiteSettings(raw: unknown): SiteSettings {
     welcomeBody: str(r.welcomeBody, DEFAULT_SITE_SETTINGS.welcomeBody),
     officialMode: r.officialMode === true,
     liveVotingEnabled: r.liveVotingEnabled === true,
+    lotRecordsEnabled: r.lotRecordsEnabled === true,
     disclaimerText: str(r.disclaimerText, DEFAULT_SITE_SETTINGS.disclaimerText),
     aboutBody: str(r.aboutBody, DEFAULT_SITE_SETTINGS.aboutBody),
   };

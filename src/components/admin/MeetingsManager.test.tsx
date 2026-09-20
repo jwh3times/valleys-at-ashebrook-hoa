@@ -37,6 +37,7 @@ beforeEach(() => {
     welcomeBody: '',
     officialMode: true,
     liveVotingEnabled: true,
+    lotRecordsEnabled: false,
     disclaimerText: '',
     aboutBody: '',
   });
@@ -1600,6 +1601,7 @@ describe('MeetingsManager', () => {
       welcomeBody: '',
       officialMode: true,
       liveVotingEnabled: false,
+      lotRecordsEnabled: false,
       disclaimerText: '',
       aboutBody: '',
     });
@@ -1630,6 +1632,7 @@ describe('MeetingsManager', () => {
       welcomeBody: '',
       officialMode: false,
       liveVotingEnabled: true,
+      lotRecordsEnabled: false,
       disclaimerText: '',
       aboutBody: '',
     });
