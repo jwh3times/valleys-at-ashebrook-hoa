@@ -7,6 +7,39 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-09-20
+
+### Added
+
+- **A screen for the board's lot records, which says so plainly when the
+  feature is off.** The admin panel gains a **Lot records** tab. With the
+  feature switched off — which is how it ships — the tab explains what lot
+  records are, that they belong to one lot rather than to the association, and
+  which two switches have to be on before anything can be recorded, and offers
+  no way to record anything.
+
+  With it on, the board can record a violation against a lot, mark it cured,
+  close it, reopen it, correct its wording, and void one entered by mistake.
+  Every row is headed by the home's address rather than an internal id, and
+  every button on a row names the row it acts on, so "Void" in a long list is
+  never ambiguous. Board notes are marked as board-only where they appear.
+  Voiding explains itself before it acts — it cannot be undone, the record stays
+  visible to the board, and it disappears from the lot's own view — and asks for
+  a reason from a fixed list. Each record's history can be opened in place,
+  showing what happened, when, and who did it (ADR 0024, #291).
+
+### Fixed
+
+- **A list of one lot's records could briefly appear under another lot's
+  heading.** If a change was saved at the same moment the lot filter was
+  changed, whichever answer arrived last won, even if it was the older
+  question. The filter is now locked while a change is being saved, and a
+  slower answer can no longer overwrite a newer one.
+- **A failed read no longer reports "no violations recorded".** When the
+  records cannot be read, the panel says so and hides both the empty message
+  and the entry form, rather than making a claim about a home that nobody
+  checked.
+
 ## [1.2.7] - 2026-09-20
 
 ### Added

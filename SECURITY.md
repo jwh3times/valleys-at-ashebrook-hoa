@@ -460,8 +460,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Anthropic answer-generation step); the resulting index text is un-pseudonymized and board-only,
   consistent with the non-tier-aware index described above.
 - **Lot Records never reach the AI Search index or an assistant answer.** Lot Records (ADR 0024,
-  #291 — a board-only data-entry API exists as of slice 2, gated behind two default-off flags, and
-  no homeowner-facing surface exists yet) are not documents: they never enter
+  #291 — a board-only data-entry API and its admin screen exist as of slices 2-3, gated behind two
+  default-off flags, and no homeowner-facing surface exists yet) are not documents: they never enter
   `documents`, never reach R2 under `documents/` or `rag/`, and so can never surface through the
   non-tier-aware index described above. `test/unit/lot-records-boundaries.test.ts` statically scans
   every module under `src/server/ai/` and the document-writing admin routes for any reference to a
