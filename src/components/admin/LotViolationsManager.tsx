@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchLotViolations,
   fetchLotRecordEvents,
@@ -7,9 +7,11 @@ import {
   editLotViolation,
   fetchProperties,
 } from '../../lib/admin';
+import { fetchSiteSettings } from '../../lib/content';
 import {
   LOT_RECORD_REASON_CODES,
   LOT_VIOLATION_CATEGORIES,
+  type LotRecordAction,
   type LotRecordEventDetail,
   type LotRecordReasonCode,
   type LotViolationCategory,
@@ -20,18 +22,25 @@ import {
 /**
  * The board's Lot Record surface (ADR 0024, #291 slice 3).
  *
- * Two things shape this panel more than the CRUD does.
+ * Three things shape this panel more than the CRUD does.
  *
  * **What it shows belongs to one Lot, not to the association.** Every row is
  * headed by its Lot, and the create form asks for the Lot first, because
  * recording a violation against the wrong Lot publishes it to the wrong
- * people. There is no "all lots" editing mode — the filter narrows a list, it
- * never becomes a bulk action.
+ * people. The filter narrows a list; it never becomes a bulk action, and it is
+ * locked while a write is in flight so the list and the filter cannot disagree
+ * about which Lot is on screen.
  *
  * **Status is not a field.** It moves only through the named actions, which is
  * what lets the record's history describe its lifecycle, so the row offers
- * buttons rather than a dropdown. Voiding is the one that asks a question
- * first: it is the correction path, it is terminal, and the reason is recorded.
+ * buttons rather than a dropdown. Voiding asks first: it is the correction
+ * path, it is terminal, and its reason is recorded.
+ *
+ * **A failed read is not an empty list.** "No violations recorded" is a claim
+ * about a Lot, and making it when the truth is "we could not read" is the most
+ * consequential thing this panel could get wrong. A load failure suppresses
+ * both the empty state and the create form, which could not work anyway
+ * without the Lot list.
  */
 
 const CATEGORY_LABELS: Record<LotViolationCategory, string> = {
@@ -52,6 +61,15 @@ const REASON_LABELS: Record<LotRecordReasonCode, string> = {
   homeowner_corrected: 'Homeowner corrected the record',
   board_decision: 'Board decision',
   other: 'Other',
+};
+
+const EVENT_LABELS: Record<LotRecordAction, string> = {
+  created: 'Recorded',
+  cured: 'Marked cured',
+  closed: 'Closed',
+  reopened: 'Reopened',
+  voided: 'Voided',
+  edited: 'Corrected',
 };
 
 /** The actions each status offers, in the order a board member wants them. */
@@ -86,8 +104,9 @@ const emptyForm = {
 export default function LotViolationsManager() {
   const [rows, setRows] = useState<LotViolationDetail[]>([]);
   const [lots, setLots] = useState<PropertyWithOwners[]>([]);
-  const [enabled, setEnabled] = useState(true);
+  const [gateOff, setGateOff] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -104,52 +123,92 @@ export default function LotViolationsManager() {
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [history, setHistory] = useState<LotRecordEventDetail[]>([]);
 
-  const load = useCallback(async () => {
-    const [violations, properties] = await Promise.all([
-      fetchLotViolations(filterLotId || undefined),
-      fetchProperties(),
+  /**
+   * Every read is numbered, and only the newest may write. The mount effect
+   * has its own unmount flag, but a row action's reload has no effect to hang
+   * a flag on — and it races the filter's reload, which is how one Lot's
+   * records can land under another Lot's heading.
+   */
+  const latestRead = useRef(0);
+
+  const refresh = useCallback(
+    async (isStale: () => boolean = () => false) => {
+      const seq = ++latestRead.current;
+      const superseded = () => isStale() || seq !== latestRead.current;
+      try {
+        const violations = await fetchLotViolations(filterLotId || undefined);
+        if (superseded()) return;
+        setGateOff(!violations.enabled);
+        setRows(violations.rows);
+        setLoadError('');
+      } catch (err: unknown) {
+        if (superseded()) return;
+        setLoadError(
+          (err as { message?: string } | null)?.message ??
+            'Could not load lot records.',
+        );
+      }
+    },
+    [filterLotId],
+  );
+
+  /**
+   * The Lot list and the gate, read once. They are a separate loader from the
+   * records on purpose: they do not change when the filter does, and reloading
+   * them after every row action would refetch the whole property table to
+   * throw it away.
+   *
+   * The gate is read here rather than inferred from the API's 404, so an
+   * unexplained 404 — a renamed route, a client bundle ahead of its deploy —
+   * cannot masquerade as "the feature is switched off" and send the board to a
+   * Site Settings page where the switch is already on.
+   */
+  const loadContext = useCallback(async (isStale: () => boolean) => {
+    const [site, properties] = await Promise.all([
+      fetchSiteSettings().catch(() => null),
+      fetchProperties().catch(() => [] as PropertyWithOwners[]),
     ]);
-    return { violations, properties };
-  }, [filterLotId]);
+    if (isStale()) return;
+    if (site) setGateOff(!(site.officialMode && site.lotRecordsEnabled));
+    setLots(properties);
+  }, []);
 
   useEffect(() => {
     // The documented mount-fetch shape: a memoized loader as the effect's
-    // dependency, started from a function declared inside the callback, with
-    // an unmount flag guarding the eventual write.
-    let live = true;
+    // dependency, started from a function declared inside the callback, with a
+    // flag the cleanup flips so a late response cannot write.
+    let ignore = false;
     async function loadOnMount() {
-      setLoading(true);
-      try {
-        const { violations, properties } = await load();
-        if (!live) return;
-        setEnabled(violations.enabled);
-        setRows(violations.rows);
-        setLots(properties);
-      } catch (err: unknown) {
-        if (!live) return;
-        setMsg(
-          'Error: ' +
-            ((err as { message?: string } | null)?.message ??
-              'could not load lot records.'),
-        );
-      } finally {
-        if (live) setLoading(false);
-      }
+      await loadContext(() => ignore);
     }
     void loadOnMount();
     return () => {
-      live = false;
+      ignore = true;
     };
-  }, [load]);
+  }, [loadContext]);
 
+  useEffect(() => {
+    // The records, reloaded whenever the filter changes. Only the first load
+    // replaces the panel with "Loading…"; a filter change keeps the list and
+    // its controls mounted, so focus stays where the board member put it.
+    let ignore = false;
+    async function loadRecords() {
+      await refresh(() => ignore);
+      if (!ignore) setLoading(false);
+    }
+    void loadRecords();
+    return () => {
+      ignore = true;
+    };
+  }, [refresh]);
+
+  /** A write, then a reload of the records only — the Lot list has not moved. */
   async function run(action: () => Promise<void>, successMsg: string) {
     setBusy(true);
     setMsg('');
     try {
       await action();
-      const { violations } = await load();
-      setEnabled(violations.enabled);
-      setRows(violations.rows);
+      await refresh();
       setMsg(successMsg);
     } catch (err: unknown) {
       setMsg(
@@ -179,6 +238,8 @@ export default function LotViolationsManager() {
     if (editingId) {
       const id = editingId;
       void run(async () => {
+        // No lotId and no status: `edit` owns neither, and the lot IS the
+        // audience.
         await editLotViolation(id, {
           category: form.category,
           effectiveDay: form.effectiveDay,
@@ -198,6 +259,8 @@ export default function LotViolationsManager() {
         summary,
         ...(note ? { internalNote: note } : {}),
       });
+      // Inside the action, after the await: a failed create keeps the lot the
+      // board chose, so a retry cannot attach to a different one.
       setForm(emptyForm);
     }, 'Violation recorded.');
   }
@@ -213,25 +276,45 @@ export default function LotViolationsManager() {
     });
   }
 
-  function showHistory(row: LotViolationDetail) {
+  function toggleVoid(row: LotViolationDetail) {
+    const opening = voidingId !== row.id;
+    // Reset the reason per record: a code chosen for one violation must never
+    // ride along to the next, because it lands in that record's own history.
+    setVoidReason('entered_in_error');
+    setVoidingId(opening ? row.id : null);
+  }
+
+  function toggleHistory(row: LotViolationDetail) {
     if (historyId === row.id) {
       setHistoryId(null);
       return;
     }
-    void run(async () => {
-      setHistory(await fetchLotRecordEvents(row.id));
-      setHistoryId(row.id);
-    }, '');
+    // Deliberately not through `run`: opening a history is a read, and it must
+    // not clear the banner reporting what the last write did.
+    void (async () => {
+      try {
+        setHistory(await fetchLotRecordEvents(row.id));
+        setHistoryId(row.id);
+      } catch (err: unknown) {
+        setMsg(
+          'Error: ' +
+            ((err as { message?: string } | null)?.message ??
+              'could not load the record history.'),
+        );
+      }
+    })();
   }
 
+  // Only the first load replaces the panel. A filter change keeps the list and
+  // its controls mounted, so focus stays where the board member put it.
   if (loading)
     return (
       <div className="admin-panel">
-        <p className="loading">Loading…</p>
+        <p className="loading panel-pad">Loading…</p>
       </div>
     );
 
-  if (!enabled)
+  if (gateOff)
     return (
       <div className="admin-panel">
         <div className="admin-bar">
@@ -249,6 +332,8 @@ export default function LotViolationsManager() {
       </div>
     );
 
+  const banner = loadError ? `Error: ${loadError}` : msg;
+
   return (
     <div className="admin-panel">
       <div className="admin-bar">
@@ -261,100 +346,148 @@ export default function LotViolationsManager() {
         shown to a homeowner.
       </p>
 
-      {msg && (
+      {banner && (
         <div
           className={
-            msg.startsWith('Error:')
+            banner.startsWith('Error:')
               ? 'form-message form-message--error'
               : 'form-message form-message--success'
           }
         >
-          {msg}
+          {banner}
         </div>
       )}
 
-      <form className="admin-form" onSubmit={submitForm}>
-        <h2>{editingId ? 'Correct this violation' : 'Record a violation'}</h2>
-        <label>
-          Lot
-          <select
-            value={form.lotId}
-            disabled={editingId !== null}
-            onChange={(e) => setForm({ ...form, lotId: e.target.value })}
-          >
-            <option value="">Choose a lot…</option>
-            {lots.map((lot) => (
-              <option key={lot.id} value={lot.id}>
-                {lot.address}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Category
-          <select
-            value={form.category}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                category: e.target.value as LotViolationCategory,
-              })
-            }
-          >
-            {LOT_VIOLATION_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Date observed
-          <input
-            type="date"
-            value={form.effectiveDay}
-            onChange={(e) => setForm({ ...form, effectiveDay: e.target.value })}
-          />
-        </label>
-        <label>
-          Summary (the homeowner sees this)
-          <input
-            type="text"
-            value={form.summary}
-            onChange={(e) => setForm({ ...form, summary: e.target.value })}
-          />
-        </label>
-        <label>
-          Board note (never shown to the homeowner)
-          <textarea
-            value={form.internalNote}
-            rows={2}
-            onChange={(e) => setForm({ ...form, internalNote: e.target.value })}
-          />
-        </label>
-        <div className="admin-form__actions">
-          <button type="submit" disabled={busy}>
-            {editingId ? 'Save correction' : 'Record violation'}
-          </button>
-          {editingId && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setEditingId(null);
-                setForm(emptyForm);
-              }}
-            >
-              Cancel
-            </button>
-          )}
+      {loadError ? (
+        <div className="panel-card" style={{ marginBottom: '26px' }}>
+          <p className="muted" style={{ margin: 0 }}>
+            The records could not be read, so nothing is shown and nothing can
+            be recorded. This is not the same as a lot having no violations.
+          </p>
         </div>
-      </form>
+      ) : (
+        <form
+          className="panel-card"
+          onSubmit={submitForm}
+          style={{ marginBottom: '26px' }}
+        >
+          <div className="panel-editor__title">
+            {editingId ? 'Correct this violation' : 'Record a violation'}
+          </div>
+          <div className="field-grid" style={{ marginBottom: '16px' }}>
+            <div className="field" style={{ margin: 0 }}>
+              <label htmlFor="violation-lot">Lot</label>
+              <select
+                id="violation-lot"
+                value={form.lotId}
+                // The lot is the audience, so it is fixed once a record
+                // exists; the server refuses to move it either.
+                disabled={editingId !== null || busy}
+                onChange={(e) => setForm({ ...form, lotId: e.target.value })}
+              >
+                <option value="">— choose a lot —</option>
+                {lots.map((lot) => (
+                  <option key={lot.id} value={lot.id}>
+                    {lot.address}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label htmlFor="violation-category">Category</label>
+              <select
+                id="violation-category"
+                value={form.category}
+                disabled={busy}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    category: e.target.value as LotViolationCategory,
+                  })
+                }
+              >
+                {LOT_VIOLATION_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {CATEGORY_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="field-grid" style={{ marginBottom: '16px' }}>
+            <div className="field" style={{ margin: 0 }}>
+              <label htmlFor="violation-day">Date observed</label>
+              <input
+                id="violation-day"
+                type="date"
+                value={form.effectiveDay}
+                disabled={busy}
+                onChange={(e) =>
+                  setForm({ ...form, effectiveDay: e.target.value })
+                }
+              />
+            </div>
+            <div className="field" style={{ margin: 0 }}>
+              <label htmlFor="violation-summary">
+                Summary (the homeowner sees this)
+              </label>
+              <input
+                id="violation-summary"
+                type="text"
+                value={form.summary}
+                disabled={busy}
+                onChange={(e) => setForm({ ...form, summary: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="field" style={{ marginBottom: '16px' }}>
+            <label htmlFor="violation-note">
+              Board note (never shown to the homeowner)
+            </label>
+            <textarea
+              id="violation-note"
+              value={form.internalNote}
+              rows={2}
+              disabled={busy}
+              onChange={(e) =>
+                setForm({ ...form, internalNote: e.target.value })
+              }
+            />
+          </div>
+          <div className="btn-row">
+            <button className="btn btn--small" type="submit" disabled={busy}>
+              {busy
+                ? 'Saving…'
+                : editingId
+                  ? 'Save correction'
+                  : 'Record violation'}
+            </button>
+            {editingId && (
+              <button
+                type="button"
+                className="btn btn--outline btn--small"
+                disabled={busy}
+                onClick={() => {
+                  setEditingId(null);
+                  setForm(emptyForm);
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+      )}
 
-      <label>
-        Show violations for
+      <div className="field" style={{ marginBottom: '16px' }}>
+        <label htmlFor="violation-filter">Show violations for</label>
         <select
+          id="violation-filter"
           value={filterLotId}
+          // Locked during a write: the list is reloaded when the write
+          // returns, and a filter changed mid-flight would label those rows
+          // with the wrong lot.
+          disabled={busy}
           onChange={(e) => setFilterLotId(e.target.value)}
         >
           <option value="">Every lot</option>
@@ -364,86 +497,107 @@ export default function LotViolationsManager() {
             </option>
           ))}
         </select>
-      </label>
+      </div>
 
-      {rows.length === 0 ? (
-        <p className="admin-empty">No violations recorded.</p>
-      ) : (
-        <ul className="admin-list">
-          {rows.map((row) => (
-            <li key={row.id} className="admin-list__item">
-              <div>
-                <strong>{addressOf(row.lotId)}</strong> —{' '}
-                {CATEGORY_LABELS[row.category]}, {row.effectiveDay} —{' '}
-                {STATUS_LABELS[row.status]}
-              </div>
-              <div>{row.summary}</div>
-              {row.internalNote && (
-                <div className="admin-list__note">
-                  Board note: {row.internalNote}
-                </div>
-              )}
-
-              <div className="admin-list__actions">
-                {ACTIONS[row.status].map(({ action, label }) => (
-                  <button
-                    key={action}
-                    type="button"
-                    disabled={busy}
-                    aria-label={`${label} violation: ${identityOf(row)}`}
-                    onClick={() =>
-                      void run(
-                        () => transitionLotViolation(action, row.id),
-                        `Violation marked ${label.toLowerCase()}.`,
-                      )
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-                {row.status !== 'voided' && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      aria-label={`Correct violation: ${identityOf(row)}`}
-                      onClick={() => startEdit(row)}
+      <div className="panel-list">
+        {loadError ? null : rows.length === 0 ? (
+          <p className="muted panel-pad">No violations recorded.</p>
+        ) : (
+          rows.map((row) => (
+            <div
+              key={row.id}
+              className="panel-card"
+              style={{ marginBottom: '14px' }}
+            >
+              <div className="list-row">
+                <div className="admin-row-main">
+                  <div className="admin-row-title">{addressOf(row.lotId)}</div>
+                  <div className="admin-row-sub">
+                    {CATEGORY_LABELS[row.category]} · {row.effectiveDay} ·{' '}
+                    {STATUS_LABELS[row.status]}
+                  </div>
+                  <div style={{ marginTop: '6px' }}>{row.summary}</div>
+                  {row.internalNote && (
+                    <div
+                      className="admin-row-sub"
+                      style={{
+                        marginTop: '8px',
+                        paddingLeft: '10px',
+                        borderLeft: '3px solid var(--border-soft)',
+                      }}
                     >
-                      Correct
-                    </button>
+                      <strong>Board only</strong> — never shown to the
+                      homeowner: {row.internalNote}
+                    </div>
+                  )}
+                </div>
+                <div className="row-actions">
+                  {ACTIONS[row.status].map(({ action, label }) => (
                     <button
+                      key={action}
                       type="button"
+                      className="row-link"
                       disabled={busy}
-                      aria-label={`Void violation: ${identityOf(row)}`}
+                      aria-label={`${label} violation: ${identityOf(row)}`}
                       onClick={() =>
-                        setVoidingId(voidingId === row.id ? null : row.id)
+                        void run(
+                          () => transitionLotViolation(action, row.id),
+                          `Violation marked ${label.toLowerCase()}.`,
+                        )
                       }
                     >
-                      Void
+                      {label}
                     </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  disabled={busy}
-                  aria-label={`History of violation: ${identityOf(row)}`}
-                  onClick={() => showHistory(row)}
-                >
-                  History
-                </button>
+                  ))}
+                  {row.status !== 'voided' && (
+                    <>
+                      <button
+                        type="button"
+                        className="row-link"
+                        disabled={busy}
+                        aria-label={`Correct violation: ${identityOf(row)}`}
+                        onClick={() => startEdit(row)}
+                      >
+                        Correct
+                      </button>
+                      <button
+                        type="button"
+                        className="row-link"
+                        disabled={busy}
+                        aria-expanded={voidingId === row.id}
+                        aria-label={`Void violation: ${identityOf(row)}`}
+                        onClick={() => toggleVoid(row)}
+                      >
+                        Void
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="row-link"
+                    disabled={busy}
+                    aria-expanded={historyId === row.id}
+                    aria-label={`History of violation: ${identityOf(row)}`}
+                    onClick={() => toggleHistory(row)}
+                  >
+                    History
+                  </button>
+                </div>
               </div>
 
               {voidingId === row.id && (
-                <div className="admin-list__form">
-                  <p>
+                <div className="panel-pad">
+                  <p className="muted">
                     Voiding keeps the record here and removes it from the
                     lot&rsquo;s own view. It cannot be undone, and a voided
                     record cannot be corrected — record a new violation instead.
                   </p>
-                  <label>
-                    Reason
+                  <div className="field" style={{ marginBottom: '12px' }}>
+                    <label htmlFor={`void-reason-${row.id}`}>Reason</label>
                     <select
+                      id={`void-reason-${row.id}`}
                       value={voidReason}
+                      disabled={busy}
                       onChange={(e) =>
                         setVoidReason(e.target.value as LotRecordReasonCode)
                       }
@@ -454,44 +608,48 @@ export default function LotViolationsManager() {
                         </option>
                       ))}
                     </select>
-                  </label>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    aria-label={`Confirm voiding violation: ${identityOf(row)}`}
-                    onClick={() =>
-                      void run(async () => {
-                        await transitionLotViolation(
-                          'void',
-                          row.id,
-                          voidReason,
-                        );
-                        setVoidingId(null);
-                      }, 'Violation voided.')
-                    }
-                  >
-                    Void this violation
-                  </button>
+                  </div>
+                  <div className="btn-row">
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      disabled={busy}
+                      aria-label={`Confirm voiding violation: ${identityOf(row)}`}
+                      onClick={() =>
+                        void run(async () => {
+                          await transitionLotViolation(
+                            'void',
+                            row.id,
+                            voidReason,
+                          );
+                          setVoidingId(null);
+                        }, 'Violation voided.')
+                      }
+                    >
+                      Void this violation
+                    </button>
+                  </div>
                 </div>
               )}
 
               {historyId === row.id && (
-                <ol className="admin-list__history">
+                <ol className="panel-pad">
                   {history.map((event) => (
                     <li key={event.id}>
-                      {event.action}
+                      {EVENT_LABELS[event.action]}
                       {event.reasonCode
                         ? ` — ${REASON_LABELS[event.reasonCode]}`
                         : ''}{' '}
-                      — {new Date(event.recordedAt).toLocaleString()}
+                      — {new Date(event.recordedAt).toLocaleString()} — by{' '}
+                      {event.actingAccountId}
                     </li>
                   ))}
                 </ol>
               )}
-            </li>
-          ))}
-        </ul>
-      )}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
