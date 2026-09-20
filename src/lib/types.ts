@@ -167,6 +167,39 @@ export const LOT_VIOLATION_CATEGORIES = [
 export type LotViolationCategory = (typeof LOT_VIOLATION_CATEGORIES)[number];
 
 /**
+ * One violation as the board's surface carries it — every field, every status,
+ * including the board-only note. The homeowner shape is narrower and lives in
+ * `src/server/lot-records/reads.ts`, which never selects `internalNote` at all;
+ * these are deliberately not one type with optional fields, because an optional
+ * field is a thing a component can forget to check.
+ *
+ * `recordedAt` crosses the wire as an ISO string, as every other admin detail
+ * type does.
+ */
+export interface LotViolationDetail {
+  id: string;
+  lotId: string;
+  category: LotViolationCategory;
+  effectiveDay: string;
+  summary: string;
+  internalNote: string | null;
+  status: LotViolationStatus;
+  createdBy: string;
+  recordedAt: string;
+}
+
+/** One entry in a Lot Record's history. */
+export interface LotRecordEventDetail {
+  id: string;
+  recordType: LotRecordType;
+  recordId: string;
+  action: LotRecordAction;
+  actingAccountId: string;
+  reasonCode: LotRecordReasonCode | null;
+  recordedAt: string;
+}
+
+/**
  * Why a Lot Record moved state or was voided — a bounded CODE, never free
  * text. `lot_record_events.reason_code` is read by the board and is kept free
  * of resident-identifying prose on purpose: a reason typed into a box ends up

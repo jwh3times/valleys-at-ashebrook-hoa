@@ -23,6 +23,10 @@ import type {
   CandidateInput,
   ProxyDetail,
   ProxyInput,
+  LotViolationDetail,
+  LotRecordEventDetail,
+  LotViolationCategory,
+  LotRecordReasonCode,
 } from './types';
 import {
   REPORT_PAGE_SIZE,
@@ -82,6 +86,91 @@ async function adminSave<T = void>(
     id ? 'PATCH' : 'POST',
     id ? { id, ...(data as object) } : data,
     fallback,
+  );
+}
+
+// ---------- Lot records (ADR 0024, #291) ----------
+
+/**
+ * The board's Lot Record surface answers `404` for the whole namespace while
+ * either feature flag is off, which is a normal state rather than a failure —
+ * it is how the feature stays dark. So this read distinguishes the two instead
+ * of throwing: `enabled: false` is "the surface is not turned on", and a
+ * genuine failure still throws with the server's own message, as every other
+ * helper here does.
+ */
+export async function fetchLotViolations(
+  lotId?: string,
+): Promise<{ enabled: boolean; rows: LotViolationDetail[] }> {
+  const query = lotId ? `?lotId=${encodeURIComponent(lotId)}` : '';
+  const res = await fetch(`/api/admin/lot-violations${query}`);
+  if (res.status === 404) return { enabled: false, rows: [] };
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Load lot records failed: ${res.status}`,
+    );
+  return { enabled: true, rows: (await res.json()) as LotViolationDetail[] };
+}
+
+export async function fetchLotRecordEvents(
+  recordId: string,
+): Promise<LotRecordEventDetail[]> {
+  return adminRequest(
+    `/api/admin/lot-violations?events=${encodeURIComponent(recordId)}`,
+    'GET',
+    undefined,
+    'Load record history failed',
+  );
+}
+
+export async function createLotViolation(input: {
+  lotId: string;
+  category: LotViolationCategory;
+  effectiveDay: string;
+  summary: string;
+  internalNote?: string;
+}): Promise<{ id: string }> {
+  return adminRequest(
+    '/api/admin/lot-violations',
+    'POST',
+    { action: 'create', ...input },
+    'Record violation failed',
+  );
+}
+
+/**
+ * The named status transitions. `status` is never sent as a field — it moves
+ * only through these, which is what lets the record's history describe its
+ * lifecycle. A void requires a reason; the others accept one.
+ */
+export async function transitionLotViolation(
+  action: 'cure' | 'close' | 'reopen' | 'void',
+  id: string,
+  reason?: LotRecordReasonCode,
+): Promise<void> {
+  await adminRequest(
+    '/api/admin/lot-violations',
+    'POST',
+    { action, id, ...(reason ? { reason } : {}) },
+    'Update violation failed',
+  );
+}
+
+export async function editLotViolation(
+  id: string,
+  fields: {
+    category?: LotViolationCategory;
+    effectiveDay?: string;
+    summary?: string;
+    internalNote?: string;
+  },
+  reason?: LotRecordReasonCode,
+): Promise<void> {
+  await adminRequest(
+    '/api/admin/lot-violations',
+    'POST',
+    { action: 'edit', id, ...fields, ...(reason ? { reason } : {}) },
+    'Edit violation failed',
   );
 }
 

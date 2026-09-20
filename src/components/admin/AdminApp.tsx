@@ -19,6 +19,7 @@ import MeetingsManager from './MeetingsManager';
 import ResolutionsManager from './ResolutionsManager';
 import ElectionsManager from './ElectionsManager';
 import ProxiesManager from './ProxiesManager';
+import LotViolationsManager from './LotViolationsManager';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
 
@@ -93,6 +94,14 @@ const SECTIONS = [
     key: 'board',
     label: 'Board access (legacy)',
     render: () => <BoardAccessManager />,
+  },
+  {
+    // ADR 0024 (#291): records belonging to ONE lot rather than to the
+    // association. The panel explains itself and offers nothing while the
+    // `lotRecordsEnabled` gate is off, which is its default.
+    key: 'lot-records',
+    label: 'Lot records',
+    render: () => <LotViolationsManager />,
   },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
   { key: 'site', label: 'Site Settings', render: () => <SiteManager /> },
