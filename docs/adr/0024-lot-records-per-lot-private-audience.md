@@ -1,6 +1,6 @@
 # ADR 0024: Lot Records Are a Per-Lot Private Audience, Not a Fourth Content Tier
 
-**Status:** Proposed
+**Status:** Accepted 2026-09-20
 **Date:** 2026-09-17
 
 ## Context
@@ -292,7 +292,9 @@ Decisions 1 and 3 agree with the equivalent decision for the paper ballot receip
 [design spec](../specs/2026-09-17-paper-ballot-receipt-design.md)): a former owner loses access at
 transfer on every surface, under one rule rather than three.
 
-This ADR remains **Proposed**. These answers remove the policy blockers, not the acceptance gate.
+**Accepted 2026-09-20.** The board's answers removed the policy blockers; the maintainer's
+acceptance was the separate gate this section referred to, and it is now given. Implementation of
+#291 proceeds from here, behind `lotRecordsEnabled` and the official-mode gate as described above.
 
 ## Related decisions
 

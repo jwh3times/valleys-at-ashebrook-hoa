@@ -7,6 +7,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-09-20
+
+### Changed
+
+- **The designs for per-lot private records and the dues ledger are accepted.** ADR 0024 (Lot
+  Records are a per-Lot private audience, not a fourth content tier) and ADR 0025 (an append-only
+  per-Lot dues ledger with payments reconciled from verified provider events) move from Proposed to
+  Accepted, and the ADR index drops their "proposed" marks. The board answered the policy questions
+  on 2026-09-18 and the previous release made the documents match those answers; the maintainer's
+  acceptance was the one gate left, so per-owner records (#291) and online dues payments (#295) can
+  now be built from these designs. Nothing about the designs themselves changes: both features stay
+  behind their own flags and ship dark, and the ledger's fee behaviour still waits on figures read
+  from the association's executed collection policy, which is evidence rather than a decision.
+
 ## [1.2.4] - 2026-09-20
 
 ### Changed
