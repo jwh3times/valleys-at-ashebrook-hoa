@@ -459,6 +459,12 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   as-is with no AI call. Either way this stays within Cloudflare (not a third-party egress like the
   Anthropic answer-generation step); the resulting index text is un-pseudonymized and board-only,
   consistent with the non-tier-aware index described above.
+- **Lot Records never reach the AI Search index or an assistant answer.** Lot Records (ADR 0024,
+  #291 — currently dark, with no route or page exposing them) are not documents: they never enter
+  `documents`, never reach R2 under `documents/` or `rag/`, and so can never surface through the
+  non-tier-aware index described above. `test/unit/lot-records-boundaries.test.ts` statically scans
+  every module under `src/server/ai/` and the document-writing admin routes for any reference to a
+  Lot Record table or Drizzle identifier and fails the build on one.
 
 ## Automated safeguards
 

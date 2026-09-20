@@ -74,14 +74,16 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   the result rather than trusting an unconditional `UPDATE` to have matched anything, so an unknown
   id can no longer read back as the same silent `204` a real edit gets.
 - Site settings and feature gates, `requireBoard`-gated (#363, ADR 0024): `/api/admin/site`
-  supports `PUT` and `POST`. **`PUT` no longer writes either gate.** It replaces the presentation
+  supports `PUT` and `POST`. **`PUT` no longer writes any gate.** It replaces the presentation
   fields (name, tagline, welcome copy, disclaimer, about body) but the `ON CONFLICT DO UPDATE`'s
-  `json_set` rewrites `officialMode` and `liveVotingEnabled` back to whatever is currently stored
-  on the row, regardless of what the body sends — a `json_type = 'true'` check re-wrapped through
-  `json('true'|'false')` so the value stays a JSON boolean rather than the integer `json_extract`
-  would coerce it to, which `LIVE_VOTING_ENABLED_SQL` would then read as permanently off. A
-  first-ever `PUT` (no stored row to preserve) inserts both gates at their coded defaults
-  regardless of the body — a gate cannot be switched on through `PUT` even once. `POST { action:
+  `json_set` rewrites every key in `SITE_GATE_KEYS` (`officialMode`, `liveVotingEnabled`, and
+  `lotRecordsEnabled`) back to whatever is currently stored on the row, regardless of what the body
+  sends — a `json_type = 'true'` check re-wrapped through `json('true'|'false')` so the value stays
+  a JSON boolean rather than the integer `json_extract` would coerce it to, which
+  `LIVE_VOTING_ENABLED_SQL` would then read as permanently off. A first-ever `PUT` (no stored row to
+  preserve) inserts every gate at its coded default regardless of the body — a gate cannot be
+  switched on through `PUT` even once, and a future gate added to `SITE_GATE_KEYS` rides this rule
+  for free. `POST { action:
 'setGate', key, expected, value }` is the only way to change a gate: `requireBoard` first (write
   freeze `503`, then unauthenticated `401`, then non-board `403`), then `readJson` (`400` on
   malformed body), then dispatch. `400` for a `key` outside `SITE_GATE_KEYS`, or if `expected`/

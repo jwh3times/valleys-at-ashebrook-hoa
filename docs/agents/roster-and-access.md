@@ -121,6 +121,18 @@ itself as a subquery, bound to the caller's account and to each recorded electio
 Day, so a lot's own holders on that day — and no one else — see whether their lot's paper ballot is
 recorded. See [`voting-and-ballots.md`](./voting-and-ballots.md).
 
+`lotAuthorityExists` has a period-bounded sibling, `lotAuthorityCoversRecordDay` — same builder,
+additionally requiring the record's own date to fall on or after the start of the authority that
+grants it, so a buyer who holds Lot Authority today reads nothing the seller's period produced. It
+backs Lot Records (#291, ADR 0024, dark — see [`data-model.md`](./data-model.md) and
+`src/server/lot-records/` in [`module-map.md`](./module-map.md)), which are a **second scoping axis
+alongside the content tier**: a Lot Record's audience is decided by its `lot_id` joined against the
+roster, not by `visibility`, and it is gated separately — a Lot Record surface requires both
+`officialMode` and the new default-off `lotRecordsEnabled` site gate. A Lot Record table carries no
+`visibility` column at all — putting the two axes on one column would let a future tier edit
+publish one Lot's record to every member — so content-tier visibility and Lot Authority scoping
+never interact for these tables.
+
 ## Writing to the roster
 
 Every mutation on the phase 3b/3c/3d roster routes is **ONE D1 batch of conditional statements**:

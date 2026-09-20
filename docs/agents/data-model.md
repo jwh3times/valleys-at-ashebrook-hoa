@@ -221,6 +221,44 @@ second, independently-settable fact; the real `proxyId` is attached to `MemberAt
 `MemberVoteRow` only for the admin caller (`BallotRow.proxyId`, already board-only, carries it
 always) — see the `assembleMeetingDetail`/`includeProxyIds` note in [`module-map.md`](./module-map.md).
 
+## Lot records
+
+`lot_violations` and `lot_record_events` (migration `0034`, ADR 0024, #291 slice 1 — dark: no route
+or page reads or writes them yet) are the first of a family whose audience is not a content tier
+but a Lot: whoever holds Lot Authority over that one Lot, plus Board Access. Storage is typed per
+record type — there is no generic `lot_records` table with a JSON payload, matching the ADR 0022
+ledger's refusal of arbitrary JSON — and neither table carries a `visibility` column, deliberately,
+so a future tier edit can never publish one Lot's record to every member. Both tables are gated by
+`lotRecordsEnabled`, a new member of `SITE_GATE_KEYS` alongside `officialMode` and
+`liveVotingEnabled`: a Lot Record surface requires both `officialMode` and `lotRecordsEnabled`
+literally `true`, since presenting the site officially and publishing Lot-level financial and
+enforcement detail are separate decisions (`src/server/lot-records/gate.ts`).
+
+`lot_violations` has `lot_id` referencing `properties(id)` on delete-restrict (the same
+outlive-an-editing-mistake action `ballots`/`proxies`/`member_votes` use), `category` (CHECK-bounded
+to the eight `LOT_VIOLATION_CATEGORIES` in `src/lib/types.ts`), `effective_day` (a `YYYY-MM-DD`
+Association Day, CHECK-shaped and indexed together with `lot_id` since every read is "this Lot,
+newest first"), `summary` (CHECK non-blank), a board-only `internal_note`, `status`
+(`open`/`cured`/`closed`/`voided`, default `open`), and plain-text `created_by`/`created_at` with no
+FK — the same audit-trail-only pattern `reports.created_by` and `setting_changes.acting_account_id`
+use. No Person name or Contact Method value is copied into the table, so Roster Redaction never has
+to reach it. A `voided` row stays visible to the board and disappears from the homeowner surface by
+construction (excluded in the read's own scoping predicate), never by a caller-side filter.
+
+`lot_record_events` is the append-only log every Lot Record type shares, subject to
+`(record_type, record_id)` with **no foreign key** — SQLite cannot express an FK whose target
+depends on another column's value — `record_type` CHECK-bounded to `LOT_RECORD_TYPES` (today just
+`lot_violations`; ADR 0025's `dues_ledger_entries`, #295, widens this CHECK when it lands), and
+`action` CHECK-bounded to `LOT_RECORD_ACTIONS`. Append-only is by convention, the same discipline
+the ADR 0022 ledger and `setting_changes` use, since D1 has one binding and this codebase forbids
+triggers. Per-record board reads are not logged; only a bulk export, if one is ever added, would be.
+
+`src/server/roster/authority.ts`'s `lotAuthorityCoversRecordDay` is the read-time sibling of
+`lotAuthorityExists`, sharing one SQL builder with it: it additionally bounds a Lot Record read to
+the caller's own period of authority (a buyer holds Lot Authority today, but sees nothing the
+seller's period produced), and it is what `src/server/lot-records/reads.ts`'s homeowner reads embed
+in their `WHERE` clause. See [`roster-and-access.md`](./roster-and-access.md).
+
 ## Document storage (R2)
 
 Every document has two R2 representations keyed by its D1 uuid, per
