@@ -130,11 +130,14 @@ export type SiteGateKey = (typeof SITE_GATE_KEYS)[number];
 
 /**
  * Every Lot Record table. The structural suites iterate this, so a new record
- * type added without its scoping test fails the build. ADR 0025's
- * `dues_ledger_entries` (#295) joins it — and widens the
- * `lot_record_events.record_type` CHECK — when that ledger lands.
+ * type added without its scoping test fails the build. `dues_ledger_entries`
+ * joined it with ADR 0025's ledger (#295, migration `0036`), which widened the
+ * `lot_record_events.record_type` CHECK to match.
  */
-export const LOT_RECORD_TYPES = ['lot_violations'] as const;
+export const LOT_RECORD_TYPES = [
+  'lot_violations',
+  'dues_ledger_entries',
+] as const;
 export type LotRecordType = (typeof LOT_RECORD_TYPES)[number];
 
 /** What a `lot_record_events` row can record having happened. */
@@ -216,6 +219,53 @@ export const LOT_RECORD_REASON_CODES = [
   'other',
 ] as const;
 export type LotRecordReasonCode = (typeof LOT_RECORD_REASON_CODES)[number];
+
+/**
+ * THE DUES LEDGER (ADR 0025, #295).
+ *
+ * Append-only and balance-forward: the balance is `SUM(amount_cents)` over a
+ * Lot's entries, so a positive balance is owed and a negative one is a credit,
+ * and there is no stored figure to drift. Amounts are integer CENTS —
+ * never a float, and never a string defaulted with `||`, which for money is
+ * how a typed 0 becomes someone's whole balance.
+ *
+ * Nothing is ever updated or deleted. A mistaken entry is corrected by a
+ * `reversal`, and a real-world credit or debit such as a board-approved waiver
+ * is an `adjustment`.
+ */
+export const DUES_LEDGER_KINDS = [
+  'charge',
+  'payment',
+  'adjustment',
+  'reversal',
+] as const;
+export type DuesLedgerKind = (typeof DUES_LEDGER_KINDS)[number];
+
+/** What a charge is for. Charges only; NULL on every other kind. */
+export const DUES_CHARGE_CATEGORIES = [
+  'assessment',
+  'special_assessment',
+  'late_fee',
+  'fine',
+  'other',
+] as const;
+export type DuesChargeCategory = (typeof DUES_CHARGE_CATEGORIES)[number];
+
+/** How a payment arrived. Payments only; NULL on every other kind. */
+export const DUES_PAYMENT_METHODS = [
+  'online',
+  'check',
+  'cash',
+  'other',
+] as const;
+export type DuesPaymentMethod = (typeof DUES_PAYMENT_METHODS)[number];
+
+/**
+ * Who wrote the row. `provider` rows are credited from a verified provider
+ * event and have no acting account; `board` rows always name one.
+ */
+export const DUES_ENTRY_SOURCES = ['board', 'provider'] as const;
+export type DuesEntrySource = (typeof DUES_ENTRY_SOURCES)[number];
 
 /**
  * A violation's lifecycle. `voided` is the correction path — nothing is

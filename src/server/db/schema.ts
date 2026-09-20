@@ -21,6 +21,10 @@ import { people } from './roster-schema';
 // these table definitions, the `src/server/lot-records/` module, and the admin
 // UI all read one list. See its comment for why.
 import {
+  DUES_CHARGE_CATEGORIES,
+  DUES_ENTRY_SOURCES,
+  DUES_LEDGER_KINDS,
+  DUES_PAYMENT_METHODS,
   LOT_RECORD_ACTIONS,
   LOT_RECORD_REASON_CODES,
   LOT_RECORD_TYPES,
@@ -602,6 +606,133 @@ export const lotViolations = sqliteTable(
 );
 
 /**
+ * The per-Lot dues ledger (ADR 0025, #295) — the second Lot Record type.
+ *
+ * Append-only and balance-forward. The balance is `SUM(amountCents)` over a
+ * Lot's rows, never a stored column, so it cannot drift; a positive balance is
+ * owed and a negative one is a credit. Signs are fixed by CHECK per `kind`, so
+ * that sum is meaningful without interpreting the kind.
+ *
+ * Two rules cannot be same-row CHECKs and live in the `INSERT … SELECT` that
+ * writes a reversal instead: its amount is exactly the negation of the entry it
+ * reverses, and a reversal may not itself be reversed.
+ *
+ * `reference` is board-only, `recordedBy` is NULL exactly for provider-sourced
+ * rows, and `operationKey` is UNIQUE so a double submit — or a redelivered
+ * provider event — posts nothing twice.
+ */
+export const duesLedgerEntries = sqliteTable(
+  'dues_ledger_entries',
+  {
+    id: text('id').primaryKey(),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => properties.id, { onDelete: 'restrict' }),
+    kind: text('kind', { enum: DUES_LEDGER_KINDS }).notNull(),
+    /** Integer CENTS, signed. Never a float, never parsed with `||`. */
+    amountCents: integer('amount_cents').notNull(),
+    effectiveDay: text('effective_day').notNull(),
+    /** Homeowner-visible. The board's own note is `reference`. */
+    description: text('description').notNull(),
+    category: text('category', { enum: DUES_CHARGE_CATEGORIES }),
+    method: text('method', { enum: DUES_PAYMENT_METHODS }),
+    /** Board-only, such as a check number. Projected out of homeowner reads. */
+    reference: text('reference'),
+    source: text('source', { enum: DUES_ENTRY_SOURCES }).notNull(),
+    /**
+     * The provider payment this row was credited from. No FK yet: the
+     * `payments` table arrives with the rail, and adding the column later
+     * would mean rebuilding this table.
+     */
+    paymentId: text('payment_id'),
+    reversesEntryId: text('reverses_entry_id').references(
+      (): AnySQLiteColumn => duesLedgerEntries.id,
+      { onDelete: 'restrict' },
+    ),
+    /** The acting ACCOUNT; NULL exactly when `source = 'provider'`. */
+    recordedBy: text('recorded_by'),
+    recordedAt: integer('recorded_at', { mode: 'timestamp_ms' }).notNull(),
+    operationKey: text('operation_key').notNull(),
+  },
+  (t) => [
+    // (operationKey, lotId): ADR 0025's bulk action posts one assessment to
+    // every Lot under ONE key, which a bare unique on the key alone makes
+    // impossible. The composite still makes a double submit a no-op, per Lot.
+    uniqueIndex('dues_ledger_entries_operation_key_lot_unq').on(
+      t.operationKey,
+      t.lotId,
+    ),
+    // One credited entry per provider payment — the second idempotency layer,
+    // so a webhook and a reconciliation pull cannot both credit one settlement.
+    uniqueIndex('dues_ledger_entries_payment_unq')
+      .on(t.paymentId)
+      .where(sql`${t.source} = 'provider'`),
+    uniqueIndex('dues_ledger_entries_reverses_unq').on(t.reversesEntryId),
+    index('dues_ledger_entries_lot_effective_day_idx').on(
+      t.lotId,
+      t.effectiveDay,
+    ),
+    check(
+      'dues_ledger_entries_kind_check',
+      sql`${t.kind} IN ('charge', 'payment', 'adjustment', 'reversal')`,
+    ),
+    check(
+      'dues_ledger_entries_source_check',
+      sql`${t.source} IN ('board', 'provider')`,
+    ),
+    check(
+      'dues_ledger_entries_effective_day_shape',
+      sql`${t.effectiveDay} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`,
+    ),
+    check(
+      'dues_ledger_entries_description_not_blank',
+      sql`length(trim(${t.description})) > 0`,
+    ),
+    check(
+      'dues_ledger_entries_sign_by_kind',
+      sql`(${t.kind} = 'charge' AND ${t.amountCents} > 0)
+        OR (${t.kind} = 'payment' AND ${t.amountCents} < 0)
+        OR (${t.kind} IN ('adjustment', 'reversal') AND ${t.amountCents} <> 0)`,
+    ),
+    check(
+      'dues_ledger_entries_category_check',
+      sql`${t.category} IS NULL OR ${t.category} IN ('assessment', 'special_assessment', 'late_fee', 'fine', 'other')`,
+    ),
+    check(
+      'dues_ledger_entries_method_check',
+      sql`${t.method} IS NULL OR ${t.method} IN ('online', 'check', 'cash', 'other')`,
+    ),
+    check(
+      'dues_ledger_entries_category_on_charges',
+      sql`(${t.kind} = 'charge') = (${t.category} IS NOT NULL)`,
+    ),
+    check(
+      'dues_ledger_entries_method_on_payments',
+      sql`(${t.kind} = 'payment') = (${t.method} IS NOT NULL)`,
+    ),
+    check(
+      'dues_ledger_entries_reverses_on_reversals',
+      sql`(${t.kind} = 'reversal') = (${t.reversesEntryId} IS NOT NULL)`,
+    ),
+    check(
+      'dues_ledger_entries_recorded_by_shape',
+      sql`(${t.source} = 'provider') = (${t.recordedBy} IS NULL)`,
+    ),
+    // A provider row exists because a verified event said money moved, so it
+    // is a payment or the reversal of one — never a charge with no accountable
+    // account behind it.
+    check(
+      'dues_ledger_entries_provider_kind',
+      sql`${t.source} = 'board' OR ${t.kind} IN ('payment', 'reversal')`,
+    ),
+    check(
+      'dues_ledger_entries_payment_id_source',
+      sql`${t.paymentId} IS NULL OR ${t.source} = 'provider'`,
+    ),
+  ],
+);
+
+/**
  * The shared event log for every Lot Record type (ADR 0024, #291): one row per
  * create, transition, and void.
  *
@@ -638,11 +769,17 @@ export const lotRecordEvents = sqliteTable(
     ),
     check(
       'lot_record_events_record_type_check',
-      sql`${t.recordType} IN ('lot_violations')`,
+      sql`${t.recordType} IN ('lot_violations', 'dues_ledger_entries')`,
     ),
     check(
       'lot_record_events_action_check',
       sql`${t.action} IN ('created', 'cured', 'closed', 'reopened', 'voided', 'edited')`,
+    ),
+    // The actions belong to their subject: a violation has a lifecycle, a
+    // ledger entry does not — it is appended and corrected by a further entry.
+    check(
+      'lot_record_events_action_for_subject',
+      sql`${t.recordType} <> 'dues_ledger_entries' OR ${t.action} = 'created'`,
     ),
     check(
       'lot_record_events_reason_code_check',

@@ -22,6 +22,7 @@ import {
   settings,
   lotViolations,
   lotRecordEvents,
+  duesLedgerEntries,
   reports,
   resolutions,
   elections,
@@ -156,6 +157,16 @@ export async function truncateAll() {
   // FK) but belongs with the records it logs.
   await db.delete(lotRecordEvents);
   await db.delete(lotViolations);
+  // A reversal points at the entry it reverses with RESTRICT, and SQLite
+  // enforces that per row rather than at end of statement — so deleting the
+  // table outright fails on the parent as soon as one reversal exists. Nor can
+  // the link be nulled first, the way `parties.consolidated_into_party_id` is
+  // above: `dues_ledger_entries_reverses_on_reversals` requires a reversal to
+  // HAVE one. Children first, then the rest.
+  await db
+    .delete(duesLedgerEntries)
+    .where(eq(duesLedgerEntries.kind, 'reversal'));
+  await db.delete(duesLedgerEntries);
   // Roster: links and verifications cite properties.
   await db.delete(propertyVerifications);
   await db.delete(manualApprovalQueue);

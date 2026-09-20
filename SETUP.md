@@ -499,7 +499,10 @@ resource, binding, or secret.
 ## Lot Records Rollout
 
 Lot Records is a separate, default-off gate (`lotRecordsEnabled`, ADR 0024, #291) for a per-lot
-record family — enforcement records today, more record types later. Both **Official Mode** and
+record family — enforcement records today, plus (as of ADR 0025, #295 slice 1) a read-only per-Lot
+dues ledger with no write route, payment rail, or surface of its own yet, so enabling the gate today
+still exposes only the enforcement records; the ledger reads exist in code but nothing calls them.
+Both **Official Mode** and
 **Lot Records** must be on, each by its own toggle in `/admin` -> **Site Settings**, before the
 board's data entry becomes visible to homeowners at `/lot-records`. Like Official Mode and Live
 Voting, each flip is its own audited transition, independent of the rest of the settings form, and

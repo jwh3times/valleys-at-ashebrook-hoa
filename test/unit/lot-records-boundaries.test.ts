@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  DUES_CHARGE_CATEGORIES,
+  DUES_ENTRY_SOURCES,
+  DUES_LEDGER_KINDS,
+  DUES_PAYMENT_METHODS,
   LOT_RECORD_ACTIONS,
   LOT_RECORD_REASON_CODES,
   LOT_RECORD_TYPES,
@@ -35,7 +39,18 @@ const SRC = join(process.cwd(), 'src');
 /** Table names and their Drizzle identifiers, for the scans below. */
 const LOT_RECORD_TABLES: Record<string, string> = {
   lot_violations: 'lotViolations',
+  dues_ledger_entries: 'duesLedgerEntries',
   lot_record_events: 'lotRecordEvents',
+};
+
+/**
+ * The tables ADR 0025 and ADR 0024 both declare append-only. Nothing may
+ * UPDATE or DELETE a row in any of them: a mistaken ledger entry is corrected
+ * by a reversal, and a mistaken violation by a void.
+ */
+const APPEND_ONLY_TABLES: Record<string, string> = {
+  lot_record_events: 'lotRecordEvents',
+  dues_ledger_entries: 'duesLedgerEntries',
 };
 
 function sourceFiles(dir: string): string[] {
@@ -98,7 +113,15 @@ describe('the AI surfaces never touch a Lot Record', () => {
         for (const [table, identifier] of Object.entries(LOT_RECORD_TABLES)) {
           if (text.includes(table))
             offenders.push(`${relative(file)}: names ${table}`);
-          if (new RegExp(`\b${identifier}\b`).test(text))
+          // Concatenated, NOT a template literal. This is the dangerous half
+          // of that rule: inside a template literal `\b` is not an invalid
+          // escape, it is the BACKSPACE character — so the pattern became
+          // <BS>identifier<BS>, matched nothing, and NO lint rule objects.
+          // This check was vacuous from the day it was written (#291 slice 1)
+          // until a planted reference in src/server/ai/pii.ts exposed it; the
+          // table-name half above, a plain `includes`, is what was actually
+          // holding the line.
+          if (new RegExp('\\b' + identifier + '\\b').test(text))
             offenders.push(`${relative(file)}: imports ${identifier}`);
         }
         if (text.includes('lot-records'))
@@ -115,20 +138,31 @@ describe('the AI surfaces never touch a Lot Record', () => {
   });
 });
 
-describe('lot_record_events is append-only', () => {
-  it('has no UPDATE or DELETE against the table anywhere in src/, raw or Drizzle', () => {
+describe('the append-only tables really are', () => {
+  it('has no UPDATE or DELETE against any of them in src/, raw or Drizzle', () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(SRC)) {
       const text = readFileSync(file, 'utf8');
       const rel = relative(file);
-      if (/UPDATE\s+["`]?lot_record_events["`]?/i.test(text))
-        offenders.push(`${rel}: raw UPDATE against lot_record_events`);
-      if (/DELETE\s+FROM\s+["`]?lot_record_events["`]?/i.test(text))
-        offenders.push(`${rel}: raw DELETE against lot_record_events`);
-      if (/\.update\(\s*lotRecordEvents\s*\)/.test(text))
-        offenders.push(`${rel}: Drizzle .update(lotRecordEvents)`);
-      if (/\.delete\(\s*lotRecordEvents\s*\)/.test(text))
-        offenders.push(`${rel}: Drizzle .delete(lotRecordEvents)`);
+      // Patterns are built by CONCATENATION with doubled backslashes, never
+      // inside a plain template literal. In one, `\s` is an invalid escape
+      // that silently becomes the letter `s`, so the pattern compiles to
+      // `UPDATEs+…` and matches nothing while the suite reports green. This
+      // guard shipped that way once; oxlint's no-useless-escape caught it,
+      // which is luck rather than coverage. (`String.raw` would also be
+      // correct and is used elsewhere in test/unit — concatenation is used
+      // here so the escaping is visible at the point of use.)
+      const bare = text.replace(/["`]/g, '');
+      for (const [table, identifier] of Object.entries(APPEND_ONLY_TABLES)) {
+        if (new RegExp('UPDATE\\s+' + table, 'i').test(bare))
+          offenders.push(`${rel}: raw UPDATE against ${table}`);
+        if (new RegExp('DELETE\\s+FROM\\s+' + table, 'i').test(bare))
+          offenders.push(`${rel}: raw DELETE against ${table}`);
+        if (new RegExp('\\.update\\(\\s*' + identifier + '\\s*\\)').test(text))
+          offenders.push(`${rel}: Drizzle .update(${identifier})`);
+        if (new RegExp('\\.delete\\(\\s*' + identifier + '\\s*\\)').test(text))
+          offenders.push(`${rel}: Drizzle .delete(${identifier})`);
+      }
     }
     expect(offenders).toEqual([]);
   });
@@ -215,6 +249,77 @@ describe('the Lot Record vocabulary matches the database', () => {
     expect(checkValues('lot_record_events_reason_code_check')).toEqual([
       ...LOT_RECORD_REASON_CODES,
     ]);
+  });
+
+  it('bounds dues_ledger_entries.kind to DUES_LEDGER_KINDS', () => {
+    expect(checkValues('dues_ledger_entries_kind_check')).toEqual([
+      ...DUES_LEDGER_KINDS,
+    ]);
+  });
+
+  it('bounds dues_ledger_entries.category to DUES_CHARGE_CATEGORIES', () => {
+    expect(checkValues('dues_ledger_entries_category_check')).toEqual([
+      ...DUES_CHARGE_CATEGORIES,
+    ]);
+  });
+
+  it('bounds dues_ledger_entries.method to DUES_PAYMENT_METHODS', () => {
+    expect(checkValues('dues_ledger_entries_method_check')).toEqual([
+      ...DUES_PAYMENT_METHODS,
+    ]);
+  });
+
+  it('bounds dues_ledger_entries.source to DUES_ENTRY_SOURCES', () => {
+    expect(checkValues('dues_ledger_entries_source_check')).toEqual([
+      ...DUES_ENTRY_SOURCES,
+    ]);
+  });
+
+  it('pins every value-list CHECK on a Lot Record table', () => {
+    // The guard on the guard, and the reason this suite did not go stale when
+    // the ledger arrived with four new vocabularies: every CHECK of the form
+    // `... IN (...)` on one of these tables must be pinned above. A new one
+    // added to a migration with no pin fails here, naming itself.
+    const pinned = new Set([
+      'lot_violations_category_check',
+      'lot_violations_status_check',
+      'lot_record_events_record_type_check',
+      'lot_record_events_action_check',
+      'lot_record_events_reason_code_check',
+      'dues_ledger_entries_kind_check',
+      'dues_ledger_entries_category_check',
+      'dues_ledger_entries_method_check',
+      'dues_ledger_entries_source_check',
+    ]);
+    // Deliberately not pinned: these constrain a RELATIONSHIP between columns
+    // rather than a vocabulary, so there is no TypeScript list to compare to.
+    const relational = new Set([
+      'dues_ledger_entries_provider_kind',
+      'lot_record_events_action_for_subject',
+    ]);
+
+    const found = new Set<string>();
+    for (const file of migrationFiles) {
+      const sql = readFileSync(join(MIGRATIONS, file), 'utf8');
+      for (const match of sql.matchAll(
+        /CONSTRAINT "([a-z_]+)" CHECK\([^)]*?IN \(/g,
+      )) {
+        const name = match[1];
+        if (
+          name.startsWith('lot_violations_') ||
+          name.startsWith('lot_record_events_') ||
+          name.startsWith('dues_ledger_entries_')
+        )
+          found.add(name);
+      }
+    }
+    for (const name of found)
+      expect(
+        pinned.has(name) || relational.has(name),
+        `${name} is a value list with no pin in this suite`,
+      ).toBe(true);
+    // And every pin must still correspond to a live CHECK.
+    for (const name of pinned) expect(found.has(name)).toBe(true);
   });
 
   it('reads the rebuild rather than the original table definition', () => {
