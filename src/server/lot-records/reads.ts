@@ -338,10 +338,22 @@ export interface MemberDuesEntry {
 
 export interface MemberLotLedger {
   lotId: string;
-  /** The sum of everything before this reader's period, as one line. */
+  /**
+   * The sum of everything before this reader's period, as one line.
+   *
+   * ADR 0024 words that line "balance before <day>", and the day it means is
+   * the first day of the reader's own authority — NOT the date of any entry.
+   * Neither statement below produces it: the authority start is buried inside
+   * the predicate, as a MAX over branches in the Representation case. A first
+   * draft labelled the line with the earliest ITEMIZED day instead, which is
+   * arithmetically adjacent and semantically wrong — it moves when an
+   * unrelated entry is back-posted, appears as "before <day>: $0.00" for a
+   * long-time owner with no earlier period, and goes missing for the reader
+   * whose every entry predates them, which is the one case that needs it. So
+   * the figure ships without a date, and the surface that renders it gets the
+   * day properly or says "brought forward".
+   */
   openingBalanceCents: number;
-  /** The first itemized day, which the opening line is "before". */
-  openingBeforeDay: string | null;
   entries: MemberDuesEntry[];
   /** Opening plus every itemized entry: what the Lot owes today. */
   balanceCents: number;
@@ -410,7 +422,7 @@ export async function fetchMemberDuesLedger(
      SELECT ${LEDGER_COLUMNS}
        FROM dues_ledger_entries
       WHERE ${detail.sql}
-      ORDER BY effective_day ASC, recorded_at ASC`,
+      ORDER BY effective_day ASC, recorded_at ASC, id ASC`,
   )
     .bind(personId, ...detail.binds)
     .all<LedgerRow>();
@@ -449,7 +461,6 @@ export async function fetchMemberDuesLedger(
     const created: MemberLotLedger = {
       lotId,
       openingBalanceCents: 0,
-      openingBeforeDay: null,
       entries: [],
       balanceCents: 0,
     };
@@ -460,21 +471,20 @@ export async function fetchMemberDuesLedger(
   for (const opening of openings)
     lotOf(opening.lot_id).openingBalanceCents = opening.opening_cents ?? 0;
 
-  for (const row of rows) {
-    const lot = lotOf(row.lot_id);
-    if (lot.openingBeforeDay === null) lot.openingBeforeDay = row.effective_day;
-    lot.entries.push(toMemberEntry(row));
-  }
+  for (const row of rows) lotOf(row.lot_id).entries.push(toMemberEntry(row));
 
-  for (const lot of byLot.values()) {
-    // A Lot whose every entry predates the reader is still THEIR Lot and still
-    // has a balance; it simply has no itemized line to be "before".
-    if (lot.entries.length === 0) lot.openingBeforeDay = null;
+  for (const lot of byLot.values())
     lot.balanceCents =
       lot.openingBalanceCents +
       lot.entries.reduce((sum, e) => sum + e.amountCents, 0);
-  }
 
+  // Sorted by Lot id so a caller holding several reads them in a stable order
+  // rather than in whatever order the two statements happened to group.
+  //
+  // A Lot with no ledger rows at all is absent: it appears in neither
+  // statement, and inventing a zero row here would mean asking the roster a
+  // third time. A surface that must show every held Lot unions this with
+  // `fetchMemberLotAddresses`, which is the read that knows the Lots.
   return [...byLot.values()].sort((a, b) => a.lotId.localeCompare(b.lotId));
 }
 
@@ -483,7 +493,7 @@ export async function fetchMemberDuesLedger(
  * the board-only `reference` and every provider-sourced row. Unscoped by
  * construction, so it is reachable only from a `requireBoard`-gated route.
  */
-export async function fetchAdminDuesLedger(
+export async function fetchAdminLotDuesLedger(
   env: Env,
   lotId?: string,
 ): Promise<AdminDuesEntry[]> {
@@ -492,7 +502,7 @@ export async function fetchAdminDuesLedger(
             recorded_by, recorded_at, operation_key
        FROM dues_ledger_entries
        ${lotId === undefined ? '' : 'WHERE lot_id = ?'}
-      ORDER BY effective_day ASC, recorded_at ASC`,
+      ORDER BY effective_day ASC, recorded_at ASC, id ASC`,
   );
   const { results } = await (
     lotId === undefined ? statement : statement.bind(lotId)

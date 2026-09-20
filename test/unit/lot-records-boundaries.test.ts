@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  DUES_CHARGE_CATEGORIES,
+  DUES_ENTRY_SOURCES,
+  DUES_LEDGER_KINDS,
+  DUES_PAYMENT_METHODS,
   LOT_RECORD_ACTIONS,
   LOT_RECORD_REASON_CODES,
   LOT_RECORD_TYPES,
@@ -245,6 +249,77 @@ describe('the Lot Record vocabulary matches the database', () => {
     expect(checkValues('lot_record_events_reason_code_check')).toEqual([
       ...LOT_RECORD_REASON_CODES,
     ]);
+  });
+
+  it('bounds dues_ledger_entries.kind to DUES_LEDGER_KINDS', () => {
+    expect(checkValues('dues_ledger_entries_kind_check')).toEqual([
+      ...DUES_LEDGER_KINDS,
+    ]);
+  });
+
+  it('bounds dues_ledger_entries.category to DUES_CHARGE_CATEGORIES', () => {
+    expect(checkValues('dues_ledger_entries_category_check')).toEqual([
+      ...DUES_CHARGE_CATEGORIES,
+    ]);
+  });
+
+  it('bounds dues_ledger_entries.method to DUES_PAYMENT_METHODS', () => {
+    expect(checkValues('dues_ledger_entries_method_check')).toEqual([
+      ...DUES_PAYMENT_METHODS,
+    ]);
+  });
+
+  it('bounds dues_ledger_entries.source to DUES_ENTRY_SOURCES', () => {
+    expect(checkValues('dues_ledger_entries_source_check')).toEqual([
+      ...DUES_ENTRY_SOURCES,
+    ]);
+  });
+
+  it('pins every value-list CHECK on a Lot Record table', () => {
+    // The guard on the guard, and the reason this suite did not go stale when
+    // the ledger arrived with four new vocabularies: every CHECK of the form
+    // `... IN (...)` on one of these tables must be pinned above. A new one
+    // added to a migration with no pin fails here, naming itself.
+    const pinned = new Set([
+      'lot_violations_category_check',
+      'lot_violations_status_check',
+      'lot_record_events_record_type_check',
+      'lot_record_events_action_check',
+      'lot_record_events_reason_code_check',
+      'dues_ledger_entries_kind_check',
+      'dues_ledger_entries_category_check',
+      'dues_ledger_entries_method_check',
+      'dues_ledger_entries_source_check',
+    ]);
+    // Deliberately not pinned: these constrain a RELATIONSHIP between columns
+    // rather than a vocabulary, so there is no TypeScript list to compare to.
+    const relational = new Set([
+      'dues_ledger_entries_provider_kind',
+      'lot_record_events_action_for_subject',
+    ]);
+
+    const found = new Set<string>();
+    for (const file of migrationFiles) {
+      const sql = readFileSync(join(MIGRATIONS, file), 'utf8');
+      for (const match of sql.matchAll(
+        /CONSTRAINT "([a-z_]+)" CHECK\([^)]*?IN \(/g,
+      )) {
+        const name = match[1];
+        if (
+          name.startsWith('lot_violations_') ||
+          name.startsWith('lot_record_events_') ||
+          name.startsWith('dues_ledger_entries_')
+        )
+          found.add(name);
+      }
+    }
+    for (const name of found)
+      expect(
+        pinned.has(name) || relational.has(name),
+        `${name} is a value list with no pin in this suite`,
+      ).toBe(true);
+    // And every pin must still correspond to a live CHECK.
+    for (const name of pinned) expect(found.has(name)).toBe(true);
   });
 
   it('reads the rebuild rather than the original table definition', () => {

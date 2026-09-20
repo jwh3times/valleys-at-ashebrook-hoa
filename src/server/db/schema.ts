@@ -655,7 +655,18 @@ export const duesLedgerEntries = sqliteTable(
     operationKey: text('operation_key').notNull(),
   },
   (t) => [
-    uniqueIndex('dues_ledger_entries_operation_key_unq').on(t.operationKey),
+    // (operationKey, lotId): ADR 0025's bulk action posts one assessment to
+    // every Lot under ONE key, which a bare unique on the key alone makes
+    // impossible. The composite still makes a double submit a no-op, per Lot.
+    uniqueIndex('dues_ledger_entries_operation_key_lot_unq').on(
+      t.operationKey,
+      t.lotId,
+    ),
+    // One credited entry per provider payment — the second idempotency layer,
+    // so a webhook and a reconciliation pull cannot both credit one settlement.
+    uniqueIndex('dues_ledger_entries_payment_unq')
+      .on(t.paymentId)
+      .where(sql`${t.source} = 'provider'`),
     uniqueIndex('dues_ledger_entries_reverses_unq').on(t.reversesEntryId),
     index('dues_ledger_entries_lot_effective_day_idx').on(
       t.lotId,
@@ -707,6 +718,17 @@ export const duesLedgerEntries = sqliteTable(
       'dues_ledger_entries_recorded_by_shape',
       sql`(${t.source} = 'provider') = (${t.recordedBy} IS NULL)`,
     ),
+    // A provider row exists because a verified event said money moved, so it
+    // is a payment or the reversal of one — never a charge with no accountable
+    // account behind it.
+    check(
+      'dues_ledger_entries_provider_kind',
+      sql`${t.source} = 'board' OR ${t.kind} IN ('payment', 'reversal')`,
+    ),
+    check(
+      'dues_ledger_entries_payment_id_source',
+      sql`${t.paymentId} IS NULL OR ${t.source} = 'provider'`,
+    ),
   ],
 );
 
@@ -752,6 +774,12 @@ export const lotRecordEvents = sqliteTable(
     check(
       'lot_record_events_action_check',
       sql`${t.action} IN ('created', 'cured', 'closed', 'reopened', 'voided', 'edited')`,
+    ),
+    // The actions belong to their subject: a violation has a lifecycle, a
+    // ledger entry does not — it is appended and corrected by a further entry.
+    check(
+      'lot_record_events_action_for_subject',
+      sql`${t.recordType} <> 'dues_ledger_entries' OR ${t.action} = 'created'`,
     ),
     check(
       'lot_record_events_reason_code_check',

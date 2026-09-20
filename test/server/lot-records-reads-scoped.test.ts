@@ -178,7 +178,7 @@ describe('every export is classified', () => {
   ];
   const ADMIN_ONLY = [
     'fetchAdminLotViolations',
-    'fetchAdminDuesLedger',
+    'fetchAdminLotDuesLedger',
     'fetchAdminLotRecordEvents',
   ];
 
@@ -188,6 +188,14 @@ describe('every export is classified', () => {
       .map(([k]) => k)
       .sort();
     expect(exported).toEqual([...AUTHORITY_SCOPED, ...ADMIN_ONLY].sort());
+    // The prefixes themselves, not just membership of the two lists. Without
+    // this the suite's own title was untrue: an export could sit in ADMIN_ONLY
+    // under any name at all, which is how `fetchAdminDuesLedger` slipped past
+    // a convention this module documents as `fetchAdminLot*`.
+    for (const name of AUTHORITY_SCOPED)
+      expect(name.startsWith('fetchMember')).toBe(true);
+    for (const name of ADMIN_ONLY)
+      expect(name.startsWith('fetchAdminLot')).toBe(true);
   });
 
   it('gives every Lot Record type a member read', () => {
