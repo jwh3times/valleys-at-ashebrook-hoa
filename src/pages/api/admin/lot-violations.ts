@@ -5,8 +5,10 @@ import {
   resolveAuthContext,
 } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
-import { LOT_RECORDS_ENABLED_SQL } from '../../../server/lot-records/gate';
-import { getSiteSettings } from '../../../server/content/settings';
+import {
+  LOT_RECORDS_ENABLED_SQL,
+  lotRecordsAvailable,
+} from '../../../server/lot-records/gate';
 import {
   fetchAdminLotRecordEvents,
   fetchAdminLotViolations,
@@ -43,16 +45,38 @@ export const prerender = false;
  * hard-deleted: a mistaken record is **voided** with a reason, stays visible to
  * the board, and disappears from the Lot's own surface. Every create,
  * transition, void, and correction appends one `lot_record_events` row in the
- * same D1 batch, gated on `changes() = 1` from the statement before it, so the
- * record and its log entry either both land or neither does.
+ * same D1 batch, gated on `changes() = 1` from the statement before it, so a
+ * refused mutation logs nothing.
+ *
+ * The converse — a logged event whose mutation did not land — is prevented by
+ * the shape of the statements rather than by the idiom: every mutation here
+ * keys on the primary key, so it changes exactly one row or none. An action
+ * that ever changes several rows would need a different check than
+ * `changes() !== 1`, which would then read a partial apply as a conflict AFTER
+ * the batch had committed. ADR 0025's ledger reuses this helper; that is the
+ * constraint it inherits.
  */
 
 const NOT_FOUND = () => new Response('Not found', { status: 404 });
 
-/** The flags as a route sees them; the mutations re-check them in SQL. */
-async function flagsOff(): Promise<boolean> {
-  const site = await getSiteSettings(env);
-  return !(site.officialMode && site.lotRecordsEnabled);
+/**
+ * An optional free-text field: a string, or absent. A non-string is a `400`,
+ * never a silent clear — `stringField` reads every non-string as `''`, and for
+ * `internalNote` that would DELETE the board's note rather than reject the
+ * request. It is the one column ADR 0024 designates as the place prose lives.
+ */
+function optionalTextOrError(
+  body: unknown,
+  key: string,
+): { ok: true; value: string | null } | { ok: false; res: Response } {
+  const raw = (body as Record<string, unknown>)[key];
+  if (raw === undefined || raw === null) return { ok: true, value: null };
+  if (typeof raw !== 'string')
+    return {
+      ok: false,
+      res: new Response(`${key} must be text`, { status: 400 }),
+    };
+  return { ok: true, value: raw.trim() || null };
 }
 
 /**
@@ -159,7 +183,13 @@ async function create(body: unknown, accountId: string): Promise<Response> {
 
   const summary = stringField(body, 'summary');
   if (!summary) return new Response('summary is required', { status: 400 });
-  const internalNote = stringField(body, 'internalNote') || null;
+  const note = optionalTextOrError(body, 'internalNote');
+  if (!note.ok) return note.res;
+  // A reason is optional on a create and is recorded when given, rather than
+  // accepted and dropped: a panel that sends one would otherwise look like it
+  // worked.
+  const reason = reasonOrError(body, false);
+  if (!reason.ok) return reason.res;
 
   const id = crypto.randomUUID();
   // The lot is checked inside the INSERT rather than by a preflight SELECT:
@@ -178,7 +208,7 @@ async function create(body: unknown, accountId: string): Promise<Response> {
     category as LotViolationCategory,
     effectiveDay,
     summary,
-    internalNote,
+    note.value,
     accountId,
     Date.now(),
     lotId,
@@ -186,7 +216,7 @@ async function create(body: unknown, accountId: string): Promise<Response> {
 
   const [inserted, logged] = await env.DATABASE.batch([
     insert,
-    eventInsert(id, 'created', accountId, null),
+    eventInsert(id, 'created', accountId, reason.value),
   ]);
   if (inserted.meta.changes !== 1)
     return new Response('Lot not found, or lot records are not enabled', {
@@ -291,10 +321,13 @@ async function edit(body: unknown, accountId: string): Promise<Response> {
     binds.push(summary);
   }
 
-  // An explicit null clears the board-only note; omitting the key leaves it.
+  // An explicit null or a blank string clears the board-only note; omitting the
+  // key leaves it; a non-string is refused rather than clearing it.
   if ('internalNote' in (body as Record<string, unknown>)) {
+    const note = optionalTextOrError(body, 'internalNote');
+    if (!note.ok) return note.res;
     sets.push('internal_note = ?');
-    binds.push(stringField(body, 'internalNote') || null);
+    binds.push(note.value);
   }
 
   if (sets.length === 0)
@@ -334,18 +367,24 @@ async function edit(body: unknown, accountId: string): Promise<Response> {
 export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
-  if (await flagsOff()) return NOT_FOUND();
+  if (!(await lotRecordsAvailable(env))) return NOT_FOUND();
 
   // Built from `request.url` rather than taken from the context, as
   // `meetings.ts` and `reports.ts` do: the context's `url` is Astro's, and a
   // handler that depends on it cannot be invoked directly the way the Workers
   // pool and `permission-matrix.test.ts` invoke every route.
   const url = new URL(request.url);
-  const recordId = url.searchParams.get('events');
-  if (recordId)
+  // Presence, not truthiness: `?events=` with no value used to be falsy here
+  // and fall through to the full violation list, which is a surprising answer
+  // to a request that plainly asked for one record's log.
+  if (url.searchParams.has('events')) {
+    const recordId = url.searchParams.get('events') ?? '';
+    if (!recordId)
+      return new Response('events requires a record id', { status: 400 });
     return Response.json(
       await fetchAdminLotRecordEvents(env, 'lot_violations', recordId),
     );
+  }
 
   const lotId = url.searchParams.get('lotId') ?? undefined;
   return Response.json(await fetchAdminLotViolations(env, lotId));
@@ -354,7 +393,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
-  if (await flagsOff()) return NOT_FOUND();
+  if (!(await lotRecordsAvailable(env))) return NOT_FOUND();
 
   const parsed = await readJson(request);
   if (!parsed.ok) return new Response('Malformed JSON body', { status: 400 });

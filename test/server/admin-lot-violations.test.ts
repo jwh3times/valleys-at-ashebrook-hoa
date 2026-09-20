@@ -8,7 +8,10 @@ import {
   settings,
 } from '../../src/server/db/schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
-import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
+import {
+  DEFAULT_SITE_SETTINGS,
+  LOT_RECORD_REASON_CODES,
+} from '../../src/lib/types';
 import { seedProperty, truncateAll } from './fixtures';
 
 /**
@@ -233,6 +236,62 @@ describe('transitions', () => {
     expect(await getDb(env).select().from(lotRecordEvents)).toHaveLength(1);
   });
 
+  it('logs the actor and a timestamp on every event', async () => {
+    // eventInsert takes four positional strings; nothing else in this suite
+    // would notice two of them being bound to each other's slots.
+    const before = Date.now();
+    const id = await createViolation();
+    await post({ action: 'cure', id });
+
+    const events = await getDb(env).select().from(lotRecordEvents);
+    expect(events).toHaveLength(2);
+    for (const event of events) {
+      expect(event.actingAccountId).toBe('board-1');
+      expect(event.recordId).toBe(id);
+      expect(event.recordedAt.getTime()).toBeGreaterThanOrEqual(before);
+      expect(event.recordedAt.getTime()).toBeLessThanOrEqual(Date.now());
+    }
+  });
+
+  it('logs reopen as its own event', async () => {
+    const id = await createViolation();
+    await post({ action: 'close', id });
+    await post({ action: 'reopen', id });
+
+    const events = await getDb(env).select().from(lotRecordEvents);
+    expect(events.map((e) => e.action).sort()).toEqual([
+      'closed',
+      'created',
+      'reopened',
+    ]);
+  });
+
+  it('stores no reason when a transition is given none', async () => {
+    const id = await createViolation();
+    await post({ action: 'cure', id });
+    const cured = (await getDb(env).select().from(lotRecordEvents)).find(
+      (e) => e.action === 'cured',
+    );
+    expect(cured?.reasonCode).toBeNull();
+  });
+
+  it('records a reason on a transition that is not a void', async () => {
+    const id = await createViolation();
+    await post({ action: 'cure', id, reason: 'homeowner_corrected' });
+    const cured = (await getDb(env).select().from(lotRecordEvents)).find(
+      (e) => e.action === 'cured',
+    );
+    expect(cured?.reasonCode).toBe('homeowner_corrected');
+  });
+
+  it('refuses an unknown reason code on any action', async () => {
+    const id = await createViolation();
+    expect(
+      (await post({ action: 'cure', id, reason: 'felt like it' })).status,
+    ).toBe(400);
+    expect(await getDb(env).select().from(lotRecordEvents)).toHaveLength(1);
+  });
+
   it('refuses a transition on an unknown id', async () => {
     expect((await post({ action: 'cure', id: 'nope' })).status).toBe(409);
   });
@@ -294,6 +353,25 @@ describe('void', () => {
   });
 });
 
+describe('every reason code the code list carries', () => {
+  it('is accepted by the database CHECK', async () => {
+    // The route validates against the TypeScript list and the database has its
+    // own CHECK (migration 0035). A code in one and not the other is a 500 on
+    // the board's first use of it, so each one is written here at least once.
+    for (const reason of LOT_RECORD_REASON_CODES) {
+      const id = await createViolation();
+      expect((await post({ action: 'void', id, reason })).status).toBe(204);
+    }
+    const voided = (await getDb(env).select().from(lotRecordEvents)).filter(
+      (e) => e.action === 'voided',
+    );
+    const byName = (a: string, b: string) => a.localeCompare(b);
+    expect(voided.map((e) => e.reasonCode ?? '').sort(byName)).toEqual(
+      [...LOT_RECORD_REASON_CODES].sort(byName),
+    );
+  });
+});
+
 describe('edit', () => {
   it('changes descriptive fields and logs one edited event', async () => {
     const id = await createViolation();
@@ -338,6 +416,49 @@ describe('edit', () => {
     expect(row.status).toBe('open');
   });
 
+  it('ignores every field it does not own, even beside one it does', async () => {
+    // The sharper case than the one above: a legal edit carrying fields that
+    // must never move. `lot_id` matters most — it IS the audience under ADR
+    // 0024, so moving it would republish one Lot's enforcement record to a
+    // different Lot's owners.
+    const id = await createViolation();
+    const [before] = await getDb(env).select().from(lotViolations);
+
+    const res = await post({
+      action: 'edit',
+      id,
+      summary: 'Trailer parked in the street',
+      status: 'voided',
+      lotId: 'lot-b',
+      createdBy: 'someone-else',
+      createdAt: 0,
+    });
+    expect(res.status).toBe(204);
+
+    const [after] = await getDb(env).select().from(lotViolations);
+    expect(after.summary).toBe('Trailer parked in the street');
+    expect(after.lotId).toBe('lot-a');
+    expect(after.status).toBe('open');
+    expect(after.createdBy).toBe('board-1');
+    expect(after.createdAt.getTime()).toBe(before.createdAt.getTime());
+  });
+
+  it('refuses a board-only note that is not text, rather than clearing it', async () => {
+    const id = await createViolation({ internalNote: 'call counsel' });
+    expect((await post({ action: 'edit', id, internalNote: 42 })).status).toBe(
+      400,
+    );
+    const [row] = await getDb(env).select().from(lotViolations);
+    expect(row.internalNote).toBe('call counsel');
+  });
+
+  it('logs an edited event', async () => {
+    const id = await createViolation();
+    await post({ action: 'edit', id, summary: 'Rewritten' });
+    const events = await getDb(env).select().from(lotRecordEvents);
+    expect(events.map((e) => e.action).sort()).toEqual(['created', 'edited']);
+  });
+
   it('refuses a blank summary', async () => {
     const id = await createViolation();
     expect((await post({ action: 'edit', id, summary: '  ' })).status).toBe(
@@ -370,6 +491,17 @@ describe('board reads', () => {
       lotId: string;
     }[];
     expect(rows.map((r) => r.lotId)).toEqual(['lot-b']);
+  });
+
+  it('answers an empty log for a record with no events', async () => {
+    const events = (await (await get('?events=no-such-record')).json()) as [];
+    expect(events).toEqual([]);
+  });
+
+  it('refuses ?events= with no id rather than listing every violation', async () => {
+    await createViolation();
+    const res = await get('?events=');
+    expect(res.status).toBe(400);
   });
 
   it('returns one record event log, oldest first', async () => {

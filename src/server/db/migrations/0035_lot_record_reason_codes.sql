@@ -7,14 +7,23 @@
 -- is where prose belongs; it is a column both redaction and the read helpers
 -- already know about.
 --
--- SQLite cannot add a CHECK to an existing table, so this is the 12-step table
--- rebuild. Safe and cheap here because the table is EMPTY everywhere — nothing
--- in the shipped code can write it yet, and `0034` has not been applied to
--- production at the time of writing (ops #35). The rebuild is written as the
--- generic sequence anyway rather than a DROP/CREATE, so that applying `0034`
--- and `0035` in one pass against a database where something DID write rows
--- preserves them rather than silently discarding them.
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+-- SQLite cannot add a CHECK to an existing table, so this is the table rebuild.
+-- Safe and cheap here because the table is EMPTY everywhere — nothing in the
+-- shipped code can write it yet, and `0034` has not been applied to production
+-- at the time of writing (ops #35). The rebuild is written as the generic
+-- sequence anyway rather than a DROP/CREATE, so that applying `0034` and `0035`
+-- in one pass against a database where something DID write rows preserves them
+-- rather than silently discarding them.
+--
+-- **No foreign-key PRAGMA at all**, unlike the `0024`-`0029` rebuilds. Those
+-- wrap themselves in D1's `PRAGMA defer_foreign_keys` (never the unsupported
+-- `PRAGMA foreign_keys`, which Miniflare accepts locally and remote D1 does
+-- not — so the test suite cannot catch that mistake). Neither is needed here:
+-- `lot_record_events` has no foreign key of its own, by design — its subject is
+-- `(record_type, record_id)`, which no FK can express — and nothing references
+-- it, so there is no constraint for the rebuild to defer. No view references it
+-- either, so the `ALTER ... RENAME` view-reparse hazard of `0024`/`0025` does
+-- not apply.
 CREATE TABLE `__new_lot_record_events` (
 	`id` text PRIMARY KEY NOT NULL,
 	`record_type` text NOT NULL,
@@ -31,5 +40,4 @@ INSERT INTO `__new_lot_record_events` (`id`, `record_type`, `record_id`, `action
 SELECT `id`, `record_type`, `record_id`, `action`, `acting_account_id`, `reason_code`, `recorded_at` FROM `lot_record_events`;--> statement-breakpoint
 DROP TABLE `lot_record_events`;--> statement-breakpoint
 ALTER TABLE `__new_lot_record_events` RENAME TO `lot_record_events`;--> statement-breakpoint
-CREATE INDEX `lot_record_events_subject_idx` ON `lot_record_events` (`record_type`,`record_id`,`recorded_at`);--> statement-breakpoint
-PRAGMA foreign_keys=ON;
+CREATE INDEX `lot_record_events_subject_idx` ON `lot_record_events` (`record_type`,`record_id`,`recorded_at`);
