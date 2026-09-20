@@ -38,7 +38,7 @@ CREATE TABLE `lot_violations` (
 	FOREIGN KEY (`lot_id`) REFERENCES `properties`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "lot_violations_category_check" CHECK("category" IN ('architectural', 'maintenance', 'landscaping', 'parking', 'trash', 'pets', 'noise', 'other')),
 	CONSTRAINT "lot_violations_status_check" CHECK("status" IN ('open', 'cured', 'closed', 'voided')),
-	CONSTRAINT "lot_violations_effective_day_shape" CHECK("effective_day" LIKE '____-__-__'),
+	CONSTRAINT "lot_violations_effective_day_shape" CHECK("effective_day" GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
 	CONSTRAINT "lot_violations_summary_not_blank" CHECK(length(trim("summary")) > 0)
 );
 --> statement-breakpoint

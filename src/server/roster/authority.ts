@@ -302,10 +302,17 @@ export function lotAuthorityExists(
  * A direct owner's period starts at their Ownership's `start_day`. A
  * Representative's starts at the LATER of the Representation's and the
  * Organization's Ownership `start_day`, since neither alone confers authority.
- * A NULL `start_day` is legacy history ADR 0022 permits, and it means the start
- * is unknown rather than recent, so detail is visible from the beginning — the
- * `COALESCE(..., '')` in the Representation branch says the same thing, `''`
- * sorting before every `YYYY-MM-DD` day.
+ *
+ * The two branches read a NULL `start_day` differently, and the difference is
+ * the "later of the two" rule rather than an inconsistency. ADR 0022 permits a
+ * NULL Ownership start as legacy history, meaning the start is unknown rather
+ * than recent: in the owner branch that opens detail from the beginning, since
+ * there is no other bound. In the Representation branch there IS another bound
+ * — `representations.start_day` is NOT NULL — so `COALESCE(..., '')` makes an
+ * unknown Organization start defer to the Representative's own start rather
+ * than widen past it. `''` sorts before every `YYYY-MM-DD` day, so the MAX
+ * picks the Representation's start, and the expression can never go NULL and
+ * silently deny the whole branch.
  *
  * This shares one builder with `lotAuthorityExists` rather than restating the
  * branches, for the reason this module exists: two expressions of Lot Authority

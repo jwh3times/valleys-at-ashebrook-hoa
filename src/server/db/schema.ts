@@ -584,9 +584,14 @@ export const lotViolations = sqliteTable(
       'lot_violations_status_check',
       sql`${t.status} IN ('open', 'cured', 'closed', 'voided')`,
     ),
+    // GLOB, not LIKE: `_` matches ANY character, so `LIKE '____-__-__'`
+    // admits 'zzzz-99-99'. The read boundary compares this column
+    // lexicographically against an Ownership's start_day, so a malformed day
+    // sorts after every real start and would surface a record from outside the
+    // reader's period. GLOB pins each position to a digit for the same cost.
     check(
       'lot_violations_effective_day_shape',
-      sql`${t.effectiveDay} LIKE '____-__-__'`,
+      sql`${t.effectiveDay} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`,
     ),
     check(
       'lot_violations_summary_not_blank',

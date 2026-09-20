@@ -66,45 +66,51 @@ const relative = (file: string) =>
 
 describe('the AI surfaces never touch a Lot Record', () => {
   /**
-   * Scoped to the modules that can put text into the index or into a
+   * Every module that can put text into the AI Search index or into a
    * generated answer: the assistant and its retrieval, the report generator,
-   * and the pseudonymizer's dictionary loader. `LOT_RECORD_TYPES` drives the
-   * table list, so ADR 0025's dues ledger is covered the day it is added
-   * there — which is the point of the enumeration existing.
+   * and the pseudonymizer's dictionary loader (all under `server/ai`), plus the
+   * two admin routes that actually write R2 objects under `documents/` and
+   * `rag/`. The index is scoped to `rag/` and is NOT tier-aware (SECURITY.md),
+   * so one Lot's enforcement history reaching it would be readable by every
+   * homeowner who can ask the assistant a question.
+   *
+   * Paths are asserted to exist rather than skipped when missing: a scan that
+   * silently reads nothing after a rename is worse than no scan, because it
+   * still reports green.
    */
-  const AI_DIRECTORIES = ['server/ai', 'server/documents', 'server/reports'];
+  const AI_PATHS = [
+    'server/ai',
+    'pages/api/admin/documents.ts',
+    'pages/api/admin/duplicates.ts',
+    'pages/api/admin/assistant.ts',
+    'pages/api/admin/reports.ts',
+  ];
 
-  it('actually scans the assistant, so a renamed directory fails loudly', () => {
-    // Without this, the skip below would turn a moved `server/ai` into a
-    // silently empty scan — a guard that passes because it read nothing.
-    expect(sourceFiles(join(SRC, 'server', 'ai')).length).toBeGreaterThan(0);
+  /** Every source file at one path, whether it names a directory or a file. */
+  function filesAt(path: string): string[] {
+    const full = join(SRC, ...path.split('/'));
+    return statSync(full).isDirectory() ? sourceFiles(full) : [full];
+  }
+
+  it('resolves every scanned path, so a rename fails loudly instead of quietly', () => {
+    for (const path of AI_PATHS)
+      expect(filesAt(path).length).toBeGreaterThan(0);
   });
 
-  it('has no reference to a Lot Record table under the AI directories', () => {
+  it('has no reference to a Lot Record table from any of them', () => {
     const offenders: string[] = [];
-    for (const dir of AI_DIRECTORIES) {
-      const full = join(SRC, dir);
-      let entries: string[];
-      try {
-        entries = sourceFiles(full);
-      } catch {
-        // A directory that does not exist in this tree cannot leak; the
-        // assistant lives under `server/ai` today and the others are named
-        // here so a later split stays covered.
-        continue;
-      }
-      for (const file of entries) {
+    for (const path of AI_PATHS)
+      for (const file of filesAt(path)) {
         const text = readFileSync(file, 'utf8');
         for (const [table, identifier] of Object.entries(LOT_RECORD_TABLES)) {
           if (text.includes(table))
             offenders.push(`${relative(file)}: names ${table}`);
-          if (new RegExp(`\\b${identifier}\\b`).test(text))
+          if (new RegExp(`\b${identifier}\b`).test(text))
             offenders.push(`${relative(file)}: imports ${identifier}`);
         }
         if (text.includes('lot-records'))
           offenders.push(`${relative(file)}: imports the lot-records module`);
       }
-    }
     expect(offenders).toEqual([]);
   });
 

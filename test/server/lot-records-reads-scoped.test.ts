@@ -323,6 +323,35 @@ describe('fetchMemberLotViolations', () => {
     expect(rows.map((r) => r.id)).toEqual(['v-a']);
   });
 
+  it("bounds a representative at their own start when the organization's is unknown", async () => {
+    // ADR 0022 permits a NULL Ownership start_day as legacy history. In the
+    // owner branch that means "visible from the beginning"; here it must NOT,
+    // because the Representation's own start is a known bound and is the later
+    // of the two. It must also not make the MAX go NULL, which would deny the
+    // whole branch and hide a legacy-imported organization's records entirely.
+    await seedOrganizationAuthority('rep-1', 'org-1', 'lot-a', {
+      ownershipStartDay: null,
+      representationStartDay: '2026-06-01',
+    });
+    await seedViolation('v-before', 'lot-a', { effectiveDay: '2019-01-01' });
+    await seedViolation('v-after', 'lot-a', { effectiveDay: '2026-07-01' });
+
+    const rows = await lotRecords.fetchMemberLotViolations(env, 'rep-1', DAY);
+    expect(rows.map((r) => r.id)).toEqual(['v-after']);
+  });
+
+  it('shows a representative a record dated on their first day', async () => {
+    // The boundary is inclusive in both branches; the owner branch has its own
+    // day-one case above.
+    await seedOrganizationAuthority('rep-1', 'org-1', 'lot-a', {
+      representationStartDay: '2026-06-01',
+    });
+    await seedViolation('v-day-one', 'lot-a', { effectiveDay: '2026-06-01' });
+
+    const rows = await lotRecords.fetchMemberLotViolations(env, 'rep-1', DAY);
+    expect(rows.map((r) => r.id)).toEqual(['v-day-one']);
+  });
+
   it("starts a representative's period at the later of the two start days", async () => {
     // The organization has owned the lot since January, but this person has
     // represented it only since June. Their period starts in June.
