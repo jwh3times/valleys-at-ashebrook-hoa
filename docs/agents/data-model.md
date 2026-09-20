@@ -245,6 +245,52 @@ server-rendered `/lot-records` page reads `fetchMemberLotViolations` (scoped by 
 `fetchMemberLotAddresses`. Both flags still default off, so the family stays unreachable in
 production until an operator turns `lotRecordsEnabled` on.
 
+`dues_ledger_entries` (migration `0036`, ADR 0025, #295 slice 1) is the second Lot Record type: the
+per-Lot dues ledger, read-only in this slice — no write route, no payment rail, no surface, and it
+still rides the default-off `lotRecordsEnabled` gate above. It is append-only and balance-forward:
+the balance is `SUM(amount_cents)` over a Lot's rows, never a stored column, so a positive balance
+is owed and a negative one is a credit, and there is nothing to drift. Columns: `lot_id` referencing
+`properties(id)` on delete-restrict; `kind` (CHECK-bounded to `DUES_LEDGER_KINDS` —
+`charge`/`payment`/`adjustment`/`reversal`); `amount_cents`, integer cents, signed, with its sign
+fixed per `kind` by CHECK (`charge` positive, `payment` negative, `adjustment`/`reversal`
+nonzero) so the sum is meaningful without interpreting `kind`; `effective_day` (`YYYY-MM-DD`,
+GLOB-shaped); `description` (CHECK non-blank, homeowner-visible); `category` (CHECK-bounded to
+`DUES_CHARGE_CATEGORIES`, present on a `charge` and NULL otherwise, enforced by an equality CHECK
+rather than left to a writer); `method` (CHECK-bounded to `DUES_PAYMENT_METHODS`, present on a
+`payment` and NULL otherwise, same equality-CHECK shape); `reference` (board-only, e.g. a check
+number, projected out of the homeowner read the way `lot_violations.internal_note` is); `source`
+(CHECK-bounded to `DUES_ENTRY_SOURCES` — `board`/`provider`); `payment_id` (no FK — the `payments`
+table arrives with the payment rail in a later slice — CHECK-restricted to `source = 'provider'`);
+`reverses_entry_id` (self-referencing on delete-restrict, UNIQUE so an entry is reversed at most
+once, present exactly when `kind = 'reversal'`); `recorded_by` (the acting account, NULL exactly
+when `source = 'provider'`); `recorded_at`; `operation_key`. Two rules cannot be same-row CHECKs and
+are enforced by the `INSERT … SELECT` that writes a reversal instead (ADR 0025): a reversal's amount
+is exactly the negation of the entry it reverses, and a reversal may not itself be reversed.
+
+Two idempotency indexes, each shaped for a different double-submit: **`(operation_key, lot_id)`
+UNIQUE**, not `operation_key` alone, because ADR 0025's bulk action posts one assessment to every
+Lot under ONE key — a bare unique on the key would make that impossible, since the second lot's row
+would collide with the first — while the composite still makes a resubmission a no-op per Lot; and a
+**partial UNIQUE on `payment_id WHERE source = 'provider'`**, the per-effect layer so a webhook and
+a reconciliation pull can never both credit one settlement (the predicate exists because `payment_id`
+is NULL on every board-entered row, which a bare unique would otherwise collide on). An index on
+`(lot_id, effective_day)` serves the admin per-lot read and its ordering.
+
+`lot_record_events` now serves two subject tables, and gained a **pair rule** with the widened
+CHECK: `record_type IN ('lot_violations', 'dues_ledger_entries')` plus
+`lot_record_events_action_for_subject`, which requires `action = 'created'` whenever
+`record_type = 'dues_ledger_entries'`. A ledger entry has no lifecycle — it is appended and, if
+wrong, corrected by a further entry — so the widened `action` vocabulary (`cured`/`closed`/
+`reopened`/`voided`/`edited`) stays reachable only by a violation. Migration `0036` widened the
+CHECK by the same `__new`-copy-and-rename rebuild `0035` used, with no FK PRAGMA (see
+[`migrations.md`](./migrations.md)).
+
+`src/server/lot-records/reads.ts`'s `fetchMemberDuesLedger` and `fetchAdminLotDuesLedger` are the
+reads (see [`module-map.md`](./module-map.md)); `fetchMemberDuesLedger` is where ADR 0024's rule for
+a running figure is implemented — entries from before the reader's own period of authority are
+collapsed into `openingBalanceCents` rather than dropped, so a caller with an earlier owner's
+history behind them still sees a whole balance rather than a partial one.
+
 `lot_violations` has `lot_id` referencing `properties(id)` on delete-restrict (the same
 outlive-an-editing-mistake action `ballots`/`proxies`/`member_votes` use), `category` (CHECK-bounded
 to the eight `LOT_VIOLATION_CATEGORIES` in `src/lib/types.ts`), `effective_day` (a `YYYY-MM-DD`
@@ -258,8 +304,8 @@ construction (excluded in the read's own scoping predicate), never by a caller-s
 
 `lot_record_events` is the append-only log every Lot Record type shares, subject to
 `(record_type, record_id)` with **no foreign key** — SQLite cannot express an FK whose target
-depends on another column's value — `record_type` CHECK-bounded to `LOT_RECORD_TYPES` (today just
-`lot_violations`; ADR 0025's `dues_ledger_entries`, #295, widens this CHECK when it lands),
+depends on another column's value — `record_type` CHECK-bounded to `LOT_RECORD_TYPES`
+(`lot_violations` and, since migration `0036`, ADR 0025's `dues_ledger_entries`, #295 — see below),
 `action` CHECK-bounded to `LOT_RECORD_ACTIONS`, and — since migration `0035` (#291 slice 2) rebuilt
 the table — `reason_code` CHECK-bounded to `LOT_RECORD_REASON_CODES` rather than free text, so a
 board-typed reason can never accumulate resident-identifying prose in a column Roster Redaction

@@ -7,6 +7,40 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-09-20
+
+### Added
+
+- **The groundwork for a dues ledger, and nothing that can be seen or written
+  yet.** Each lot gains a ledger of charges, payments, adjustments and
+  reversals, stored in whole cents and never in fractions. A balance is always
+  the sum of the entries rather than a number kept alongside them, so it cannot
+  quietly disagree with them: a positive balance is owed, a negative one is a
+  credit the association holds.
+
+  Nothing is ever edited or deleted. A mistake is corrected by recording its
+  reversal, and a real-world credit such as a waiver is recorded as an
+  adjustment, so the history reads as what happened rather than as what someone
+  decided it should look like afterwards.
+
+  What a homeowner will eventually read is decided here too: they see the
+  entries from their own period of ownership, and everything before that is
+  shown as a single opening figure rather than being dropped. A balance with
+  the earlier part missing would be worse than no balance at all — the point of
+  the line is that the number is whole.
+
+  There is no board entry screen, no homeowner view, and no online payment
+  yet — those follow. This release only creates the storage and the reading
+  rules (ADR 0025, #295).
+
+### Fixed
+
+- A safeguard that checks the AI assistant can never reach a lot's private
+  records was only half working: one of its two checks had a typo that made it
+  match nothing, silently, since it was written. The half that was working is
+  what had been holding the line. Both halves now work, confirmed by deliberately
+  planting a violation and watching the check fail.
+
 ## [1.2.9] - 2026-09-20
 
 ### Added

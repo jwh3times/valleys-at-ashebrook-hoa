@@ -331,6 +331,16 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `/api/admin/lot-violations`'s `GET` (see [`http-endpoints.md`](./http-endpoints.md)). This is a
   separate scoping axis from `content/reads.ts`'s content tier — see
   [`data-model.md`](./data-model.md) and [`roster-and-access.md`](./roster-and-access.md).
+  ADR 0025's dues ledger (#295 slice 1) adds a second pair here: `fetchMemberDuesLedger(env,
+personId, associationDay)` returns each Lot's itemized entries from the caller's own period of
+  authority plus an `openingBalanceCents` collapsing everything earlier — the running-figure rule
+  ADR 0024 requires, so a caller with an earlier owner's history behind them still sees a whole
+  balance rather than a partial one — and `fetchAdminLotDuesLedger(env, lotId?)` is the unscoped,
+  board-only read carrying every column including `reference` and provider-sourced rows. Read-only
+  in this slice: no write route exists yet. `fetchMember*`/`fetchAdminLot*` is a naming convention
+  the module now documents and `test/server/lot-records-reads-scoped.test.ts` actually asserts —
+  every export's prefix is checked, not just its membership in one of the two lists — rather than
+  only claiming it in prose.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible
