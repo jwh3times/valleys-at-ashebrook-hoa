@@ -186,6 +186,36 @@ describe('accountNav lot records link', () => {
       );
   });
 
+  it('offers it to a board admin who holds a lot', () => {
+    // ADR 0024: a board admin with Lot Authority reads their own lot on the
+    // homeowner surface under the same conditions as anyone else. The case
+    // below (no lot) is decided by an earlier branch and proves nothing about
+    // this one.
+    expect(
+      accountNav(
+        { role: 'board', propertyIds: ['p1'] },
+        {
+          officialMode: true,
+          liveVotingEnabled: false,
+          lotRecordsEnabled: true,
+        },
+      ).links,
+    ).toContainEqual({ href: '/lot-records', label: 'Lot records' });
+  });
+
+  it('hides it from a board admin who holds a lot when the gate is off', () => {
+    expect(
+      accountNav(
+        { role: 'board', propertyIds: ['p1'] },
+        {
+          officialMode: true,
+          liveVotingEnabled: false,
+          lotRecordsEnabled: false,
+        },
+      ).links,
+    ).not.toContainEqual(expect.objectContaining({ href: '/lot-records' }));
+  });
+
   it('does not offer it to a board member who holds no lot', () => {
     // Board access is not Lot Authority: they read every lot through /admin,
     // and this surface is for a lot's own holders.

@@ -125,6 +125,15 @@ export function accountNav(
         mode.liveVotingEnabled
           ? [{ href: '/vote', label: 'Vote' }]
           : []),
+        // A board admin who holds a Lot reads that Lot's records on the
+        // homeowner surface like anyone else (ADR 0024) — the page gates on
+        // the `member` capability, which they have. Holding no Lot, they get
+        // no link: the admin panel is where they read every Lot.
+        ...(auth.propertyIds.length > 0 &&
+        mode.officialMode &&
+        mode.lotRecordsEnabled
+          ? [{ href: '/lot-records', label: 'Lot records' }]
+          : []),
       ],
     };
   if (auth.role !== 'homeowner')

@@ -3,8 +3,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import { env } from 'cloudflare:workers';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 import { associationDateIso } from '../lib/format';
-import { fetchMemberLotViolations } from '../server/lot-records/reads';
-import { fetchMemberLots } from '../server/content/reads';
+import {
+  fetchMemberLotViolations,
+  fetchMemberLotAddresses,
+} from '../server/lot-records/reads';
+import { lotRecordsVisible } from '../server/lot-records/gate';
+import {
+  LOT_VIOLATION_CATEGORY_LABELS,
+  LOT_VIOLATION_STATUS_LABELS,
+} from '../lib/lot-records';
 
 /**
  * A LOT'S OWN RECORDS, READ BY THE PEOPLE WHO HOLD IT (ADR 0024, #291 slice 4).
@@ -34,7 +41,7 @@ const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 
 // Both flags, fail-closed, before anything else (ADR 0024). `officialMode`
 // alone must not publish Lot-level enforcement records.
-if (!site.officialMode || !site.lotRecordsEnabled) {
+if (!lotRecordsVisible(site)) {
   return Astro.rewrite('/404');
 }
 
@@ -48,36 +55,29 @@ const member = ctx !== null && ctx.capabilities.has('member');
 const scopable = member && ctx!.personId !== null;
 
 const today = associationDateIso();
-const [records, lots] = scopable
+// BOTH reads are scoped from `personId` by the roster, never from the lot
+// array on the caller's context: that array is what the request asserts, and
+// ADR 0024 fixes the homeowner read's input as the Person. It also means these
+// addresses are exactly the Lots the reader holds, so the copy below cannot
+// pluralize on a claim.
+const [records, addresses] = scopable
   ? await Promise.all([
       fetchMemberLotViolations(env, ctx!.personId, today),
-      fetchMemberLots(env, ctx!.propertyIds),
+      fetchMemberLotAddresses(env, ctx!.personId, today),
     ])
-  : [[], []];
+  : [[], new Map<string, string>()];
 
-const addressOf = (lotId: string) =>
-  lots.find((l) => l.id === lotId)?.address ?? 'Your lot';
+const addressOf = (lotId: string) => addresses.get(lotId) ?? 'Your lot';
 
 // A reader may hold several Lots — two homes, or a Representation covering
 // more than one — and the copy should not tell them they have one.
-const plural = lots.length > 1;
+const plural = addresses.size > 1;
 
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Open',
-  cured: 'Cured',
-  closed: 'Closed',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  architectural: 'Architectural',
-  maintenance: 'Maintenance',
-  landscaping: 'Landscaping',
-  parking: 'Parking',
-  trash: 'Trash',
-  pets: 'Pets',
-  noise: 'Noise',
-  other: 'Other',
-};
+// The most caller-specific HTML on the site: one Lot's enforcement record,
+// rendered into the page rather than fetched by an island. It must never
+// become cacheable if a zone cache rule is added later — the same reason
+// `/elections` sets this on the renders that carry a ballot receipt.
+Astro.response.headers.set('Cache-Control', 'private, no-store');
 ---
 
 <BaseLayout
@@ -124,9 +124,9 @@ const CATEGORY_LABELS: Record<string, string> = {
               <li class="record-list__item">
                 <p class="record-list__title">{addressOf(record.lotId)}</p>
                 <p class="record-list__meta">
-                  {CATEGORY_LABELS[record.category] ?? record.category} &middot;{' '}
+                  {LOT_VIOLATION_CATEGORY_LABELS[record.category]} &middot;{' '}
                   {record.effectiveDay} &middot;{' '}
-                  {STATUS_LABELS[record.status] ?? record.status}
+                  {LOT_VIOLATION_STATUS_LABELS[record.status]}
                 </p>
                 <p>{record.summary}</p>
               </li>

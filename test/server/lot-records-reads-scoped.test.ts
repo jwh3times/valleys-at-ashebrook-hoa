@@ -1,7 +1,13 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import * as lotRecords from '../../src/server/lot-records/reads';
-import { truncateAll, seedProperty, seedLotAuthority } from './fixtures';
+import {
+  truncateAll,
+  seedProperty,
+  seedLotAuthority,
+  seedPerson,
+} from './fixtures';
+import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { lotViolations, lotRecordEvents } from '../../src/server/db/schema';
 import {
@@ -144,6 +150,10 @@ beforeEach(async () => {
   await db.delete(representationLots);
   await db.delete(representations);
   await db.delete(organizations);
+  // `parties.consolidated_into_party_id` points at another party with
+  // RESTRICT, so a surviving consolidation link would make the shared
+  // teardown's `DELETE FROM parties` fail.
+  await db.update(parties).set({ consolidatedIntoPartyId: null });
   await truncateAll();
   await seedProperty('lot-a');
   await seedProperty('lot-b');
@@ -159,6 +169,11 @@ describe('every export is classified', () => {
   const AUTHORITY_SCOPED = [
     'fetchMemberLotViolations',
     'fetchMemberLotViolation',
+    // Not a record read, but scoped the same way and for the same reason: the
+    // homeowner page labels each row with its Lot's address, and asking the
+    // roster from `personId` is what keeps a caller-supplied lot list out of
+    // the page entirely.
+    'fetchMemberLotAddresses',
   ];
   const ADMIN_ONLY = ['fetchAdminLotViolations', 'fetchAdminLotRecordEvents'];
 
@@ -364,6 +379,104 @@ describe('fetchMemberLotViolations', () => {
 
     const rows = await lotRecords.fetchMemberLotViolations(env, 'rep-1', DAY);
     expect(rows.map((r) => r.id)).toEqual(['v-after']);
+  });
+});
+
+describe('a consolidated duplicate Party', () => {
+  it('reads the survivor records, as its own lotIds already promised', async () => {
+    // Consolidation MARKS the duplicate and moves no Ownership row, while
+    // `LOT_SQL` — the thing that decided this account is a member at all —
+    // resolves the account's Person one hop to the survivor. A read that did
+    // not would tell the caller they hold the survivor's lots and then show
+    // them nothing: an empty page indistinguishable from a clean lot.
+    await seedLotAuthority('survivor', 'lot-a', { startDay: '2026-01-01' });
+    await seedPerson('duplicate', {
+      fullName: 'Person duplicate',
+      nameNormalized: 'person duplicate',
+    });
+    await getDb(env)
+      .update(parties)
+      .set({ consolidatedIntoPartyId: 'survivor' })
+      .where(eq(parties.id, 'duplicate'));
+    await seedViolation('v-a', 'lot-a');
+
+    const rows = await lotRecords.fetchMemberLotViolations(
+      env,
+      'duplicate',
+      DAY,
+    );
+    expect(rows.map((r) => r.id)).toEqual(['v-a']);
+
+    const one = await lotRecords.fetchMemberLotViolation(
+      env,
+      'duplicate',
+      DAY,
+      'v-a',
+    );
+    expect(one?.id).toBe('v-a');
+  });
+
+  it('still reads nothing for a lot the survivor does not hold', async () => {
+    await seedLotAuthority('survivor', 'lot-a', { startDay: '2026-01-01' });
+    await seedPerson('duplicate', {
+      fullName: 'Person duplicate',
+      nameNormalized: 'person duplicate',
+    });
+    await getDb(env)
+      .update(parties)
+      .set({ consolidatedIntoPartyId: 'survivor' })
+      .where(eq(parties.id, 'duplicate'));
+    await seedViolation('v-b', 'lot-b');
+
+    expect(
+      await lotRecords.fetchMemberLotViolations(env, 'duplicate', DAY),
+    ).toEqual([]);
+  });
+});
+
+describe('fetchMemberLotAddresses', () => {
+  it('returns only the lots the caller holds, keyed by id', async () => {
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+
+    const addresses = await lotRecords.fetchMemberLotAddresses(
+      env,
+      'person-1',
+      DAY,
+    );
+    expect([...addresses.keys()]).toEqual(['lot-a']);
+    expect(addresses.get('lot-a')).toBe('lot-a Ashebrook Lane');
+  });
+
+  it('returns nothing for a former owner or an unlinked account', async () => {
+    await seedLotAuthority('seller', 'lot-a', {
+      startDay: '2020-01-01',
+      endDay: '2026-06-01',
+    });
+    expect(
+      (await lotRecords.fetchMemberLotAddresses(env, 'seller', DAY)).size,
+    ).toBe(0);
+    expect(
+      (await lotRecords.fetchMemberLotAddresses(env, null, DAY)).size,
+    ).toBe(0);
+  });
+
+  it('includes a lot held only through a consolidated duplicate link', async () => {
+    await seedLotAuthority('survivor', 'lot-a', { startDay: '2026-01-01' });
+    await seedPerson('duplicate', {
+      fullName: 'Person duplicate',
+      nameNormalized: 'person duplicate',
+    });
+    await getDb(env)
+      .update(parties)
+      .set({ consolidatedIntoPartyId: 'survivor' })
+      .where(eq(parties.id, 'duplicate'));
+
+    const addresses = await lotRecords.fetchMemberLotAddresses(
+      env,
+      'duplicate',
+      DAY,
+    );
+    expect([...addresses.keys()]).toEqual(['lot-a']);
   });
 });
 

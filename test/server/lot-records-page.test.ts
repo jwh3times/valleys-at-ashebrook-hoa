@@ -28,10 +28,12 @@ import type { AuthContext } from '../../src/server/authz/guards';
  * Container API inside the Workers runtime, against seeded roster facts, and
  * asked what reaches the HTML.
  *
- * The caller classes are the ones ADR 0024 names: a sole owner, a co-owner, a
- * Representative (organization-wide and Lot-scoped), a former owner after an
- * end, a buyer with pre-period records on their own Lot, a board caller who
- * holds no Lot, an unlinked account, and `cutover_mode = legacy`.
+ * The caller classes are the ones ADR 0024 names: a sole owner, a co-owner, an
+ * organization's Representative, a consolidated duplicate Party, a former
+ * owner after an end, a buyer with pre-period records on their own Lot, a
+ * board caller who holds no Lot, an unlinked account, and `cutover_mode =
+ * legacy`. The Lot-scoped Representation is proved at the query instead
+ * (`lot-records-reads-scoped.test.ts`), where the scope itself lives.
  */
 
 beforeAll(async () => {
@@ -52,6 +54,8 @@ async function makeContainer() {
 
 /** A caller as middleware would put one on `locals`. */
 function caller(overrides: Partial<AuthContext> = {}): AuthContext {
+  // No cast: if AuthContext gains a field the page reads, this must fail to
+  // compile rather than quietly render a page branching on `undefined`.
   return {
     userId: 'u1',
     personId: 'person-1',
@@ -62,7 +66,7 @@ function caller(overrides: Partial<AuthContext> = {}): AuthContext {
     role: 'homeowner',
     propertyIds: ['lot-a'],
     ...overrides,
-  } as AuthContext;
+  };
 }
 
 const flagsOn: SiteSettings = {
@@ -151,6 +155,19 @@ describe('the gate', () => {
   });
 });
 
+describe('caching', () => {
+  it('marks the page private and uncacheable', async () => {
+    // One Lot's enforcement record, rendered into the HTML rather than fetched
+    // by an island. A zone cache rule added later must not be able to serve
+    // one reader's page to another.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedViolation('v-a', 'lot-a');
+
+    const res = await renderResponse(caller(), flagsOn);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+});
+
 describe('what a reader is shown', () => {
   it('shows a sole owner their own lot record', async () => {
     await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
@@ -166,6 +183,9 @@ describe('what a reader is shown', () => {
     await seedViolation('v-a', 'lot-a');
 
     const html = await render(caller());
+    // Anchored: without this the case would also pass on a page that rendered
+    // no records at all.
+    expect(html).toContain('Summary of v-a');
     expect(html).not.toContain('Board note for v-a');
   });
 
@@ -176,8 +196,18 @@ describe('what a reader is shown', () => {
 
     const first = await render(caller());
     const second = await render(caller({ personId: 'person-2' }));
-    expect(first).toContain('Summary of v-a');
-    expect(second).toContain('Summary of v-a');
+    // The ADR's claim is that co-owners see the IDENTICAL record — not merely
+    // that each sees something. Compared on the rendered list, since the rest
+    // of the page differs by nothing here.
+    const list = (html: string) => {
+      // Searched FROM the list's own start: the header nav closes a <ul>
+      // earlier in the document, and slicing to that one yields ''.
+      const start = html.indexOf('<ul class="record-list">');
+      expect(start).toBeGreaterThan(-1);
+      return html.slice(start, html.indexOf('</ul>', start));
+    };
+    expect(list(first)).toContain('Summary of v-a');
+    expect(list(second)).toEqual(list(first));
   });
 
   it('shows nothing of another lot, even one the caller claims', async () => {
@@ -190,7 +220,10 @@ describe('what a reader is shown', () => {
       caller({ lotIds: ['lot-a', 'lot-b'], propertyIds: ['lot-a', 'lot-b'] }),
     );
     expect(html).not.toContain('Summary of v-b');
-    expect(html).toContain('There is nothing recorded for your lot');
+    // The full sentence, including the period: the addresses now come from the
+    // roster, so the copy must say "lot" and not "lots" for a caller who holds
+    // one and claims two.
+    expect(html).toContain('There is nothing recorded for your lot.');
   });
 
   it('hides records from before a buyer period', async () => {
@@ -210,10 +243,12 @@ describe('what a reader is shown', () => {
     });
     await seedViolation('v-theirs', 'lot-a', { effectiveDay: '2021-05-05' });
 
-    // A former owner has no `member` capability in production; this asserts
-    // the read as well, so the page is safe even if one ever reached it.
+    // Handed a caller the PAGE considers a member, so what refuses here is the
+    // query rather than the capability — which is the regression worth
+    // catching: a page that filtered by `ctx.lotIds` would show this.
     const html = await render(caller());
     expect(html).not.toContain('Summary of v-theirs');
+    expect(html).toContain('There is nothing recorded for your lot.');
   });
 
   it('hides a voided record', async () => {
