@@ -36,7 +36,12 @@ fullName}` list from `GET /api/admin/meetings?roster=people` — plus `fetchLotP
   meetings/motions none of them has a separate single-record fetch — and proxies-record helpers
   (`fetchProxies`, `saveProxy`, `deleteProxy`). `setMemberAttendance`, `setMemberVotes`, and
   `setBallots` each take a `proxyId?: string | null` per entry, replacing the old `viaProxy?:
-boolean`.
+boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (reports the
+  feature-off `404` as `{ enabled: false, rows: [] }` rather than throwing, so the panel can render
+  the gate explanation instead of an error), `fetchLotRecordEvents`, `createLotViolation`,
+  `transitionLotViolation` (the four named status actions — `cure`, `close`, `reopen`, `void` — over
+  one call, never a raw `status` field), and `editLotViolation` — back the admin `LotViolationsManager`
+  panel, the only caller of any of them.
 - `src/lib/roster-admin.ts` (ADR 0022 phase 3e, #221) handles board — and, for its three
   System-Administrator-only actions, capability-gated — writes to every phase 3b/3c/3d roster admin
   surface, one group per admin panel: Roster (`fetchRoster`, lot retire/correct, party
@@ -297,19 +302,22 @@ boolean`.
   moved out of `roster/lookup.ts` when the member surfaces left the legacy roster — it is the only
   caller left) and `verification/rate-limit.ts` holds the shared KV throttles
   both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
-- `lot-records/` (#291, ADR 0024; board-only as of slice 2 — the homeowner-facing surface still
-  does not exist): `gate.ts` exports `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the
-  mutation-boundary SQL fragment) and `lotRecordsAvailable(env)` (the read-time check, now called
-  by `/api/admin/lot-violations`), both requiring `officialMode` AND `lotRecordsEnabled`
-  fail-closed. `reads.ts` holds the first Lot Record type's reads:
-  `fetchMemberLotViolations`/`fetchMemberLotViolation` take a `personId` (never a caller-supplied
-  lot list) and embed `roster/authority.ts`'s `lotAuthorityCoversRecordDay` in their `WHERE` clause,
-  so a row the caller may not read is `null`/absent rather than filtered after the fact — these two
-  still have no caller; `fetchAdminLotViolations`/`fetchAdminLotRecordEvents` are unscoped and
-  board-only by construction, and are now called by `/api/admin/lot-violations`'s `GET` (see
-  [`http-endpoints.md`](./http-endpoints.md)). This is a separate scoping axis from
-  `content/reads.ts`'s content tier — see [`data-model.md`](./data-model.md) and
-  [`roster-and-access.md`](./roster-and-access.md).
+- `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3 — the
+  homeowner-facing surface still does not exist): `gate.ts` exports
+  `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment) and
+  `lotRecordsAvailable(env)` (the read-time check, now called by `/api/admin/lot-violations`), both
+  requiring `officialMode` AND `lotRecordsEnabled` fail-closed. `reads.ts` holds the first Lot
+  Record type's reads: `fetchMemberLotViolations`/`fetchMemberLotViolation` take a `personId`
+  (never a caller-supplied lot list) and embed `roster/authority.ts`'s `lotAuthorityCoversRecordDay`
+  in their `WHERE` clause, so a row the caller may not read is `null`/absent rather than filtered
+  after the fact — these two still have no caller, and their `MemberLotViolation` return shape lives
+  here rather than in `src/lib/types.ts`, deliberately: it never selects `internal_note`, unlike the
+  admin `LotViolationDetail` shape in `src/lib/types.ts` that does; keeping the two apart means an
+  admin-only field can never leak by way of a shared type. `fetchAdminLotViolations`/
+  `fetchAdminLotRecordEvents` are unscoped and board-only by construction, and are now called by
+  `/api/admin/lot-violations`'s `GET` (see [`http-endpoints.md`](./http-endpoints.md)). This is a
+  separate scoping axis from `content/reads.ts`'s content tier — see
+  [`data-model.md`](./data-model.md) and [`roster-and-access.md`](./roster-and-access.md).
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible

@@ -95,6 +95,18 @@ describe('AdminApp', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers a Lot records tab', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    expect(
+      screen.getByRole('button', { name: 'Lot records' }),
+    ).toBeInTheDocument();
+  });
+
   it('offers a Resolutions tab', () => {
     vi.mocked(useAuth).mockReturnValue({
       loading: false,
