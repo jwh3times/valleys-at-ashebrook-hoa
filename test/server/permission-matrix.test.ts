@@ -48,7 +48,18 @@ beforeEach(async () => {
   await db.delete(settings).where(eq(settings.key, 'site'));
   await db.insert(settings).values({
     key: 'site',
-    value: JSON.stringify({ officialMode: true, liveVotingEnabled: true }),
+    // Every feature flag on. A route gated behind one its caller cannot see
+    // answers 404 BEFORE the capability gate runs, and a 404 satisfies both
+    // "not 401" and "not 403" — so an unseeded flag would let a route pass
+    // this matrix without its declared capability ever being exercised. ADR
+    // 0024 asks for `lotRecordsEnabled` here for exactly that reason; a future
+    // flag (ADR 0025's `onlinePaymentsEnabled`) belongs here the day it gates
+    // a route.
+    value: JSON.stringify({
+      officialMode: true,
+      liveVotingEnabled: true,
+      lotRecordsEnabled: true,
+    }),
     updatedAt: new Date(),
   });
 });
