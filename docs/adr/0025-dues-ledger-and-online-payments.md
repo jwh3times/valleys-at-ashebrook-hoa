@@ -12,12 +12,19 @@ mode. Nothing records what a Lot owes, what it has paid, or when. The site has n
 and has never held a fact that a homeowner could contradict with a bank statement.
 
 The board approved #295 (online dues payments) at its 2026-08-11 meeting, taking effect once the
-site is officially adopted (#361). The payment provider has **not** been selected. The
-recommendation on the issue is Stripe, using hosted Checkout, ACH Direct Debit by default with card
-optional, and signed idempotent webhooks, pending board selection. The issue fixes two
+site is officially adopted (#361). It selected the provider on 2026-09-18: **Stripe**, using
+hosted Checkout, ACH Direct Debit by default with card optional, and signed idempotent webhooks.
+Fees differ little at this scale, so what decided it was that the alternative — a bank lockbox —
+means the board hand-enters every payment indefinitely, and ledger accuracy then depends on that
+typing, where the design below credits only from a verified provider event. The issue fixes two
 requirements: payments need their own flag separate from `officialMode`, and "the reconciliation
 design matters more than the checkout flow". It also names the new failure class: a homeowner who
 believes they paid and a ledger that says otherwise.
+
+**The association is self-managed.** The document corpus holds a large body of material from a
+previous management company, including an owner portal that took payments, and a reader coming to
+that corpus cold would reasonably read it as current. It is not. The rail described here is the
+association's only one; it neither duplicates nor competes with a manager's portal.
 
 ADR 0024 establishes Lot Records, the per-Lot private audience this ledger belongs to.
 
@@ -65,6 +72,15 @@ The ledger is **balance-forward**. Payments are not allocated to specific charge
 accounting (which payment settled which assessment) is deferred; the treasurer's books remain the
 place that allocation lives. The existing `DuesSettings` blob stays as the public description of
 dues amounts and offline options. The ledger does not replace it.
+
+**A partial payment applies in the association's adopted order: attorney fees, then fines, then
+late fees and interest, and lastly assessments** (board, minutes 2026-09-18). That order comes
+from the association's adopted collection policy, which makes it a constraint on this ledger
+rather than a preference — a naive assessments-first application would put the site at odds with
+the association's own policy. Balance-forward is what keeps the first slice consistent with it:
+because no entry claims to settle another, the ledger asserts no allocation at all, and no surface
+may present one. When open-item accounting is taken up, this order is a fixed input to that
+design, not a choice left to it.
 
 Board charge posting includes a bulk action that posts one assessment to every non-retired Lot in
 one D1 batch under one `operation_key`, so a double submit posts nothing twice.
@@ -116,8 +132,9 @@ a webhook request into zero or more normalized events. It retrieves the current 
 payment by reference, and it lists events since a cursor. **Nothing outside the adapter directory
 imports a provider SDK or names a provider.** A unit scan pins this, in the style of
 `authz-legacy-role.test.ts`. The selected provider is configuration: a `PAYMENTS_PROVIDER` var
-naming the adapter id. Stripe is the recommended first adapter, and selection is pending the board.
-Nothing in this decision depends on it.
+naming the adapter id. Stripe is the first adapter, chosen by the board on 2026-09-18. Because the
+provider stays behind this boundary, that choice is reversible without moving schema, ledger,
+gates, or board surfaces. Nothing in this decision depends on it.
 
 ### A payment is recorded only from a verified provider fact
 
@@ -266,20 +283,40 @@ and `.dev.vars.example`, and deployed with `npm run secrets:put`. Setting them i
 secret change that needs explicit confirmation. The merchant account those secrets belong to is
 the association's, never the site operator's.
 
+The board settled that account's ownership on 2026-09-18: the **treasurer** opens it, in the
+association's name, under its EIN and settling to its bank account — never a personal account.
+Its credentials live in the association's password manager rather than an individual's, and a
+second officer holds recovery access, so a single departure cannot strand it. Until the account
+exists there are no credentials, so this rail can be built to the adapter boundary but not
+integrated; the account itself is an operator step tracked on the private tracker
+(`jwh3times/valleys-at-ashebrook-hoa-ops#34`).
+
 ### Deliberately out of scope
 
 Each of these is **deferred**, not rejected, and each would be a later decision:
 
 - Autopay and subscriptions.
-- Automatic late fees and interest. The board posts `late_fee` charges manually.
+- Automatic late fees and interest. The board posts `late_fee` charges manually. When automatic
+  late fees are taken up, the amount, grace period, and lien threshold must be read from the
+  association's **executed** collection policy rather than invented here: the corpus copy is a
+  scanned form whose fee fields did not survive OCR, and reading the original is tracked on the
+  private tracker (`jwh3times/valleys-at-ashebrook-hoa-ops#33`).
 - Payment plans.
+- An automatic returned-payment charge. The ledger reverses a returned payment on its own, and
+  the board decided (minutes 2026-09-18) that any fee for it is posted as a ledger entry by the
+  board rather than charged automatically.
 - Refunds initiated from the site. A refund made in the provider's dashboard arrives as
-  `funds_withdrawn` and is reversed automatically.
-- Charge-level payment allocation.
+  `funds_withdrawn` and is reversed automatically. The board decided (minutes 2026-09-18) that
+  refunds are authorized by the **treasurer, outside the site**, and recorded as a matching ledger
+  entry, so no money-moving path is added to the admin surface.
+- Charge-level payment allocation — deferred, but no longer open-ended: when it ships it follows
+  the adopted payment-application order above.
 - Emailed statements or dunning notices.
 - Linking fines to ADR 0024 violation records.
 - Any provider fee accounting on the Lot ledger. Provider fees are an association expense, not a
-  Lot charge.
+  Lot charge. The board decided (minutes 2026-09-18) that the association **absorbs** processing
+  fees, with no card surcharge — so no surcharge rules and no counsel review enter this design,
+  and the lever if cost becomes a concern is steering payers to ACH.
 
 ## Consequences
 
@@ -298,25 +335,39 @@ Each of these is **deferred**, not rejected, and each would be a later decision:
 - New structural suites: webhook enumeration, the provider-name scan, ledger insert-only, effect
   idempotency under redelivery and under webhook-plus-pull, and order tolerance.
 
-## Open questions for the board
+## Board decisions (minutes 2026-09-18)
 
-1. **Provider selection.** Stripe is recommended, pending the board's choice. Alternatively, the
-   association's bank may offer free ACH or a lockbox, in which case payments are recorded by board
-   entry or file import, with no online checkout at all.
-2. **Merchant account ownership.** The account must be opened in the association's name, under its
-   EIN, settling to its bank account. Who on the board opens it and holds its credentials?
-3. **Who bears fees.** Does the association absorb processing fees, or are they passed to the
-   payer? Any card surcharge is governed by card-network rules and state law and should go to
-   counsel before it is offered.
-4. **Payment methods offered.** ACH only, or ACH by default with card optional? This affects fees
-   and how long a payment stays pending.
-5. **Partial payments and overpayments.** May a homeowner pay less than the balance, or more
-   (creating a credit)? The design allows both unless the board limits them.
-6. **Returned payments.** What does the association do after an ACH return — a returned-payment
-   charge, and at what amount? The ledger records the reversal automatically. Any fee is a board
-   decision entered as a charge.
-7. **Refund policy.** Refunds of overpayments or credits happen outside the site. Who authorizes
-   them?
+The seven policy questions this ADR left to the board are answered, including the provider choice
+it deliberately left open. They are numbered here as this ADR numbered them; the minutes and the
+answers recorded on #295 number the same seven 6 through 12, continuing ADR 0024's list.
+
+1. **Provider.** Stripe, with ACH as the default method. A bank lockbox was weighed and rejected:
+   it would mean hand-entering every payment indefinitely. The provider remains an adapter, so the
+   choice is reversible.
+2. **Merchant account ownership.** Opened by the treasurer, in the association's name, EIN, and
+   bank account — never a personal account. Credentials in the association's password manager,
+   with a second officer holding recovery access.
+3. **Who bears fees.** The association absorbs processing fees. No card surcharge, so no counsel
+   review on surcharging is needed. The lever if cost becomes a concern is steering payers to ACH.
+4. **Payment methods offered.** ACH by default, card optional.
+5. **Partial payments and overpayments.** Both allowed; an overpayment becomes a credit. **A
+   partial payment applies in the association's adopted order — attorney fees, then fines, then
+   late fees and interest, and lastly assessments.** This is a binding constraint on the ledger,
+   recorded with the ledger design above.
+6. **Returned payments.** No automatic charge. The ledger records the reversal; the board may post
+   a fee as a ledger entry.
+7. **Refunds.** Authorized by the treasurer, outside the site, recorded as a matching ledger
+   entry.
+
+**What is still needed before the fee behaviour can be built.** The executed collection policy
+supplies the payment-application order above, which is legible in the corpus, but its late-fee
+amount, grace period, and lien threshold are not. The corpus copy is a scanned form of processing
+instructions whose checkbox selections and fee fields did not survive OCR, so those figures must be
+read from the executed original before anything implements them. That reading is tracked on the
+private tracker (`jwh3times/valleys-at-ashebrook-hoa-ops#33`). No figure is invented here.
+
+This ADR remains **Proposed**. These answers clear the policy questions and the provider choice;
+acceptance is a separate gate, as is ADR 0024, which this design builds on.
 
 ## Related decisions
 
