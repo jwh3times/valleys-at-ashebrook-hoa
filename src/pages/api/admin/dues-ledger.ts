@@ -9,7 +9,10 @@ import {
   LOT_RECORDS_ENABLED_SQL,
   lotRecordsAvailable,
 } from '../../../server/lot-records/gate';
-import { fetchAdminLotDuesLedger } from '../../../server/lot-records/reads';
+import {
+  fetchAdminLotDuesLedger,
+  fetchAdminLotRecordEvents,
+} from '../../../server/lot-records/reads';
 import {
   isoDateOrError,
   DUES_CHARGE_CATEGORIES,
@@ -46,6 +49,18 @@ export const prerender = false;
 
 const NOT_FOUND = () => new Response('Not found', { status: 404 });
 
+/**
+ * The largest single entry the board can post: $1,000,000.
+ *
+ * Not a policy limit — it is a typo limit, and a type limit. `Number.isInteger`
+ * is true for `1e21`, which is far beyond SQLite's 64-bit INTEGER range, so
+ * such a value lands in the column as a REAL: a float in the one table whose
+ * entire premise is integer cents. Anything a board member actually means to
+ * post is orders of magnitude below this, and a number above it is a slipped
+ * keyboard, so it is refused rather than stored.
+ */
+const MAX_ENTRY_CENTS = 100_000_000;
+
 /** Cents from the body: an integer, present, and non-zero. */
 function centsOrError(
   body: unknown,
@@ -65,6 +80,10 @@ function centsOrError(
   if (typeof raw !== 'number' || !Number.isInteger(raw))
     return fail(`${key} must be a whole number of cents`);
   if (raw === 0) return fail(`${key} cannot be zero`);
+  if (Math.abs(raw) > MAX_ENTRY_CENTS)
+    return fail(
+      `${key} is larger than a single entry may be (${MAX_ENTRY_CENTS} cents) — check the decimal point`,
+    );
   return { ok: true, value: raw };
 }
 
@@ -147,12 +166,83 @@ function entryInsert(input: EntryInput) {
   );
 }
 
+/**
+ * Turn a UNIQUE violation into the answer that is actually true.
+ *
+ * Three unique indexes guard this table, and they mean three different things.
+ * Answering "already posted" for all of them is worse than saying nothing: a
+ * board member who reuses a key from a stale tab for a DIFFERENT charge would
+ * be told their entry was already recorded when no such entry exists anywhere —
+ * reassured, with the money unrecorded. So the index is identified, and a
+ * duplicate operation key is only reported as an idempotent retry when the row
+ * already there really is the same entry.
+ *
+ * An unrecognised constraint is re-thrown rather than guessed at.
+ */
+async function conflictResponse(
+  error: unknown,
+  intended: {
+    lotId: string;
+    kind: string;
+    amountCents: number;
+    operationKey: string;
+  } | null,
+): Promise<Response> {
+  const message = String(error);
+  if (!message.includes('UNIQUE')) throw error;
+
+  if (message.includes('reverses_entry_id'))
+    return new Response(
+      'That entry has already been reversed — an entry is reversed at most once',
+      { status: 409 },
+    );
+  if (message.includes('payment_id'))
+    return new Response(
+      'That payment has already been credited to the ledger',
+      { status: 409 },
+    );
+  if (!message.includes('operation_key')) throw error;
+  if (!intended)
+    return new Response(
+      'This submission was already posted — nothing was posted twice',
+      { status: 409 },
+    );
+
+  // Same key, same lot: is what is already there the same entry, or a
+  // different one wearing a reused key?
+  const existing = await env.DATABASE.prepare(
+    `SELECT kind, amount_cents FROM dues_ledger_entries
+      WHERE operation_key = ? AND lot_id = ?`,
+  )
+    .bind(intended.operationKey, intended.lotId)
+    .first<{ kind: string; amount_cents: number }>();
+  if (
+    existing &&
+    existing.kind === intended.kind &&
+    existing.amount_cents === intended.amountCents
+  )
+    return new Response(
+      'This entry was already posted — nothing was posted twice',
+      { status: 409 },
+    );
+  return new Response(
+    'That operation key has already been used on this lot for a different entry — use a new key',
+    { status: 409 },
+  );
+}
+
 /** Run an insert and its event append as one batch, answering uniformly. */
 async function post(
   statement: D1PreparedStatement,
   recordId: string,
   accountId: string,
   conflict: string,
+  intended: {
+    lotId: string;
+    kind: string;
+    amountCents: number;
+    operationKey: string;
+  } | null = null,
 ): Promise<Response> {
   let applied, logged;
   try {
@@ -161,15 +251,7 @@ async function post(
       eventInsert(recordId, accountId),
     ]);
   } catch (error) {
-    // The duplicate `(operation_key, lot_id)` a double submit produces is a
-    // UNIQUE violation rather than a zero-row no-op, and it means the first
-    // submission already landed — which is success, not a server fault.
-    if (String(error).includes('UNIQUE'))
-      return new Response(
-        'This entry was already posted — nothing was posted twice',
-        { status: 409 },
-      );
-    throw error;
+    return conflictResponse(error, intended);
   }
   if (applied.meta.changes !== 1)
     return new Response(conflict, { status: 409 });
@@ -262,6 +344,12 @@ async function postCharge(body: unknown, accountId: string) {
     id,
     accountId,
     'Lot not found, or lot records are not enabled',
+    {
+      lotId: common.lotId,
+      kind: 'charge',
+      amountCents: amount.value,
+      operationKey: common.operationKey,
+    },
   );
 }
 
@@ -308,6 +396,12 @@ async function postPayment(body: unknown, accountId: string) {
     id,
     accountId,
     'Lot not found, or lot records are not enabled',
+    {
+      lotId: common.lotId,
+      kind: 'payment',
+      amountCents: -amount.value,
+      operationKey: common.operationKey,
+    },
   );
 }
 
@@ -338,6 +432,12 @@ async function postAdjustment(body: unknown, accountId: string) {
     id,
     accountId,
     'Lot not found, or lot records are not enabled',
+    {
+      lotId: common.lotId,
+      kind: 'adjustment',
+      amountCents: amount.value,
+      operationKey: common.operationKey,
+    },
   );
 }
 
@@ -350,6 +450,15 @@ async function postAdjustment(body: unknown, accountId: string) {
  * reversal may not itself be reversed. "Already reversed" is left to the
  * UNIQUE index on `reverses_entry_id`, which is the only form of it that
  * survives two requests racing.
+ *
+ * The amount is derived in SQL, so it is deliberately NOT subject to
+ * `MAX_ENTRY_CENTS`: a reversal must match its original exactly, and a
+ * provider-sourced entry may one day be larger than the board's typo cap.
+ *
+ * **Only a board-entered row is reversible here.** A provider-sourced payment
+ * is undone by its own `funds_withdrawn` event (ADR 0025), and that path needs
+ * the one `reverses_entry_id` slot the UNIQUE index allows — a board reversal
+ * would occupy it and leave a real ACH return with nowhere to write its effect.
  */
 async function reverse(body: unknown, accountId: string) {
   const targetId = stringField(body, 'entryId');
@@ -378,6 +487,7 @@ async function reverse(body: unknown, accountId: string) {
        FROM dues_ledger_entries original
       WHERE original.id = ?
         AND original.kind <> 'reversal'
+        AND original.source = 'board'
         AND ${LOT_RECORDS_ENABLED_SQL}`,
   ).bind(
     id,
@@ -394,7 +504,7 @@ async function reverse(body: unknown, accountId: string) {
     insert,
     id,
     accountId,
-    'That entry cannot be reversed — it does not exist, is itself a reversal, or lot records are not enabled',
+    'That entry cannot be reversed — it does not exist, is itself a reversal, came from the payment provider, or lot records are not enabled',
   );
 }
 
@@ -402,11 +512,17 @@ async function reverse(body: unknown, accountId: string) {
  * One assessment posted to every non-retired lot, in one statement, under ONE
  * operation key.
  *
- * The key is shared on purpose: re-submitting the same bulk post collides per
- * lot and writes nothing, which is what makes a double click safe on the one
- * action that touches every home at once. Row ids come from SQLite rather than
- * from a loop in TypeScript, so this stays a single statement — a partially
- * posted assessment would be worse than a failed one.
+ * The key is shared on purpose: re-submitting the same bulk post writes
+ * nothing for the lots that already have it, which is what makes a double
+ * click safe on the one action that touches every home at once. It does still
+ * reach a lot created since — "every non-retired lot has this assessment" is
+ * the state the action asserts, not "this ran once".
+ *
+ * Row ids come from SQLite rather than from a loop in TypeScript, so this
+ * stays one statement: a partially posted assessment would be worse than a
+ * failed one. They are `randomblob` hex rather than the `crypto.randomUUID()`
+ * every other row here carries — a deliberate difference, since SQL is where
+ * they have to be generated.
  */
 async function postBulkAssessment(body: unknown, accountId: string) {
   const effectiveDay = stringField(body, 'effectiveDay');
@@ -436,45 +552,64 @@ async function postBulkAssessment(body: unknown, accountId: string) {
   const key = operationKeyOrError(body);
   if (!key.ok) return key.res;
 
-  let result;
-  try {
-    result = await env.DATABASE.prepare(
+  // ON CONFLICT DO NOTHING rather than letting the UNIQUE raise: re-sending a
+  // bulk post must be safe, and a Lot CREATED since the first post should
+  // still receive the assessment. Raising would refuse the whole statement and
+  // leave that new Lot silently without it, reported as "already posted".
+  const [inserted, logged] = await env.DATABASE.batch([
+    env.DATABASE.prepare(
       `INSERT INTO dues_ledger_entries ${ENTRY_COLUMNS}
        SELECT lower(hex(randomblob(16))), properties.id, 'charge', ?, ?, ?,
               ?, NULL, NULL, 'board', NULL, NULL, ?, ?, ?
          FROM properties
         WHERE properties.retired_at IS NULL
-          AND ${LOT_RECORDS_ENABLED_SQL}`,
-    )
-      .bind(
-        amount.value,
-        effectiveDay,
-        description,
-        category,
-        accountId,
-        Date.now(),
-        key.value,
-      )
-      .run();
-  } catch (error) {
-    if (String(error).includes('UNIQUE'))
-      return new Response(
-        'This assessment was already posted — nothing was posted twice',
-        { status: 409 },
-      );
-    throw error;
-  }
+          AND ${LOT_RECORDS_ENABLED_SQL}
+       ON CONFLICT (operation_key, lot_id) DO NOTHING`,
+    ).bind(
+      amount.value,
+      effectiveDay,
+      description,
+      category,
+      accountId,
+      Date.now(),
+      key.value,
+    ),
+    // One event per entry, in the same batch, matched by the shared key. ADR
+    // 0024 asks for an event per create and does not exempt a bulk one: the
+    // board's per-entry history would otherwise be populated for hand-entered
+    // rows and empty for bulk-posted ones, which a board member reading one
+    // Lot's history would read as "nobody recorded this".
+    //
+    // The `changes() = 1` guard the single-entry path uses does not generalise
+    // to N rows, so this selects the entries by their key instead — and it is
+    // restricted to rows with no event yet, so a re-post that inserts one new
+    // Lot logs that Lot only.
+    env.DATABASE.prepare(
+      `INSERT INTO lot_record_events
+         (id, record_type, record_id, action, acting_account_id, reason_code, recorded_at)
+       SELECT lower(hex(randomblob(16))), 'dues_ledger_entries', entry.id,
+              'created', ?, NULL, ?
+         FROM dues_ledger_entries entry
+        WHERE entry.operation_key = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM lot_record_events existing
+            WHERE existing.record_type = 'dues_ledger_entries'
+              AND existing.record_id = entry.id
+          )`,
+    ).bind(accountId, Date.now(), key.value),
+  ]);
 
-  const posted = result.meta.changes;
+  const posted = inserted.meta.changes;
   if (posted === 0)
     return new Response(
-      'Nothing was posted — there are no active lots, or lot records are not enabled',
+      'Nothing was posted — this assessment is already on every active lot, or there are no active lots, or lot records are not enabled',
       { status: 409 },
     );
-  // Deliberately no `lot_record_events` row per entry here. The log's subject
-  // is one record, and a bulk post would write one row per lot for an act the
-  // board took once; the shared `operation_key` is what ties those entries
-  // together, and it is on every one of them.
+  if (logged.meta.changes !== posted)
+    return new Response(
+      'The assessment was posted, but its events were not logged — contact an administrator',
+      { status: 500 },
+    );
   return Response.json({ posted }, { status: 201 });
 }
 
@@ -484,6 +619,17 @@ export const GET: APIRoute = async ({ request, locals }) => {
   if (!(await lotRecordsAvailable(env))) return NOT_FOUND();
 
   const url = new URL(request.url);
+  // Presence, not truthiness: `?events=` with no value must not fall through
+  // to the whole ledger.
+  if (url.searchParams.has('events')) {
+    const recordId = url.searchParams.get('events') ?? '';
+    if (!recordId)
+      return new Response('events requires an entry id', { status: 400 });
+    return Response.json(
+      await fetchAdminLotRecordEvents(env, 'dues_ledger_entries', recordId),
+    );
+  }
+
   const lotId = url.searchParams.get('lotId') ?? undefined;
   return Response.json(await fetchAdminLotDuesLedger(env, lotId));
 };
