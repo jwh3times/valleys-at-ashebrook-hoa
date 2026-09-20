@@ -91,6 +91,12 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   in `.astro` files, islands, and unit tests.
 - `src/lib/format.ts` contains shared formatting helpers, including `associationDateIso` for the
   `America/New_York` proxy cutoff, unit-tested in `format.test.ts`.
+- `src/lib/lot-records.ts` (#291, ADR 0024) is a pure module holding Lot Record display vocabulary
+  — `LOT_VIOLATION_CATEGORY_LABELS`, `LOT_VIOLATION_STATUS_LABELS`, `LOT_RECORD_REASON_LABELS`, and
+  `LOT_RECORD_EVENT_LABELS` — keyed by their `src/lib/types.ts` unions rather than `string`, so an
+  added category fails the build here instead of rendering raw. Shared by the admin
+  `LotViolationsManager` panel and the homeowner `/lot-records` page, deliberately, so the two
+  surfaces cannot word the same category differently.
 - `src/lib/auth-client.ts` contains the Better Auth browser client.
 
 ## Server code (`src/server/`)
@@ -302,19 +308,26 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   moved out of `roster/lookup.ts` when the member surfaces left the legacy roster — it is the only
   caller left) and `verification/rate-limit.ts` holds the shared KV throttles
   both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
-- `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3 — the
-  homeowner-facing surface still does not exist): `gate.ts` exports
-  `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment) and
-  `lotRecordsAvailable(env)` (the read-time check, now called by `/api/admin/lot-violations`), both
-  requiring `officialMode` AND `lotRecordsEnabled` fail-closed. `reads.ts` holds the first Lot
-  Record type's reads: `fetchMemberLotViolations`/`fetchMemberLotViolation` take a `personId`
-  (never a caller-supplied lot list) and embed `roster/authority.ts`'s `lotAuthorityCoversRecordDay`
-  in their `WHERE` clause, so a row the caller may not read is `null`/absent rather than filtered
-  after the fact — these two still have no caller, and their `MemberLotViolation` return shape lives
-  here rather than in `src/lib/types.ts`, deliberately: it never selects `internal_note`, unlike the
-  admin `LotViolationDetail` shape in `src/lib/types.ts` that does; keeping the two apart means an
-  admin-only field can never leak by way of a shared type. `fetchAdminLotViolations`/
-  `fetchAdminLotRecordEvents` are unscoped and board-only by construction, and are now called by
+- `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3, and
+  slice 4 completed the feature with the homeowner-facing `/lot-records` page): `gate.ts` exports
+  `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment),
+  `lotRecordsAvailable(env)` (the read-time check, called by `/api/admin/lot-violations`), and
+  `lotRecordsVisible(site)` (the same answer for a caller that already holds a `SiteSettings` —
+  `/lot-records` calls it directly off `Astro.locals.site` rather than re-fetching settings; the
+  former now delegates to it), all requiring `officialMode` AND `lotRecordsEnabled` fail-closed.
+  `reads.ts` holds the first Lot Record type's reads: `fetchMemberLotViolations`/
+  `fetchMemberLotViolation` take a `personId` (never a caller-supplied lot list) and embed
+  `roster/authority.ts`'s `lotAuthorityCoversRecordDay` in their `WHERE` clause, so a row the caller
+  may not read is `null`/absent rather than filtered after the fact; their `MemberLotViolation`
+  return shape lives here rather than in `src/lib/types.ts`, deliberately: it never selects
+  `internal_note`, unlike the admin `LotViolationDetail` shape in `src/lib/types.ts` that does;
+  keeping the two apart means an admin-only field can never leak by way of a shared type. Both
+  reads, and the new `fetchMemberLotAddresses(env, personId, associationDay)` (the id-to-address
+  map `/lot-records` renders against, holding no other roster PII), first resolve the caller's
+  Person one hop through `COALESCE(consolidated_into_party_id, id)` via an internal `me` CTE,
+  matching `derive.ts`'s `LOT_SQL` — see the consolidation-canonicalization note in
+  [`roster-and-access.md`](./roster-and-access.md#lot-authority). `fetchAdminLotViolations`/
+  `fetchAdminLotRecordEvents` are unscoped and board-only by construction, and are called by
   `/api/admin/lot-violations`'s `GET` (see [`http-endpoints.md`](./http-endpoints.md)). This is a
   separate scoping axis from `content/reads.ts`'s content tier — see
   [`data-model.md`](./data-model.md) and [`roster-and-access.md`](./roster-and-access.md).

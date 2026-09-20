@@ -460,12 +460,17 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Anthropic answer-generation step); the resulting index text is un-pseudonymized and board-only,
   consistent with the non-tier-aware index described above.
 - **Lot Records never reach the AI Search index or an assistant answer.** Lot Records (ADR 0024,
-  #291 — a board-only data-entry API and its admin screen exist as of slices 2-3, gated behind two
-  default-off flags, and no homeowner-facing surface exists yet) are not documents: they never enter
-  `documents`, never reach R2 under `documents/` or `rag/`, and so can never surface through the
-  non-tier-aware index described above. `test/unit/lot-records-boundaries.test.ts` statically scans
-  every module under `src/server/ai/` and the document-writing admin routes for any reference to a
-  Lot Record table or Drizzle identifier and fails the build on one.
+  #291 — a board-only data-entry API and its admin screen (slices 2-3), plus the homeowner-facing
+  `/lot-records` page (slice 4) that completes the feature, all gated behind two default-off flags)
+  are not documents: they never enter `documents`, never reach R2 under `documents/` or `rag/`, and
+  so can never surface through the non-tier-aware index described above. `test/unit/lot-records-boundaries.test.ts`
+  statically scans every module under `src/server/ai/` and the document-writing admin routes for any
+  reference to a Lot Record table or Drizzle identifier and fails the build on one.
+- **`/lot-records` is server-rendered and marked `private, no-store`.** Like the ballot-receipt
+  renders on `/elections`, it is the most caller-specific HTML on the site — one Lot's own
+  enforcement records — so its response must never be cacheable if a zone cache rule is added
+  later. With either gating flag off, or for a caller who lacks the `member` capability, it answers
+  the generic 404 rather than 403, consistent with the rest of the site's hidden-record behavior.
 
 ## Automated safeguards
 

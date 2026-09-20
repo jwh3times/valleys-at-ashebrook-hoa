@@ -496,6 +496,30 @@ deploys and is not reset by a new build. Before the first production enablement:
 This rollout uses the existing D1 site setting and standard deployment steps; it adds no Cloudflare
 resource, binding, or secret.
 
+## Lot Records Rollout
+
+Lot Records is a separate, default-off gate (`lotRecordsEnabled`, ADR 0024, #291) for a per-lot
+record family — enforcement records today, more record types later. Both **Official Mode** and
+**Lot Records** must be on, each by its own toggle in `/admin` -> **Site Settings**, before the
+board's data entry becomes visible to homeowners at `/lot-records`. Like Official Mode and Live
+Voting, each flip is its own audited transition, independent of the rest of the settings form, and
+is recorded in `setting_changes`.
+
+Turning **Lot Records** on publishes every record already entered for every lot at once — there is
+no per-record or per-lot publish step — to whoever currently holds that lot. Before enabling it in
+production:
+
+- [ ] Have the board review the enforcement records already entered through the admin **Lot
+      records** panel for accuracy, since enabling the flag makes all of them readable
+      immediately, not just new ones.
+- [ ] Confirm the deployed revision passed CI and Lot Records is still off after deployment.
+- [ ] In a non-production environment, verify a homeowner sees only their own lot's records (and a
+      co-owner or Representative sees the same list), a former owner sees nothing, and the
+      `/lot-records` page 404s while either flag is off.
+
+This rollout uses the existing D1 site setting and standard deployment steps; it adds no Cloudflare
+resource, binding, or secret.
+
 ## Public Architecture
 
 See [AGENTS.md](./AGENTS.md) for the architecture overview, [docs/agents/](./docs/agents/) for
