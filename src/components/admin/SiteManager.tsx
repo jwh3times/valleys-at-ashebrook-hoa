@@ -24,6 +24,10 @@ const GATE_COPY: Record<SiteGateKey, { label: string; help: string }> = {
     label: 'Live voting',
     help: 'Enables homeowner election ballots and member-motion votes. Turning this off pauses every open vote without closing it or deleting received votes.',
   },
+  lotRecordsEnabled: {
+    label: 'Lot records',
+    help: 'Publishes each lot’s own private records — dues balances and violations — to the people who hold that lot, and opens the board’s data entry for them. Official mode must be on as well. Turn this on only once the records are loaded and checked: a homeowner reading their own balance is the point, and a wrong one is worse than none.',
+  },
 };
 
 export default function SiteManager() {

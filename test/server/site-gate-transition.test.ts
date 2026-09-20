@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings, settingChanges } from '../../src/server/db/schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
-import { normalizeSiteSettings } from '../../src/lib/types';
+import { normalizeSiteSettings, type SiteGateKey } from '../../src/lib/types';
 import { legacyAuthContext } from '../../src/server/authz/context';
 import { POST } from '../../src/pages/api/admin/site';
 
@@ -51,7 +51,7 @@ async function seedSite(gates: {
     });
 }
 
-async function storedGate(key: 'officialMode' | 'liveVotingEnabled') {
+async function storedGate(key: SiteGateKey) {
   const [row] = await getDb(env)
     .select()
     .from(settings)
@@ -152,9 +152,29 @@ describe('POST /api/admin/site { action: "setGate" }', () => {
     expect(await changeRows()).toHaveLength(0);
   });
 
-  it('refuses an unknown key with 400 and writes nothing', async () => {
+  it('refuses a settings key that is not a gate with 400 and writes nothing', async () => {
     await seedSite({ officialMode: false, liveVotingEnabled: false });
 
+    // `siteName` is a real settings field, which is the sharper case: this
+    // route swaps GATES, and the presentation fields keep travelling through
+    // the whole-blob `PUT`. (This case used to name `lotRecordsEnabled` as its
+    // unknown key — ADR 0024's flag, which #291 has since added to
+    // `SITE_GATE_KEYS`, so it is now a gate like any other and is exercised
+    // below.)
+    const res = await post(
+      { action: 'setGate', key: 'siteName', expected: false, value: true },
+      board,
+    );
+    expect(res.status).toBe(400);
+    expect(await changeRows()).toHaveLength(0);
+  });
+
+  it('swaps lotRecordsEnabled, the gate ADR 0024 added, through the same path', async () => {
+    await seedSite({ officialMode: false, liveVotingEnabled: false });
+
+    // The seeded blob predates the key entirely, which is the case the CAS's
+    // COALESCE exists for: an absent gate reads as `false` rather than as a
+    // mismatch, so the first transition is not stuck at 409 forever.
     const res = await post(
       {
         action: 'setGate',
@@ -164,8 +184,13 @@ describe('POST /api/admin/site { action: "setGate" }', () => {
       },
       board,
     );
-    expect(res.status).toBe(400);
-    expect(await changeRows()).toHaveLength(0);
+    expect(res.status).toBe(204);
+    expect(await storedGate('lotRecordsEnabled')).toBe(true);
+    const rows = await changeRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe('lotRecordsEnabled');
+    expect(rows[0].oldValue).toBe('false');
+    expect(rows[0].newValue).toBe('true');
   });
 
   it('refuses non-boolean expected/value with 400', async () => {

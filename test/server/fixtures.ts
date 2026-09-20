@@ -20,6 +20,8 @@ import {
   documents,
   announcements,
   settings,
+  lotViolations,
+  lotRecordEvents,
   reports,
   resolutions,
   elections,
@@ -149,6 +151,11 @@ export async function truncateAll() {
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
+  // ADR 0024 Lot Records cite `properties` with RESTRICT, so they clear before
+  // it; `lot_record_events` cites nothing (its subject is (type, id) with no
+  // FK) but belongs with the records it logs.
+  await db.delete(lotRecordEvents);
+  await db.delete(lotViolations);
   // Roster: links and verifications cite properties.
   await db.delete(propertyVerifications);
   await db.delete(manualApprovalQueue);

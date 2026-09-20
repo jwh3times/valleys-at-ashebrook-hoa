@@ -185,3 +185,17 @@ _Avoid_: Board bootstrap, permanent backdoor
 **Access Event**:
 An immutable account of a privileged access grant, revocation, or denied attempt, including the acting Account or automatic cause and when the event occurred. Automatic consequences remain linked to the initiating change.
 _Avoid_: Access change, mutable audit row
+
+## Lot records
+
+**Lot Record**:
+A record whose audience is the parties holding Lot Authority over one Lot, plus Board Access — a dues balance or a violation, not a shared association document. Its audience is the Lot, never a named Person: co-owners and an Organization's Representatives all see the same record, and nothing on this surface can be addressed to one of them privately. Access follows the roster on every request rather than a stored permission, so it begins and ends with Lot Authority; detail is limited to records dated within the reader's own period of authority.
+_Avoid_: Owner record, homeowner data, private tier, fourth tier
+
+**Lot Record Event**:
+An immutable account of a Lot Record being created, moved between states, or voided, recording the acting Account, the reason, and when. Reading a Lot Record is not an event; a bulk export of Lot Records is.
+_Avoid_: Record history, mutable audit row
+
+**Voided Lot Record**:
+A Lot Record recorded in error and therefore never true. It is preserved and remains visible to the Board, and it disappears from the Lot's own surface; nothing about a Lot Record is hard-deleted, and a correction that is not an error is a new record rather than an edit of the old one.
+_Avoid_: Deleted record, closed record

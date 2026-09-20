@@ -7,6 +7,43 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-09-20
+
+### Added
+
+- **The groundwork for a lot's own private records — dues balances and
+  violations — is in place, and nothing about it is switched on.** A record that
+  belongs to one lot rather than to the association has a different audience
+  from anything the site has held before: not a sensitivity level that every
+  member shares, but the people who hold that one lot, decided from the
+  ownership roster on every request. This release adds the database tables for
+  the first record type, the module that reads them, and a new **Lot records**
+  switch in Site Settings that is off and does nothing yet. No page, no admin
+  screen, and no API can reach any of it.
+
+  What the reading rules will be, once there is something to read: co-owners and
+  an organization's representatives all see the same records, because the
+  audience is the lot and not a named person. Detail is limited to the reader's
+  own period of ownership, so a buyer sees the lot's running balance but not the
+  seller's itemized history, and someone who sells loses access at transfer. A
+  record entered in error is voided rather than deleted — it stays visible to
+  the board and disappears from the homeowner's view. None of these records can
+  reach the AI assistant's search index, which is enforced by a test rather than
+  by a convention.
+
+  The **Lot records** switch will require official mode to be on as well, and
+  both must be on for anything to appear. It travels through the same audited,
+  one-at-a-time path the official-mode and live-voting switches use, so turning
+  it on will leave a record of who did it and when. Turning it on before the
+  records are loaded and checked would show homeowners wrong balances, which is
+  worse than showing none (ADR 0024, #291).
+
+### Fixed
+
+- The site-settings save path's test coverage now derives from the list of
+  feature switches rather than naming them, so a switch added later is covered
+  against a stale browser tab reverting it from the moment it exists.
+
 ## [1.2.5] - 2026-09-20
 
 ### Changed

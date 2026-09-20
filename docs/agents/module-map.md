@@ -288,11 +288,26 @@ boolean`.
   `hasEverHeldLotAuthority`, `fetchLotAuthorityKeys`) and as the raw-SQL `lotAuthorityExists` fragment the casting
   predicates embed; a `day` of `null` asks "did this authority EVER exist", which is what lets the
   board's pickers still offer a former owner for a past occasion, while proxy use checks the
-  meeting or election's own Association Day. `verification/property.ts` is the unchanged-shape legacy backend (minus its
+  meeting or election's own Association Day. `lotAuthorityCoversRecordDay` (#291, ADR 0024) shares
+  `lotAuthorityExists`'s builder and additionally bounds the result to records dated on or after the
+  start of the caller's own period of authority — the read condition Lot Records need and Lot
+  Authority itself does not; see the `lot-records/` entry below.
+  `verification/property.ts` is the unchanged-shape legacy backend (minus its
   three retired auto-enqueue paths, and now holding the `getActiveOwnersForProperty` reader that
   moved out of `roster/lookup.ts` when the member surfaces left the legacy roster — it is the only
   caller left) and `verification/rate-limit.ts` holds the shared KV throttles
   both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
+- `lot-records/` (#291, ADR 0024; dark — no route or page calls it yet): `gate.ts` exports
+  `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment) and
+  `lotRecordsAvailable(env)` (the read-time check), both requiring `officialMode` AND
+  `lotRecordsEnabled` fail-closed. `reads.ts` holds the first Lot Record type's reads:
+  `fetchMemberLotViolations`/`fetchMemberLotViolation` take a `personId` (never a caller-supplied
+  lot list) and embed `roster/authority.ts`'s `lotAuthorityCoversRecordDay` in their `WHERE` clause,
+  so a row the caller may not read is `null`/absent rather than filtered after the fact;
+  `fetchAdminLotViolations`/`fetchAdminLotRecordEvents` are unscoped and board-only by construction,
+  reachable only from a `requireBoard`-gated route. This is a separate scoping axis from
+  `content/reads.ts`'s content tier — see [`data-model.md`](./data-model.md) and
+  [`roster-and-access.md`](./roster-and-access.md).
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible

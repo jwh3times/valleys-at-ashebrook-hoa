@@ -285,6 +285,54 @@ export function lotAuthorityExists(
   lot: SqlRef,
   day: string,
 ): AuthoritySql {
+  return buildAuthoritySql(person, lot, day);
+}
+
+/**
+ * The same predicate, additionally bounded to records dated on or after the
+ * start of the authority that grants it — ADR 0024's second read condition for
+ * Lot Records (#291).
+ *
+ * A buyer holds Lot Authority today, so `lotAuthorityExists` already answers
+ * yes for them; what they may see is a narrower question. Detail is limited to
+ * the caller's OWN period, so a new owner reads nothing the seller's period
+ * produced. `effectiveDay` is the record's Association Day, usually a column
+ * reference into the Lot Record table being read.
+ *
+ * A direct owner's period starts at their Ownership's `start_day`. A
+ * Representative's starts at the LATER of the Representation's and the
+ * Organization's Ownership `start_day`, since neither alone confers authority.
+ *
+ * The two branches read a NULL `start_day` differently, and the difference is
+ * the "later of the two" rule rather than an inconsistency. ADR 0022 permits a
+ * NULL Ownership start as legacy history, meaning the start is unknown rather
+ * than recent: in the owner branch that opens detail from the beginning, since
+ * there is no other bound. In the Representation branch there IS another bound
+ * — `representations.start_day` is NOT NULL — so `COALESCE(..., '')` makes an
+ * unknown Organization start defer to the Representative's own start rather
+ * than widen past it. `''` sorts before every `YYYY-MM-DD` day, so the MAX
+ * picks the Representation's start, and the expression can never go NULL and
+ * silently deny the whole branch.
+ *
+ * This shares one builder with `lotAuthorityExists` rather than restating the
+ * branches, for the reason this module exists: two expressions of Lot Authority
+ * that can drift are worse than one that is harder to read.
+ */
+export function lotAuthorityCoversRecordDay(
+  person: SqlRef,
+  lot: SqlRef,
+  day: string,
+  effectiveDay: SqlRef,
+): AuthoritySql {
+  return buildAuthoritySql(person, lot, day, effectiveDay);
+}
+
+function buildAuthoritySql(
+  person: SqlRef,
+  lot: SqlRef,
+  day: string,
+  effectiveDay?: SqlRef,
+): AuthoritySql {
   const binds: unknown[] = [];
   const ref = (operand: SqlRef): string => {
     if ('column' in operand) return operand.column;
@@ -305,7 +353,12 @@ export function lotAuthorityExists(
             AND authority_own.lot_id = ${ref(lot)}
             AND authority_own.voided_at IS NULL
             AND (authority_own.start_day IS NULL OR authority_own.start_day <= ${dayRef()})
-            AND (authority_own.end_day IS NULL OR ${dayRef()} < authority_own.end_day)
+            AND (authority_own.end_day IS NULL OR ${dayRef()} < authority_own.end_day)${
+              effectiveDay === undefined
+                ? ''
+                : `
+            AND (authority_own.start_day IS NULL OR ${ref(effectiveDay)} >= authority_own.start_day)`
+            }
         )
         OR EXISTS (
           SELECT 1 FROM representations authority_rep
@@ -327,7 +380,12 @@ export function lotAuthorityExists(
                   AND authority_rl.lot_id = ${ref(lot)}
                   AND authority_rl.voided_at IS NULL
               )
-            )
+            )${
+              effectiveDay === undefined
+                ? ''
+                : `
+            AND ${ref(effectiveDay)} >= MAX(COALESCE(authority_org_own.start_day, ''), authority_rep.start_day)`
+            }
         )
       )`;
   return { sql: text, binds };
