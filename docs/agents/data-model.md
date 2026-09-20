@@ -238,10 +238,12 @@ Board data entry landed in #291 slice 2 (v1.2.7):
 `POST /api/admin/lot-violations` creates and transitions `lot_violations` rows and appends their
 `lot_record_events`, and `GET /api/admin/lot-violations` is the board's unscoped read — see
 [`http-endpoints.md`](./http-endpoints.md). Slice 3 (v1.2.8) added the board's own screen, the
-admin `LotViolationsManager` panel, over that same route — see
-[`module-map.md`](./module-map.md). The homeowner-facing surface (a member page or API route
-reading `fetchMemberLotViolations`/`fetchMemberLotViolation`) still does not exist, and both flags
-still default off, so the family stays unreachable in production either way.
+admin `LotViolationsManager` panel, over that same route — see [`module-map.md`](./module-map.md).
+Slice 4 (v1.2.9, ADR 0024) completed the feature with the homeowner-facing surface: the
+server-rendered `/lot-records` page reads `fetchMemberLotViolations` (scoped by `personId` and
+`lotAuthorityCoversRecordDay`, never by a caller-supplied lot list) and the address-only
+`fetchMemberLotAddresses`. Both flags still default off, so the family stays unreachable in
+production until an operator turns `lotRecordsEnabled` on.
 
 `lot_violations` has `lot_id` referencing `properties(id)` on delete-restrict (the same
 outlive-an-editing-mistake action `ballots`/`proxies`/`member_votes` use), `category` (CHECK-bounded

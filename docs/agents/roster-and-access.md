@@ -124,15 +124,31 @@ recorded. See [`voting-and-ballots.md`](./voting-and-ballots.md).
 `lotAuthorityExists` has a period-bounded sibling, `lotAuthorityCoversRecordDay` — same builder,
 additionally requiring the record's own date to fall on or after the start of the authority that
 grants it, so a buyer who holds Lot Authority today reads nothing the seller's period produced. It
-backs Lot Records (#291, ADR 0024 — board data entry shipped in slice 2 and its own admin screen in
-slice 3, the homeowner surface still does not exist; see [`data-model.md`](./data-model.md) and
-`src/server/lot-records/` in [`module-map.md`](./module-map.md)), which are a **second scoping axis
-alongside the content tier**: a Lot Record's audience is decided by its `lot_id` joined against the
-roster, not by `visibility`, and it is gated separately — a Lot Record surface requires both
-`officialMode` and the new default-off `lotRecordsEnabled` site gate. A Lot Record table carries no
-`visibility` column at all — putting the two axes on one column would let a future tier edit
-publish one Lot's record to every member — so content-tier visibility and Lot Authority scoping
-never interact for these tables.
+backs Lot Records (#291, ADR 0024 — board data entry shipped in slice 2, its own admin screen in
+slice 3, and the homeowner-facing `/lot-records` page in slice 4, completing the feature; see
+[`data-model.md`](./data-model.md) and `src/server/lot-records/` in
+[`module-map.md`](./module-map.md)), which are a **second scoping axis alongside the content
+tier**: a Lot Record's audience is decided by its `lot_id` joined against the roster, not by
+`visibility`, and it is gated separately — a Lot Record surface requires both `officialMode` and
+the default-off `lotRecordsEnabled` site gate. A Lot Record table carries no `visibility` column at
+all — putting the two axes on one column would let a future tier edit publish one Lot's record to
+every member — so content-tier visibility and Lot Authority scoping never interact for these
+tables.
+
+**Consolidation canonicalization is asymmetric on purpose.** `derive.ts`'s `LOT_SQL` resolves the
+caller's Person one hop through `COALESCE(consolidated_into_party_id, id)` before computing
+`lotIds`, because consolidation only MARKS a duplicate Party — it moves no Ownership or
+Representation row — so an account linked to a duplicate would otherwise be told (via `lotIds`)
+that it holds the survivor's Lots while every per-Person read still keyed on the duplicate's own
+id. `src/server/lot-records/reads.ts`'s homeowner reads (`fetchMemberLotViolations`,
+`fetchMemberLotViolation`, `fetchMemberLotAddresses`) repeat that same one-hop canonicalization in
+an internal `me` CTE before scoping, because without it a duplicate-linked account would be shown
+none of the records for the Lots `lotIds` just told it it holds — an empty page indistinguishable
+from a Lot with nothing recorded, the worst answer that surface can give. `roster/authority.ts`
+deliberately does **not** canonicalize: there the question is "who acted" (a proxy grantor, a
+ballot caster, a Board Term holder), and the Party named on that historical record is the answer,
+duplicate or not. Canonicalize only when the question is "which Person is this **account**" —
+`LOT_SQL` and the Lot Records homeowner reads both ask that; `roster/authority.ts` never does.
 
 ## Writing to the roster
 

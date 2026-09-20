@@ -1,4 +1,7 @@
-import { lotAuthorityCoversRecordDay } from '../roster/authority';
+import {
+  lotAuthorityCoversRecordDay,
+  lotAuthorityExists,
+} from '../roster/authority';
 import type {
   LotRecordAction,
   LotRecordType,
@@ -96,6 +99,36 @@ const toAdminViolation = (r: ViolationRow): AdminLotViolation => ({
 });
 
 /**
+ * Resolves the caller's Person one hop through a consolidation, exactly as
+ * `LOT_SQL`'s `me` CTE does, and is prepended to every homeowner read.
+ *
+ * `AuthContext.personId` is the raw `person_links.person_id`, while the
+ * `lotIds` that decided this caller is a member were computed from
+ * `COALESCE(consolidated_into_party_id, id)`. Consolidation only MARKS the
+ * duplicate — `POST /api/admin/roster-parties` moves no Ownership row — so
+ * without this, an account linked to a duplicate Party would be told it holds
+ * the survivor's Lots and then shown none of their records: an empty page
+ * indistinguishable from a Lot with nothing recorded, which is the worst
+ * answer this surface can give.
+ *
+ * `roster/authority.ts` deliberately does NOT canonicalize, and that is right
+ * for what it answers there — a proxy grantor or a ballot caster IS the Party
+ * named on the record. The canonicalization belongs here, where the question
+ * is instead "which Person is this ACCOUNT", the same question `LOT_SQL` asks.
+ *
+ * One hop only, which the consolidate route enforces by refusing a survivor
+ * that is itself consolidated.
+ */
+const CALLER_PERSON_CTE = `WITH me AS (
+    SELECT COALESCE(pa.consolidated_into_party_id, pa.id) AS party_id
+    FROM parties pa
+    WHERE pa.id = ?
+  )`;
+
+/** How the predicate below refers to that resolved Person. */
+const CALLER_PERSON = { column: '(SELECT party_id FROM me)' } as const;
+
+/**
  * The scoping predicate every homeowner read embeds: the caller holds Lot
  * Authority over the row's Lot today, AND the row is dated on or after the
  * start of that authority.
@@ -107,9 +140,9 @@ const toAdminViolation = (r: ViolationRow): AdminLotViolation => ({
  * to disappear from this surface by construction rather than by everyone
  * remembering a filter.
  */
-function memberViolationScope(personId: string, associationDay: string) {
+function memberViolationScope(associationDay: string) {
   const authority = lotAuthorityCoversRecordDay(
-    { value: personId },
+    CALLER_PERSON,
     { column: 'lot_violations.lot_id' },
     associationDay,
     { column: 'lot_violations.effective_day' },
@@ -134,14 +167,15 @@ export async function fetchMemberLotViolations(
   associationDay: string,
 ): Promise<MemberLotViolation[]> {
   if (!personId) return [];
-  const scope = memberViolationScope(personId, associationDay);
+  const scope = memberViolationScope(associationDay);
   const { results } = await env.DATABASE.prepare(
-    `SELECT ${VIOLATION_COLUMNS}
+    `${CALLER_PERSON_CTE}
+     SELECT ${VIOLATION_COLUMNS}
        FROM lot_violations
       WHERE ${scope.sql}
       ORDER BY effective_day DESC, created_at DESC`,
   )
-    .bind(...scope.binds)
+    .bind(personId, ...scope.binds)
     .all<ViolationRow>();
   return results.map(toMemberViolation);
 }
@@ -159,15 +193,52 @@ export async function fetchMemberLotViolation(
   id: string,
 ): Promise<MemberLotViolation | null> {
   if (!personId) return null;
-  const scope = memberViolationScope(personId, associationDay);
+  const scope = memberViolationScope(associationDay);
   const row = await env.DATABASE.prepare(
-    `SELECT ${VIOLATION_COLUMNS}
+    `${CALLER_PERSON_CTE}
+     SELECT ${VIOLATION_COLUMNS}
        FROM lot_violations
       WHERE id = ? AND ${scope.sql}`,
   )
-    .bind(id, ...scope.binds)
+    .bind(personId, id, ...scope.binds)
     .first<ViolationRow>();
   return row ? toMemberViolation(row) : null;
+}
+
+/**
+ * The addresses of the Lots this caller holds today, keyed by Lot id.
+ *
+ * `content/reads.ts`'s `fetchMemberLots` would answer a similar question, but
+ * it takes a caller-supplied lot array and returns every co-owner's name
+ * alongside — roster PII a Lot Record surface has no use for. This asks the
+ * roster the same way the record reads do, from `personId`, and returns
+ * nothing else.
+ */
+export async function fetchMemberLotAddresses(
+  env: Env,
+  personId: string | null,
+  associationDay: string,
+): Promise<Map<string, string>> {
+  if (!personId) return new Map();
+  // The plain authority question, NOT the period-bounded one: an address is
+  // not a record with a date, and the bound reads `effective_day >=
+  // start_day`, so feeding it a sentinel day would exclude every Lot whose
+  // ownership has a known start.
+  const authority = lotAuthorityExists(
+    CALLER_PERSON,
+    { column: 'properties.id' },
+    associationDay,
+  );
+  const { results } = await env.DATABASE.prepare(
+    `${CALLER_PERSON_CTE}
+     SELECT properties.id AS id, properties.address AS address
+       FROM properties
+      WHERE ${authority.sql}
+      ORDER BY properties.address`,
+  )
+    .bind(personId, ...authority.binds)
+    .all<{ id: string; address: string }>();
+  return new Map(results.map((r) => [r.id, r.address]));
 }
 
 /**

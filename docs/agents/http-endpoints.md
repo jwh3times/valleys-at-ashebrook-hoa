@@ -306,8 +306,9 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   [ADR 0019](../adr/0019-homeowner-writes-official-mode-gate.md).
 - Board data entry for Lot Records, gated on both `officialMode` and the default-off
   `lotRecordsEnabled` (ADR 0024, #291 slice 2, with the admin `LotViolationsManager` panel added in
-  slice 3 — the homeowner-facing surface does not exist yet): `/api/admin/lot-violations` supports
-  `GET`/`POST`. Gate order is board-first, matching the
+  slice 3, and the homeowner-facing `/lot-records` page — a server-rendered page, not an API route —
+  added in slice 4): `/api/admin/lot-violations` supports `GET`/`POST`. Gate order is board-first,
+  matching the
   `/api/admin/*` middleware backstop's own order rather than the flags-then-auth order used
   elsewhere: `requireBoard` (write freeze `503` on mutating verbs, then unauthenticated `401`, then
   non-board `403`), THEN both flags together (`404`, masking existence uniformly since the

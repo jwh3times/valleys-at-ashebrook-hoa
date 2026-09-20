@@ -11,13 +11,20 @@ import { fetchSiteSettings } from '../../lib/content';
 import {
   LOT_RECORD_REASON_CODES,
   LOT_VIOLATION_CATEGORIES,
-  type LotRecordAction,
   type LotRecordEventDetail,
   type LotRecordReasonCode,
   type LotViolationCategory,
   type LotViolationDetail,
   type PropertyWithOwners,
 } from '../../lib/types';
+// Shared with the homeowner page, so the board and the homeowner cannot word
+// the same category differently.
+import {
+  LOT_RECORD_EVENT_LABELS as EVENT_LABELS,
+  LOT_RECORD_REASON_LABELS as REASON_LABELS,
+  LOT_VIOLATION_CATEGORY_LABELS as CATEGORY_LABELS,
+  LOT_VIOLATION_STATUS_LABELS as STATUS_LABELS,
+} from '../../lib/lot-records';
 
 /**
  * The board's Lot Record surface (ADR 0024, #291 slice 3).
@@ -43,35 +50,6 @@ import {
  * without the Lot list.
  */
 
-const CATEGORY_LABELS: Record<LotViolationCategory, string> = {
-  architectural: 'Architectural',
-  maintenance: 'Maintenance',
-  landscaping: 'Landscaping',
-  parking: 'Parking',
-  trash: 'Trash',
-  pets: 'Pets',
-  noise: 'Noise',
-  other: 'Other',
-};
-
-const REASON_LABELS: Record<LotRecordReasonCode, string> = {
-  entered_in_error: 'Entered in error',
-  duplicate: 'Duplicate of another record',
-  superseded: 'Superseded by a later record',
-  homeowner_corrected: 'Homeowner corrected the record',
-  board_decision: 'Board decision',
-  other: 'Other',
-};
-
-const EVENT_LABELS: Record<LotRecordAction, string> = {
-  created: 'Recorded',
-  cured: 'Marked cured',
-  closed: 'Closed',
-  reopened: 'Reopened',
-  voided: 'Voided',
-  edited: 'Corrected',
-};
-
 /** The actions each status offers, in the order a board member wants them. */
 const ACTIONS: Record<
   LotViolationDetail['status'],
@@ -84,13 +62,6 @@ const ACTIONS: Record<
   cured: [{ action: 'close', label: 'Close' }],
   closed: [{ action: 'reopen', label: 'Reopen' }],
   voided: [],
-};
-
-const STATUS_LABELS: Record<LotViolationDetail['status'], string> = {
-  open: 'Open',
-  cured: 'Cured',
-  closed: 'Closed',
-  voided: 'Voided',
 };
 
 const emptyForm = {

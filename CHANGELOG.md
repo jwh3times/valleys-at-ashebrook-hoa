@@ -7,6 +7,36 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-09-20
+
+### Added
+
+- **A homeowner can now see the records kept for their own lot — once the board
+  turns it on.** A new **Lot records** page shows the violations recorded
+  against the lots you hold: what was observed, when, and where it stands. It
+  appears in your account links only when the board has switched the feature
+  on, and the page does not exist at all until then.
+
+  Who sees what follows the ownership record rather than anything the page
+  decides. Everyone who holds a lot sees the same records, whether that is two
+  spouses or a company's representatives — nothing here is addressed to one of
+  them privately. The records shown are the ones from your own period of
+  ownership, so someone who has just bought a home does not read what the
+  previous owner's period produced, and someone who has sold sees nothing. The
+  board's private notes never leave the board's screen, and a record the board
+  voided disappears from your view while staying in theirs.
+
+  Anyone who has not verified their property is pointed at verification rather
+  than shown an empty page, and the page is marked private and uncacheable,
+  because it is the most personal page on the site (ADR 0024, #291).
+
+### Fixed
+
+- **A homeowner whose duplicate record had been merged into another would have
+  seen an empty page** instead of their lot's records — the merge marks the
+  duplicate without moving what it owns, and the page and the sign-in check
+  disagreed about which record was theirs. They now agree.
+
 ## [1.2.8] - 2026-09-20
 
 ### Added

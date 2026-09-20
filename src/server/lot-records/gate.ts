@@ -1,6 +1,10 @@
 import { sql } from 'drizzle-orm';
 import { getSiteSettings } from '../content/settings';
-import { LOT_RECORD_TYPES, type LotRecordType } from '../../lib/types';
+import {
+  LOT_RECORD_TYPES,
+  type LotRecordType,
+  type SiteSettings,
+} from '../../lib/types';
 
 export { LOT_RECORD_TYPES, type LotRecordType };
 
@@ -46,6 +50,16 @@ export const lotRecordsEnabledInDb = sql.raw(LOT_RECORDS_ENABLED_SQL);
  * malformed settings row hides the surface rather than exposing it.
  */
 export async function lotRecordsAvailable(env: Env): Promise<boolean> {
-  const site = await getSiteSettings(env);
+  return lotRecordsVisible(await getSiteSettings(env));
+}
+
+/**
+ * The same answer for a caller that already holds the settings — a page whose
+ * middleware put them on `locals`. One definition of "on", so a third copy of
+ * the flag pair cannot appear in the next surface.
+ */
+export function lotRecordsVisible(
+  site: Pick<SiteSettings, 'officialMode' | 'lotRecordsEnabled'>,
+): boolean {
   return site.officialMode && site.lotRecordsEnabled;
 }

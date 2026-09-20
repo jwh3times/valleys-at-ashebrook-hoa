@@ -42,9 +42,14 @@ const BASE_NAV: NavLink[] = [
 ];
 
 type ModeName = Pick<SiteSettings, 'officialMode' | 'siteName'>;
+/**
+ * The gates the header's account links depend on. Named for voting because
+ * that was its first use; it now carries every flag a member link is gated on,
+ * and a new flag joins it rather than growing a second parameter.
+ */
 export type VotingMode = Pick<
   SiteSettings,
-  'officialMode' | 'liveVotingEnabled'
+  'officialMode' | 'liveVotingEnabled' | 'lotRecordsEnabled'
 >;
 
 /** Primary nav links; the Dues link only appears in official mode. */
@@ -96,7 +101,11 @@ export interface AccountNav {
  */
 export function accountNav(
   auth: AccountNavAuth | null,
-  mode: VotingMode = { officialMode: false, liveVotingEnabled: false },
+  mode: VotingMode = {
+    officialMode: false,
+    liveVotingEnabled: false,
+    lotRecordsEnabled: false,
+  },
 ): AccountNav {
   if (!auth)
     return {
@@ -116,6 +125,15 @@ export function accountNav(
         mode.liveVotingEnabled
           ? [{ href: '/vote', label: 'Vote' }]
           : []),
+        // A board admin who holds a Lot reads that Lot's records on the
+        // homeowner surface like anyone else (ADR 0024) — the page gates on
+        // the `member` capability, which they have. Holding no Lot, they get
+        // no link: the admin panel is where they read every Lot.
+        ...(auth.propertyIds.length > 0 &&
+        mode.officialMode &&
+        mode.lotRecordsEnabled
+          ? [{ href: '/lot-records', label: 'Lot records' }]
+          : []),
       ],
     };
   if (auth.role !== 'homeowner')
@@ -134,6 +152,12 @@ export function accountNav(
       links: [
         { href: '/proxies', label: 'Proxies' },
         ...(mode.liveVotingEnabled ? [{ href: '/vote', label: 'Vote' }] : []),
+        // ADR 0024: the reader's own lot's records. Both flags, like the page
+        // itself, which answers 404 rather than 403 when either is off — so a
+        // link shown while the page is dark would be a link to nothing.
+        ...(mode.lotRecordsEnabled
+          ? [{ href: '/lot-records', label: 'Lot records' }]
+          : []),
       ],
     };
   return { signedIn: true, links: [] };
