@@ -22,6 +22,7 @@ import { people } from './roster-schema';
 // UI all read one list. See its comment for why.
 import {
   LOT_RECORD_ACTIONS,
+  LOT_RECORD_REASON_CODES,
   LOT_RECORD_TYPES,
   LOT_VIOLATION_CATEGORIES,
   LOT_VIOLATION_STATUSES,
@@ -622,8 +623,11 @@ export const lotRecordEvents = sqliteTable(
     recordId: text('record_id').notNull(),
     action: text('action', { enum: LOT_RECORD_ACTIONS }).notNull(),
     actingAccountId: text('acting_account_id').notNull(),
-    /** Why, for a transition or a void. Free of resident-identifying text. */
-    reasonCode: text('reason_code'),
+    /**
+     * Why, for a transition or a void — a bounded code (migration `0035`),
+     * never free text. See `LOT_RECORD_REASON_CODES`.
+     */
+    reasonCode: text('reason_code', { enum: LOT_RECORD_REASON_CODES }),
     recordedAt: integer('recorded_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => [
@@ -639,6 +643,10 @@ export const lotRecordEvents = sqliteTable(
     check(
       'lot_record_events_action_check',
       sql`${t.action} IN ('created', 'cured', 'closed', 'reopened', 'voided', 'edited')`,
+    ),
+    check(
+      'lot_record_events_reason_code_check',
+      sql`${t.reasonCode} IS NULL OR ${t.reasonCode} IN ('entered_in_error', 'duplicate', 'superseded', 'homeowner_corrected', 'board_decision', 'other')`,
     ),
   ],
 );

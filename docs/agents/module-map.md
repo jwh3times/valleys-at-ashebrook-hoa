@@ -297,15 +297,17 @@ boolean`.
   moved out of `roster/lookup.ts` when the member surfaces left the legacy roster — it is the only
   caller left) and `verification/rate-limit.ts` holds the shared KV throttles
   both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
-- `lot-records/` (#291, ADR 0024; dark — no route or page calls it yet): `gate.ts` exports
-  `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment) and
-  `lotRecordsAvailable(env)` (the read-time check), both requiring `officialMode` AND
-  `lotRecordsEnabled` fail-closed. `reads.ts` holds the first Lot Record type's reads:
+- `lot-records/` (#291, ADR 0024; board-only as of slice 2 — the homeowner-facing surface still
+  does not exist): `gate.ts` exports `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the
+  mutation-boundary SQL fragment) and `lotRecordsAvailable(env)` (the read-time check, now called
+  by `/api/admin/lot-violations`), both requiring `officialMode` AND `lotRecordsEnabled`
+  fail-closed. `reads.ts` holds the first Lot Record type's reads:
   `fetchMemberLotViolations`/`fetchMemberLotViolation` take a `personId` (never a caller-supplied
   lot list) and embed `roster/authority.ts`'s `lotAuthorityCoversRecordDay` in their `WHERE` clause,
-  so a row the caller may not read is `null`/absent rather than filtered after the fact;
-  `fetchAdminLotViolations`/`fetchAdminLotRecordEvents` are unscoped and board-only by construction,
-  reachable only from a `requireBoard`-gated route. This is a separate scoping axis from
+  so a row the caller may not read is `null`/absent rather than filtered after the fact — these two
+  still have no caller; `fetchAdminLotViolations`/`fetchAdminLotRecordEvents` are unscoped and
+  board-only by construction, and are now called by `/api/admin/lot-violations`'s `GET` (see
+  [`http-endpoints.md`](./http-endpoints.md)). This is a separate scoping axis from
   `content/reads.ts`'s content tier — see [`data-model.md`](./data-model.md) and
   [`roster-and-access.md`](./roster-and-access.md).
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.

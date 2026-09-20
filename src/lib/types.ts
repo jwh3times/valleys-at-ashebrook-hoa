@@ -167,6 +167,24 @@ export const LOT_VIOLATION_CATEGORIES = [
 export type LotViolationCategory = (typeof LOT_VIOLATION_CATEGORIES)[number];
 
 /**
+ * Why a Lot Record moved state or was voided — a bounded CODE, never free
+ * text. `lot_record_events.reason_code` is read by the board and is kept free
+ * of resident-identifying prose on purpose: a reason typed into a box ends up
+ * naming people, and this column is not covered by Roster Redaction. Detail
+ * that genuinely belongs on the record goes in the record's own board-only
+ * note, which redaction and the read helpers both know about.
+ */
+export const LOT_RECORD_REASON_CODES = [
+  'entered_in_error',
+  'duplicate',
+  'superseded',
+  'homeowner_corrected',
+  'board_decision',
+  'other',
+] as const;
+export type LotRecordReasonCode = (typeof LOT_RECORD_REASON_CODES)[number];
+
+/**
  * A violation's lifecycle. `voided` is the correction path — nothing is
  * hard-deleted; a voided record stays visible to the board and disappears from
  * the homeowner surface. Status moves only through named transitions.

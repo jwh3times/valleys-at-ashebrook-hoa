@@ -438,7 +438,7 @@ describe('board reads', () => {
           recordId: 'v-a',
           action: 'cured',
           actingAccountId: 'board-account',
-          reasonCode: 'homeowner-corrected',
+          reasonCode: 'homeowner_corrected',
           recordedAt: new Date('2026-09-05T12:00:00Z'),
         },
         {

@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   LOT_RECORD_ACTIONS,
+  LOT_RECORD_REASON_CODES,
   LOT_RECORD_TYPES,
   LOT_VIOLATION_CATEGORIES,
   LOT_VIOLATION_STATUSES,
@@ -31,14 +32,6 @@ import {
  */
 
 const SRC = join(process.cwd(), 'src');
-const MIGRATION = join(
-  SRC,
-  'server',
-  'db',
-  'migrations',
-  '0034_lot_records.sql',
-);
-
 /** Table names and their Drizzle identifiers, for the scans below. */
 const LOT_RECORD_TABLES: Record<string, string> = {
   lot_violations: 'lotViolations',
@@ -142,15 +135,56 @@ describe('lot_record_events is append-only', () => {
 });
 
 describe('the Lot Record vocabulary matches the database', () => {
-  const migration = readFileSync(MIGRATION, 'utf8');
+  /**
+   * SQL cannot import TypeScript, so each of these lists is written twice —
+   * once in `src/lib/types.ts` and once as a CHECK — and a drift between them
+   * is a runtime constraint violation on the board's first use of the new
+   * value, not a type error.
+   *
+   * The CHECK to compare against is the one in the migration that most
+   * recently DEFINED it. `0035` rebuilt `lot_record_events` to bound
+   * `reason_code`, so `0034`'s copy of that table no longer describes the live
+   * shape; reading the wrong file is how this suite would keep passing while
+   * checking a table that no longer exists. `definingMigration` finds the last
+   * file that mentions each constraint rather than trusting a hard-coded path,
+   * so the next rebuild moves the target automatically.
+   */
+  const MIGRATIONS = join(SRC, 'server', 'db', 'migrations');
 
-  /** The quoted values of one `IN (...)` list in the migration. */
+  const migrationFiles = readdirSync(MIGRATIONS)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+
+  function definingMigration(constraint: string): string {
+    const defining = migrationFiles.filter((f) =>
+      readFileSync(join(MIGRATIONS, f), 'utf8').includes(
+        `CONSTRAINT "${constraint}"`,
+      ),
+    );
+    if (defining.length === 0)
+      throw new Error(`no migration defines ${constraint}`);
+    return readFileSync(join(MIGRATIONS, defining.at(-1)!), 'utf8');
+  }
+
+  /**
+   * The quoted values of one CHECK's `IN (...)` list.
+   *
+   * Parsed by slicing rather than by a regular expression: the CHECK bodies
+   * differ in shape (`reason_code`'s is `IS NULL OR ... IN (...)`), and a
+   * pattern loose enough for both is a pattern that quietly matches the wrong
+   * thing.
+   */
   function checkValues(constraint: string): string[] {
-    const match = new RegExp(
-      `CONSTRAINT "${constraint}" CHECK\\("[a-z_]+" IN \\(([^)]*)\\)\\)`,
-    ).exec(migration);
-    if (!match) throw new Error(`no CHECK named ${constraint} in ${MIGRATION}`);
-    return match[1].split(',').map((v) => v.trim().replace(/^'|'$/g, ''));
+    const sql = definingMigration(constraint);
+    const at = sql.indexOf(`CONSTRAINT "${constraint}"`);
+    const open = sql.indexOf('IN (', at);
+    const close = sql.indexOf(')', open);
+    if (at < 0 || open < 0 || close < 0)
+      throw new Error(`no IN list on ${constraint}`);
+    return sql
+      .slice(open + 'IN ('.length, close)
+      .split(',')
+      .map((v) => v.trim().replace(/^'|'$/g, ''));
   }
 
   it('bounds lot_violations.category to LOT_VIOLATION_CATEGORIES', () => {
@@ -175,5 +209,22 @@ describe('the Lot Record vocabulary matches the database', () => {
     expect(checkValues('lot_record_events_action_check')).toEqual([
       ...LOT_RECORD_ACTIONS,
     ]);
+  });
+
+  it('bounds lot_record_events.reason_code to LOT_RECORD_REASON_CODES', () => {
+    expect(checkValues('lot_record_events_reason_code_check')).toEqual([
+      ...LOT_RECORD_REASON_CODES,
+    ]);
+  });
+
+  it('reads the rebuild rather than the original table definition', () => {
+    // The guard on the guard: if a later migration rebuilds these tables
+    // again, this is the assertion that notices the target moved.
+    expect(definingMigration('lot_record_events_reason_code_check')).toContain(
+      '__new_lot_record_events',
+    );
+    expect(definingMigration('lot_violations_category_check')).toContain(
+      'CREATE TABLE `lot_violations`',
+    );
   });
 });
