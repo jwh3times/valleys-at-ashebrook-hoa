@@ -1,0 +1,139 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { env } from 'cloudflare:workers';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import { associationDateIso } from '../lib/format';
+import { fetchMemberLotViolations } from '../server/lot-records/reads';
+import { fetchMemberLots } from '../server/content/reads';
+
+/**
+ * A LOT'S OWN RECORDS, READ BY THE PEOPLE WHO HOLD IT (ADR 0024, #291 slice 4).
+ *
+ * This is the first surface where the Lot Record audience faces a real reader,
+ * and the rules it enforces are not the site's usual ones:
+ *
+ * - **The audience is the Lot, not the person.** Co-owners and an
+ *   organization's Representatives see identical records. Nothing here is
+ *   addressed to one of them.
+ * - **Detail stops at the reader's own period.** A buyer does not read what
+ *   the seller's period produced; a former owner reads nothing at all. Both
+ *   fall out of the scoping predicate rather than from anything this page
+ *   decides — it hands `personId` and the Association Day to the read and
+ *   renders what comes back.
+ * - **Off means gone.** With either flag off the page is the generic 404,
+ *   never a 403, so the surface is not advertised.
+ *
+ * Rendered entirely server-side with no client directive, per the rendering
+ * model: the records ship as HTML, and there is nothing here for a client
+ * island to re-fetch or to filter.
+ */
+
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this page is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+
+// Both flags, fail-closed, before anything else (ADR 0024). `officialMode`
+// alone must not publish Lot-level enforcement records.
+if (!site.officialMode || !site.lotRecordsEnabled) {
+  return Astro.rewrite('/404');
+}
+
+const ctx = Astro.locals.authContext ?? null;
+// A capability question, not a rank one: reading a Lot's records needs Lot
+// Authority (`member`), which a board member who owns no Lot does not have —
+// they read every Lot through the admin surface instead.
+const member = ctx !== null && ctx.capabilities.has('member');
+// Under `cutover_mode = legacy` there is no Person to scope by, so nobody
+// qualifies — the same deliberate refusal `/api/member/roster-self` gives.
+const scopable = member && ctx!.personId !== null;
+
+const today = associationDateIso();
+const [records, lots] = scopable
+  ? await Promise.all([
+      fetchMemberLotViolations(env, ctx!.personId, today),
+      fetchMemberLots(env, ctx!.propertyIds),
+    ])
+  : [[], []];
+
+const addressOf = (lotId: string) =>
+  lots.find((l) => l.id === lotId)?.address ?? 'Your lot';
+
+// A reader may hold several Lots — two homes, or a Representation covering
+// more than one — and the copy should not tell them they have one.
+const plural = lots.length > 1;
+
+const STATUS_LABELS: Record<string, string> = {
+  open: 'Open',
+  cured: 'Cured',
+  closed: 'Closed',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  architectural: 'Architectural',
+  maintenance: 'Maintenance',
+  landscaping: 'Landscaping',
+  parking: 'Parking',
+  trash: 'Trash',
+  pets: 'Pets',
+  noise: 'Noise',
+  other: 'Other',
+};
+---
+
+<BaseLayout
+  title="Lot records"
+  description="Records the association keeps for your lot."
+>
+  <div class="page-section">
+    <p class="eyebrow">Members</p>
+    <h1 class="page-title" style="margin-bottom: 36px;">
+      Lot records
+    </h1>
+
+    {!ctx ? (
+      <p class="page-lead">
+        Sign in to see the records kept for your lot.{' '}
+        <a href="/login">Sign in</a> or <a href="/register">register</a>.
+      </p>
+    ) : !member ? (
+      <p class="page-lead">
+        Verify your property to see the records kept for your lot.{' '}
+        <a href="/verify-property">Verify your property</a>.
+      </p>
+    ) : !scopable ? (
+      <p class="page-lead">
+        Your lot&rsquo;s records are not available through this account yet.
+        Please contact the board.
+      </p>
+    ) : (
+      <>
+        <p class="page-lead">
+          What the association records for {plural ? 'your lots' : 'your lot'}.
+          Everyone who holds {plural ? 'a lot' : 'the lot'} sees the same
+          records, and they cover the period you have held it. For anything
+          earlier, or anything you believe is wrong, contact the board.
+        </p>
+
+        {records.length === 0 ? (
+          <p class="page-lead">
+            There is nothing recorded for {plural ? 'your lots' : 'your lot'}.
+          </p>
+        ) : (
+          <ul class="record-list">
+            {records.map((record) => (
+              <li class="record-list__item">
+                <p class="record-list__title">{addressOf(record.lotId)}</p>
+                <p class="record-list__meta">
+                  {CATEGORY_LABELS[record.category] ?? record.category} &middot;{' '}
+                  {record.effectiveDay} &middot;{' '}
+                  {STATUS_LABELS[record.status] ?? record.status}
+                </p>
+                <p>{record.summary}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </>
+    )}
+  </div>
+</BaseLayout>

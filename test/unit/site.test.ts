@@ -98,14 +98,18 @@ describe('accountNav proxies link', () => {
     const nav = accountNav(homeowner, {
       officialMode: true,
       liveVotingEnabled: false,
+      lotRecordsEnabled: false,
     });
     expect(nav.links).toContainEqual({ href: '/proxies', label: 'Proxies' });
   });
 
   it('hides /proxies when official mode is off (and when the arg is omitted)', () => {
     expect(
-      accountNav(homeowner, { officialMode: false, liveVotingEnabled: false })
-        .links,
+      accountNav(homeowner, {
+        officialMode: false,
+        liveVotingEnabled: false,
+        lotRecordsEnabled: false,
+      }).links,
     ).toEqual([]);
     expect(accountNav(homeowner).links).toEqual([]);
   });
@@ -114,11 +118,19 @@ describe('accountNav proxies link', () => {
     expect(
       accountNav(
         { role: 'homeowner', propertyIds: [] },
-        { officialMode: true, liveVotingEnabled: false },
+        {
+          officialMode: true,
+          liveVotingEnabled: false,
+          lotRecordsEnabled: false,
+        },
       ).links,
     ).toEqual([{ href: '/verify-property', label: 'Verify your property' }]);
     expect(
-      accountNav(null, { officialMode: true, liveVotingEnabled: false }).links,
+      accountNav(null, {
+        officialMode: true,
+        liveVotingEnabled: false,
+        lotRecordsEnabled: false,
+      }).links,
     ).toEqual([
       { href: '/login', label: 'Sign in' },
       { href: '/register', label: 'Register' },
@@ -126,20 +138,98 @@ describe('accountNav proxies link', () => {
     expect(
       accountNav(
         { role: 'board', propertyIds: [] },
-        { officialMode: true, liveVotingEnabled: false },
+        {
+          officialMode: true,
+          liveVotingEnabled: false,
+          lotRecordsEnabled: false,
+        },
       ).links,
     ).toEqual([{ href: '/admin', label: 'Admin' }]);
   });
 });
 
+describe('accountNav lot records link', () => {
+  const homeowner = {
+    role: 'homeowner' as const,
+    propertyIds: ['p1'],
+  };
+
+  it('offers /lot-records when both gates are on', () => {
+    const nav = accountNav(homeowner, {
+      officialMode: true,
+      liveVotingEnabled: false,
+      lotRecordsEnabled: true,
+    });
+    expect(nav.links).toContainEqual({
+      href: '/lot-records',
+      label: 'Lot records',
+    });
+  });
+
+  it('hides it whenever either gate is off', () => {
+    // The page itself answers 404 with either flag off, so a link shown then
+    // would lead nowhere.
+    for (const mode of [
+      {
+        officialMode: true,
+        liveVotingEnabled: false,
+        lotRecordsEnabled: false,
+      },
+      {
+        officialMode: false,
+        liveVotingEnabled: false,
+        lotRecordsEnabled: true,
+      },
+    ])
+      expect(accountNav(homeowner, mode).links).not.toContainEqual(
+        expect.objectContaining({ href: '/lot-records' }),
+      );
+  });
+
+  it('does not offer it to a board member who holds no lot', () => {
+    // Board access is not Lot Authority: they read every lot through /admin,
+    // and this surface is for a lot's own holders.
+    expect(
+      accountNav(
+        { role: 'board', propertyIds: [] },
+        {
+          officialMode: true,
+          liveVotingEnabled: false,
+          lotRecordsEnabled: true,
+        },
+      ).links,
+    ).toEqual([{ href: '/admin', label: 'Admin' }]);
+  });
+
+  it('does not offer it to an unverified account', () => {
+    expect(
+      accountNav(
+        { role: 'homeowner', propertyIds: [] },
+        {
+          officialMode: true,
+          liveVotingEnabled: false,
+          lotRecordsEnabled: true,
+        },
+      ).links,
+    ).toEqual([{ href: '/verify-property', label: 'Verify your property' }]);
+  });
+});
+
 describe('accountNav live voting link', () => {
   const homeowner = { role: 'homeowner' as const, propertyIds: ['p1'] };
-  const bothOn = { officialMode: true, liveVotingEnabled: true };
+  const bothOn = {
+    officialMode: true,
+    liveVotingEnabled: true,
+    lotRecordsEnabled: false,
+  };
 
   it('shows Proxies in official mode and Vote only when both flags are on', () => {
     expect(
-      accountNav(homeowner, { officialMode: true, liveVotingEnabled: false })
-        .links,
+      accountNav(homeowner, {
+        officialMode: true,
+        liveVotingEnabled: false,
+        lotRecordsEnabled: false,
+      }).links,
     ).toEqual([{ href: '/proxies', label: 'Proxies' }]);
     expect(accountNav(homeowner, bothOn).links).toEqual([
       { href: '/proxies', label: 'Proxies' },

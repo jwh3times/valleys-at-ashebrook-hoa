@@ -1992,6 +1992,40 @@ body.body--bare {
   margin-top: 4px;
 }
 
+/* ADR 0024 Lot Records: a homeowner reading their own lot's records. Shaped
+   like .meeting-list — a bordered list of rows — but its own block, because
+   these rows are not links and are never a record of the association's
+   business. */
+.record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  max-width: 820px;
+}
+
+.record-list__item {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.record-list__item:last-child {
+  border-bottom: none;
+}
+
+.record-list__title {
+  font-weight: 600;
+  margin: 0;
+}
+
+.record-list__meta {
+  color: var(--text-muted);
+  font-size: 13.5px;
+  margin: 4px 0 8px;
+}
+
 .attendance-line {
   font-weight: 600;
   margin: 4px 0 20px;
