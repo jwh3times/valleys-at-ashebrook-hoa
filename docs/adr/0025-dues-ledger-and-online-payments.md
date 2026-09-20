@@ -1,6 +1,6 @@
 # ADR 0025: A Per-Lot Dues Ledger, with Online Payments Reconciled from Verified Provider Events
 
-**Status:** Proposed
+**Status:** Accepted 2026-09-20
 **Date:** 2026-09-17
 
 ## Context
@@ -366,8 +366,10 @@ instructions whose checkbox selections and fee fields did not survive OCR, so th
 read from the executed original before anything implements them. That reading is tracked on the
 private tracker (`jwh3times/valleys-at-ashebrook-hoa-ops#33`). No figure is invented here.
 
-This ADR remains **Proposed**. These answers clear the policy questions and the provider choice;
-acceptance is a separate gate, as is ADR 0024, which this design builds on.
+**Accepted 2026-09-20**, together with ADR 0024, which this design builds on. The board's answers
+cleared the policy questions and the provider choice; the maintainer's acceptance was the separate
+gate. What remains before the fee behaviour ships is evidence, not a decision: the figures named
+just above.
 
 ## Related decisions
 
