@@ -9,6 +9,9 @@
 // `LOT_VIOLATION_CATEGORIES` must break the build here, not render a raw
 // `special_assessment` to a homeowner.
 import type {
+  DuesChargeCategory,
+  DuesLedgerKind,
+  DuesPaymentMethod,
   LotRecordAction,
   LotRecordReasonCode,
   LotViolationCategory,
@@ -55,4 +58,35 @@ export const LOT_RECORD_EVENT_LABELS: Record<LotRecordAction, string> = {
   reopened: 'Reopened',
   voided: 'Voided',
   edited: 'Corrected',
+};
+
+/**
+ * The dues ledger's words (ADR 0025, #295 slice 4).
+ *
+ * They live beside the violation vocabulary for the reason stated at the top
+ * of this file, and slice 4 is where that reason stops being hypothetical: the
+ * board's panel and the homeowner's page now render the same entries, and a
+ * charge the board posted as a "Late fee" must not read as anything else on
+ * the page the homeowner disputes it from.
+ */
+export const DUES_LEDGER_KIND_LABELS: Record<DuesLedgerKind, string> = {
+  charge: 'Charge',
+  payment: 'Payment',
+  adjustment: 'Adjustment',
+  reversal: 'Reversal',
+};
+
+export const DUES_CHARGE_CATEGORY_LABELS: Record<DuesChargeCategory, string> = {
+  assessment: 'Assessment',
+  special_assessment: 'Special assessment',
+  late_fee: 'Late fee',
+  fine: 'Fine',
+  other: 'Other',
+};
+
+export const DUES_PAYMENT_METHOD_LABELS: Record<DuesPaymentMethod, string> = {
+  online: 'Online',
+  check: 'Check',
+  cash: 'Cash',
+  other: 'Other',
 };

@@ -11,6 +11,11 @@ import {
   fetchProperties,
 } from '../../lib/admin';
 import { fetchSiteSettings } from '../../lib/content';
+import {
+  DUES_CHARGE_CATEGORY_LABELS,
+  DUES_LEDGER_KIND_LABELS,
+  DUES_PAYMENT_METHOD_LABELS,
+} from '../../lib/lot-records';
 import { associationDateIso } from '../../lib/format';
 import {
   parseDollarsToCents,
@@ -46,32 +51,16 @@ import {
  * nothing twice, while a genuine second entry gets a new one.
  */
 
-const CATEGORY_LABELS: Record<DuesChargeCategory, string> = {
-  assessment: 'Assessment',
-  special_assessment: 'Special assessment',
-  late_fee: 'Late fee',
-  fine: 'Fine',
-  other: 'Other',
-};
-
-const METHOD_LABELS: Record<DuesPaymentMethod, string> = {
-  online: 'Online',
-  check: 'Check',
-  cash: 'Cash',
-  other: 'Other',
-};
+// The words themselves live in `src/lib/lot-records.ts`, so this panel and the
+// homeowner's page at /lot-records cannot word the same entry differently.
+const CATEGORY_LABELS = DUES_CHARGE_CATEGORY_LABELS;
+const METHOD_LABELS = DUES_PAYMENT_METHOD_LABELS;
+const KIND_LABELS = DUES_LEDGER_KIND_LABELS;
 
 /** The methods a board member may record by hand. */
 const OFFLINE_METHODS = DUES_PAYMENT_METHODS.filter(
   (m): m is Exclude<DuesPaymentMethod, 'online'> => m !== 'online',
 );
-
-const KIND_LABELS: Record<AdminDuesEntryDetail['kind'], string> = {
-  charge: 'Charge',
-  payment: 'Payment',
-  adjustment: 'Adjustment',
-  reversal: 'Reversal',
-};
 
 type EntryForm = {
   kind: 'charge' | 'payment' | 'adjustment';

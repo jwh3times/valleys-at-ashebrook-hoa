@@ -2,19 +2,27 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { env } from 'cloudflare:workers';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
-import { associationDateIso } from '../lib/format';
+import { associationDateIso, formatDate } from '../lib/format';
 import {
   fetchMemberLotViolations,
   fetchMemberLotAddresses,
+  fetchMemberDuesLedger,
+  type MemberDuesEntry,
+  type MemberLotViolation,
 } from '../server/lot-records/reads';
 import { lotRecordsVisible } from '../server/lot-records/gate';
+import { describeBalance, formatCents } from '../lib/money';
 import {
+  DUES_CHARGE_CATEGORY_LABELS,
+  DUES_LEDGER_KIND_LABELS,
+  DUES_PAYMENT_METHOD_LABELS,
   LOT_VIOLATION_CATEGORY_LABELS,
   LOT_VIOLATION_STATUS_LABELS,
 } from '../lib/lot-records';
 
 /**
- * A LOT'S OWN RECORDS, READ BY THE PEOPLE WHO HOLD IT (ADR 0024, #291 slice 4).
+ * A LOT'S OWN RECORDS, READ BY THE PEOPLE WHO HOLD IT (ADR 0024, #291 slice 4;
+ * the dues ledger added by ADR 0025, #295 slice 4).
  *
  * This is the first surface where the Lot Record audience faces a real reader,
  * and the rules it enforces are not the site's usual ones:
@@ -25,10 +33,15 @@ import {
  * - **Detail stops at the reader's own period.** A buyer does not read what
  *   the seller's period produced; a former owner reads nothing at all. Both
  *   fall out of the scoping predicate rather than from anything this page
- *   decides — it hands `personId` and the Association Day to the read and
+ *   decides — it hands `personId` and the Association Day to the reads and
  *   renders what comes back.
  * - **Off means gone.** With either flag off the page is the generic 404,
  *   never a 403, so the surface is not advertised.
+ *
+ * The page is organized BY LOT rather than by record type, because that is the
+ * unit the whole ADR is about: a reader holding two homes has two balances and
+ * two enforcement histories, and one merged list carries a figure that is true
+ * of neither.
  *
  * Rendered entirely server-side with no client directive, per the rendering
  * model: the records ship as HTML, and there is nothing here for a client
@@ -55,27 +68,109 @@ const member = ctx !== null && ctx.capabilities.has('member');
 const scopable = member && ctx!.personId !== null;
 
 const today = associationDateIso();
-// BOTH reads are scoped from `personId` by the roster, never from the lot
+// ALL THREE reads are scoped from `personId` by the roster, never from the lot
 // array on the caller's context: that array is what the request asserts, and
 // ADR 0024 fixes the homeowner read's input as the Person. It also means these
 // addresses are exactly the Lots the reader holds, so the copy below cannot
 // pluralize on a claim.
-const [records, addresses] = scopable
+const [records, addresses, ledgers] = scopable
   ? await Promise.all([
       fetchMemberLotViolations(env, ctx!.personId, today),
       fetchMemberLotAddresses(env, ctx!.personId, today),
+      fetchMemberDuesLedger(env, ctx!.personId, today),
     ])
-  : [[], new Map<string, string>()];
+  : [[], new Map<string, string>(), []];
 
-const addressOf = (lotId: string) => addresses.get(lotId) ?? 'Your lot';
+/**
+ * One section per Lot, built from the ADDRESSES rather than from the records.
+ *
+ * `fetchMemberDuesLedger` documents that a Lot with no ledger rows is absent
+ * from its result, and the same is true of a Lot with no violations — so a
+ * page driven by the records would silently omit the home that owes nothing
+ * and has been reported for nothing, which is precisely the reader who came to
+ * check. The addresses are the authority answer to "which Lots do you hold
+ * today", so they decide the sections and the records fill them.
+ *
+ * The union with the records' own Lot ids is belt and braces: both record
+ * reads are scoped through the same authority predicate as the addresses, so
+ * a record on a Lot with no address cannot arise today. If one ever did, a
+ * page built from the addresses alone would DROP it — showing a homeowner less
+ * than the database says is theirs — so the id is carried through under a
+ * neutral heading instead.
+ */
+const ledgerOf = new Map(ledgers.map((ledger) => [ledger.lotId, ledger]));
+const violationsOf = new Map<string, MemberLotViolation[]>();
+for (const record of records) {
+  const list = violationsOf.get(record.lotId);
+  if (list) list.push(record);
+  else violationsOf.set(record.lotId, [record]);
+}
+
+const lotIds = [
+  ...addresses.keys(),
+  ...[...ledgerOf.keys(), ...violationsOf.keys()]
+    .filter((id) => !addresses.has(id))
+    .sort(),
+];
+
+const lots = lotIds.map((lotId) => ({
+  lotId,
+  address: addresses.get(lotId) ?? 'Your lot',
+  ledger: ledgerOf.get(lotId) ?? null,
+  violations: violationsOf.get(lotId) ?? [],
+}));
 
 // A reader may hold several Lots — two homes, or a Representation covering
 // more than one — and the copy should not tell them they have one.
-const plural = addresses.size > 1;
+const plural = lots.length > 1;
 
-// The most caller-specific HTML on the site: one Lot's enforcement record,
-// rendered into the page rather than fetched by an island. It must never
-// become cacheable if a zone cache rule is added later — the same reason
+interface LedgerLine {
+  entry: MemberDuesEntry | null;
+  runningCents: number;
+}
+
+/**
+ * The ledger as it is read: the opening balance first, then each entry
+ * carrying the balance AFTER it.
+ *
+ * The running figure is what makes a ledger checkable — a column of amounts
+ * with only a total at the bottom reconciles against nothing — and it is
+ * computed here rather than stored, because ADR 0025's balance is
+ * `SUM(amount_cents)` and a stored running total is a second source of truth
+ * that drifts from it.
+ *
+ * The opening line carries NO date. `MemberLotLedger.openingBalanceCents`
+ * records why: the day it would need is the first day of the reader's own
+ * authority, which neither statement returns, and labelling it with the
+ * earliest itemized day is wrong in the one case the line exists for.
+ */
+function ledgerLines(
+  openingCents: number,
+  entries: MemberDuesEntry[],
+): LedgerLine[] {
+  let running = openingCents;
+  const lines: LedgerLine[] =
+    openingCents === 0 ? [] : [{ entry: null, runningCents: running }];
+  for (const entry of entries) {
+    running += entry.amountCents;
+    lines.push({ entry, runningCents: running });
+  }
+  return lines;
+}
+
+/** What an entry was for, in the same words the board's panel uses. */
+function describeEntry(entry: MemberDuesEntry): string {
+  const kind = DUES_LEDGER_KIND_LABELS[entry.kind];
+  if (entry.category)
+    return kind + ' · ' + DUES_CHARGE_CATEGORY_LABELS[entry.category];
+  if (entry.method)
+    return kind + ' · ' + DUES_PAYMENT_METHOD_LABELS[entry.method];
+  return kind;
+}
+
+// The most caller-specific HTML on the site: one Lot's balance and enforcement
+// record, rendered into the page rather than fetched by an island. It must
+// never become cacheable if a zone cache rule is added later — the same reason
 // `/elections` sets this on the renders that carry a ballot receipt.
 Astro.response.headers.set('Cache-Control', 'private, no-store');
 ---
@@ -105,34 +200,97 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
         Your lot&rsquo;s records are not available through this account yet.
         Please contact the board.
       </p>
+    ) : lots.length === 0 ? (
+      /* Not a fallback for "nothing happened yet": the LOTS come from the
+         roster, so an empty list means this reader holds none today. A page
+         that printed its per-lot lead and then no sections would read as
+         broken, and the one honest thing to say is that there is nothing —
+         the same sentence a reader with a lot and no records gets, since
+         neither is told anything about the other case. */
+      <p class="page-lead">
+        There is nothing recorded for your lot. If you have recently bought a
+        home here, or believe this is wrong, please contact the board.
+      </p>
     ) : (
       <>
         <p class="page-lead">
-          What the association records for {plural ? 'your lots' : 'your lot'}.
-          Everyone who holds {plural ? 'a lot' : 'the lot'} sees the same
-          records, and they cover the period you have held it. For anything
-          earlier, or anything you believe is wrong, contact the board.
+          What the association records for {plural ? 'your lots' : 'your lot'} —
+          the dues balance and any compliance records. Everyone who holds{' '}
+          {plural ? 'a lot' : 'the lot'} sees the same records, and they cover
+          the period you have held it. For anything earlier, or anything you
+          believe is wrong, contact the board.
         </p>
 
-        {records.length === 0 ? (
-          <p class="page-lead">
-            There is nothing recorded for {plural ? 'your lots' : 'your lot'}.
-          </p>
-        ) : (
-          <ul class="record-list">
-            {records.map((record) => (
-              <li class="record-list__item">
-                <p class="record-list__title">{addressOf(record.lotId)}</p>
-                <p class="record-list__meta">
-                  {LOT_VIOLATION_CATEGORY_LABELS[record.category]} &middot;{' '}
-                  {record.effectiveDay} &middot;{' '}
-                  {LOT_VIOLATION_STATUS_LABELS[record.status]}
-                </p>
-                <p>{record.summary}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+        {lots.map((lot) => (
+          <section class="lot-record">
+            <h2 class="lot-record__address">{lot.address}</h2>
+
+            <h3 class="lot-record__heading">Dues</h3>
+            <p class="lot-record__balance">
+              {describeBalance(lot.ledger?.balanceCents ?? 0)}
+            </p>
+            <p class="muted lot-record__asof">
+              As of {formatDate(today)}. Payments are recorded by the board —
+              see <a href="/dues">Dues &amp; Assessments</a> for how to pay.
+            </p>
+
+            {lot.ledger === null ? (
+              <p>Nothing has been posted to this lot&rsquo;s account.</p>
+            ) : (
+              <ul class="record-list">
+                {ledgerLines(
+                  lot.ledger.openingBalanceCents,
+                  lot.ledger.entries,
+                ).map((line) => (
+                  <li class="record-list__item record-list__item--ledger">
+                    <div>
+                      <p class="record-list__title">
+                        {line.entry === null
+                          ? 'Balance brought forward'
+                          : line.entry.description}
+                      </p>
+                      <p class="record-list__meta">
+                        {line.entry === null
+                          ? 'Everything recorded before the period you have held this lot'
+                          : formatDate(line.entry.effectiveDay) +
+                            ' · ' +
+                            describeEntry(line.entry)}
+                      </p>
+                    </div>
+                    <p class="record-list__amount">
+                      {line.entry === null
+                        ? ''
+                        : formatCents(line.entry.amountCents)}
+                      <span class="record-list__running">
+                        Balance {formatCents(line.runningCents)}
+                      </span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <h3 class="lot-record__heading">Compliance records</h3>
+            {lot.violations.length === 0 ? (
+              <p>There is nothing recorded for this lot.</p>
+            ) : (
+              <ul class="record-list">
+                {lot.violations.map((record) => (
+                  <li class="record-list__item">
+                    <p class="record-list__title">
+                      {LOT_VIOLATION_CATEGORY_LABELS[record.category]}
+                    </p>
+                    <p class="record-list__meta">
+                      {formatDate(record.effectiveDay)} &middot;{' '}
+                      {LOT_VIOLATION_STATUS_LABELS[record.status]}
+                    </p>
+                    <p>{record.summary}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ))}
       </>
     )}
   </div>
