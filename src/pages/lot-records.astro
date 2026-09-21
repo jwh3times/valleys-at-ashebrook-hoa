@@ -113,17 +113,6 @@ const lotIds = [
     .sort(),
 ];
 
-const lots = lotIds.map((lotId) => ({
-  lotId,
-  address: addresses.get(lotId) ?? 'Your lot',
-  ledger: ledgerOf.get(lotId) ?? null,
-  violations: violationsOf.get(lotId) ?? [],
-}));
-
-// A reader may hold several Lots — two homes, or a Representation covering
-// more than one — and the copy should not tell them they have one.
-const plural = lots.length > 1;
-
 interface LedgerLine {
   entry: MemberDuesEntry | null;
   runningCents: number;
@@ -167,6 +156,50 @@ function describeEntry(entry: MemberDuesEntry): string {
     return kind + ' · ' + DUES_PAYMENT_METHOD_LABELS[entry.method];
   return kind;
 }
+
+const lots = lotIds.map((lotId) => {
+  const ledger = ledgerOf.get(lotId) ?? null;
+  return {
+    lotId,
+    address: addresses.get(lotId) ?? 'Your lot',
+    balanceCents: ledger?.balanceCents ?? 0,
+    /**
+     * The rows to draw — which is NOT the same question as "is there a
+     * ledger". A Lot whose pre-period entries cancel exactly produces a
+     * ledger (the openings statement groups a row that sums to zero) with no
+     * opening line to draw and no entry of the reader's own, and a template
+     * branching on `ledger === null` renders `<ul class="record-list">` with
+     * nothing in it — a bordered, unpadded hairline where a sentence belongs.
+     * That is the state a buyer lands in when the seller settled everything
+     * at closing, so the empty case is decided here, once, from the lines.
+     */
+    lines: ledgerLines(ledger?.openingBalanceCents ?? 0, ledger?.entries ?? []),
+    /**
+     * Whether anything was ever posted, which is a different sentence from
+     * "nothing during your period". Saying the first when the second is true
+     * would tell a buyer the Lot has no history when it has a settled one.
+     */
+    everPosted: ledger !== null,
+    /**
+     * `balanceCents` is the UNBOUNDED sum: `lotAuthorityCoversRecordDay`
+     * bounds `effective_day` from below only, and the admin write validates
+     * the day's shape without an upper bound, so a board member posting next
+     * quarter's assessment early is inside it. The figure is right — ADR 0025
+     * says the balance IS the sum, and filtering future rows here would make
+     * the homeowner's balance disagree with the board's — but "as of today"
+     * would be the wrong thing to say about it, so the copy names them when
+     * there are any and stays quiet when there are not.
+     */
+    hasFutureEntry: (ledger?.entries ?? []).some(
+      (entry) => entry.effectiveDay > today,
+    ),
+    violations: violationsOf.get(lotId) ?? [],
+  };
+});
+
+// A reader may hold several Lots — two homes, or a Representation covering
+// more than one — and the copy should not tell them they have one.
+const plural = lots.length > 1;
 
 // The most caller-specific HTML on the site: one Lot's balance and enforcement
 // record, rendered into the page rather than fetched by an island. It must
@@ -227,21 +260,26 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
 
             <h3 class="lot-record__heading">Dues</h3>
             <p class="lot-record__balance">
-              {describeBalance(lot.ledger?.balanceCents ?? 0)}
+              {describeBalance(lot.balanceCents)}
             </p>
             <p class="muted lot-record__asof">
-              As of {formatDate(today)}. Payments are recorded by the board —
-              see <a href="/dues">Dues &amp; Assessments</a> for how to pay.
+              Read on {formatDate(today)}
+              {lot.hasFutureEntry
+                ? ', and it includes entries dated ahead of today'
+                : ''}
+              . Payments are recorded by the board — see{' '}
+              <a href="/dues">Dues &amp; Assessments</a> for how to pay.
             </p>
 
-            {lot.ledger === null ? (
-              <p>Nothing has been posted to this lot&rsquo;s account.</p>
+            {lot.lines.length === 0 ? (
+              <p>
+                {lot.everPosted
+                  ? 'Nothing has been posted during the period you have held this lot.'
+                  : 'Nothing has been posted to this lot’s account.'}
+              </p>
             ) : (
               <ul class="record-list">
-                {ledgerLines(
-                  lot.ledger.openingBalanceCents,
-                  lot.ledger.entries,
-                ).map((line) => (
+                {lot.lines.map((line) => (
                   <li class="record-list__item record-list__item--ledger">
                     <div>
                       <p class="record-list__title">
@@ -272,7 +310,11 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
 
             <h3 class="lot-record__heading">Compliance records</h3>
             {lot.violations.length === 0 ? (
-              <p>There is nothing recorded for this lot.</p>
+              /* Scoped to the section. "There is nothing recorded for this
+                 lot" sits directly under a balance and a ledger and reads as
+                 contradicting them, and it is all but the sentence the
+                 hold-no-Lot state uses. */
+              <p>No compliance records for this lot.</p>
             ) : (
               <ul class="record-list">
                 {lot.violations.map((record) => (
