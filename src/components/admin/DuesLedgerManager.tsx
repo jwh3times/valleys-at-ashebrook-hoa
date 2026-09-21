@@ -11,6 +11,7 @@ import {
   fetchProperties,
 } from '../../lib/admin';
 import { fetchSiteSettings } from '../../lib/content';
+import { associationDateIso } from '../../lib/format';
 import {
   parseDollarsToCents,
   formatCents,
@@ -133,6 +134,16 @@ export default function DuesLedgerManager() {
   /** Only the newest read may write; a row action's reload races the filter. */
   const latestRead = useRef(0);
 
+  /**
+   * Whether the site settings have answered, and what they said.
+   *
+   * Two sources could set the gate — the settings, and the ledger read's 404 —
+   * and they race. The settings are the authority: they are what the switch
+   * actually is. The 404 is only a fallback for when the settings could not be
+   * read at all, which is the case the mapping exists for.
+   */
+  const settingsAnswered = useRef(false);
+
   const refresh = useCallback(
     async (isStale: () => boolean = () => false) => {
       const seq = ++latestRead.current;
@@ -140,7 +151,7 @@ export default function DuesLedgerManager() {
       try {
         const ledger = await fetchDuesLedger(filterLotId || undefined);
         if (superseded()) return;
-        setGateOff(!ledger.enabled);
+        if (!ledger.enabled && !settingsAnswered.current) setGateOff(true);
         setRows(ledger.rows);
         setLoadError('');
       } catch (err: unknown) {
@@ -160,7 +171,10 @@ export default function DuesLedgerManager() {
       fetchProperties().catch(() => [] as PropertyWithOwners[]),
     ]);
     if (isStale()) return;
-    if (site) setGateOff(!(site.officialMode && site.lotRecordsEnabled));
+    if (site) {
+      settingsAnswered.current = true;
+      setGateOff(!(site.officialMode && site.lotRecordsEnabled));
+    }
     setLots(properties);
   }, []);
 
@@ -212,7 +226,10 @@ export default function DuesLedgerManager() {
 
   /** What a row control's accessible name says it acts on. */
   const identityOf = (row: AdminDuesEntryDetail) =>
-    `${addressOf(row.lotId)}, ${row.effectiveDay}, ${formatCents(row.amountCents)}`;
+    // The description is included because without it two $25 late fees on one
+    // lot on one day — routine — give both rows' controls the same accessible
+    // name, which is the ambiguity the rule exists to prevent.
+    `${addressOf(row.lotId)}, ${row.effectiveDay}, ${formatCents(row.amountCents)}, ${row.description}`;
 
   /**
    * The balance of whatever is on screen. When the list is filtered to one
@@ -529,7 +546,10 @@ export default function DuesLedgerManager() {
                 type="button"
                 className="btn btn--outline btn--small"
                 disabled={busy}
-                onClick={() => setShowBulk(!showBulk)}
+                onClick={() => {
+                  if (!showBulk) bulkKey.current = newOperationKey();
+                  setShowBulk(!showBulk);
+                }}
                 aria-expanded={showBulk}
               >
                 Post an assessment to every lot
@@ -710,6 +730,15 @@ export default function DuesLedgerManager() {
                       aria-label={`Reverse entry: ${identityOf(row)}`}
                       onClick={() => {
                         setReverseReason('');
+                        // A fresh key each time a reversal form OPENS, so a
+                        // key identifies one intended entry. Shared across
+                        // rows, a key left over from a failed reversal of one
+                        // row would be sent for a different row's — refused as
+                        // a reused key, which is safe but unexplainable. It
+                        // stays stable while the form is open, so a retry after
+                        // a failure is still a retry.
+                        if (reversingId !== row.id)
+                          reverseKey.current = newOperationKey();
                         setReversingId(reversingId === row.id ? null : row.id);
                       }}
                     >
@@ -765,7 +794,11 @@ export default function DuesLedgerManager() {
                         void run(async () => {
                           await reverseDuesEntry({
                             entryId: row.id,
-                            effectiveDay: new Date().toISOString().slice(0, 10),
+                            // The ASSOCIATION's day. `toISOString()` is UTC,
+                            // so a board member in New York clicking at 8pm
+                            // would date the correction tomorrow — and the
+                            // ledger is ordered by this column.
+                            effectiveDay: associationDateIso(),
                             description: reverseReason.trim(),
                             operationKey: reverseKey.current,
                           });

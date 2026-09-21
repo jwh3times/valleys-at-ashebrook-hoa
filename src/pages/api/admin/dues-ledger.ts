@@ -18,6 +18,7 @@ import {
   DUES_CHARGE_CATEGORIES,
   DUES_PAYMENT_METHODS,
 } from '../../../lib/types';
+import { MAX_ENTRY_CENTS } from '../../../lib/money';
 
 export const prerender = false;
 
@@ -49,17 +50,8 @@ export const prerender = false;
 
 const NOT_FOUND = () => new Response('Not found', { status: 404 });
 
-/**
- * The largest single entry the board can post: $1,000,000.
- *
- * Not a policy limit — it is a typo limit, and a type limit. `Number.isInteger`
- * is true for `1e21`, which is far beyond SQLite's 64-bit INTEGER range, so
- * such a value lands in the column as a REAL: a float in the one table whose
- * entire premise is integer cents. Anything a board member actually means to
- * post is orders of magnitude below this, and a number above it is a slipped
- * keyboard, so it is refused rather than stored.
- */
-const MAX_ENTRY_CENTS = 100_000_000;
+// The bound is defined once, in `src/lib/money.ts`, so the form that refuses a
+// slipped decimal point and the route that refuses it agree on the number.
 
 /** Cents from the body: an integer, present, and non-zero. */
 function centsOrError(

@@ -18,6 +18,17 @@
 export type MoneyParse =
   { ok: true; cents: number } | { ok: false; error: string };
 
+/**
+ * The largest single ledger entry, in cents: $1,000,000.
+ *
+ * It lives here rather than in the route so the form and the server agree on
+ * one number and one vocabulary — the route imports it. It is a typo limit and
+ * a type limit rather than a policy one: `Number.isInteger(1e21)` is true and
+ * such a value is past SQLite's 64-bit INTEGER range, so it would land in the
+ * ledger as a float.
+ */
+export const MAX_ENTRY_CENTS = 100_000_000;
+
 /** Accepts `12`, `12.5`, `12.50`, `-12.50`, `1,234.56`, `$12.50`. */
 const SHAPE = /^(-?)\$?\s*(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{1,2}))?$/;
 
@@ -51,7 +62,22 @@ export function parseDollarsToCents(raw: string): MoneyParse {
   const total = dollars * 100 + cents;
   if (!Number.isSafeInteger(total))
     return { ok: false, error: 'That amount is too large' };
-  return { ok: true, cents: sign === '-' ? -total : total };
+  // Zero is refused here rather than by the server, which would answer in the
+  // wire's vocabulary ("amountCents cannot be zero") to someone who typed
+  // dollars. A zero entry is not a fact anyone meant to record — the same
+  // argument as blank, one step along.
+  if (total === 0)
+    return { ok: false, error: 'An amount of zero is not an entry' };
+  if (total > MAX_ENTRY_CENTS)
+    return {
+      ok: false,
+      error: `That is larger than a single entry may be ($${(MAX_ENTRY_CENTS / 100).toLocaleString('en-US')}) — check the decimal point`,
+    };
+  // `-total` where total is 0 would be `-0`, and every `x < 0` check
+  // downstream silently disagrees with the minus that was typed. Zero is
+  // refused above, so this cannot arise — the ternary states the invariant
+  // rather than relying on it.
+  return { ok: true, cents: sign === '-' && total !== 0 ? -total : total };
 }
 
 /**
