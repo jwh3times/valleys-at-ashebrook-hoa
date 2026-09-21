@@ -191,6 +191,30 @@ export interface LotViolationDetail {
   recordedAt: string;
 }
 
+/**
+ * One ledger entry as the board's surface carries it — every column,
+ * including the board-only `reference`. The homeowner shape is narrower and
+ * lives in `src/server/lot-records/reads.ts`; keeping it out of this module is
+ * what stops a client component importing it by accident.
+ */
+export interface AdminDuesEntryDetail {
+  id: string;
+  lotId: string;
+  kind: DuesLedgerKind;
+  amountCents: number;
+  effectiveDay: string;
+  description: string;
+  category: DuesChargeCategory | null;
+  method: DuesPaymentMethod | null;
+  reference: string | null;
+  source: DuesEntrySource;
+  paymentId: string | null;
+  reversesEntryId: string | null;
+  recordedBy: string | null;
+  recordedAt: string;
+  operationKey: string;
+}
+
 /** One entry in a Lot Record's history. */
 export interface LotRecordEventDetail {
   id: string;

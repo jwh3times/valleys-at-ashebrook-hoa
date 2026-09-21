@@ -248,9 +248,10 @@ production until an operator turns `lotRecordsEnabled` on.
 `dues_ledger_entries` (migration `0036`, ADR 0025, #295 slice 1, v1.2.10) is the second Lot Record
 type: the per-Lot dues ledger. Slice 1 shipped the table and its reads read-only; slice 2 (#295,
 v1.2.11) added the board's write path, `POST /api/admin/dues-ledger` — see
-[`http-endpoints.md`](./http-endpoints.md) — with no schema change. There is still no payment rail
-and no UI surface for the ledger (no admin panel, and `/lot-records` does not yet render it to
-homeowners), and it still rides the default-off `lotRecordsEnabled` gate above. It is append-only and balance-forward:
+[`http-endpoints.md`](./http-endpoints.md) — with no schema change; slice 3 (#295, v1.2.12) added
+the board's admin panel (`DuesLedgerManager`) over that same route, with no schema change either.
+There is still no payment rail, and `/lot-records` does not yet render the ledger to homeowners, so
+it still rides the default-off `lotRecordsEnabled` gate above. It is append-only and balance-forward:
 the balance is `SUM(amount_cents)` over a Lot's rows, never a stored column, so a positive balance
 is owed and a negative one is a credit, and there is nothing to drift. Columns: `lot_id` referencing
 `properties(id)` on delete-restrict; `kind` (CHECK-bounded to `DUES_LEDGER_KINDS` —

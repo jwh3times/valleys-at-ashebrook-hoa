@@ -20,6 +20,7 @@ import ResolutionsManager from './ResolutionsManager';
 import ElectionsManager from './ElectionsManager';
 import ProxiesManager from './ProxiesManager';
 import LotViolationsManager from './LotViolationsManager';
+import DuesLedgerManager from './DuesLedgerManager';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
 
@@ -102,6 +103,14 @@ const SECTIONS = [
     key: 'lot-records',
     label: 'Lot records',
     render: () => <LotViolationsManager />,
+  },
+  {
+    // ADR 0025 (#295): what each lot owes and has paid. Separate from the
+    // `Dues` tab above, which is the public description of dues amounts and
+    // payment options — this one is the record.
+    key: 'dues-ledger',
+    label: 'Dues ledger',
+    render: () => <DuesLedgerManager />,
   },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
   { key: 'site', label: 'Site Settings', render: () => <SiteManager /> },

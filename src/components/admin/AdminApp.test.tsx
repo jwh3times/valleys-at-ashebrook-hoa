@@ -107,6 +107,18 @@ describe('AdminApp', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers a Dues ledger tab', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    expect(
+      screen.getByRole('button', { name: 'Dues ledger' }),
+    ).toBeInTheDocument();
+  });
+
   it('offers a Resolutions tab', () => {
     vi.mocked(useAuth).mockReturnValue({
       loading: false,

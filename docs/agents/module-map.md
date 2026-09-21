@@ -41,7 +41,13 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   the gate explanation instead of an error), `fetchLotRecordEvents`, `createLotViolation`,
   `transitionLotViolation` (the four named status actions — `cure`, `close`, `reopen`, `void` — over
   one call, never a raw `status` field), and `editLotViolation` — back the admin `LotViolationsManager`
-  panel, the only caller of any of them.
+  panel, the only caller of any of them. Dues ledger helpers (ADR 0025, #295 slice 3) —
+  `fetchDuesLedger` (same feature-off `404` → `{ enabled: false, rows: [] }` shape as
+  `fetchLotViolations`), `fetchDuesEntryEvents`, `postDuesCharge`, `postDuesPayment`,
+  `postDuesAdjustment`, `reverseDuesEntry`, `postBulkAssessment`, and `newOperationKey` (mints the
+  `crypto.randomUUID()` key a form holds in a ref for its lifetime, so a retry re-sends the same key
+  and a new intent gets a new one) — back the admin `DuesLedgerManager` panel, the only caller of
+  any of them.
 - `src/lib/roster-admin.ts` (ADR 0022 phase 3e, #221) handles board — and, for its three
   System-Administrator-only actions, capability-gated — writes to every phase 3b/3c/3d roster admin
   surface, one group per admin panel: Roster (`fetchRoster`, lot retire/correct, party
@@ -97,6 +103,14 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   added category fails the build here instead of rendering raw. Shared by the admin
   `LotViolationsManager` panel and the homeowner `/lot-records` page, deliberately, so the two
   surfaces cannot word the same category differently.
+- `src/lib/money.ts` (ADR 0025, #295 slice 3) is a pure module converting between what a board
+  member types and what the dues ledger stores: `parseDollarsToCents` parses the typed digits into
+  separate whole-dollar and cents integers rather than multiplying a parsed fraction (the classic
+  `parseFloat(x) * 100` floating-point bug), refuses blank, zero, and more-than-two-decimal-place
+  input rather than coercing them, and can never produce `-0`; `formatCents` and `describeBalance`
+  render cents back for display, sign-first. `MAX_ENTRY_CENTS` (the $1,000,000 single-entry cap)
+  lives here rather than in `src/pages/api/admin/dues-ledger.ts`, which imports it, so the form and
+  the route agree on one number. The only caller is `DuesLedgerManager`.
 - `src/lib/auth-client.ts` contains the Better Auth browser client.
 
 ## Server code (`src/server/`)
@@ -344,7 +358,9 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   [`http-endpoints.md`](./http-endpoints.md)), which gives `fetchAdminLotRecordEvents` a second
   caller alongside `/api/admin/lot-violations`'s `GET`; `test/unit/lot-records-boundaries.test.ts`
   source-scans both routes' mutation statements for `LOT_RECORDS_ENABLED_SQL` so the flags re-check
-  claimed above is proven, not just asserted by each route's `404` test.
+  claimed above is proven, not just asserted by each route's `404` test. Slice 3 (#295, v1.2.12)
+  added the board's admin panel, `DuesLedgerManager`, over that same route — see the `src/lib/`
+  entries above for its helpers and `src/lib/money.ts`.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible

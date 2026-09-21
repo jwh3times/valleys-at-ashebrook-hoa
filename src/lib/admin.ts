@@ -27,6 +27,9 @@ import type {
   LotRecordEventDetail,
   LotViolationCategory,
   LotRecordReasonCode,
+  AdminDuesEntryDetail,
+  DuesChargeCategory,
+  DuesPaymentMethod,
 } from './types';
 import {
   REPORT_PAGE_SIZE,
@@ -171,6 +174,124 @@ export async function editLotViolation(
     'POST',
     { action: 'edit', id, ...fields, ...(reason ? { reason } : {}) },
     'Edit violation failed',
+  );
+}
+
+// ---------- Dues ledger (ADR 0025, #295) ----------
+
+/**
+ * Like `fetchLotViolations`, the feature being off is a STATE rather than a
+ * failure: the whole namespace answers 404 while either flag is off, which is
+ * how it stays dark.
+ */
+export async function fetchDuesLedger(
+  lotId?: string,
+): Promise<{ enabled: boolean; rows: AdminDuesEntryDetail[] }> {
+  const query = lotId ? `?lotId=${encodeURIComponent(lotId)}` : '';
+  const res = await fetch(`/api/admin/dues-ledger${query}`);
+  if (res.status === 404) return { enabled: false, rows: [] };
+  if (!res.ok)
+    throw new Error((await res.text()) || `Load ledger failed: ${res.status}`);
+  return { enabled: true, rows: (await res.json()) as AdminDuesEntryDetail[] };
+}
+
+export async function fetchDuesEntryEvents(
+  entryId: string,
+): Promise<LotRecordEventDetail[]> {
+  return adminRequest(
+    `/api/admin/dues-ledger?events=${encodeURIComponent(entryId)}`,
+    'GET',
+    undefined,
+    'Load entry history failed',
+  );
+}
+
+/**
+ * Every ledger write carries an `operationKey`, so re-sending the same
+ * submission posts nothing twice. The caller keeps one key per form instance
+ * and takes a fresh one after a success — never per render, which would make
+ * every retry look like a new entry.
+ */
+export function newOperationKey(): string {
+  return crypto.randomUUID();
+}
+
+export async function postDuesCharge(input: {
+  lotId: string;
+  category: DuesChargeCategory;
+  amountCents: number;
+  effectiveDay: string;
+  description: string;
+  reference?: string;
+  operationKey: string;
+}): Promise<{ id: string }> {
+  return adminRequest(
+    '/api/admin/dues-ledger',
+    'POST',
+    { action: 'postCharge', ...input },
+    'Post charge failed',
+  );
+}
+
+export async function postDuesPayment(input: {
+  lotId: string;
+  method: Exclude<DuesPaymentMethod, 'online'>;
+  amountCents: number;
+  effectiveDay: string;
+  description: string;
+  reference?: string;
+  operationKey: string;
+}): Promise<{ id: string }> {
+  return adminRequest(
+    '/api/admin/dues-ledger',
+    'POST',
+    { action: 'postPayment', ...input },
+    'Post payment failed',
+  );
+}
+
+export async function postDuesAdjustment(input: {
+  lotId: string;
+  amountCents: number;
+  effectiveDay: string;
+  description: string;
+  reference?: string;
+  operationKey: string;
+}): Promise<{ id: string }> {
+  return adminRequest(
+    '/api/admin/dues-ledger',
+    'POST',
+    { action: 'postAdjustment', ...input },
+    'Post adjustment failed',
+  );
+}
+
+export async function reverseDuesEntry(input: {
+  entryId: string;
+  effectiveDay: string;
+  description: string;
+  operationKey: string;
+}): Promise<{ id: string }> {
+  return adminRequest(
+    '/api/admin/dues-ledger',
+    'POST',
+    { action: 'reverse', ...input },
+    'Reverse entry failed',
+  );
+}
+
+export async function postBulkAssessment(input: {
+  category: DuesChargeCategory;
+  amountCents: number;
+  effectiveDay: string;
+  description: string;
+  operationKey: string;
+}): Promise<{ posted: number }> {
+  return adminRequest(
+    '/api/admin/dues-ledger',
+    'POST',
+    { action: 'postBulkAssessment', ...input },
+    'Post assessment failed',
   );
 }
 
