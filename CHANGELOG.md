@@ -7,6 +7,32 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.12] - 2026-09-20
+
+### Added
+
+- **A screen for the dues ledger, which says what a correction will do before
+  it does it.** The admin panel gains a **Dues ledger** tab: post a charge, a
+  payment, or an adjustment against a lot; post one assessment to every active
+  lot at once; and reverse an entry that was wrong.
+
+  Nothing here can be edited or deleted, so the panel is built around that
+  rather than around an undo. Reversing states the exact amount it will post,
+  that both entries stay on the record, that the homeowner sees both, and that
+  it cannot be undone — before the button is pressed. A running balance is
+  shown in words, and it says whose balance it is, so the association's total
+  is never mistaken for one home's.
+
+  Amounts are typed in dollars and stored as whole cents, with the conversion
+  done digit by digit rather than through a decimal number, so no cent is ever
+  lost to rounding. Blank is refused rather than read as zero, zero is refused
+  as not being an entry at all, and more than two decimal places is refused
+  rather than quietly rounded away.
+
+  Still off unless both **Official mode** and **Lot records** are on, and
+  homeowners still cannot see any of it — their view comes next (ADR 0025,
+  #295).
+
 ## [1.2.11] - 2026-09-20
 
 ### Added

@@ -156,6 +156,13 @@ vs `0` ("recorded as zero") distinction. `npm run lint:coercions` fails CI on th
 deliberate case needs a trailing `coercion-ok` comment with a reason. It catches the shape, not
 every way blank can be conflated with zero.
 
+Money has the same blank-first requirement plus a second, money-shaped trap: `parseFloat(x) * 100`
+loses cents to floating point (`1.005 * 100` is not `100.5`) on inputs that look fine in testing.
+Parse dollars-and-cents input by splitting the typed digits into a whole-dollar integer and a
+cents integer and combining those, never by parsing a fraction and multiplying it — see
+`src/lib/money.ts`'s `parseDollarsToCents`, the one parser every dollar-amount form should reuse
+rather than re-deriving.
+
 ### Fixtures and examples use reserved synthetic contact values
 
 Every phone number and email address in the tracked tree must be one that cannot belong to
@@ -184,14 +191,14 @@ _inside_ the effect callback. So a clean `npm run lint` is not proof no effect s
 synchronously.
 
 The documented **mount-fetch shape** is what both that rule and
-`react/exhaustive-effect-dependencies` expect, and what seven components already use (admin
+`react/exhaustive-effect-dependencies` expect, and what eight components already use (admin
 `ReportsManager`, `MembersManager`, `MeetingsManager`, `BoardServicePanel`, `ResolutionsManager`,
-`LotViolationsManager`, and member `ProxyManager`): a `useCallback`-memoized loader declared as the
-effect's dependency, started from a function declared inside the effect callback, with an
-unmount/cleanup flag guarding the eventual write. `LotViolationsManager` needs a second loader (one
-for its filtered list, one read once for the lot list and the feature gate) plus a read-sequence
-guard, because a row action's reload has no effect to hang an unmount flag on and can race the
-filter's own reload.
+`LotViolationsManager`, `DuesLedgerManager`, and member `ProxyManager`): a `useCallback`-memoized
+loader declared as the effect's dependency, started from a function declared inside the effect
+callback, with an unmount/cleanup flag guarding the eventual write. `LotViolationsManager` and
+`DuesLedgerManager` each need a second loader (one for the filtered/gated list, one read once for
+the lot list and the feature gate) plus a read-sequence guard, because a row action's reload has no
+effect to hang an unmount flag on and can race the filter's own reload.
 
 ## Architecture
 

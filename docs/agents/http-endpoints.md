@@ -355,7 +355,9 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   never defaulted — the same `Number(x) || default` trap the numeric-coercion rule bans elsewhere),
   a whole number, and non-zero, else `400`; and its magnitude is capped at `MAX_ENTRY_CENTS`
   (100,000,000, i.e. $1,000,000) because `Number.isInteger(1e21)` is true and a value that size would
-  land in the INTEGER column as a SQLite REAL — a typo/type limit, not a policy one. `postCharge` and
+  land in the INTEGER column as a SQLite REAL — a typo/type limit, not a policy one.
+  `MAX_ENTRY_CENTS` lives in `src/lib/money.ts` (slice 3, #295) rather than in this route, so the
+  board's `DuesLedgerManager` form and the route agree on one number. `postCharge` and
   `postBulkAssessment` require a positive amount and a `category` from `DUES_CHARGE_CATEGORIES`.
   `postPayment` requires a positive amount and a `method` from `DUES_PAYMENT_METHODS`, refuses
   `method: 'online'` (`400` — that row is written only by the payment provider's own event, not by

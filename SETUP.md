@@ -501,12 +501,11 @@ resource, binding, or secret.
 Lot Records is a separate, default-off gate (`lotRecordsEnabled`, ADR 0024, #291) for a per-lot
 record family — enforcement records, plus (as of ADR 0025, #295) a per-Lot dues ledger. Slice 1
 shipped the ledger's table and reads; slice 2 added the board's write path,
-`/api/admin/dues-ledger`, so a board member can now post charges, payments, adjustments,
-reversals, and a bulk assessment across every active lot. There is still no admin panel and no
-payment rail, and `/lot-records` does not yet render the ledger to homeowners, so enabling the gate
-today still only publishes the enforcement records to homeowners; until the ledger's panel and
-homeowner display ship, board dues entry is reachable by direct API call only. Both **Official
-Mode** and
+`/api/admin/dues-ledger`; slice 3 added the board's admin panel (the **Dues ledger** tab in
+`/admin`, over the same route), so a board member can now post charges, payments, adjustments,
+reversals, and a bulk assessment across every active lot without a direct API call. There is still
+no payment rail, and `/lot-records` does not yet render the ledger to homeowners, so enabling the
+gate today still only publishes the enforcement records to homeowners. Both **Official Mode** and
 **Lot Records** must be on, each by its own toggle in `/admin` -> **Site Settings**, before the
 board's data entry becomes visible to homeowners at `/lot-records`. Like Official Mode and Live
 Voting, each flip is its own audited transition, independent of the rest of the settings form, and
