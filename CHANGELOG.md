@@ -7,6 +7,38 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.13] - 2026-09-20
+
+### Added
+
+- **Homeowners can see what their lot owes.** The **Lot records** page now
+  leads with the balance for each home you hold, followed by the entries
+  behind it — every charge, payment, adjustment and correction, in date order,
+  each carrying the balance after it. A ledger you cannot follow line by line
+  is one you cannot check against your own bank statement, which is the point
+  of showing it.
+
+  The page is now organized by home rather than by record type. If you hold
+  two, you get two balances and two histories; a single merged figure would be
+  true of neither. A credit is called a credit rather than shown as a negative
+  amount owed.
+
+  Entries from before you owned the home are not itemised — they are not
+  yours to read — but they are not dropped either, because the balance is what
+  the lot owes, not what you were billed. They are gathered into one
+  "balance brought forward" line, so the figure is always the whole one. A
+  home with nothing posted to it says so, rather than showing an empty box,
+  and so does a home whose earlier entries settle to nothing.
+
+  Still off unless both **Official mode** and **Lot records** are on (ADR
+  0025, #295).
+
+### Changed
+
+- The words used for a charge's category, a payment's method, and an entry's
+  kind now come from one place, so the board's screen and the homeowner's page
+  cannot describe the same entry differently.
+
 ## [1.2.12] - 2026-09-20
 
 ### Added

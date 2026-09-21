@@ -467,10 +467,11 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   statically scans every module under `src/server/ai/` and the document-writing admin routes for any
   reference to a Lot Record table or Drizzle identifier and fails the build on one.
 - **`/lot-records` is server-rendered and marked `private, no-store`.** Like the ballot-receipt
-  renders on `/elections`, it is the most caller-specific HTML on the site — one Lot's own
-  enforcement records — so its response must never be cacheable if a zone cache rule is added
-  later. With either gating flag off, or for a caller who lacks the `member` capability, it answers
-  the generic 404 rather than 403, consistent with the rest of the site's hidden-record behavior.
+  renders on `/elections`, it is the most caller-specific HTML on the site — one Lot's own dues
+  balance, ledger, and enforcement records (ADR 0025, #295 slice 4) — so its response must never be
+  cacheable if a zone cache rule is added later. With either gating flag off, or for a caller who
+  lacks the `member` capability, it answers the generic 404 rather than 403, consistent with the
+  rest of the site's hidden-record behavior.
 
 ## Automated safeguards
 

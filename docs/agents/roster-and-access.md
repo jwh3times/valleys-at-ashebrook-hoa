@@ -141,10 +141,11 @@ caller's Person one hop through `COALESCE(consolidated_into_party_id, id)` befor
 Representation row — so an account linked to a duplicate would otherwise be told (via `lotIds`)
 that it holds the survivor's Lots while every per-Person read still keyed on the duplicate's own
 id. `src/server/lot-records/reads.ts`'s homeowner reads (`fetchMemberLotViolations`,
-`fetchMemberLotViolation`, `fetchMemberLotAddresses`) repeat that same one-hop canonicalization in
-an internal `me` CTE before scoping, because without it a duplicate-linked account would be shown
-none of the records for the Lots `lotIds` just told it it holds — an empty page indistinguishable
-from a Lot with nothing recorded, the worst answer that surface can give. `roster/authority.ts`
+`fetchMemberLotViolation`, `fetchMemberLotAddresses`, and — since ADR 0025's ledger — `fetchMemberDuesLedger`)
+repeat that same one-hop canonicalization in an internal `me` CTE before scoping, because without it
+a duplicate-linked account would be shown none of the records for the Lots `lotIds` just told it it
+holds — an empty page indistinguishable from a Lot with nothing recorded, the worst answer that
+surface can give. `roster/authority.ts`
 deliberately does **not** canonicalize: there the question is "who acted" (a proxy grantor, a
 ballot caster, a Board Term holder), and the Party named on that historical record is the answer,
 duplicate or not. Canonicalize only when the question is "which Person is this **account**" —
