@@ -5,7 +5,11 @@ import reactServerRenderer from '@astrojs/react/server.js';
 import LotRecordsPage from '../../src/pages/lot-records.astro';
 import NotFoundPage from '../../src/pages/404.astro';
 import { getDb } from '../../src/server/db/client';
-import { lotViolations, settings } from '../../src/server/db/schema';
+import {
+  duesLedgerEntries,
+  lotViolations,
+  settings,
+} from '../../src/server/db/schema';
 import {
   parties,
   people,
@@ -118,8 +122,42 @@ async function seedViolation(
     });
 }
 
+let ledgerSequence = 0;
+
+async function seedEntry(
+  lotId: string,
+  kind: 'charge' | 'payment' | 'adjustment',
+  amountCents: number,
+  effectiveDay: string,
+  description: string,
+) {
+  ledgerSequence += 1;
+  await getDb(env)
+    .insert(duesLedgerEntries)
+    .values({
+      id: `le${ledgerSequence}`,
+      lotId,
+      kind,
+      amountCents,
+      effectiveDay,
+      description,
+      category: kind === 'charge' ? 'assessment' : null,
+      method: kind === 'payment' ? 'check' : null,
+      // Board-only, and the point of asserting on it below: the homeowner
+      // read never selects this column, so it must not reach the HTML.
+      reference: `Board reference ${ledgerSequence}`,
+      source: 'board',
+      paymentId: null,
+      reversesEntryId: null,
+      recordedBy: 'board-1',
+      recordedAt: new Date('2026-01-01T12:00:00Z'),
+      operationKey: `op-${ledgerSequence}`,
+    });
+}
+
 beforeEach(async () => {
   const db = getDb(env);
+  await db.delete(duesLedgerEntries);
   await db.delete(representationLots);
   await db.delete(representations);
   await db.delete(organizations);
@@ -200,11 +238,15 @@ describe('what a reader is shown', () => {
     // that each sees something. Compared on the rendered list, since the rest
     // of the page differs by nothing here.
     const list = (html: string) => {
-      // Searched FROM the list's own start: the header nav closes a <ul>
-      // earlier in the document, and slicing to that one yields ''.
-      const start = html.indexOf('<ul class="record-list">');
+      // The whole per-lot region, not one <ul>: the page now renders a section
+      // per Lot carrying a balance, a ledger and the compliance records, and
+      // comparing only the first list would let the two readers disagree about
+      // a balance and still pass.
+      const start = html.indexOf('<section class="lot-record">');
       expect(start).toBeGreaterThan(-1);
-      return html.slice(start, html.indexOf('</ul>', start));
+      const end = html.lastIndexOf('</section>');
+      expect(end).toBeGreaterThan(start);
+      return html.slice(start, end);
     };
     expect(list(first)).toContain('Summary of v-a');
     expect(list(second)).toEqual(list(first));
@@ -220,10 +262,15 @@ describe('what a reader is shown', () => {
       caller({ lotIds: ['lot-a', 'lot-b'], propertyIds: ['lot-a', 'lot-b'] }),
     );
     expect(html).not.toContain('Summary of v-b');
-    // The full sentence, including the period: the addresses now come from the
-    // roster, so the copy must say "lot" and not "lots" for a caller who holds
-    // one and claims two.
-    expect(html).toContain('There is nothing recorded for your lot.');
+    // The full sentence, including the period. It is now scoped to the lot the
+    // reader actually holds, and the sections come from the roster's
+    // addresses, so the second claimed lot buys not even a heading.
+    expect(html).toContain('No compliance records for this lot.');
+    expect(html).toContain('1 Ashebrook Lane');
+    expect(html).not.toContain('2 Ashebrook Lane');
+    // The lead must say "lot" and not "lots" for a caller who holds one and
+    // claims two.
+    expect(html).toContain('What the association records for your lot');
   });
 
   it('hides records from before a buyer period', async () => {
@@ -311,6 +358,191 @@ describe('what a reader is shown', () => {
     const html = await render(caller({ personId: 'rep-1' }));
     expect(html).toContain('Summary of v-a');
     expect(html).not.toContain('Summary of v-b');
+  });
+});
+
+describe('the dues balance a homeowner reads', () => {
+  it("shows the lot's balance and every entry behind it, in order", async () => {
+    // The whole point of a balance-forward ledger is that the reader can
+    // follow it. So this asserts the RUNNING figure at each step, not merely
+    // the total: a page that printed the right total against the wrong column
+    // of running balances is the version a homeowner brings to a meeting.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-01-15', 'Winter quarter');
+    await seedEntry('lot-a', 'charge', 12500, '2026-02-15', 'Fence repair');
+    await seedEntry('lot-a', 'payment', -45000, '2026-03-01', 'Check 1041');
+
+    const html = await render(caller());
+    expect(html).toContain('$125.00 owed');
+    for (const [description, running] of [
+      ['Winter quarter', 'Balance $450.00'],
+      ['Fence repair', 'Balance $575.00'],
+      ['Check 1041', 'Balance $125.00'],
+    ]) {
+      expect(html).toContain(description);
+      expect(html).toContain(running);
+    }
+    // The payment's own amount keeps its sign, so a credit on the page cannot
+    // be read as another charge.
+    expect(html).toContain('-$450.00');
+  });
+
+  it('calls a negative balance a credit and never says it is owed', async () => {
+    // `describeBalance` exists for this sentence. An overpayment shown as
+    // "-$50.00 owed" is the one wording a homeowner would act on wrongly.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-01-15', 'Winter quarter');
+    await seedEntry('lot-a', 'payment', -50000, '2026-02-01', 'Check 1041');
+
+    const html = await render(caller());
+    expect(html).toContain('$50.00 in credit');
+    expect(html).not.toContain('owed');
+  });
+
+  it('collapses what came before the reader period into one undated line', async () => {
+    // A buyer does not read the seller's entries, but the balance is the sum
+    // of everything the Lot owes — so the earlier entries collapse rather than
+    // disappear, and the line carries NO date, because the day it would need
+    // (the first day of this reader's authority) is not what either statement
+    // returns.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-06-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-03-01', 'Seller quarter');
+    await seedEntry('lot-a', 'charge', 12500, '2026-07-01', 'Summer quarter');
+
+    const html = await render(caller());
+    expect(html).toContain('Balance brought forward');
+    expect(html).not.toContain('Seller quarter');
+    expect(html).toContain('Summer quarter');
+    // Whole, not partial: $125.00 would be the bug this line exists to
+    // prevent.
+    expect(html).toContain('$575.00 owed');
+    // Both running figures: the brought-forward line, then the itemized entry
+    // carrying the balance AFTER it. Asserting only the first would pass on a
+    // page that restarted the running total at each row.
+    expect(html).toContain('Balance $450.00');
+    expect(html).toContain('Balance $575.00');
+  });
+
+  it('shows the opening balance alone when every entry predates the reader', async () => {
+    // The case the undated line exists FOR: nothing is itemizable, so a page
+    // that rendered the opening only alongside detail rows would show this
+    // reader a balance with no explanation at all.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-06-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-03-01', 'Seller quarter');
+
+    const html = await render(caller());
+    expect(html).toContain('$450.00 owed');
+    expect(html).toContain('Balance brought forward');
+    expect(html).not.toContain('Seller quarter');
+  });
+
+  it('shows a lot with no ledger at all rather than omitting it', async () => {
+    // `fetchMemberDuesLedger` returns nothing for a Lot with no entries, so a
+    // page driven by the ledger would render no section — dropping the home
+    // of the reader most likely to be checking: the one who owes nothing.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+
+    const html = await render(caller());
+    expect(html).toContain('1 Ashebrook Lane');
+    expect(html).toContain('Nothing owed');
+    // The full clause: "Nothing has been posted" alone also matches the
+    // during-your-period sentence, which is the other empty state.
+    expect(html).toContain('Nothing has been posted to this lot');
+    expect(html).not.toContain('during the period you have held this lot');
+  });
+
+  it('says so in words when the period before the reader nets to zero', async () => {
+    // The gap between the two empty states, and the state a fresh buyer
+    // usually lands in: the seller's charges were all settled at closing, so
+    // `fetchMemberDuesLedger` DOES return a ledger for this Lot (the openings
+    // statement groups a row that sums to 0), but there is no opening line to
+    // draw and no entry of the reader's own yet. Branching on `ledger === null`
+    // alone renders an empty <ul class="record-list">, which has a border and
+    // no padding — a hairline box where a sentence belongs.
+    //
+    // "Nothing has been posted to this lot's account" would also be false
+    // here: things were posted, they just cancel and predate this reader.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-06-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-03-01', 'Seller quarter');
+    await seedEntry('lot-a', 'payment', -45000, '2026-04-01', 'Seller check');
+
+    const html = await render(caller());
+    expect(html).toContain('Nothing owed');
+    expect(html).toContain(
+      'Nothing has been posted during the period you have held this lot.',
+    );
+    expect(html).not.toContain('Seller quarter');
+    // The box with nothing in it.
+    expect(html).not.toContain('<ul class="record-list"></ul>');
+  });
+
+  it('does not call the balance current when a charge is dated ahead', async () => {
+    // `balanceCents` is the UNBOUNDED sum — the authority predicate bounds
+    // `effective_day` from below only — so a board member posting next
+    // quarter's assessment early is already inside the figure. The number
+    // stays whole (filtering it here would make the homeowner's balance
+    // disagree with the board's); what must not happen is the page calling
+    // it the balance as of today without saying so.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2099-01-01', 'Next quarter');
+
+    const html = await render(caller());
+    expect(html).toContain('$450.00 owed');
+    expect(html).toContain('includes entries dated ahead of today');
+  });
+
+  it('stays quiet about future entries when there are none', async () => {
+    // The other half, so the clause above is not simply always printed.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-01-15', 'Winter quarter');
+
+    const html = await render(caller());
+    expect(html).toContain('Winter quarter');
+    expect(html).not.toContain('dated ahead of today');
+  });
+
+  it('never ships the board-only reference', async () => {
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-01-15', 'Winter quarter');
+
+    const html = await render(caller());
+    // Anchored, so the case cannot pass on a page that rendered no ledger.
+    expect(html).toContain('Winter quarter');
+    expect(html).not.toContain('Board reference');
+  });
+
+  it('gives a reader holding two lots two separate balances', async () => {
+    // One merged figure would be true of neither home, and the association
+    // bills each Lot separately.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedLotAuthority('person-1', 'lot-b', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 45000, '2026-01-15', 'Winter on A');
+    await seedEntry('lot-b', 'charge', 12500, '2026-01-15', 'Winter on B');
+
+    const html = await render(caller());
+    expect(html).toContain('1 Ashebrook Lane');
+    expect(html).toContain('2 Ashebrook Lane');
+    expect(html).toContain('$450.00 owed');
+    expect(html).toContain('$125.00 owed');
+    // Not summed into one: $575.00 is what a merged page would print.
+    expect(html).not.toContain('$575.00');
+    expect(html).toContain('What the association records for your lots');
+  });
+
+  it('shows a former owner no balance, not a zero one', async () => {
+    // "Nothing owed" would be a statement about a Lot this reader no longer
+    // holds, and they hold no Lot to state it about.
+    await seedLotAuthority('person-1', 'lot-a', {
+      startDay: '2020-01-01',
+      endDay: '2026-06-01',
+    });
+    await seedEntry('lot-a', 'charge', 45000, '2021-05-05', 'Their quarter');
+
+    const html = await render(caller());
+    expect(html).toContain('There is nothing recorded for your lot.');
+    expect(html).not.toContain('Nothing owed');
+    expect(html).not.toContain('$450.00');
+    expect(html).not.toContain('Their quarter');
   });
 });
 

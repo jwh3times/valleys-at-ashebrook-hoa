@@ -503,25 +503,26 @@ record family — enforcement records, plus (as of ADR 0025, #295) a per-Lot due
 shipped the ledger's table and reads; slice 2 added the board's write path,
 `/api/admin/dues-ledger`; slice 3 added the board's admin panel (the **Dues ledger** tab in
 `/admin`, over the same route), so a board member can now post charges, payments, adjustments,
-reversals, and a bulk assessment across every active lot without a direct API call. There is still
-no payment rail, and `/lot-records` does not yet render the ledger to homeowners, so enabling the
-gate today still only publishes the enforcement records to homeowners. Both **Official Mode** and
-**Lot Records** must be on, each by its own toggle in `/admin` -> **Site Settings**, before the
-board's data entry becomes visible to homeowners at `/lot-records`. Like Official Mode and Live
-Voting, each flip is its own audited transition, independent of the rest of the settings form, and
-is recorded in `setting_changes`.
+reversals, and a bulk assessment across every active lot without a direct API call; slice 4 added
+the homeowner-facing render, so `/lot-records` now shows each held lot's balance and itemized
+ledger alongside its enforcement records. There is still no payment rail, so every ledger entry a
+homeowner sees is board-entered until one ships. Both **Official Mode** and **Lot Records** must be
+on, each by its own toggle in `/admin` -> **Site Settings**, before the board's data entry becomes
+visible to homeowners at `/lot-records`. Like Official Mode and Live Voting, each flip is its own
+audited transition, independent of the rest of the settings form, and is recorded in
+`setting_changes`.
 
 Turning **Lot Records** on publishes every record already entered for every lot at once — there is
 no per-record or per-lot publish step — to whoever currently holds that lot. Before enabling it in
 production:
 
-- [ ] Have the board review the enforcement records already entered through the admin **Lot
-      records** panel for accuracy, since enabling the flag makes all of them readable
-      immediately, not just new ones.
+- [ ] Have the board review the enforcement records and dues ledger entries already entered
+      through the admin **Lot records** and **Dues ledger** panels for accuracy, since enabling the
+      flag makes all of them readable immediately, not just new ones.
 - [ ] Confirm the deployed revision passed CI and Lot Records is still off after deployment.
-- [ ] In a non-production environment, verify a homeowner sees only their own lot's records (and a
-      co-owner or Representative sees the same list), a former owner sees nothing, and the
-      `/lot-records` page 404s while either flag is off.
+- [ ] In a non-production environment, verify a homeowner sees only their own lot's balance,
+      ledger, and records (and a co-owner or Representative sees the same), a former owner sees
+      nothing, and the `/lot-records` page 404s while either flag is off.
 
 This rollout uses the existing D1 site setting and standard deployment steps; it adds no Cloudflare
 resource, binding, or secret.

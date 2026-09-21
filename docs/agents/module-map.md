@@ -97,12 +97,16 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   in `.astro` files, islands, and unit tests.
 - `src/lib/format.ts` contains shared formatting helpers, including `associationDateIso` for the
   `America/New_York` proxy cutoff, unit-tested in `format.test.ts`.
-- `src/lib/lot-records.ts` (#291, ADR 0024) is a pure module holding Lot Record display vocabulary
-  — `LOT_VIOLATION_CATEGORY_LABELS`, `LOT_VIOLATION_STATUS_LABELS`, `LOT_RECORD_REASON_LABELS`, and
-  `LOT_RECORD_EVENT_LABELS` — keyed by their `src/lib/types.ts` unions rather than `string`, so an
-  added category fails the build here instead of rendering raw. Shared by the admin
-  `LotViolationsManager` panel and the homeowner `/lot-records` page, deliberately, so the two
-  surfaces cannot word the same category differently.
+- `src/lib/lot-records.ts` (#291, ADR 0024; dues vocabulary added by ADR 0025, #295 slice 4) is a
+  pure module holding Lot Record display vocabulary — `LOT_VIOLATION_CATEGORY_LABELS`,
+  `LOT_VIOLATION_STATUS_LABELS`, `LOT_RECORD_REASON_LABELS`, `LOT_RECORD_EVENT_LABELS`, and now
+  `DUES_LEDGER_KIND_LABELS`/`DUES_CHARGE_CATEGORY_LABELS`/`DUES_PAYMENT_METHOD_LABELS` (moved out of
+  `DuesLedgerManager`, which aliases them under its own local `CATEGORY_LABELS`/`METHOD_LABELS`/
+  `KIND_LABELS` names) — keyed by their
+  `src/lib/types.ts` unions rather than `string`, so an added category fails the build here instead
+  of rendering raw. Shared by the admin `LotViolationsManager`/`DuesLedgerManager` panels and the
+  homeowner `/lot-records` page, deliberately, so the two surfaces cannot word the same category or
+  ledger entry differently.
 - `src/lib/money.ts` (ADR 0025, #295 slice 3) is a pure module converting between what a board
   member types and what the dues ledger stores: `parseDollarsToCents` parses the typed digits into
   separate whole-dollar and cents integers rather than multiplying a parsed fraction (the classic
@@ -360,7 +364,12 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   source-scans both routes' mutation statements for `LOT_RECORDS_ENABLED_SQL` so the flags re-check
   claimed above is proven, not just asserted by each route's `404` test. Slice 3 (#295, v1.2.12)
   added the board's admin panel, `DuesLedgerManager`, over that same route — see the `src/lib/`
-  entries above for its helpers and `src/lib/money.ts`.
+  entries above for its helpers and `src/lib/money.ts`. Slice 4 (#295, ADR 0025) gives
+  `fetchMemberDuesLedger` its second caller: `/lot-records` now renders each held Lot's balance and
+  running ledger alongside its violations, reorganizing the page by Lot rather than by record type —
+  the per-Lot section list is built from `fetchMemberLotAddresses` rather than from either record
+  read, because both omit a Lot with nothing on it and a page driven by them would drop the home of
+  a reader who owes nothing and has no violations.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible

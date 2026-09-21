@@ -30,10 +30,10 @@ It provides:
 - 📝 **Homeowner proxies** — in official mode, a verified homeowner can grant or revoke a proxy
   for one of their lots at an upcoming member meeting or election and review proxies they granted
   or hold at `/proxies`; the board can still record and administer paper proxies
-- 🏚️ **Lot records** — a default-off, per-lot record family (starting with enforcement records)
-  that the board records at `/admin`; once the board turns on the separate **Lot Records** setting,
-  everyone who currently holds a lot reads that lot's own records, and no one else's, at
-  `/lot-records`
+- 🏚️ **Lot records** — a default-off, per-lot record family (enforcement records and a per-lot
+  dues ledger) that the board records at `/admin`; once the board turns on the separate **Lot
+  Records** setting, everyone who currently holds a lot reads that lot's own balance, ledger, and
+  enforcement records, and no one else's, at `/lot-records`
 - 🤖 **Board-only AI document assistant** — ask natural-language questions about the
   document library and get a streamed, cited answer (Cloudflare AI Search + Claude),
   with known resident PII pseudonymized before anything reaches the model
