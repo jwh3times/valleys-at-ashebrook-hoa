@@ -7,6 +7,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.18] - 2026-09-22
+
+### Security
+
+- **The dues settings are no longer readable without signing in as the board.**
+  `GET /api/content/dues` returned the dues blob — amount, due date, notes and
+  payment-option links — to anyone who asked, whether or not the site was in
+  official mode, while the **Dues** page itself only shows that information in
+  official mode. Nothing sensitive was exposed, because the page publishes the
+  same text once official mode is on and the board's panel was the endpoint's
+  only caller. It was an open door onto a surface that is about to carry more:
+  the same settings area is where per-home dues detail is heading.
+
+  The read now lives beside the write it belongs with, at
+  `GET /api/admin/dues`, and requires board access exactly as saving those
+  settings already did. The public endpoint is gone.
+
+### Removed
+
+- `GET /api/content/dues`. It was a same-origin endpoint serving this site's own
+  admin panel, not a published interface, and its one caller moved with it, so
+  nothing outside the site should notice.
+
 ## [1.2.17] - 2026-09-22
 
 ### Changed
@@ -3457,7 +3480,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.17...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.18...HEAD
+[1.2.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.14...v1.2.15

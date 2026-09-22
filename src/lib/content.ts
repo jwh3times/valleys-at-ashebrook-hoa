@@ -2,7 +2,6 @@
 import {
   type Announcement,
   type DocumentItem,
-  type DuesSettings,
   type SiteSettings,
   DOCUMENT_CATEGORIES,
   normalizeSiteSettings,
@@ -18,12 +17,6 @@ export async function fetchDocuments(): Promise<DocumentItem[]> {
   const res = await fetch('/api/content/documents');
   if (!res.ok) throw new Error(`documents ${res.status}`);
   return (await res.json()) as DocumentItem[];
-}
-
-export async function fetchDuesSettings(): Promise<DuesSettings> {
-  const res = await fetch('/api/content/dues');
-  if (!res.ok) throw new Error(`dues ${res.status}`);
-  return (await res.json()) as DuesSettings;
 }
 
 export async function fetchSiteSettings(): Promise<SiteSettings> {

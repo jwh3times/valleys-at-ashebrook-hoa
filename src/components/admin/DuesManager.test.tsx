@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-vi.mock('../../lib/content', () => ({
+vi.mock('../../lib/admin', () => ({
   fetchDuesSettings: vi.fn().mockResolvedValue({
     amount: '$125',
     dueDate: '2027-01-01',
@@ -10,8 +10,8 @@ vi.mock('../../lib/content', () => ({
       { label: 'Pay by check', details: 'Mail a check.', url: '' },
     ],
   }),
+  saveDues: vi.fn(),
 }));
-vi.mock('../../lib/admin', () => ({ saveDues: vi.fn() }));
 
 import DuesManager from './DuesManager';
 

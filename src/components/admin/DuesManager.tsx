@@ -1,5 +1,4 @@
-import { fetchDuesSettings } from '../../lib/content';
-import { saveDues } from '../../lib/admin';
+import { fetchDuesSettings, saveDues } from '../../lib/admin';
 import {
   DEFAULT_DUES_SETTINGS,
   type DuesSettings,

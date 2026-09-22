@@ -9,11 +9,12 @@ into a client-side module.**
 
 ## Client helpers (`src/lib/`)
 
-- `src/lib/content.ts` handles public reads from `/api/content/*` endpoints.
+- `src/lib/content.ts` handles public reads from `/api/content/*` endpoints. The dues read
+  is not among them — it lives in `src/lib/admin.ts` beside `saveDues` (#364).
 - `src/lib/member.ts` handles the official-mode homeowner proxy API: `fetchMyProxies`,
   `grantProxy`, `revokeProxy`, and `lookupLotPersons` (over the unchanged `/api/member/owner-lookup`
   path), with the write/lookup request shapes kept beside those helpers.
-- `src/lib/admin.ts` handles board writes to `/api/admin/*` endpoints, typed document duplicate
+- `src/lib/admin.ts` handles board reads and writes against `/api/admin/*` endpoints, typed document duplicate
   errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
   `fetchReport`, `deleteReport`), the meeting-record people-picker and party-roster reads that
   replaced the retired board-roster helpers (`fetchMeetingRosterPeople` — the flat `{id,
