@@ -8,16 +8,44 @@ grouped dependency PR hide a real failure.
 `.github/workflows/build.yml` runs on every PR and every push to `main`, in this order:
 
 ```
-types:worker:check → format:check → lint → sync:agents -- --check
+types:worker (regenerate) → format:check → lint → sync:agents -- --check
   → lint:coercions → lint:migrations → lint:fixtures → check → test → test:server
-  → build → deploy:check
+  → build → deploy:check → worker-types drift verdict
 ```
 
 Run the relevant gates locally before pushing.
 
+### The Worker types gate regenerates first and judges last (#358)
+
+`worker-configuration.d.ts` is generated output committed to the tree, so it drifts whenever
+`wrangler.toml`, the environment template, or the installed toolchain moves. Dependabot edits only
+`package.json` and the lockfile, so **every bump touching `wrangler` or `@cloudflare/workers-types`
+drifts it by construction**.
+
+CI used to check it first and stop there, which meant such a bump died in about thirty seconds
+having validated nothing. Now CI **regenerates** the file up front, runs the whole suite against
+the correct types, and fails at the very end if the committed copy disagrees — `always()`, so a
+bump that is both stale and broken reports both rather than hiding one behind the other.
+
+The gate is still strict; drift is still a red build, on human PRs too. What changed is what a red
+build tells you: "this bump is sound, commit the regenerated file" rather than "something drifted,
+nothing was tested".
+
+**The fix, either way, is two commands:**
+
+```bash
+npm run types:worker   # rewrites worker-configuration.d.ts
+git add worker-configuration.d.ts
+```
+
+CI deliberately does **not** commit the regenerated file back. Doing so would need a
+`contents: write` token on a job whose `npm ci` has just run the install scripts of the very
+package being bumped — the risk `AGENTS.md` gates behind human confirmation everywhere else.
+
 > **A failed early gate skips every later step, including the whole test suite.** A
 > green-looking single blocker can therefore hide a real failure behind it — do not assume the
-> first reported failure is the only one.
+> first reported failure is the only one. The Worker types gate no longer does this (above), but
+> every other gate still does.
 
 That hazard has fired twice, both times on grouped dependabot PRs:
 
