@@ -7,6 +7,48 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.15] - 2026-09-22
+
+### Fixed
+
+- **The glossary said a mistaken dues entry gets voided. It does not.**
+  `CONTEXT.md` was written for lot records before the dues ledger shipped, and
+  read as a whole it gave the wrong answer for half the record types it
+  covers: **Voided Lot Record** described a record entered in error as voided
+  and vanishing from the lot's own surface, while **Lot Record** offered "a
+  dues balance" as an example of such a record. The ledger has no void at
+  all — a mistake is corrected by a reversal, which appends the opposite entry
+  and deliberately leaves both visible to the board and to the homeowner.
+  Those are opposite answers to "what does the homeowner see afterwards".
+
+  **Voided Lot Record** is now scoped to violations and says that only a
+  record type which has a void may be voided, pointing at reversal for the
+  ledger. **Lot Record** names a Dues Ledger Entry rather than a balance,
+  since the balance is derived from the entries and is never stored. **Lot
+  Record Event** now records that only a violation has states to move between
+  or a void to register, matching the constraint migration `0036` added.
+
+  **Review Flag** listed "Automatic reversal" among the words to avoid for it,
+  written when reversal named nothing real. It now says "Automatic rollback",
+  so the two senses no longer collide.
+
+### Added
+
+- Four terms the dues ledger put on a homeowner-facing page with nothing in
+  the glossary to fix the words: **Dues Ledger Entry** and its four kinds,
+  **Balance**, **Opening Balance**, and **Reversal**. **Opening Balance** is
+  the one a homeowner already reads as "balance brought forward"; it is
+  recorded as deliberately undated, because the day it would need is the first
+  day of the reader's own authority rather than the date of any entry
+  (ADR 0025, #387).
+
+## [1.2.14] - 2026-09-21
+
+### Changed
+
+- Bumped `oxlint-tsgolint` from 7.0.2001 to 7.0.2002 in the oxlint group
+  (#385).
+
 ## [1.2.13] - 2026-09-21
 
 ### Added

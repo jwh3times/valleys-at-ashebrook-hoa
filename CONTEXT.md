@@ -98,7 +98,7 @@ _Avoid_: Effective date, Association Day
 
 **Review Flag**:
 A durable indication that a roster, identity, Board-service, or access change may require a human to inspect an affected fact or intervening action. It does not itself invalidate or rewrite that fact or action, and its opening and resolution are preserved through Review Events.
-_Avoid_: Automatic reversal, deletion marker
+_Avoid_: Automatic rollback, deletion marker
 
 **Review Event**:
 An immutable account of opening or resolving a Review Flag, linked to the change that caused the review and recording who or what acted and when.
@@ -189,13 +189,29 @@ _Avoid_: Access change, mutable audit row
 ## Lot records
 
 **Lot Record**:
-A record whose audience is the parties holding Lot Authority over one Lot, plus Board Access — a dues balance or a violation, not a shared association document. Its audience is the Lot, never a named Person: co-owners and an Organization's Representatives all see the same record, and nothing on this surface can be addressed to one of them privately. Access follows the roster on every request rather than a stored permission, so it begins and ends with Lot Authority; detail is limited to records dated within the reader's own period of authority.
+A record whose audience is the parties holding Lot Authority over one Lot, plus Board Access — a Dues Ledger Entry or a violation, not a shared association document. Its audience is the Lot, never a named Person: co-owners and an Organization's Representatives all see the same record, and nothing on this surface can be addressed to one of them privately. Access follows the roster on every request rather than a stored permission, so it begins and ends with Lot Authority; detail is limited to records dated within the reader's own period of authority.
 _Avoid_: Owner record, homeowner data, private tier, fourth tier
 
 **Lot Record Event**:
-An immutable account of a Lot Record being created, moved between states, or voided, recording the acting Account, the reason, and when. Reading a Lot Record is not an event; a bulk export of Lot Records is.
+An immutable account of a Lot Record being created, moved between states, or voided, recording the acting Account, the reason, and when. Only a violation has states to move between or a void to record; a Dues Ledger Entry can only ever be created. Reading a Lot Record is not an event; a bulk export of Lot Records is.
 _Avoid_: Record history, mutable audit row
 
 **Voided Lot Record**:
-A Lot Record recorded in error and therefore never true. It is preserved and remains visible to the Board, and it disappears from the Lot's own surface; nothing about a Lot Record is hard-deleted, and a correction that is not an error is a new record rather than an edit of the old one.
-_Avoid_: Deleted record, closed record
+A violation recorded in error and therefore never true. It is preserved and remains visible to the Board, and it disappears from the Lot's own surface; nothing about a Lot Record is hard-deleted, and a correction that is not an error is a new record rather than an edit of the old one. Only a record type that has a void may be voided: the dues ledger has none, and its correction is a Reversal.
+_Avoid_: Deleted record, closed record, voided ledger entry
+
+**Dues Ledger Entry**:
+One posting against a Lot's dues, in signed integer cents, of one of four kinds: a charge, which is positive; a payment, which is negative; an adjustment, either sign, for a real-world credit or debit such as a board-approved waiver; and a Reversal. Entries are appended and never edited or deleted.
+_Avoid_: Transaction, invoice, dues record, dues balance
+
+**Balance**:
+What a Lot owes, derived on every read as the sum of its Dues Ledger Entries and never stored, so no figure can drift from the entries it came from. A positive Balance is owed and a negative one is a credit.
+_Avoid_: Balance column, amount due, running total
+
+**Opening Balance**:
+The sum of every Dues Ledger Entry posted before the reader's own period of authority, collapsed into one line so that the Balance stays whole while an earlier Owner's itemized entries stay invisible. It is deliberately undated, because the day it means is the first day of the reader's authority rather than the date of any entry; the homeowner surface words it "balance brought forward".
+_Avoid_: Starting balance, previous balance, balance before the earliest entry
+
+**Reversal**:
+The correction path for a Dues Ledger Entry: an appended entry negating exactly one earlier one. An entry may be reversed at most once, and a Reversal may not itself be reversed. Unlike a Voided Lot Record it hides nothing — both entries stay visible to the Lot and to the Board.
+_Avoid_: Void, deletion, edit, un-payment
