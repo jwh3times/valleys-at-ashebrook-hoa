@@ -438,7 +438,7 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
 - ADR 0022 phase 2 roster preview, `requireBoard`-gated and read-only:
   `GET /api/admin/roster-preview` returns structural counts (IDs and non-personal fields only, not
   a roster browser) across five sections — Roster, Board, Access, Review, Compliance — including
-  the two ADR 0022 integrity views and shadow-mismatch counts. It is not a public or homeowner
+  the two ADR 0022 integrity views. It is not a public or homeowner
   surface and does not affect authorization. Its phase-2 admin panel (`RosterPreview`) was retired
   by phase 3e in favor of the five writable panels below; this route and its structural-count shape
   are unchanged.

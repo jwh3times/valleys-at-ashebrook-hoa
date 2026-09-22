@@ -103,7 +103,7 @@ no separate weighted/unweighted mode); `motions.outcome` itself is board-entered
 computed, because passage thresholds vary and quorum is not modelled), roster/verification tables
 (`properties` — including `vote_weight`, an integer `NOT NULL DEFAULT 1` that weights a lot's
 member-meeting vote and is rejected at zero, see ADR 0015, and nullable `retired_day`/`retired_at`
-added by ADR 0022 migration `0022`, read only by the ADR 0022 phase-2 shadow derivation
+added by ADR 0022 migration `0022`, read only by the ADR 0022 derived-authorization model
 (`src/server/authz/derive.ts`), never by legacy authorization — `owners`,
 `user_property_links`, `property_verifications`, `manual_approval_queue`), and Better Auth tables
 (`user`, `session`, `account`, `verification`).

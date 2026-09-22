@@ -149,8 +149,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   required third parameter, computed once per request by `src/middleware.ts` and by
   `resolveAuthContext` (middleware-first caller resolution with a fail-closed fallback) via
   `associationDateIso()`, never read from `locals` or recomputed downstream.
-  `readLegacyRosterContext` reads the legacy answer for one account entirely from D1 with no
-  session, for the shadow layer's mode-aware comparison (below). `users.role` is read ONLY inside
+  `users.role` is read ONLY inside
   `context.ts` — `test/unit/authz-legacy-role.test.ts` pins that by import-scanning the rest of
   `authz/`, and separately scans all of `src/` for a `ctx.role` comparison outside the guards (a
   read like `visibleTiers(ctx.role)` passes the alias onward rather than comparing it, so it is not
@@ -198,24 +197,18 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `/api/verify/*` routes, and `src/middleware.ts` — whose final `else` branch is what catches any
   surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
   and fails if a mutating route ends up live without being declared in both that test and
-  `ALWAYS_LIVE`. `authz/` also holds the ADR 0022 shadow layer, which computes but never decides:
-  `derive.ts` (`deriveAccess`/`toDerivedAccess`, a capability SET — `member`/`board`/`systemAdmin`,
-  not a ladder — plus `lotIds`, `contentTier`, and `hasCurrentBoardTerm`, recomputed from current
-  D1 facts on every call with nothing cached) now also returns `invalidBoardGrantId` — a live Board
-  grant whose qualifying term has lapsed, been cancelled, or been voided
-  (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on the
-  strength of it, independent of whether the write path already ended the grant, and recording it
-  as an Access Event awaits an attribution decision on #217. `shadow-compare.ts`
-  (`compareContexts`, the pure legacy-vs-derived diff shared by the request path and the offline
-  sweep so neither can drift from the other) and `shadow.ts` (`compareInShadow`, wired into
-  `src/middleware.ts` behind `env.CUTOVER_SHADOW === 'on'`) are mode-aware: they compute the OTHER
-  model from whichever context served the request — under `legacy` it derives, as phase 2 always
-  did; under `derived` it reads the legacy roster fresh via `readLegacyRosterContext` — so the two
-  sides can never become a comparison of the served context with itself. It still returns `void`
-  and swallows its own errors, so it remains structurally incapable of changing a response, and
-  stays in place through phase 3, deleted only in phase 4 (#212). Legacy
-  `getAuthContext`/`resolveAuthContext` remain the entry point for every request regardless of
-  which model answers it.
+  `ALWAYS_LIVE`. `authz/` also holds `derive.ts` (`deriveAccess`/`toDerivedAccess`, a capability SET
+  — `member`/`board`/`systemAdmin`, not a ladder — plus `lotIds`, `contentTier`, and
+  `hasCurrentBoardTerm`, recomputed from current D1 facts on every call with nothing cached, its
+  `Capability` type imported from `guards.ts` rather than redeclared) that also returns
+  `invalidBoardGrantId` — a live Board grant whose qualifying term has lapsed, been cancelled, or
+  been voided (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on
+  the strength of it, independent of whether the write path already ended the grant, and recording
+  it as an Access Event awaits an attribution decision on #217. The ADR 0022 phase-4 wave-1 shadow
+  layer (`shadow.ts`, `shadow-compare.ts`, the `CUTOVER_SHADOW` env var, and the offline
+  `scripts/shadow-sweep.ts` sweep) is deleted (#212); `derive.ts` is now read only from
+  `getAuthContext`'s `derived` branch. Legacy `getAuthContext`/`resolveAuthContext` remain the entry
+  point for every request regardless of which model answers it.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
