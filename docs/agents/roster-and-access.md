@@ -24,10 +24,12 @@ by import-scanning the rest of `authz/`.
 `POST /api/bootstrap/board` is permanently self-disabled: its `system_admin_bootstrap` singleton
 is consumed and a re-run answers `410`.
 
-**Only phase 4 (#212) remains** — deleting the shadow layer (`shadow.ts`, `shadow-compare.ts`, the
-offline sweep) and the `role`/`propertyIds` compatibility aliases, and renaming `properties` to
-`lots`. The write freeze, the permission matrix, and the ballot-privacy suites are retained
-permanently per #206/#212, not retired with the migration.
+**Phase 4 (#212) is under way.** Wave 1 deleted the shadow layer (`shadow.ts`, `shadow-compare.ts`,
+the `CUTOVER_SHADOW` env var, and the offline `scripts/shadow-sweep.ts` sweep). What remains —
+the rest of wave 1 (the legacy Members panel, the `role`/`propertyIds` compatibility aliases, the
+`user_property_links` readers) and wave 2's one-way step (the `legacy` branch, `users.role`, and
+the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is tracked on #212. The write freeze, the permission matrix, and the ballot-privacy
+suites are retained permanently per #206/#212, not retired with the migration.
 
 ## The seam
 
@@ -204,8 +206,7 @@ been voided (`test/server/access-revalidation.test.ts`); evaluation refuses the 
 the strength of it, independent of whether the write path already ended the grant.
 `src/server/authz/revalidation-event.ts` records that as an account-attributed root Access Event,
 day-idempotent by `operation_key = grant-revalidation:<grant>:<day>`, written only when `derived`
-is the **serving** model and never from shadow, with errors swallowed so evaluation cannot 500 on
-a ledger failure.
+is the **serving** model, with errors swallowed so evaluation cannot 500 on a ledger failure.
 
 Board sign-in access has its own admin panel — **Board access (legacy)** (`BoardAccessManager`) —
 distinct from the **Board** panel (`BoardServicePanel`) that records who serves. Neither sense
@@ -336,11 +337,3 @@ dropped rather than invented; see [`migrations.md`](./migrations.md).
 > live roster rows and their audit baseline. **Any future run against production must pass
 > `--authoritative`** — the insert-once mode (`ON CONFLICT DO NOTHING`) that deletes nothing and
 > refuses to run while a flip-blocking exception is outstanding.
-
-`scripts/shadow-sweep.ts` derives both contexts for every account offline, sharing `derive.ts`'s
-SQL and `shadow-compare.ts`'s comparison with the request-path shadow rather than reimplementing
-them. Local execution batches through Wrangler's `--file`; **remote execution goes through
-order-preserving `--command` chunks instead**, because remote `--file` is D1's import API
-(progress lines plus one summary, no per-statement results) and would otherwise silently
-mis-index as data. `scripts/wrangler-d1.ts` holds the shared helpers — `parseD1Output`,
-`chunkStatements`, `withRetry`.

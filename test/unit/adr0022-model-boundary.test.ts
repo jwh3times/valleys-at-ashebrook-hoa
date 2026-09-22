@@ -19,7 +19,7 @@ import { join, relative } from 'node:path';
 //     guard, page, or content read reaches past that seam into the roster
 //     tables itself. (`revalidation-event.ts` is the one authz module that
 //     WRITES the ledger — the #217-decided Access Event — and it is called
-//     only from the derived serving path, never from shadow.)
+//     only from the derived serving path.)
 //
 //  2. CONTENT READS REACH THE ROSTER ONLY WHERE DECLARED. This began as "no
 //     content read touches the new tables at all", which held while the legacy
@@ -53,9 +53,6 @@ const ALLOWED = new Set([
   'server/db/client.ts',
   // Derivation: the derived model's read side.
   'server/authz/derive.ts',
-  // The comparison, and the operator-only mismatch table it writes.
-  'server/authz/shadow.ts',
-  'server/authz/shadow-compare.ts',
   // The two operational flag readers. Both scoped to cutover_settings by their
   // own test below.
   'server/authz/write-freeze.ts',

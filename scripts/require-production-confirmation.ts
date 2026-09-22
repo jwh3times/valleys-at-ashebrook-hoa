@@ -159,14 +159,14 @@ function productionConfirmationReasonForSegment(
 
   if (
     npm?.kind === 'run' &&
-    (npm.name === 'roster:backfill' || npm.name === 'shadow:sweep') &&
+    npm.name === 'roster:backfill' &&
     hasFlags(normalized, '--remote', '--write')
   ) {
     return 'write production roster or access-audit data';
   }
 
   const directScript =
-    /\bscripts[\\/](?:put-secret|import-corpus|import-documents|dedupe-documents|ocr-scanned|migrate-roster|shadow-sweep)\.ts\b/;
+    /\bscripts[\\/](?:put-secret|import-corpus|import-documents|dedupe-documents|ocr-scanned|migrate-roster)\.ts\b/;
   if (
     directScript.test(normalized) &&
     (/put-secret\.ts\b/.test(normalized) ||

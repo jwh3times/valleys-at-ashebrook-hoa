@@ -301,24 +301,16 @@ EMAIL_NOT_VERIFIED` for an existing-but-unverified account versus `401` for anyt
   Grants, with every stored grant re-validated against current facts. Legacy
   `users.role`/`user_property_links` are written behind as mirrors and read for authorization only
   if the flag is written back to `legacy`, which remains possible and is what an absent row means.
-- **The ADR 0022 derived-authorization layer cannot change a live authorization decision and
-  records only non-personal comparison data.** `src/server/authz/derive.ts` computes a second,
-  independent authorization context from the new party-roster tables, re-validating every stored
-  Board grant against its qualifying term on every call — a live grant whose term has lapsed, been
-  cancelled, or been voided is refused, independent of whether the write path already ended it.
-  Comparison (`src/server/authz/shadow.ts`, wired into `src/middleware.ts` behind the off-by-default
-  `env.CUTOVER_SHADOW === 'on'`) is mode-aware: it runs after whichever context answered the
-  request is already resolved and computes the other model fresh for the comparison — never the
-  served context compared with itself — returns no value, and swallows its own errors rather than
-  propagating them; it is structurally incapable of denying or granting anything. A disagreement is
-  recorded to `cutover_shadow_mismatches` as account id, role/tier codes, and lot **counts** only,
-  never a lot id, name, address, or other roster detail, and repeats collapse onto one row per
-  account rather than accumulating a per-request log. The companion offline sweep
-  (`npm run shadow:sweep`) writes the same shape from an operator machine, not the Worker. The new
-  board-only `GET /api/admin/roster-preview` panel is read-only by design — the phase-2 backfill
+- **ADR 0022 derived authorization re-validates every stored Board grant on every request.**
+  `src/server/authz/derive.ts` computes the authorization context from the party-roster
+  tables, re-validating every stored Board grant against its qualifying term on every call — a live
+  grant whose term has lapsed, been cancelled, or been voided is refused, independent of whether
+  the write path already ended it. `cutover_mode` decides which model — `derived` or `legacy` —
+  answers a given request; there is no request-path comparison of the two any more (the phase-2
+  shadow layer that ran one alongside the served answer was deleted in phase 4, #212). The board-only
+  `GET /api/admin/roster-preview` panel is read-only by design — the phase-2 backfill
   clean-replaces the underlying tables, so a write here would be silently erased — and exposes only
-  structural counts (including the count of unexplained shadow mismatches), never resident names,
-  addresses, or contact data.
+  structural counts, never resident names, addresses, or contact data.
 - **An operator-only write freeze can halt mutations site-wide without a deploy.** The
   `cutover_settings.write_freeze` singleton (built for the ADR 0022 phase-3 flip and retained
   afterward as a general maintenance switch) is read uncached on every covered request, in two

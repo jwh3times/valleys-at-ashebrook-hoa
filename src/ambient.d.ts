@@ -25,25 +25,6 @@ declare namespace Cloudflare {
      * the phase 3c rewrite (#219).
      */
     BOOTSTRAP_SECRET?: string;
-    /**
-     * ADR 0022 phase 2 shadow comparison: set to `"on"` to compute the derived
-     * authorization context alongside the legacy one and record only the
-     * disagreements. Absent or anything else means off.
-     *
-     * Declared here rather than in wrangler.toml deliberately, twice over. The
-     * generated types narrow a committed var to its literal value, so a
-     * committed `"off"` makes `=== 'on'` a type error describing the file
-     * rather than the runtime. And this is an operator switch for one phase,
-     * not deployment configuration — the cutover flag itself stays a D1
-     * singleton, because that one must flip in seconds without a deploy.
-     *
-     * STILL READ. `src/middleware.ts` consults it on every request and
-     * `SECURITY.md` documents it as an operator switch; an earlier version of
-     * this comment claimed it was removed at the phase-3 flip, which it was
-     * not. Removing the variable is ADR 0022 phase 4 work (#212), not
-     * something already done.
-     */
-    CUTOVER_SHADOW?: string;
     /** Test-only binding: D1 migrations applied via applyD1Migrations in Workers tests. */
     MIGRATIONS?: import('@cloudflare/vitest-pool-workers').D1Migration[];
   }

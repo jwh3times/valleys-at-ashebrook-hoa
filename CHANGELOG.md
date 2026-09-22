@@ -7,6 +7,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.21] - 2026-09-22
+
+### Removed
+
+- **The ADR 0022 shadow comparison is gone.** It computed the authorization
+  model that was _not_ serving a request and recorded any disagreement, behind
+  the `CUTOVER_SHADOW` switch, and `npm run shadow:sweep` did the same offline
+  for every account. Production has served from the derived model since August,
+  so there was nothing left to compare. This is the first slice of ADR 0022
+  phase 4 (#212). It needs no schema change: the
+  `cutover_shadow_mismatches` table stays until phase 4's migration drops it,
+  and nothing writes to it any more.
+
+  The board's roster preview no longer shows the two shadow-mismatch counts.
+  Once that table is dropped, those counts would break the whole preview.
+
 ## [1.2.20] - 2026-09-22
 
 ### Changed
@@ -3506,7 +3522,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.20...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.21...HEAD
+[1.2.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.17...v1.2.18

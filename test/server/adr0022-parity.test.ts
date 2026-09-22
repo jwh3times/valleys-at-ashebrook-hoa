@@ -3,8 +3,12 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { deriveAccess } from '../../src/server/authz/derive';
-import { compareContexts } from '../../src/server/authz/shadow-compare';
-import { legacyContext, resetRoster, seedRoster } from './dual-fixtures';
+import {
+  compareContexts,
+  legacyContext,
+  resetRoster,
+  seedRoster,
+} from './dual-fixtures';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 
 // Session plumbing is not what parity is testing, but the flag-driven half
@@ -463,8 +467,8 @@ describe('the flag selects the model, for every caller class', () => {
     // Allow-list entry two, through the seam. Legacy's rank ladder hands this
     // caller `member` for free; derivation grants member only from Lot
     // authority. Tier and lot set agree in both modes — the divergence is
-    // purely the capability, which is why the member-route gates and not the
-    // shadow comparison are what surface it.
+    // purely the capability, which is why the member-route gates and not
+    // `compareContexts` are what surface it.
     const legacy = await resolve('legacy', 'acct-board-nolots');
     expect(legacy?.contentTier).toBe('board');
     expect(legacy?.lotIds).toEqual([]);
@@ -505,5 +509,44 @@ describe('the flag selects the model, for every caller class', () => {
     expect((await resolve('legacy', 'acct-unlinked'))?.contentTier).toBe(
       'homeowner',
     );
+  });
+});
+
+describe('what compareContexts counts as a mismatch', () => {
+  it('matches the same tier and lot set', () => {
+    expect(
+      compareContexts(
+        { role: 'homeowner', propertyIds: ['a', 'b'] },
+        { contentTier: 'homeowner', lotIds: ['a', 'b'] },
+      ).matched,
+    ).toBe(true);
+  });
+
+  it('ignores lot order and duplicates', () => {
+    expect(
+      compareContexts(
+        { role: 'homeowner', propertyIds: ['b', 'a', 'c', 'a'] },
+        { contentTier: 'homeowner', lotIds: ['c', 'a', 'b'] },
+      ).matched,
+    ).toBe(true);
+  });
+
+  it('reports a tier disagreement with identical lots', () => {
+    const result = compareContexts(
+      { role: 'board', propertyIds: ['a'] },
+      { contentTier: 'homeowner', lotIds: ['a'] },
+    );
+    expect(result.matched).toBe(false);
+    expect(result.legacyRole).toBe('board');
+    expect(result.derivedContentTier).toBe('homeowner');
+  });
+
+  it('reports lot sets of the same size that name different lots', () => {
+    expect(
+      compareContexts(
+        { role: 'homeowner', propertyIds: ['l1'] },
+        { contentTier: 'homeowner', lotIds: ['l2'] },
+      ).matched,
+    ).toBe(false);
   });
 });
