@@ -191,3 +191,31 @@ export async function legacyContext(
   );
   return { role, propertyIds: links.map((l) => l.property_id) };
 }
+
+/**
+ * The parity suite's comparison of the two models.
+ *
+ * Compares the content tier and the lot SET — sorted and de-duplicated, because
+ * ordering is an artifact of the query plan and would otherwise report a
+ * mismatch that does not exist. Moved here from the deleted request-path shadow
+ * layer (#212); it goes when the legacy model does.
+ */
+export function compareContexts(
+  legacy: { role: string; propertyIds: string[] },
+  derived: { contentTier: string; lotIds: string[] },
+): {
+  matched: boolean;
+  legacyRole: string;
+  derivedContentTier: string;
+} {
+  const legacyLots = [...new Set(legacy.propertyIds)].sort();
+  const derivedLots = [...new Set(derived.lotIds)].sort();
+  return {
+    matched:
+      legacy.role === derived.contentTier &&
+      legacyLots.length === derivedLots.length &&
+      legacyLots.every((id, i) => id === derivedLots[i]),
+    legacyRole: legacy.role,
+    derivedContentTier: derived.contentTier,
+  };
+}

@@ -3,8 +3,12 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { deriveAccess } from '../../src/server/authz/derive';
-import { compareContexts } from '../../src/server/authz/shadow-compare';
-import { legacyContext, resetRoster, seedRoster } from './dual-fixtures';
+import {
+  compareContexts,
+  legacyContext,
+  resetRoster,
+  seedRoster,
+} from './dual-fixtures';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 
 // Session plumbing is not what parity is testing, but the flag-driven half
@@ -463,8 +467,8 @@ describe('the flag selects the model, for every caller class', () => {
     // Allow-list entry two, through the seam. Legacy's rank ladder hands this
     // caller `member` for free; derivation grants member only from Lot
     // authority. Tier and lot set agree in both modes — the divergence is
-    // purely the capability, which is why the member-route gates and not the
-    // shadow comparison are what surface it.
+    // purely the capability, which is why the member-route gates and not
+    // `compareContexts` are what surface it.
     const legacy = await resolve('legacy', 'acct-board-nolots');
     expect(legacy?.contentTier).toBe('board');
     expect(legacy?.lotIds).toEqual([]);

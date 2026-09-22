@@ -11,10 +11,9 @@ import { users } from './auth-schema';
 // Operational tables for the ADR 0022 cutover. Both drop in phase 4, except
 // the write-freeze setting, which is deliberately retained — see below.
 //
-// Added inert in PHASE 1 ("expand") — see issue #195. Two things read them now:
-// the phase-2 shadow layer writes cutover_shadow_mismatches, and the write
-// freeze is enforced from src/server/authz/write-freeze.ts. `cutover_mode` is
-// still read by nothing; phase 3 is what makes it decide anything.
+// Added inert in PHASE 1 ("expand") — see issue #195. `cutover_mode` decides
+// which model serves (src/server/authz/cutover-mode.ts), and the write freeze is
+// enforced from src/server/authz/write-freeze.ts.
 
 const instant = (name: string) => integer(name, { mode: 'timestamp_ms' });
 
@@ -67,11 +66,9 @@ export const cutoverSettings = sqliteTable(
 //
 // IDs, codes, and counts. No personal values, ever.
 //
-// Fed by two sources: the per-request shadow path, and the offline sweep that
-// derives both contexts for EVERY account. The sweep is not optional garnish —
-// on a 21-Lot site organic traffic may exercise a handful of accounts, and
-// "zero mismatches" across three accounts renders identically to zero across
-// all of them. Dropped in phase 4.
+// Written by nothing since phase 4 deleted the request-path shadow layer and
+// the offline sweep (#212). The table itself is dropped by phase 4's migration,
+// which is why the definition outlives its writers.
 export const cutoverShadowMismatches = sqliteTable(
   'cutover_shadow_mismatches',
   {

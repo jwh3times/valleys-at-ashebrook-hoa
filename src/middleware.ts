@@ -4,7 +4,6 @@
 import type { MiddlewareHandler } from 'astro';
 import { env } from 'cloudflare:workers';
 import { getAuthContext } from './server/authz/context';
-import { compareInShadow } from './server/authz/shadow';
 import { associationDateIso } from './lib/format';
 import {
   jsonContentError,
@@ -143,9 +142,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   // reaches the admin handler, and a backstop that classified the raw string
   // would wave it through as an unnamed path.
   const path = routedPathname(context.url.pathname);
-  // One authority for "today" per request. Computed once so a request landing
-  // astride midnight cannot resolve its context against one Association Day
-  // and shadow-compare against another.
+  // One authority for "today" per request, shared by both branches below.
   const associationDay = associationDateIso();
 
   if (isVotingApi(path)) {
@@ -185,17 +182,6 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   const ctx = await getAuthContext(context.request, env, associationDay);
   context.locals.authContext = ctx;
-
-  // ADR 0022: compute the OTHER authorization model alongside the one that
-  // answered and record only the disagreements. compareInShadow is mode-aware —
-  // under legacy it derives, under derived it reads the legacy roster — so it
-  // never compares a context with itself. Structurally incapable of changing
-  // the answer: `ctx` is already resolved and assigned above, this returns
-  // void, and it swallows its own errors. Off by default; deleted in phase 4
-  // (#212), not at the flip.
-  if (ctx && env.CUTOVER_SHADOW === 'on') {
-    await compareInShadow(env, ctx, associationDay);
-  }
 
   // Surface site settings (incl. officialMode) to page renders. Skip the DB read
   // for most API/file routes, which do not render chrome — they get inert

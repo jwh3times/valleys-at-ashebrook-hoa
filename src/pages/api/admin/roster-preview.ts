@@ -98,14 +98,6 @@ const SECTIONS = {
       'Pending redaction cleanup',
       "SELECT COUNT(*) AS n FROM redaction_tasks WHERE status = 'pending'",
     ],
-    [
-      'Unexplained shadow mismatches',
-      'SELECT COUNT(*) AS n FROM cutover_shadow_mismatches WHERE explained_as IS NULL',
-    ],
-    [
-      'Explained shadow mismatches',
-      'SELECT COUNT(*) AS n FROM cutover_shadow_mismatches WHERE explained_as IS NOT NULL',
-    ],
   ],
 } as const;
 

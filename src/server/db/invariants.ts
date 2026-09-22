@@ -10,8 +10,7 @@
  *   production D1 through the `DATABASE` binding.
  *
  * They cannot share an execution path — a Worker cannot spawn a subprocess —
- * so they share the queries instead, the same shared-source discipline
- * `shadow-compare.ts` was built with (#240, per #206: "the checks that gate a
+ * so they share the queries instead (#240, per #206: "the checks that gate a
  * migration are exactly the checks that catch drift afterwards").
  *
  * Every check is a query that MUST return zero rows. Adding a check means

@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { createAuth } from '../auth';
 import { getDb } from '../db/client';
-import { properties, userPropertyLinks, users } from '../db/schema';
+import { properties, userPropertyLinks } from '../db/schema';
 import { getCutoverMode } from './cutover-mode';
 import { deriveAccess, type DerivedAccess } from './derive';
 import { recordGrantRevalidationDenial } from './revalidation-event';
@@ -113,32 +113,6 @@ async function readLegacyFacts(
 }
 
 /**
- * The legacy answer for one account, read entirely from D1 — no session.
- *
- * Exists for the shadow layer, which under `cutover_mode = derived` must
- * compute the legacy side fresh: the context that served the request is already
- * the derived one, and comparing it with itself can never mismatch. The role
- * comes from `users.role` directly, which is the same row Better Auth serves
- * into the session, so this and `getAuthContext`'s legacy branch cannot
- * disagree. This export keeps the seam intact: the column is still read only in
- * this module, and consumers get a synthesized `AuthContext`, never the column.
- */
-export async function readLegacyRosterContext(
-  env: Env,
-  userId: string,
-): Promise<AuthContext> {
-  const [row] = await getDb(env)
-    .select({ role: users.role })
-    .from(users)
-    .where(eq(users.id, userId));
-  return legacyAuthContext(
-    userId,
-    coerceRole(row?.role),
-    await activeLinkedPropertyIds(env, userId),
-  );
-}
-
-/**
  * Resolve the caller for this request.
  *
  * Returns null only for an anonymous caller — no session. An authenticated
@@ -166,9 +140,8 @@ export async function getAuthContext(
     const access = await deriveAccess(env, result.user.id, associationDay);
     // A live Board grant that failed re-validation was refused by derivation;
     // record the finding as a day-idempotent Access Event (#217's decision,
-    // implemented in 3b). Only when derived is the SERVING model — the shadow
-    // layer computes but must never write, and under `legacy` the caller was
-    // not actually denied anything.
+    // implemented in 3b). Only when derived is the SERVING model — under
+    // `legacy` the caller was not actually denied anything.
     if (access.invalidBoardGrantId) {
       await recordGrantRevalidationDenial(env, {
         accountId: result.user.id,

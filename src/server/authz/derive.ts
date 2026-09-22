@@ -2,9 +2,8 @@ import type { Role } from './guards';
 
 // ADR 0022 derived authorization (issue #210, phase 2).
 //
-// PHASE 2: this is computed in SHADOW MODE and compared against the legacy
-// context. It never affects a response. Legacy decides every request until the
-// phase-3 flip.
+// The serving model since the phase-3 flip: `context.ts` answers every request
+// from this module whenever `cutover_mode = derived`.
 //
 // Three rules this module exists to enforce, each of which the old rank ladder
 // broke:
@@ -70,8 +69,7 @@ export interface DerivedAccess {
    *
    * Recorded as a day-idempotent Access Event attributed to the denied caller
    * (#217's option 1, implemented in 3b): see `revalidation-event.ts`, called
-   * from `context.ts` only when derived is the SERVING model — the shadow
-   * layer computes this field too and must never write.
+   * from `context.ts` only when derived is the SERVING model.
    *
    * Named independently of `capabilities` on purpose. A caller holding two
    * Board grants, one valid and one stale, is not denied — but the stale one is

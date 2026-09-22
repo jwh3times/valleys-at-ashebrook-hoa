@@ -53,9 +53,6 @@ const ALLOWED = new Set([
   'server/db/client.ts',
   // Derivation: the derived model's read side.
   'server/authz/derive.ts',
-  // The comparison, and the operator-only mismatch table it writes.
-  'server/authz/shadow.ts',
-  'server/authz/shadow-compare.ts',
   // The two operational flag readers. Both scoped to cutover_settings by their
   // own test below.
   'server/authz/write-freeze.ts',

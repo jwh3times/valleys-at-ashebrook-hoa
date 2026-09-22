@@ -136,8 +136,8 @@ describe('re-validating a stored Board grant', () => {
  * The recording half, decided on #217 (option 1) and implemented in 3b
  * (#218): a live grant failing re-validation writes a DAY-IDEMPOTENT Access
  * Event attributed to the denied caller — but only when `derived` is the
- * SERVING model. The shadow layer computes the same finding under `legacy`
- * and must never write.
+ * SERVING model. Under `legacy` the caller was not denied anything, so
+ * nothing is written.
  */
 describe('recording the re-validation denial', () => {
   beforeEach(async () => {
