@@ -1,4 +1,4 @@
-// Admin-only write helpers.
+// Admin-only client helpers: the board's reads and writes against /api/admin/*.
 import type {
   Announcement,
   AdminDocumentItem,
@@ -38,8 +38,8 @@ import {
 } from './reports';
 
 /**
- * Every admin write goes through here, so that a failure surfaces the
- * server's own message.
+ * Every admin request goes through here — reads as well as writes — so that a
+ * failure surfaces the server's own message.
  *
  * The routes go to real trouble over those messages — "Proxy is in use
  * (attendance) — remove those records first", "Inactive lots cannot be
