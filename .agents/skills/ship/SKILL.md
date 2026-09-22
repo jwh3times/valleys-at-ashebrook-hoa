@@ -140,6 +140,18 @@ Rules:
   `next-version.sh` now prints a higher number), renumber the existing section rather
   than adding a new one — the `Changelog Version` CI job fails a PR whose section no
   longer matches the version its merge will mint, so renumbering is what turns it green.
+- **Add the version's link definition** to the reference block at the foot of the file,
+  and repoint `[Unreleased]` at it:
+
+  ```markdown
+  [Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.21...HEAD
+  [0.3.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v0.3.20...v0.3.21
+  ```
+
+  Nothing else maintains that block, and no CI job checks it, so a section shipped
+  without its definition renders as plain bracketed text linking nowhere. Skipping this
+  is how the block once fell **188 releases** behind before anyone noticed. If you
+  renumbered the section above, renumber its definition too rather than adding a second.
 
 ### 7. Fast checks — refuse to push if any fail
 
