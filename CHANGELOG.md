@@ -7,6 +7,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.20] - 2026-09-22
+
+### Changed
+
+- **A dependency bump that moves `wrangler` is now actually tested.** CI checked
+  the generated Worker types first and stopped there, so any Dependabot bump
+  touching `wrangler` or `@cloudflare/workers-types` failed in about thirty
+  seconds having run none of the lint, type, test, build or deploy checks — the
+  drift hid whether the bump was otherwise sound. CI now regenerates those types
+  up front, runs the whole suite against them, and reports the drift at the very
+  end instead. The gate is no weaker: drift is still a red build, on every
+  branch. It just says "commit the regenerated file" against a suite that ran,
+  rather than stopping before the suite starts (#358).
+
+  CI still does not commit the regenerated file back. That would mean giving
+  write access to a job that has just run the install scripts of the package
+  being bumped.
+
 ## [1.2.19] - 2026-09-22
 
 ### Changed
@@ -3488,7 +3506,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.19...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.20...HEAD
+[1.2.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.16...v1.2.17

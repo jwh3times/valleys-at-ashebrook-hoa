@@ -26,14 +26,40 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # Fails when wrangler.toml or the committed environment template changes
-      # without regenerating compatibility-scoped runtime and binding types.
-      - name: Check generated Worker types
+      # REGENERATE FIRST, JUDGE LAST (#358).
+      #
+      # `worker-configuration.d.ts` is generated output committed to the tree,
+      # and it drifts whenever wrangler.toml, the environment template, or the
+      # installed toolchain moves. Dependabot edits only package.json and the
+      # lockfile, so every bump touching `wrangler` or `@cloudflare/workers-types`
+      # drifts it by construction.
+      #
+      # This step used to `exit 1` here, which meant such a bump died in ~30s
+      # having validated NOTHING — lint, check, test, test:server, build and
+      # deploy:check never ran against the new toolchain, so the drift masked
+      # whether the bump was otherwise sound.
+      #
+      # So regenerate now and let the whole suite run against CORRECT types,
+      # then fail at the end if the committed copy disagrees. The gate stays
+      # strict — drift is still a red build, for human PRs too — but a red
+      # build now means "this bump is sound, commit the regenerated file"
+      # rather than "something changed, nothing was tested".
+      #
+      # Deliberately NOT committing the result back. That would need a
+      # `contents: write` token on a job whose `npm ci` has just executed the
+      # install scripts of the very package being bumped, which is the risk
+      # AGENTS.md gates behind human confirmation everywhere else.
+      #
+      # The file is in .prettierignore, so a regenerated copy cannot trip
+      # format:check below and mask the suite a second way.
+      - name: Regenerate Worker types
         run: |
-          if ! npm run types:worker:check; then
-            npm run types:worker
-            git diff -- worker-configuration.d.ts
-            exit 1
+          npm run types:worker
+          if git diff --quiet -- worker-configuration.d.ts; then
+            echo "WORKER_TYPES_DRIFTED=0" >> "$GITHUB_ENV"
+          else
+            echo "WORKER_TYPES_DRIFTED=1" >> "$GITHUB_ENV"
+            echo "::warning::Generated Worker types drifted; the suite below runs against the REGENERATED types and this build fails at the end. Fix with 'npm run types:worker'."
           fi
       - run: npm run format:check
       - run: npm run lint
@@ -56,3 +82,16 @@ jobs:
       # Validates that the adapter-generated config remains consumable by the
       # repository's pinned Wrangler before a real deployment can reach main.
       - run: npm run deploy:check
+      # The drift verdict, deferred from the regeneration step above so that
+      # everything between the two actually ran. `always()` so it reports even
+      # when an earlier step failed — otherwise a bump that is BOTH stale and
+      # broken would hide the staleness behind the breakage.
+      - name: Fail if generated Worker types drifted
+        if: always()
+        run: |
+          if [ "${WORKER_TYPES_DRIFTED:-0}" = "1" ]; then
+            echo "::error::worker-configuration.d.ts is out of date. Run 'npm run types:worker' and commit the result."
+            git --no-pager diff -- worker-configuration.d.ts
+            exit 1
+          fi
+          echo "Generated Worker types are current."
