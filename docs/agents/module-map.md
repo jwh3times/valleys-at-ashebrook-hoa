@@ -203,11 +203,11 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `Capability` type imported from `guards.ts` rather than redeclared) that also returns
   `invalidBoardGrantId` — a live Board grant whose qualifying term has lapsed, been cancelled, or
   been voided (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on
-  the strength of it, independent of whether the write path already ended the grant, and recording
-  it as an Access Event awaits an attribution decision on #217. The ADR 0022 phase-4 wave-1 shadow
-  layer (`shadow.ts`, `shadow-compare.ts`, the `CUTOVER_SHADOW` env var, and the offline
-  `scripts/shadow-sweep.ts` sweep) is deleted (#212); `derive.ts` is now read only from
-  `getAuthContext`'s `derived` branch. Legacy `getAuthContext`/`resolveAuthContext` remain the entry
+  the strength of it, independent of whether the write path already ended the grant. `context.ts`
+  records that finding as a day-idempotent Access Event through `revalidation-event.ts`'s
+  `recordGrantRevalidationDenial`, only when `derived` is the serving model (#217, option 1). The
+  phase-2 shadow layer (`shadow.ts`, `shadow-compare.ts`, the `CUTOVER_SHADOW` env var, and the
+  offline `scripts/shadow-sweep.ts` sweep) was deleted in phase 4 (#212). Legacy `getAuthContext`/`resolveAuthContext` remain the entry
   point for every request regardless of which model answers it.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`

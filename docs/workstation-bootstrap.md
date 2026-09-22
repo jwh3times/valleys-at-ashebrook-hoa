@@ -58,6 +58,9 @@ npm run bootstrap:private   # companion clone + records
 npm run bootstrap:env       # .env and .dev.vars from 1Password
 ```
 
+npm 12 refuses URL-pinned dependencies by default, and `xlsx` is pinned to the SheetJS CDN. The
+tracked `.npmrc` sets `allow-remote=root` so `npm ci` installs it; do not widen it to `all`.
+
 `bootstrap:env` runs the companion's PowerShell bootstrap (`pwsh` is required on every platform)
 against the current worktree root; it validates every referenced 1Password field first and reports
 variable names only. A divergent existing `.env` or `.dev.vars` is preserved unless you pass

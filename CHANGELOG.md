@@ -7,6 +7,26 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.22] - 2026-09-22
+
+### Fixed
+
+- **`npm ci` works again under npm 12.** npm 12 refuses dependencies fetched
+  from a URL by default, and `xlsx` is pinned to the SheetJS CDN tarball, so a
+  clean install failed partway through, after it had already emptied
+  `node_modules`. A tracked `.npmrc` now sets `allow-remote=root`. That admits
+  URL-pinned dependencies declared directly in `package.json`, which the
+  lockfile's integrity hash still verifies, and still refuses any that arrive
+  transitively. CI's older npm was never affected.
+
+### Changed
+
+- `docs/agents/module-map.md` said that recording a failed Board-grant
+  re-validation as an Access Event was still waiting on a decision in #217.
+  That was decided and shipped: `context.ts` records it through
+  `revalidation-event.ts`. The same paragraph also claimed `derive.ts` was read
+  only from `getAuthContext`, and misdated the deleted shadow layer.
+
 ## [1.2.21] - 2026-09-22
 
 ### Removed
@@ -3522,7 +3542,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.21...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.22...HEAD
+[1.2.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.19...v1.2.20
 [1.2.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.18...v1.2.19
