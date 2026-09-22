@@ -7,6 +7,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.19] - 2026-09-22
+
+### Changed
+
+- `src/lib/admin.ts` described itself as write-only, which it has not been for
+  about twenty read helpers. Corrected to say what it is: the board's reads and
+  writes against `/api/admin/*`.
+
 ## [1.2.18] - 2026-09-22
 
 ### Security
@@ -3480,7 +3488,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.18...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.19...HEAD
+[1.2.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.18...v1.2.19
 [1.2.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.17...v1.2.18
 [1.2.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.15...v1.2.16
