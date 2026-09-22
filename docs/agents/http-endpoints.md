@@ -31,7 +31,10 @@ Two rules govern this whole surface and are stated once here rather than repeate
 
 API routes live under `src/pages/api/`:
 
-- Public tier-filtered reads: `GET /api/content/{announcements,documents,dues,site}`.
+- Public tier-filtered reads: `GET /api/content/{announcements,documents,site}`. The dues
+  blob's read is **not** here: it is `GET /api/admin/dues`, board-only beside the `PUT` it
+  mirrors, because the board's Dues panel is its only caller and `/dues` reads
+  `getDuesSettings` in its own frontmatter (#364).
 - Gated document download from R2 with tier checks: `GET /api/files/[id]`.
 - Default-off live homeowner voting: `POST /api/vote` accepts `castBallot` and `castMotionVote`
   only; there is no GET voting endpoint. Middleware is the namespace backstop and the handler calls
@@ -52,7 +55,9 @@ API routes live under `src/pages/api/`:
   pauses new opens and casts without deleting lifecycle state, snapshots, turnout, votes, or
   choices; an occasion still open resumes when both flags return true.
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
-  `/api/admin/{properties,owners,members}`. `/api/admin/board-people` and
+  `/api/admin/{properties,owners,members}`. `dues` is a read/write pair rather than a
+  write-only module: it carries the board's `GET` for the dues blob as well as the `PUT`
+  (#364). `/api/admin/board-people` and
   `/api/admin/board-terms` were **retired by phase 3b (#218), not ported**: the identity layer
   moved to the party roster and `board_service_terms` (see the ADR 0022 roster routes below), and
   porting the legacy routes would have kept two identity layers alive. The legacy `board_people`

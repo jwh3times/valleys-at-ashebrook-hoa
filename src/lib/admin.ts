@@ -440,6 +440,11 @@ export async function deleteDocument(id: string): Promise<void> {
 }
 
 // ---------- Settings (singletons) ----------
+/** The board's read of the dues blob; see the route for why it is board-only. */
+export async function fetchDuesSettings(): Promise<DuesSettings> {
+  return adminRequest('/api/admin/dues', 'GET', undefined, 'Load dues failed');
+}
+
 export async function saveDues(dues: DuesSettings): Promise<void> {
   await adminRequest('/api/admin/dues', 'PUT', dues, 'Save dues failed');
 }
