@@ -19,7 +19,7 @@ import { join, relative } from 'node:path';
 //     guard, page, or content read reaches past that seam into the roster
 //     tables itself. (`revalidation-event.ts` is the one authz module that
 //     WRITES the ledger — the #217-decided Access Event — and it is called
-//     only from the derived serving path, never from shadow.)
+//     only from the derived serving path.)
 //
 //  2. CONTENT READS REACH THE ROSTER ONLY WHERE DECLARED. This began as "no
 //     content read touches the new tables at all", which held while the legacy

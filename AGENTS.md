@@ -94,7 +94,6 @@ npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; se
 npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins
 npm run verify:invariants # ADR 0022 migration invariant gate; pass --local or --remote
 npm run roster:backfill   # ADR 0022 roster backfill; dry-run by default
-npm run shadow:sweep      # ADR 0022 offline shadow sweep over every account
 npm run deploy            # build and deploy with Wrangler
 npm run deploy:check      # dry-run the built Worker's generated Wrangler config
 ```

@@ -511,3 +511,42 @@ describe('the flag selects the model, for every caller class', () => {
     );
   });
 });
+
+describe('what compareContexts counts as a mismatch', () => {
+  it('matches the same tier and lot set', () => {
+    expect(
+      compareContexts(
+        { role: 'homeowner', propertyIds: ['a', 'b'] },
+        { contentTier: 'homeowner', lotIds: ['a', 'b'] },
+      ).matched,
+    ).toBe(true);
+  });
+
+  it('ignores lot order and duplicates', () => {
+    expect(
+      compareContexts(
+        { role: 'homeowner', propertyIds: ['b', 'a', 'c', 'a'] },
+        { contentTier: 'homeowner', lotIds: ['c', 'a', 'b'] },
+      ).matched,
+    ).toBe(true);
+  });
+
+  it('reports a tier disagreement with identical lots', () => {
+    const result = compareContexts(
+      { role: 'board', propertyIds: ['a'] },
+      { contentTier: 'homeowner', lotIds: ['a'] },
+    );
+    expect(result.matched).toBe(false);
+    expect(result.legacyRole).toBe('board');
+    expect(result.derivedContentTier).toBe('homeowner');
+  });
+
+  it('reports lot sets of the same size that name different lots', () => {
+    expect(
+      compareContexts(
+        { role: 'homeowner', propertyIds: ['l1'] },
+        { contentTier: 'homeowner', lotIds: ['l2'] },
+      ).matched,
+    ).toBe(false);
+  });
+});

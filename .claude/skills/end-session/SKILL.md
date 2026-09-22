@@ -250,7 +250,7 @@ That paragraph is what makes the next session cheap to start.
 - Write the handoff document from this skill — that's `handoff`, and it saves to Proton Drive,
   not the private companion.
 - Run anything that touches production data: `npm run db:migrate:remote`, `npm run roster:backfill
---write`, `npm run shadow:sweep --remote`, or any `wrangler ... --remote` write. Post-flip these
+--write`, or any `wrangler ... --remote` write. Post-flip these
   reach live resident data; a cleanup pass has no business there. (`npm run verify:invariants
 --remote` is read-only and fine if the user asks.)
 - Move anything out of `private/` into the tracked tree.
