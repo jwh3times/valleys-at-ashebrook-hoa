@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.17] - 2026-09-22
+
+### Changed
+
+- `/ship` now adds each release's comparison link alongside the changelog
+  section it writes. Nothing else maintained that block and no CI job checks
+  it, which is how it fell 188 releases behind before the previous release
+  regenerated it.
+
 ## [1.2.16] - 2026-09-22
 
 ### Fixed
@@ -3448,7 +3457,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.16...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.17...HEAD
+[1.2.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.16...v1.2.17
 [1.2.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.15...v1.2.16
 [1.2.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.14...v1.2.15
 [1.2.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.13...v1.2.14
