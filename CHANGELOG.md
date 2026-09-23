@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.28] - 2026-09-23
+
+### Changed
+
+- What a signed-in caller may read now goes by one name everywhere.
+  `AuthContext.role` was the phase-3 name for the access model's
+  `contentTier`, and it is gone. The content and file routes, the member proxy
+  route, the voting reads, the public pages and the header's account links now
+  read `contentTier`. The guard test that keeps access checks off the tier now
+  watches `contentTier`, since the compiler already rules out the old name.
+  Nothing visible changes. Part of ADR 0022 phase 4 (#212).
+
 ## [1.2.27] - 2026-09-23
 
 ### Changed
@@ -3637,7 +3649,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.27...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.28...HEAD
+[1.2.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.24...v1.2.25
