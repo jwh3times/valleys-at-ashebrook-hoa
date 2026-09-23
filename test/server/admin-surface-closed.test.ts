@@ -1,7 +1,7 @@
 // Spec-mandated regression guard (see permissions.ts): the `board` role holds
 // no Better Auth admin-plugin capabilities (impersonate/ban/set-role are
 // intentionally NOT granted — role changes go through direct DB writes in
-// api/admin/roles.ts and members.ts instead). test/unit/permissions.test.ts
+// api/admin/roles.ts and api/admin/access-grants.ts instead). test/unit/permissions.test.ts
 // already proves that at the access-control-object level; this test proves it
 // at the HTTP layer, driving the real Better Auth handler against Miniflare
 // D1/KV, so a future better-auth upgrade can't silently reopen the surface.

@@ -10,16 +10,9 @@ import { POST as announcementsPost } from '../../src/pages/api/admin/announcemen
 import { POST as propertiesPost } from '../../src/pages/api/admin/properties';
 import { POST as ownersPost } from '../../src/pages/api/admin/owners';
 import { POST as documentsPost } from '../../src/pages/api/admin/documents';
-import { POST as membersPost } from '../../src/pages/api/admin/members';
 import { GET as announcementsGet } from '../../src/pages/api/content/announcements';
 import { getDb } from '../../src/server/db/client';
-import {
-  announcements,
-  manualApprovalQueue,
-  owners,
-  properties,
-  users,
-} from '../../src/server/db/schema';
+import { announcements, owners, properties } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { INPUT_LIMITS } from '../../src/lib/types';
 import { legacyAuthContext } from '../../src/server/authz/context';
@@ -46,34 +39,7 @@ beforeAll(async () => {
       createdAt: now,
       updatedAt: now,
     },
-    {
-      id: 'prop-inactive',
-      address: 'Inactive',
-      addressNormalized: 'inactive',
-      unit: null,
-      status: 'inactive',
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    },
   ]);
-  await db.insert(users).values({
-    id: 'u-approve',
-    name: 'Approval User',
-    email: 'approval@example.com',
-    emailVerified: true,
-    role: 'visitor',
-    createdAt: now,
-    updatedAt: now,
-  });
-  await db.insert(manualApprovalQueue).values({
-    id: 'q1',
-    userId: 'u-approve',
-    claimedAddress: 'Somewhere',
-    reason: 'manual',
-    status: 'pending',
-    createdAt: now,
-  });
   await db.insert(announcements).values([
     {
       id: 'an1',
@@ -249,30 +215,6 @@ describe('documents write validation', () => {
       }),
     );
     expect(res.status).toBe(201);
-  });
-});
-
-describe('members approve — property validation', () => {
-  it('404 when the propertyId does not exist', async () => {
-    const res = await membersPost({
-      request: jsonPost('http://localhost/api/admin/members', {
-        action: 'approve',
-        queueId: 'q1',
-        propertyId: 'nope',
-      }),
-    } as never);
-    expect(res.status).toBe(404);
-  });
-
-  it('409 when the property is inactive', async () => {
-    const res = await membersPost({
-      request: jsonPost('http://localhost/api/admin/members', {
-        action: 'approve',
-        queueId: 'q1',
-        propertyId: 'prop-inactive',
-      }),
-    } as never);
-    expect(res.status).toBe(409);
   });
 });
 

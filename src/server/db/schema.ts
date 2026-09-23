@@ -154,7 +154,9 @@ export const manualApprovalQueue = sqliteTable(
       .default('pending'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   },
-  // The members panel reads the pending queue (WHERE status = 'pending').
+  // Write-dead since v0.10.0. The Members panel that read the pending rows was
+  // deleted (#212); only the retention sweep in cleanup/verification.ts still
+  // touches it, until phase 4's migration drops the table.
   (t) => [index('manual_approval_queue_status_idx').on(t.status)],
 );
 

@@ -6,7 +6,6 @@ import type {
   SiteSettings,
   SiteGateKey,
   PropertyWithOwners,
-  MembersView,
   MemberUser,
   DuplicatesView,
   MeetingSummary,
@@ -507,25 +506,6 @@ export async function saveOwner(
   id?: string,
 ): Promise<void> {
   await adminSave('/api/admin/owners', data, id, 'Save owner failed');
-}
-
-// ---------- Members / access ----------
-export async function fetchMembers(): Promise<MembersView> {
-  return adminRequest(
-    '/api/admin/members',
-    'GET',
-    undefined,
-    'Load members failed',
-  );
-}
-
-export async function memberAction(payload: {
-  action: 'approve' | 'deny' | 'revoke';
-  userId?: string;
-  queueId?: string;
-  propertyId?: string;
-}): Promise<void> {
-  await adminRequest('/api/admin/members', 'POST', payload, 'Action failed');
 }
 
 // ---------- Board membership (handoff) ----------

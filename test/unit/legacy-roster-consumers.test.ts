@@ -74,8 +74,8 @@ const CONSUMERS = new Map<string, Consumer>([
     {
       disposition: 'deleted-with-the-table',
       reason:
-        'the legacy Owners admin route; #212 deletes the legacy Properties, ' +
-        'Owners, and Members panels along with the table',
+        'the legacy Owners admin route; #212 deletes the legacy Properties ' +
+        'and Owners panels along with the table',
     },
   ],
   [
@@ -127,13 +127,13 @@ const CONSUMERS = new Map<string, Consumer>([
     },
   ],
   [
-    'pages/api/admin/members.ts',
+    'server/roster/identity.ts',
     {
       disposition: 'write-behind-mirror',
       reason:
-        'revocation mirrors a user_property_links DELETE, and the route still ' +
-        'renders the legacy manual-approval queue (write-dead since v0.10.0). ' +
-        'Both halves are deletions, not repointings',
+        'endedLinkMirrorStatements DELETEs user_property_links when a Person ' +
+        'Link ends under derived, so a flag written back to legacy cannot ' +
+        'restore access the link ending removed',
     },
   ],
 

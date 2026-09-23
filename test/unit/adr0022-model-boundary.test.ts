@@ -157,11 +157,10 @@ const NEW_MODEL_SURFACE = new Set([
   // the board route pre-checks that Person exists and the member route offers
   // the lot's authority holders. Neither writes a roster row.
   'pages/api/admin/proxies.ts',
-  // Phase 3e (#221): the two legacy role surfaces, re-pointed behind the
-  // cutover flag. Their `derived` branch writes Access Grants and Person Link
-  // endings; their `legacy` branch is unchanged.
+  // Phase 3e (#221): the legacy role surface, re-pointed behind the cutover
+  // flag. Its `derived` branch writes Access Grants; its `legacy` branch is
+  // unchanged.
   'pages/api/admin/roles.ts',
-  'pages/api/admin/members.ts',
   // Shared server modules for the routes above.
   'server/roster/audit.ts',
   'server/roster/access.ts',

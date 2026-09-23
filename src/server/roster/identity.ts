@@ -346,6 +346,45 @@ export async function endLinkStatements(
   ];
 }
 
+/**
+ * The legacy write-behind mirrors of a Person Link ending (#221's pattern),
+ * appended after `endLinkStatements` in the same batch. An account with no
+ * current link derives to visitor, so the mirror says `visitor` and holds no
+ * property links — otherwise a flag written back to `legacy` would hand the
+ * account its access back.
+ *
+ * Only under `derived`: under `legacy` these columns ARE the authority, and
+ * ending a Person Link must not revoke anything there. The mode is decided in
+ * the SQL, not by the caller reading `getCutoverMode` first: that read falls
+ * back to `legacy` on error, which is right for choosing an authorization
+ * model but here would commit the link ending while silently skipping the
+ * mirrors. Each statement is also guarded on this command having ended the
+ * link, so a batch that lost its race writes nothing here either. Deleted
+ * with the legacy model (#212).
+ */
+export function endedLinkMirrorStatements(
+  database: D1Database,
+  opts: { linkId: string; accountId: string; nowMs: number },
+): D1PreparedStatement[] {
+  const ended = andGuards(endedLinkGuard(opts.linkId, opts.nowMs), {
+    sql: "EXISTS (SELECT 1 FROM cutover_settings WHERE key = 'cutover_mode' AND value = 'derived')",
+    binds: [],
+  });
+  return [
+    database
+      .prepare(
+        `UPDATE users SET role = 'visitor', updated_at = ?
+         WHERE id = ? AND ${ended.sql}`,
+      )
+      .bind(opts.nowMs, opts.accountId, ...ended.binds),
+    database
+      .prepare(
+        `DELETE FROM user_property_links WHERE user_id = ? AND ${ended.sql}`,
+      )
+      .bind(opts.accountId, ...ended.binds),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // The last-System-Administrator invariant, shared across every ending path
 // ---------------------------------------------------------------------------

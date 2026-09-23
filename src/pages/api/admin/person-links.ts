@@ -25,6 +25,7 @@ import {
 import {
   manualVerificationStatements,
   endLinkStatements,
+  endedLinkMirrorStatements,
   denyIfLastSystemAdministrator,
   type PersonLinkEndReason,
 } from '../../../server/roster/identity';
@@ -349,6 +350,13 @@ async function unlink(body: unknown, ctx: AuthContext): Promise<Response> {
     operationKey: operationKey('person-links', 'unlink'),
     refuseIfTargetIsSystemAdministrator: !callerIsSystemAdmin,
   });
+  statements.push(
+    ...endedLinkMirrorStatements(env.DATABASE, {
+      linkId,
+      accountId: link.accountId,
+      nowMs,
+    }),
+  );
   let results: D1Result[];
   try {
     results = await env.DATABASE.batch(statements);

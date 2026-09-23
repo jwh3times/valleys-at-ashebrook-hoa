@@ -84,11 +84,12 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   durable trace even though nothing changes. Manual board verification (`POST
 /api/admin/person-links` `manualVerify`, and its `POST /api/admin/verification-requests` `accept`
   counterpart) only ever links an EXISTING Person to an account — it never creates a Person and
-  never grants access on its own — keeping identity and authority as separate decisions.
-  `POST /api/admin/members`'s `revoke` action ends the same way under `derived` (phase 3e, #221:
-  `endLinkStatements`, reason `no_longer_qualifies`, refusing a current board member — demote that on
-  the board-handoff surface first); under `legacy` it keeps clearing `users.role` and deleting
-  `user_property_links` directly, unchanged.
+  never grants access on its own — keeping identity and authority as separate decisions. Under
+  `derived`, both unlink paths also write the legacy `users.role`/`user_property_links` mirrors in
+  the same batch (`endedLinkMirrorStatements`, #212), each guarded on the link having just ended
+  AND on the mode being `derived` evaluated inside the SQL, so a flag written back to `legacy`
+  cannot hand the account its access back; under `legacy` those columns are the authority and are
+  left untouched.
 - **A public member meeting publishes each represented property's address alongside its vote,
   gated only by the meeting's own visibility tier.** The meeting record's public pages
   (`/meetings`, `/meetings/[id]`, rendered server-side via `fetchMeetingsFor`/`fetchMeetingFor` —
