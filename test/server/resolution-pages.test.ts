@@ -69,7 +69,7 @@ function renderAs(
             authContext: {
               userId: 'u',
               role,
-              propertyIds: [],
+              lotIds: [],
             },
           } as unknown as App.Locals),
   });

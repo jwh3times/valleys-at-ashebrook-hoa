@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const gate = await requireMemberApi(locals, request, env);
   if (!gate.ok) return gate.res;
   return Response.json(
-    await fetchMemberProxies(env, gate.ctx.role, gate.ctx.propertyIds),
+    await fetchMemberProxies(env, gate.ctx.role, gate.ctx.lotIds),
   );
 };
 
@@ -52,7 +52,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
 
   // Lot scoping: the fail-closed primitive, not a hand-rolled includes().
-  // 403 for a lot outside ctx.propertyIds — whether or not it exists, since
+  // 403 for a lot outside ctx.lotIds — whether or not it exists, since
   // "not yours" and "not real" must be indistinguishable here.
   try {
     requirePropertyAccess(ctx, propertyId);
@@ -178,7 +178,7 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
     .limit(1);
   // Unknown id and someone else's proxy answer identically — a caller must
   // not be able to probe which proxy ids exist.
-  if (rows.length === 0 || !gate.ctx.propertyIds.includes(rows[0].propertyId))
+  if (rows.length === 0 || !gate.ctx.lotIds.includes(rows[0].propertyId))
     return new Response('Proxy not found', { status: 404 });
 
   // Revocation only has meaning before the occasion: a proxy for a meeting or

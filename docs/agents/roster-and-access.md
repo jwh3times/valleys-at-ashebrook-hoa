@@ -41,8 +41,8 @@ admin panels now read the Lot list from the board-gated `GET /api/admin/roster-l
 (`fetchLots`/`LotSummary`) instead. `properties.notes`/`owners.notes` remain in D1 but are shown
 nowhere; exporting them before the tables are dropped is #212's migration step 1, a human step.
 The admin `useAuth` hook now decides the board view from `GET /api/me` (the caller's own derived
-capabilities) instead of the session's `role` mirror. What remains of wave 1 — the
-`role`/`propertyIds` compatibility aliases and the `user_property_links` readers (`content/voting.ts`,
+capabilities) instead of the session's `role` mirror. What remains of wave 1 — the `role`
+compatibility alias (`propertyIds` is already renamed to `lotIds`) and the `user_property_links` readers (`content/voting.ts`,
 `content/casting-authority.ts`) — and wave 2's one-way step (the `legacy` branch, `users.role`, and
 the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is tracked on #212.
 The write freeze, the permission matrix, and the ballot-privacy suites are retained permanently per
@@ -72,8 +72,8 @@ must take effect on the very next request.
 `member`/`board`/`systemAdmin`: `systemAdmin` implies `board`, but neither implies `member`, which
 comes only from Lot Authority. The live consequence of derived authorization is exactly this — a
 board member who owns no Lot is refused the member surfaces while still admitted to board ones.
-The `role` (= `contentTier`) and `propertyIds` (= `lotIds`) aliases feed nothing but content
-reads and are deleted in phase 4.
+The `role` (= `contentTier`) alias feeds nothing but content reads and is deleted in phase 4; the
+`propertyIds` alias already has been, in favour of `lotIds`.
 
 ## The write freeze
 

@@ -141,7 +141,7 @@ async function insertOpenElection() {
     updatedAt: now,
   });
   // The page's read model resolves the caller's lots from user_property_links
-  // rather than from AuthContext.propertyIds, so the link has to be real.
+  // rather than from AuthContext.lotIds, so the link has to be real.
   await db.insert(users).values({
     id: 'u1',
     name: 'Home Owner',

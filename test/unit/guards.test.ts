@@ -36,7 +36,6 @@ function ctx(
     contentTier: role,
     hasCurrentBoardTerm: false,
     role,
-    propertyIds: lotIds,
   };
 }
 

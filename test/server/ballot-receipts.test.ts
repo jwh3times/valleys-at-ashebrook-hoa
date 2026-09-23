@@ -102,7 +102,6 @@ function memberCtx(overrides: Partial<AuthContext> = {}): AuthContext {
     contentTier: 'homeowner',
     hasCurrentBoardTerm: false,
     role: 'homeowner',
-    propertyIds: [],
     ...overrides,
   } as AuthContext;
 }

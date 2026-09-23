@@ -164,7 +164,6 @@ function sysAdminCtx(userId = 'sa-1'): AuthContext {
     contentTier: 'board',
     hasCurrentBoardTerm: false,
     role: 'board',
-    propertyIds: [],
   };
 }
 

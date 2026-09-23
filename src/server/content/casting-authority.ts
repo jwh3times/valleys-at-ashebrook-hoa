@@ -21,7 +21,7 @@ export interface CastingAuthority {
  *
  * This exists because the answer had two implementations that disagreed. The
  * cast path read `user_property_links` directly (correct, snapshot-governed),
- * while the read model behind `/vote` used `AuthContext.propertyIds`, which
+ * while the read model behind `/vote` used `AuthContext.lotIds`, which
  * `getAuthContext` inner-joins against `properties` and filters to
  * `status = 'active'` — the right rule for general homeowner access, the wrong
  * one here. A lot deactivated after an occasion opened vanished from `/vote`

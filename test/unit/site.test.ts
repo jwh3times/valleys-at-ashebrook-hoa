@@ -68,30 +68,30 @@ describe('accountNav', () => {
   });
 
   it('sends a signed-in user with no verified home to verify-property', () => {
-    const nav = accountNav({ role: 'visitor', propertyIds: [] });
+    const nav = accountNav({ role: 'visitor', lotIds: [] });
     expect(nav.signedIn).toBe(true);
-    expect(hrefs({ role: 'visitor', propertyIds: [] })).toEqual([
+    expect(hrefs({ role: 'visitor', lotIds: [] })).toEqual([
       '/verify-property',
     ]);
   });
 
   it('gives a verified homeowner just the signed-in state (sign out only)', () => {
-    const nav = accountNav({ role: 'homeowner', propertyIds: ['p1'] });
+    const nav = accountNav({ role: 'homeowner', lotIds: ['p1'] });
     expect(nav.signedIn).toBe(true);
     expect(nav.links).toEqual([]);
   });
 
   it('links a board member to the admin panel', () => {
-    const nav = accountNav({ role: 'board', propertyIds: [] });
+    const nav = accountNav({ role: 'board', lotIds: [] });
     expect(nav.signedIn).toBe(true);
-    expect(hrefs({ role: 'board', propertyIds: [] })).toEqual(['/admin']);
+    expect(hrefs({ role: 'board', lotIds: [] })).toEqual(['/admin']);
   });
 });
 
 describe('accountNav proxies link', () => {
   const homeowner = {
     role: 'homeowner' as const,
-    propertyIds: ['p1'],
+    lotIds: ['p1'],
   };
 
   it('offers /proxies to a verified homeowner in official mode', () => {
@@ -117,7 +117,7 @@ describe('accountNav proxies link', () => {
   it('does not offer /proxies to unverified users, anonymous, or board (board keeps Admin)', () => {
     expect(
       accountNav(
-        { role: 'homeowner', propertyIds: [] },
+        { role: 'homeowner', lotIds: [] },
         {
           officialMode: true,
           liveVotingEnabled: false,
@@ -137,7 +137,7 @@ describe('accountNav proxies link', () => {
     ]);
     expect(
       accountNav(
-        { role: 'board', propertyIds: [] },
+        { role: 'board', lotIds: [] },
         {
           officialMode: true,
           liveVotingEnabled: false,
@@ -151,7 +151,7 @@ describe('accountNav proxies link', () => {
 describe('accountNav lot records link', () => {
   const homeowner = {
     role: 'homeowner' as const,
-    propertyIds: ['p1'],
+    lotIds: ['p1'],
   };
 
   it('offers /lot-records when both gates are on', () => {
@@ -193,7 +193,7 @@ describe('accountNav lot records link', () => {
     // this one.
     expect(
       accountNav(
-        { role: 'board', propertyIds: ['p1'] },
+        { role: 'board', lotIds: ['p1'] },
         {
           officialMode: true,
           liveVotingEnabled: false,
@@ -206,7 +206,7 @@ describe('accountNav lot records link', () => {
   it('hides it from a board admin who holds a lot when the gate is off', () => {
     expect(
       accountNav(
-        { role: 'board', propertyIds: ['p1'] },
+        { role: 'board', lotIds: ['p1'] },
         {
           officialMode: true,
           liveVotingEnabled: false,
@@ -221,7 +221,7 @@ describe('accountNav lot records link', () => {
     // and this surface is for a lot's own holders.
     expect(
       accountNav(
-        { role: 'board', propertyIds: [] },
+        { role: 'board', lotIds: [] },
         {
           officialMode: true,
           liveVotingEnabled: false,
@@ -234,7 +234,7 @@ describe('accountNav lot records link', () => {
   it('does not offer it to an unverified account', () => {
     expect(
       accountNav(
-        { role: 'homeowner', propertyIds: [] },
+        { role: 'homeowner', lotIds: [] },
         {
           officialMode: true,
           liveVotingEnabled: false,
@@ -246,7 +246,7 @@ describe('accountNav lot records link', () => {
 });
 
 describe('accountNav live voting link', () => {
-  const homeowner = { role: 'homeowner' as const, propertyIds: ['p1'] };
+  const homeowner = { role: 'homeowner' as const, lotIds: ['p1'] };
   const bothOn = {
     officialMode: true,
     liveVotingEnabled: true,
@@ -268,20 +268,20 @@ describe('accountNav live voting link', () => {
   });
 
   it('adds Vote alongside Admin only for board members with verified properties', () => {
-    expect(
-      accountNav({ role: 'board', propertyIds: [] }, bothOn).links,
-    ).toEqual([{ href: '/admin', label: 'Admin' }]);
-    expect(
-      accountNav({ role: 'board', propertyIds: ['p1'] }, bothOn).links,
-    ).toEqual([
+    expect(accountNav({ role: 'board', lotIds: [] }, bothOn).links).toEqual([
       { href: '/admin', label: 'Admin' },
-      { href: '/vote', label: 'Vote' },
     ]);
+    expect(accountNav({ role: 'board', lotIds: ['p1'] }, bothOn).links).toEqual(
+      [
+        { href: '/admin', label: 'Admin' },
+        { href: '/vote', label: 'Vote' },
+      ],
+    );
   });
 
   it('fails closed for a visitor context that still carries property IDs', () => {
     expect(
-      accountNav({ role: 'visitor', propertyIds: ['p1'] }, bothOn).links,
+      accountNav({ role: 'visitor', lotIds: ['p1'] }, bothOn).links,
     ).toEqual([{ href: '/verify-property', label: 'Verify your property' }]);
   });
 });

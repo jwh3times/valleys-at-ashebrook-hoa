@@ -68,7 +68,6 @@ function caller(overrides: Partial<AuthContext> = {}): AuthContext {
     contentTier: 'homeowner',
     hasCurrentBoardTerm: false,
     role: 'homeowner',
-    propertyIds: ['lot-a'],
     ...overrides,
   };
 }
@@ -253,14 +252,12 @@ describe('what a reader is shown', () => {
   });
 
   it('shows nothing of another lot, even one the caller claims', async () => {
-    // `lotIds`/`propertyIds` are what the caller's context asserts; the read
+    // `lotIds` is what the caller's context asserts; the read
     // scopes by the roster instead, so a claim on lot-b buys nothing.
     await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
     await seedViolation('v-b', 'lot-b');
 
-    const html = await render(
-      caller({ lotIds: ['lot-a', 'lot-b'], propertyIds: ['lot-a', 'lot-b'] }),
-    );
+    const html = await render(caller({ lotIds: ['lot-a', 'lot-b'] }));
     expect(html).not.toContain('Summary of v-b');
     // The full sentence, including the period. It is now scoped to the lot the
     // reader actually holds, and the sections come from the roster's
@@ -559,7 +556,7 @@ describe('who is refused, and how', () => {
   it('sends an account with no lot authority to verify their property', async () => {
     await seedViolation('v-a', 'lot-a');
     const html = await render(
-      caller({ capabilities: new Set([]), lotIds: [], propertyIds: [] }),
+      caller({ capabilities: new Set([]), lotIds: [] }),
     );
     expect(html).toContain('Verify your property');
     expect(html).not.toContain('Summary of v-a');
@@ -577,7 +574,6 @@ describe('who is refused, and how', () => {
         role: 'board',
         hasCurrentBoardTerm: true,
         lotIds: [],
-        propertyIds: [],
       }),
     );
     expect(html).not.toContain('Summary of v-a');

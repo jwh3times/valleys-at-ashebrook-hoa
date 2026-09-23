@@ -83,7 +83,7 @@ export function aboutParagraphs(s: Pick<SiteSettings, 'aboutBody'>): string[] {
 /** Minimal auth shape the header needs (structurally satisfied by AuthContext). */
 export interface AccountNavAuth {
   role: 'visitor' | 'homeowner' | 'board';
-  propertyIds: string[];
+  lotIds: string[];
 }
 
 export interface AccountNav {
@@ -120,7 +120,7 @@ export function accountNav(
       signedIn: true,
       links: [
         { href: '/admin', label: 'Admin' },
-        ...(auth.propertyIds.length > 0 &&
+        ...(auth.lotIds.length > 0 &&
         mode.officialMode &&
         mode.liveVotingEnabled
           ? [{ href: '/vote', label: 'Vote' }]
@@ -129,7 +129,7 @@ export function accountNav(
         // homeowner surface like anyone else (ADR 0024) — the page gates on
         // the `member` capability, which they have. Holding no Lot, they get
         // no link: the admin panel is where they read every Lot.
-        ...(auth.propertyIds.length > 0 &&
+        ...(auth.lotIds.length > 0 &&
         mode.officialMode &&
         mode.lotRecordsEnabled
           ? [{ href: '/lot-records', label: 'Lot records' }]
@@ -141,7 +141,7 @@ export function accountNav(
       signedIn: true,
       links: [{ href: '/verify-property', label: 'Verify your property' }],
     };
-  if (auth.propertyIds.length === 0)
+  if (auth.lotIds.length === 0)
     return {
       signedIn: true,
       links: [{ href: '/verify-property', label: 'Verify your property' }],

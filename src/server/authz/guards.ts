@@ -42,17 +42,15 @@ export interface AuthContext {
   hasCurrentBoardTerm: boolean;
 
   /**
-   * COMPATIBILITY ALIASES, retained through phase 3 and deleted in phase 4
+   * COMPATIBILITY ALIAS, retained through phase 3 and deleted in phase 4
    * (#212). `role` is `contentTier` under its old name and feeds nothing but
-   * content reads; `propertyIds` is `lotIds`.
+   * content reads. (`propertyIds`, the `lotIds` alias, is already gone.)
    *
-   * They exist so this phase does not have to rename two identifiers across ~28
-   * call sites while simultaneously changing what they mean. Renaming and
-   * re-sourcing at once would make every one of those diffs impossible to review
-   * for behavior change.
+   * It exists so phase 3 did not have to rename an identifier across its call
+   * sites while simultaneously changing what it meant: renaming and re-sourcing
+   * at once would make every such diff impossible to review for behavior change.
    */
   role: Role;
-  propertyIds: string[];
 }
 
 const RANK: Record<Role, number> = { visitor: 0, homeowner: 1, board: 2 };

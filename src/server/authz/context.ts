@@ -41,7 +41,7 @@ const VALID_ROLES = new Set<string>(['visitor', 'homeowner', 'board']);
 export function legacyAuthContext(
   userId: string,
   role: Role,
-  propertyIds: string[],
+  lotIds: string[],
 ): AuthContext {
   const capabilities = new Set<Capability>();
   if (role === 'board') {
@@ -54,15 +54,14 @@ export function legacyAuthContext(
     userId,
     personId: null,
     capabilities,
-    lotIds: propertyIds,
+    lotIds,
     contentTier: role,
     hasCurrentBoardTerm: false,
     role,
-    propertyIds,
   };
 }
 
-/** Derived facts, shaped as an `AuthContext`. Adds only the compat aliases. */
+/** Derived facts, shaped as an `AuthContext`. Adds only the compat alias. */
 export function derivedContext(access: DerivedAccess): AuthContext {
   return {
     userId: access.userId,
@@ -72,7 +71,6 @@ export function derivedContext(access: DerivedAccess): AuthContext {
     contentTier: access.contentTier,
     hasCurrentBoardTerm: access.hasCurrentBoardTerm,
     role: access.contentTier,
-    propertyIds: access.lotIds,
   };
 }
 

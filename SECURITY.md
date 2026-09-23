@@ -34,7 +34,7 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   on, the page offers sign-in/verification guidance while the API returns 401 to anonymous callers
   and 403 to callers below `homeowner`. Each handler calls
   `requireMemberApi`, and middleware independently gates the whole prefix as a production
-  backstop. Proxy writes are then scoped to the caller's verified `propertyIds`; verification
+  backstop. Proxy writes are then scoped to the caller's verified `lotIds`; verification
   proves control of a lot, while the grantor selects which of the Persons currently holding Lot
   Authority there is acting — Ownership, or Representation of an owning Organization (#248 part 2
   moved that question from the lot's `owners` rows to the party roster).
