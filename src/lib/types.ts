@@ -444,21 +444,6 @@ export interface MemberUser {
   createdAt: string; // ISO
 }
 
-export interface ManualApprovalItem {
-  id: string;
-  userId: string;
-  email: string | null;
-  claimedAddress: string;
-  reason: string;
-  status: string;
-  createdAt: string; // ISO
-}
-
-export interface MembersView {
-  recent: MemberUser[];
-  queue: ManualApprovalItem[];
-}
-
 // ---------- Admin write-input validation ----------
 // The site/dues settings normalizers above coerce-and-default (they never reject).
 // Board content writes instead validate loudly: trim, cap length, check enums,

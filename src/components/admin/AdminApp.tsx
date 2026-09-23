@@ -13,7 +13,6 @@ import BoardServicePanel from './BoardServicePanel';
 import AccessPanel from './AccessPanel';
 import ReviewPanel from './ReviewPanel';
 import CompliancePanel from './CompliancePanel';
-import MembersManager from './MembersManager';
 import BoardAccessManager from './BoardAccessManager';
 import MeetingsManager from './MeetingsManager';
 import ResolutionsManager from './ResolutionsManager';
@@ -66,7 +65,6 @@ const SECTIONS = [
     label: 'Compliance',
     render: () => <CompliancePanel />,
   },
-  { key: 'members', label: 'Members', render: () => <MembersManager /> },
   {
     key: 'meetings',
     label: 'Meetings',

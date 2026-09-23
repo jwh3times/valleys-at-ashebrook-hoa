@@ -3,6 +3,8 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/auth-schema';
+import { cutoverSettings } from '../../src/server/db/cutover-schema';
+import { properties, userPropertyLinks } from '../../src/server/db/schema';
 import {
   parties,
   people,
@@ -73,6 +75,9 @@ beforeEach(async () => {
     }
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
+  await db.delete(cutoverSettings);
+  await db.delete(userPropertyLinks);
+  await db.delete(properties);
   await db.run(sql.raw('DELETE FROM users'));
   for (const id of ['board-1', 'acct-1', 'acct-2', 'sa-1']) {
     const now = new Date();
@@ -574,5 +579,108 @@ describe('GET', () => {
       current: true,
       verification: { method: 'manual', reason: 'manual_board_decision' },
     });
+  });
+});
+
+/**
+ * Under `derived`, ending a link must carry the legacy `users.role` and
+ * `user_property_links` along as write-behind mirrors — the same pair the
+ * retired Members `revoke` wrote — so a flag written back to `legacy` does not
+ * hand an unlinked account its access back. Under `legacy` those columns ARE
+ * the authority, and ending a Person Link must not touch them.
+ */
+describe('unlink and the legacy mirrors', () => {
+  async function setMode(value: 'legacy' | 'derived') {
+    await getDb(env)
+      .insert(cutoverSettings)
+      .values({ key: 'cutover_mode', value, updatedAt: new Date() });
+  }
+
+  async function seedLegacyAccess(accountId: string) {
+    const db = getDb(env);
+    const now = new Date();
+    await db
+      .update(users)
+      .set({ role: 'homeowner' })
+      .where(eq(users.id, accountId));
+    await db.insert(properties).values({
+      id: 'lot-1',
+      address: '1 Mirror Lane',
+      addressNormalized: '1 mirror lane',
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(userPropertyLinks).values({
+      id: `upl-${accountId}`,
+      userId: accountId,
+      propertyId: 'lot-1',
+      verifiedAt: now,
+      method: 'otp_email',
+    });
+  }
+
+  const roleOf = async (id: string) =>
+    (await getDb(env).select().from(users).where(eq(users.id, id)))[0]?.role;
+  const legacyLinksOf = async (id: string) =>
+    getDb(env)
+      .select()
+      .from(userPropertyLinks)
+      .where(eq(userPropertyLinks.userId, id));
+
+  it('clears the stored role and property links under derived', async () => {
+    await setMode('derived');
+    await seedPerson('per-1');
+    await seedLink('acct-1', 'per-1');
+    await seedLegacyAccess('acct-1');
+
+    const res = await POST(
+      req({
+        action: 'unlink',
+        linkId: 'link-acct-1',
+        endReason: 'no_longer_qualifies',
+      }),
+    );
+    expect(res.status).toBe(204);
+    expect(await roleOf('acct-1')).toBe('visitor');
+    expect(await legacyLinksOf('acct-1')).toHaveLength(0);
+  });
+
+  it('leaves the stored role and property links alone under legacy', async () => {
+    await setMode('legacy');
+    await seedPerson('per-1');
+    await seedLink('acct-1', 'per-1');
+    await seedLegacyAccess('acct-1');
+
+    const res = await POST(
+      req({
+        action: 'unlink',
+        linkId: 'link-acct-1',
+        endReason: 'no_longer_qualifies',
+      }),
+    );
+    expect(res.status).toBe(204);
+    expect(await roleOf('acct-1')).toBe('homeowner');
+    expect(await legacyLinksOf('acct-1')).toHaveLength(1);
+  });
+
+  it('leaves the mirrors alone when the unlink is refused', async () => {
+    await setMode('derived');
+    await seedPerson('per-1');
+    await seedLink('acct-1', 'per-1');
+    await seedLegacyAccess('acct-1');
+    // The only System Administrator: the link-ending statement refuses.
+    caller.systemAdmin = true;
+    await seedGrant('g-sa', 'acct-1', 'system_admin');
+
+    const res = await POST(
+      req({
+        action: 'unlink',
+        linkId: 'link-acct-1',
+        endReason: 'no_longer_qualifies',
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(await roleOf('acct-1')).toBe('homeowner');
+    expect(await legacyLinksOf('acct-1')).toHaveLength(1);
   });
 });

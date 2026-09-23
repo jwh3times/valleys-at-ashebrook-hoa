@@ -7,6 +7,7 @@ import {
 } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
 import type { AuthContext } from '../../../server/authz/guards';
+import { getCutoverMode } from '../../../server/authz/cutover-mode';
 import { liveGrantIdsFor } from '../../../server/roster/access';
 import { getDb } from '../../../server/db/client';
 import { users } from '../../../server/db/auth-schema';
@@ -25,6 +26,7 @@ import {
 import {
   manualVerificationStatements,
   endLinkStatements,
+  endedLinkMirrorStatements,
   denyIfLastSystemAdministrator,
   type PersonLinkEndReason,
 } from '../../../server/roster/identity';
@@ -349,6 +351,14 @@ async function unlink(body: unknown, ctx: AuthContext): Promise<Response> {
     operationKey: operationKey('person-links', 'unlink'),
     refuseIfTargetIsSystemAdministrator: !callerIsSystemAdmin,
   });
+  if ((await getCutoverMode(env)) === 'derived')
+    statements.push(
+      ...endedLinkMirrorStatements(env.DATABASE, {
+        linkId,
+        accountId: link.accountId,
+        nowMs,
+      }),
+    );
   let results: D1Result[];
   try {
     results = await env.DATABASE.batch(statements);
