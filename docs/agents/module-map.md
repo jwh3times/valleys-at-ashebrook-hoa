@@ -157,9 +157,9 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `legacy`, which has no Person concept), a `capabilities` **set** of `member`/`board`/
   `systemAdmin` (deliberately not a ladder: `systemAdmin` implies `board`, but neither implies
   `member`, which comes only from Lot authority), `lotIds`, `contentTier`, `hasCurrentBoardTerm`,
-  plus compatibility aliases `role` (= `contentTier`) and `propertyIds` (= `lotIds`) that feed
-  nothing but content reads — `tierAllows`/`visibleTiers` and their call sites are unchanged —
-  retained through phase 3 and deleted in phase 4 (#212) — and its two check primitives:
+  plus the compatibility alias `role` (= `contentTier`) that feeds nothing but content reads —
+  `tierAllows`/`visibleTiers` and their call sites are unchanged — retained through phase 3 and
+  deleted in phase 4 (#212; the `propertyIds` alias is already gone) — and its two check primitives:
   `requireCapability(ctx, capability)` (set membership, the primitive every route gate is now built
   on) and `requireRole` (survives only for content-tier questions, since `contentTier` is
   genuinely ordered, unlike capability). `requireBoard`, `requireMemberApi` (official-mode-first

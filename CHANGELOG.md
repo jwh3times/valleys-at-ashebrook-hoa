@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.27] - 2026-09-23
+
+### Changed
+
+- The caller's lots are now read under one name everywhere. `propertyIds` was
+  the phase-3 name for what the access model calls `lotIds`, kept only so that
+  phase could change what the value meant without also renaming it at every
+  call site. It is gone. The member proxy route, the `/proxies` page and the
+  header's account links now read `lotIds`. Nothing visible changes. Part of
+  ADR 0022 phase 4 (#212).
+
 ## [1.2.26] - 2026-09-23
 
 ### Changed
@@ -3626,7 +3637,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.26...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.27...HEAD
+[1.2.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.23...v1.2.24
