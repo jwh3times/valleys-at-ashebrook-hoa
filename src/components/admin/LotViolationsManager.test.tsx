@@ -10,15 +10,7 @@ vi.mock('../../lib/admin');
 const mocked = vi.mocked(admin);
 
 function lot(id: string, address: string): LotSummary {
-  return {
-    id,
-    address,
-    addressNormalized: address.toLowerCase(),
-    unit: null,
-    status: 'active',
-    voteWeight: 1,
-    notes: null,
-  } as unknown as LotSummary;
+  return { id, address, unit: null, status: 'active', voteWeight: 1 };
 }
 
 function violation(

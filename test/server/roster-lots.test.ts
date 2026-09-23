@@ -523,14 +523,14 @@ describe('update', () => {
     expect(unknown.status).toBe(404);
   });
 
-  it('409s an address another lot already has', async () => {
+  it('409s an address another lot already has, however it is spaced or cased', async () => {
     await seedLot('lot-1');
     await seedLot('lot-2');
     const res = await POST(
       req({
         action: 'update',
         lotId: 'lot-2',
-        address: 'lot-1 Ashebrook Lane',
+        address: 'LOT-1  Ashebrook   lane',
       }),
     );
     expect(res.status).toBe(409);
