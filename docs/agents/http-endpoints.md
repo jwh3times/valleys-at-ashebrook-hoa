@@ -36,6 +36,11 @@ API routes live under `src/pages/api/`:
   mirrors, because the board's Dues panel is its only caller and `/dues` reads
   `getDuesSettings` in its own frontmatter (#364).
 - Gated document download from R2 with tier checks: `GET /api/files/[id]`.
+- The caller's own access: `GET /api/me` returns `{ capabilities, contentTier }` from the same
+  `AuthContext` every route gate reads (`401` when anonymous, `no-store`). It sits outside the
+  gated prefixes on purpose — any signed-in account may ask about itself — and answers about the
+  caller alone. The admin `useAuth` hook shows the board panels only when `capabilities` includes
+  `board`, never from the Better Auth session's `role` mirror, and re-reads on every sign-in (#212).
 - Default-off live homeowner voting: `POST /api/vote` accepts `castBallot` and `castMotionVote`
   only; there is no GET voting endpoint. Middleware is the namespace backstop and the handler calls
   `requireVotingApi` independently. Its fixed guard order is: literal-boolean `officialMode` plus
