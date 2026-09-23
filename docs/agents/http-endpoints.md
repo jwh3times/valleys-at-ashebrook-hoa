@@ -54,10 +54,9 @@ API routes live under `src/pages/api/`:
   reads expose only `hasCast`, never choices for display or replacement. Turning either flag off
   pauses new opens and casts without deleting lifecycle state, snapshots, turnout, votes, or
   choices; an occasion still open resumes when both flags return true.
-- Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
-  `/api/admin/{properties,owners}`. `dues` is a read/write pair rather than a
-  write-only module: it carries the board's `GET` for the dues blob as well as the `PUT`
-  (#364). `/api/admin/board-people` and
+- Board-only writes: `/api/admin/{documents,announcements,dues,site}`. `dues` is a read/write pair
+  rather than a write-only module: it carries the board's `GET` for the dues blob as well as the
+  `PUT` (#364). `/api/admin/board-people` and
   `/api/admin/board-terms` were **retired by phase 3b (#218), not ported**: the identity layer
   moved to the party roster and `board_service_terms` (see the ADR 0022 roster routes below), and
   porting the legacy routes would have kept two identity layers alive. The legacy `board_people`
@@ -461,7 +460,14 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
     never implicitly by anything else.
   - Roster: `GET /api/admin/roster` (full-detail Roster surface with the live Ownerless-Lot
     advisory; single-record reads never write the ledger) plus per-entity `POST` action buses —
-    `/api/admin/roster-lots` (`create` — inserts a live Lot with vote weight defaulting to 1,
+    `/api/admin/roster-lots` (`GET`, `requireBoard`-gated, returns every Lot as `{id, address,
+unit, status, voteWeight}` ordered by address — `status` rather than a derived "retired" flag,
+    because the election/motion SQL still decides live Lots from `properties.status` and every
+    writer keeps the two in step; this is the Lot list (`fetchLots`/`LotSummary` in
+    `src/lib/admin.ts`/`src/lib/types.ts`) the Dues ledger, Elections, Lot violations, Meetings, and
+    Proxies admin panels pick lots from, replacing the deleted `GET /api/admin/properties`, which
+    also returned every legacy owner's name, phone, and
+    email. `POST`: `create` — inserts a live Lot with vote weight defaulting to 1,
     `409` on a normalized-address collision; `update` — address/unit/vote weight only, both
     `status` and `notes` refused with `400` (retirement and legacy free text are out of scope
     here), `404` unknown, `409` retired, `409` on a stale `expected` snapshot (the values the

@@ -7,6 +7,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.25] - 2026-09-23
+
+### Removed
+
+- **The legacy _Homes & owners_ admin tab is gone.** Everything it did now
+  happens on the audited roster:
+  - adding and editing lots on the _Roster_ panel (v1.2.24)
+  - owners, their contact details and who owns which lot, on the roster's
+    people, contact and ownership tools
+  - retiring a lot, instead of flipping its status
+
+  The old per-lot and per-owner _notes_ stay in the database but no longer
+  appear anywhere. Exporting them is a step in ADR 0022 phase 4 (#212). This is
+  the third slice of that phase's first wave.
+
+### Security
+
+- **The admin lot pickers no longer receive owners' contact details.** The
+  meeting, election, proxy, violation and dues panels listed lots through the
+  legacy homes endpoint, which also returned every recorded owner's name, phone
+  number and email. None of those panels used them. They now read a lot list
+  carrying only each lot's address, unit, status and vote weight.
+
 ## [1.2.24] - 2026-09-23
 
 ### Added
@@ -3589,7 +3612,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.24...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.25...HEAD
+[1.2.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.21...v1.2.22

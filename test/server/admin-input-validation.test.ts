@@ -7,12 +7,10 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
 }));
 
 import { POST as announcementsPost } from '../../src/pages/api/admin/announcements';
-import { POST as propertiesPost } from '../../src/pages/api/admin/properties';
-import { POST as ownersPost } from '../../src/pages/api/admin/owners';
 import { POST as documentsPost } from '../../src/pages/api/admin/documents';
 import { GET as announcementsGet } from '../../src/pages/api/content/announcements';
 import { getDb } from '../../src/server/db/client';
-import { announcements, owners, properties } from '../../src/server/db/schema';
+import { announcements } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { INPUT_LIMITS } from '../../src/lib/types';
 import { legacyAuthContext } from '../../src/server/authz/context';
@@ -27,19 +25,6 @@ const jsonPost = (url: string, body: unknown) =>
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
   const db = getDb(env);
-  const now = new Date();
-  await db.insert(properties).values([
-    {
-      id: 'prop-active',
-      address: 'Active',
-      addressNormalized: 'active',
-      unit: null,
-      status: 'active',
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]);
   await db.insert(announcements).values([
     {
       id: 'an1',
@@ -126,52 +111,6 @@ describe('announcements write validation', () => {
       .where(eq(announcements.title, 'Trimmed Notice'));
     expect(row).toBeTruthy();
     expect(row.body).toBe('hello');
-  });
-});
-
-describe('properties write validation', () => {
-  it('rejects a missing address with 400', async () => {
-    const res = await propertiesPost({
-      request: jsonPost('http://localhost/api/admin/properties', { unit: 'A' }),
-    } as never);
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects an over-length address with 400', async () => {
-    const res = await propertiesPost({
-      request: jsonPost('http://localhost/api/admin/properties', {
-        address: 'x'.repeat(INPUT_LIMITS.address + 1),
-      }),
-    } as never);
-    expect(res.status).toBe(400);
-  });
-});
-
-describe('owners write validation', () => {
-  it('rejects missing required fields with 400', async () => {
-    const res = await ownersPost({
-      request: jsonPost('http://localhost/api/admin/owners', {
-        fullName: 'Jane',
-      }),
-    } as never);
-    expect(res.status).toBe(400);
-  });
-
-  it('trims and maps an empty email to null', async () => {
-    const res = await ownersPost({
-      request: jsonPost('http://localhost/api/admin/owners', {
-        propertyId: 'prop-active',
-        fullName: '  Jane Doe  ',
-        email: '',
-      }),
-    } as never);
-    expect(res.status).toBe(201);
-    const [row] = await getDb(env)
-      .select()
-      .from(owners)
-      .where(eq(owners.fullName, 'Jane Doe'));
-    expect(row).toBeTruthy();
-    expect(row.email).toBeNull();
   });
 });
 

@@ -173,10 +173,11 @@ describe('AdminApp', () => {
     for (const label of ['Roster', 'Board', 'Access', 'Review', 'Compliance']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     }
-    // The legacy homes+owners editor is relabeled, not removed…
+    // The legacy homes+owners editor is deleted (#212); its lot writes live
+    // on the Roster panel…
     expect(
-      screen.getByRole('button', { name: 'Homes & owners (legacy)' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: 'Homes & owners (legacy)' }),
+    ).not.toBeInTheDocument();
     // …and the phase-2 read-only preview tab is gone.
     expect(
       screen.queryByRole('button', { name: 'New roster (preview)' }),

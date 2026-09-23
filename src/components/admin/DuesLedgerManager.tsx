@@ -8,7 +8,7 @@ import {
   reverseDuesEntry,
   postBulkAssessment,
   newOperationKey,
-  fetchProperties,
+  fetchLots,
 } from '../../lib/admin';
 import { fetchSiteSettings } from '../../lib/content';
 import {
@@ -29,7 +29,7 @@ import {
   type DuesChargeCategory,
   type DuesPaymentMethod,
   type LotRecordEventDetail,
-  type PropertyWithOwners,
+  type LotSummary,
 } from '../../lib/types';
 
 /**
@@ -93,7 +93,7 @@ const emptyBulk = {
 
 export default function DuesLedgerManager() {
   const [rows, setRows] = useState<AdminDuesEntryDetail[]>([]);
-  const [lots, setLots] = useState<PropertyWithOwners[]>([]);
+  const [lots, setLots] = useState<LotSummary[]>([]);
   const [gateOff, setGateOff] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -157,7 +157,7 @@ export default function DuesLedgerManager() {
   const loadContext = useCallback(async (isStale: () => boolean) => {
     const [site, properties] = await Promise.all([
       fetchSiteSettings().catch(() => null),
-      fetchProperties().catch(() => [] as PropertyWithOwners[]),
+      fetchLots().catch(() => [] as LotSummary[]),
     ]);
     if (isStale()) return;
     if (site) {

@@ -32,15 +32,20 @@ Members panel (`MembersManager`, `GET`/`POST /api/admin/members`, and their `fet
 legacy `users.role`/`user_property_links` mirrors under `derived` (`endedLinkMirrorStatements`,
 below). The Lots section of the roster panel gained its own `create`/`update` actions on
 `/api/admin/roster-lots` (recording a new Lot and correcting its address, unit, or vote weight;
-see [`http-endpoints.md`](./http-endpoints.md)), which removes the last capability the legacy
+see [`http-endpoints.md`](./http-endpoints.md)), which removed the last capability the legacy
 **Homes & owners (legacy)** panel (`RosterManager`, backed by `properties`/`owners` reads and
-writes outside the roster) held alone — that panel itself is still up and still deletable only as
-part of wave 1, not yet removed. What remains — the rest of wave 1 (deleting `RosterManager` and
-its `/api/admin/properties`/`/api/admin/owners` routes, the `role`/`propertyIds` compatibility
-aliases, the `user_property_links` readers) and wave 2's one-way step (the `legacy` branch,
-`users.role`, and the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is
-tracked on #212. The write freeze, the permission matrix, and the ballot-privacy suites are
-retained permanently per #206/#212, not retired with the migration.
+writes outside the roster) held alone, and wave 1 has since deleted that panel too, along with
+`/api/admin/properties` and `/api/admin/owners` and their client helpers (`fetchProperties`,
+`saveProperty`, `saveOwner`). The Dues ledger, Elections, Lot violations, Meetings, and Proxies
+admin panels now read the Lot list from the board-gated `GET /api/admin/roster-lots`
+(`fetchLots`/`LotSummary`) instead. `properties.notes`/`owners.notes` remain in D1 but are shown
+nowhere; exporting them before the tables are dropped is #212's migration step 1, a human step.
+What remains of wave 1 — the `role`/`propertyIds` compatibility aliases (including the admin
+`useAuth` hook, which still reads `role`) and the `user_property_links` readers (`content/voting.ts`,
+`content/casting-authority.ts`) — and wave 2's one-way step (the `legacy` branch, `users.role`, and
+the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is tracked on #212.
+The write freeze, the permission matrix, and the ballot-privacy suites are retained permanently per
+#206/#212, not retired with the migration.
 
 ## The seam
 

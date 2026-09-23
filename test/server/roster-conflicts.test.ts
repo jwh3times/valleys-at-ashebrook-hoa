@@ -7,10 +7,6 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
   getAuthContext: async () => legacyAuthContext('b', 'board', []),
 }));
 
-import {
-  POST as propertiesPost,
-  PATCH as propertiesPatch,
-} from '../../src/pages/api/admin/properties';
 import { confirmPropertyVerification } from '../../src/server/verification/property';
 import { getDb } from '../../src/server/db/client';
 import {
@@ -32,62 +28,6 @@ beforeEach(async () => {
   await db.delete(userPropertyLinks);
   await db.delete(properties);
   await db.delete(users);
-});
-
-function postProperty(body: unknown) {
-  return propertiesPost({
-    request: new Request('http://localhost/api/admin/properties', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  } as never);
-}
-
-describe('admin properties — duplicate normalized address', () => {
-  it('returns 409 (not 500) instead of silently creating a second home', async () => {
-    const first = await postProperty({ address: '100 Repeat Rd' });
-    expect(first.status).toBe(201);
-    // Different casing/spacing → same normalized form.
-    const second = await postProperty({ address: '100  repeat rd ' });
-    expect(second.status).toBe(409);
-    expect((await getDb(env).select().from(properties)).length).toBe(1);
-  });
-
-  it('returns 409 when a PATCH would collide with another home’s address', async () => {
-    const db = getDb(env);
-    const now = new Date();
-    await db.insert(properties).values([
-      {
-        id: 'pa',
-        address: '1 A St',
-        addressNormalized: '1 a st',
-        unit: null,
-        status: 'active',
-        notes: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 'pb',
-        address: '2 B St',
-        addressNormalized: '2 b st',
-        unit: null,
-        status: 'active',
-        notes: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    const res = await propertiesPatch({
-      request: new Request('http://localhost/api/admin/properties', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: 'pb', address: '1 A St' }),
-      }),
-    } as never);
-    expect(res.status).toBe(409);
-  });
 });
 
 describe('verification confirm — re-verifying the same home', () => {

@@ -15,7 +15,7 @@ import {
   setVotes,
   setMemberVotes,
   fetchMeetingRosterPeople,
-  fetchProperties,
+  fetchLots,
   fetchLotPeople,
   fetchProxies,
 } from '../../lib/admin';
@@ -43,7 +43,7 @@ import type {
   VoteChoice,
   MemberVoteChoice,
   Visibility,
-  PropertyWithOwners,
+  LotSummary,
   MotionDetail,
   ProxyDetail,
 } from '../../lib/types';
@@ -187,9 +187,9 @@ export default function MeetingsManager() {
 
   // The property roster backs member-meeting attendance and vote editors —
   // their per-property twins of `people` above — loaded once alongside it.
-  const [properties, setProperties] = useState<PropertyWithOwners[]>([]);
+  const [properties, setProperties] = useState<LotSummary[]>([]);
   useEffect(() => {
-    fetchProperties()
+    fetchLots()
       .then(setProperties)
       .catch((err: unknown) => {
         const message =

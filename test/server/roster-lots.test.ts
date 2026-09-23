@@ -14,7 +14,8 @@ import {
   ownerships,
   boardServiceTerms,
 } from '../../src/server/db/roster-schema';
-import { POST } from '../../src/pages/api/admin/roster-lots';
+import { GET, POST } from '../../src/pages/api/admin/roster-lots';
+import { INPUT_LIMITS } from '../../src/lib/types';
 import { pauseNextBatch } from './fixtures';
 
 /**
@@ -400,6 +401,16 @@ describe('create', () => {
     expect(await getDb(env).select().from(properties)).toEqual([]);
   });
 
+  it('400s an over-length address', async () => {
+    const res = await POST(
+      req({ action: 'create', address: 'x'.repeat(INPUT_LIMITS.address + 1) }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe(
+      `address must be ${INPUT_LIMITS.address} characters or fewer`,
+    );
+  });
+
   it('400s a missing address and a weight below 1, zero included', async () => {
     const missing = await POST(req({ action: 'create' }));
     expect(missing.status).toBe(400);
@@ -512,14 +523,14 @@ describe('update', () => {
     expect(unknown.status).toBe(404);
   });
 
-  it('409s an address another lot already has', async () => {
+  it('409s an address another lot already has, however it is spaced or cased', async () => {
     await seedLot('lot-1');
     await seedLot('lot-2');
     const res = await POST(
       req({
         action: 'update',
         lotId: 'lot-2',
-        address: 'lot-1 Ashebrook Lane',
+        address: 'LOT-1  Ashebrook   lane',
       }),
     );
     expect(res.status).toBe(409);
@@ -595,5 +606,38 @@ describe('update under a race', () => {
       .where(eq(properties.id, 'lot-1'));
     expect(lot.voteWeight).toBe(2);
     expect(lot.address).toBe('lot-1 Ashebrook Lane');
+  });
+});
+
+describe('GET', () => {
+  it('lists every lot with only the fields the admin panels use', async () => {
+    await seedLot('lot-b');
+    await seedLot('lot-a');
+    await POST(req({ action: 'retire', lotId: 'lot-b' }));
+    await getDb(env)
+      .update(properties)
+      .set({ notes: 'legacy note', unit: '2' })
+      .where(eq(properties.id, 'lot-a'));
+
+    const res = await GET({
+      request: new Request('http://localhost/api/admin/roster-lots'),
+    } as never);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([
+      {
+        id: 'lot-a',
+        address: 'lot-a Ashebrook Lane',
+        unit: '2',
+        status: 'active',
+        voteWeight: 1,
+      },
+      {
+        id: 'lot-b',
+        address: 'lot-b Ashebrook Lane',
+        unit: null,
+        status: 'inactive',
+        voteWeight: 1,
+      },
+    ]);
   });
 });

@@ -7,7 +7,7 @@ import * as content from '../../lib/content';
 import {
   DEFAULT_SITE_SETTINGS,
   type AdminDuesEntryDetail,
-  type PropertyWithOwners,
+  type LotSummary,
 } from '../../lib/types';
 
 vi.mock('../../lib/admin');
@@ -16,17 +16,8 @@ vi.mock('../../lib/content');
 const mocked = vi.mocked(admin);
 const mockedContent = vi.mocked(content);
 
-function lot(id: string, address: string): PropertyWithOwners {
-  return {
-    id,
-    address,
-    addressNormalized: address.toLowerCase(),
-    unit: null,
-    status: 'active',
-    voteWeight: 1,
-    notes: null,
-    owners: [],
-  } as unknown as PropertyWithOwners;
+function lot(id: string, address: string): LotSummary {
+  return { id, address, unit: null, status: 'active', voteWeight: 1 };
 }
 
 function entry(
@@ -59,7 +50,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   let keys = 0;
   mocked.newOperationKey.mockImplementation(() => `key-${++keys}`);
-  mocked.fetchProperties.mockResolvedValue([
+  mocked.fetchLots.mockResolvedValue([
     lot('lot-a', '1 Ashebrook Lane'),
     lot('lot-b', '2 Ashebrook Lane'),
   ]);

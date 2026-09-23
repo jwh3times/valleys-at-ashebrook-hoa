@@ -70,22 +70,6 @@ interface Consumer {
 const CONSUMERS = new Map<string, Consumer>([
   // ---- Legacy surfaces phase 4 deletes outright -------------------------
   [
-    'pages/api/admin/owners.ts',
-    {
-      disposition: 'deleted-with-the-table',
-      reason:
-        'the legacy Owners admin route; #212 deletes the legacy Properties ' +
-        'and Owners panels along with the table',
-    },
-  ],
-  [
-    'pages/api/admin/properties.ts',
-    {
-      disposition: 'deleted-with-the-table',
-      reason: 'the legacy Properties admin route, which lists owners per lot',
-    },
-  ],
-  [
     'server/authz/context.ts',
     {
       disposition: 'deleted-with-the-table',

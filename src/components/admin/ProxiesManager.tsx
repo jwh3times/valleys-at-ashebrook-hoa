@@ -3,7 +3,7 @@ import {
   fetchProxies,
   saveProxy,
   deleteProxy,
-  fetchProperties,
+  fetchLots,
   fetchLotPeople,
   fetchMeetings,
   fetchElections,
@@ -13,7 +13,7 @@ import type {
   ProxyDetail,
   MeetingSummary,
   ElectionDetail,
-  PropertyWithOwners,
+  LotSummary,
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
 
@@ -37,7 +37,7 @@ export default function ProxiesManager() {
   } = useAdminResource<ProxyDetail[]>(fetchProxies, []);
   const [form, setForm] = useState(emptyProxy);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [properties, setProperties] = useState<PropertyWithOwners[]>([]);
+  const [properties, setProperties] = useState<LotSummary[]>([]);
   // Who may act for each lot — the roster's Lot Authority since #248 part 2,
   // including former holders so a historical paper proxy stays recordable.
   const [lotPeople, setLotPeople] = useState<LotPeople[]>([]);
@@ -45,7 +45,7 @@ export default function ProxiesManager() {
   const [elections, setElections] = useState<ElectionDetail[]>([]);
 
   useEffect(() => {
-    fetchProperties()
+    fetchLots()
       .then(setProperties)
       .catch(() => {});
     fetchLotPeople()
