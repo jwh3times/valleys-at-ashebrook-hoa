@@ -16,21 +16,27 @@ export interface AuthState {
  * `AuthContext` every admin route gates on — never from the session's `role`,
  * which is only the write-behind mirror of an Access Grant (#212). Fails
  * closed: an unreadable context, a pending read, or an answer that belongs to
- * a previously signed-in account all show the non-admin view. The routes stay
+ * a previous session or account all show the non-admin view. The routes stay
  * the authority either way.
  */
 export function useAuth(): AuthState {
   const { data, isPending } = authClient.useSession();
   const userId = (data?.user as { id?: string } | undefined)?.id ?? null;
+  // Keyed on the session, not only the account: signing out and back in as
+  // the same account must re-read, or a grant added (or revoked) in between
+  // would show the previous session's answer until the new one lands.
+  const key = userId
+    ? ((data as { session?: { id?: string } } | null)?.session?.id ?? userId)
+    : null;
   const [access, setAccess] = useState<{
-    userId: string;
+    key: string;
     isAdmin: boolean;
   } | null>(null);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!key) return;
     let cancelled = false;
-    async function load(forUser: string) {
+    async function load(forKey: string) {
       let isAdmin = false;
       try {
         const res = await fetch('/api/me', { cache: 'no-store' });
@@ -43,17 +49,17 @@ export function useAuth(): AuthState {
       } catch {
         // Fail closed: the non-admin view.
       }
-      if (!cancelled) setAccess({ userId: forUser, isAdmin });
+      if (!cancelled) setAccess({ key: forKey, isAdmin });
     }
-    void load(userId);
+    void load(key);
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [key]);
 
-  const resolved = userId !== null && access?.userId === userId;
+  const resolved = key !== null && access?.key === key;
   return {
-    loading: isPending || (userId !== null && !resolved),
+    loading: isPending || (key !== null && !resolved),
     user: data?.user ?? null,
     isAdmin: resolved ? access.isAdmin : false,
   };

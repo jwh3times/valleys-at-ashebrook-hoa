@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 
 const session = vi.hoisted(() => ({
-  data: null as { user: Record<string, unknown> } | null,
+  data: null as {
+    user: Record<string, unknown>;
+    session?: { id: string };
+  } | null,
   isPending: false,
 }));
 
@@ -95,6 +98,25 @@ describe('useAuth', () => {
     expect(result.current.loading).toBe(true);
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.isAdmin).toBe(false);
+  });
+
+  it('re-reads after signing out and back in as the same account', async () => {
+    session.data = { user: { id: 'u1' }, session: { id: 's1' } };
+    vi.stubGlobal('fetch', answer({ capabilities: [] }));
+    const { result, rerender } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isAdmin).toBe(false);
+
+    session.data = null;
+    rerender();
+    // A grant added while signed out: the next sign-in must not reuse the
+    // answer the previous session got.
+    session.data = { user: { id: 'u1' }, session: { id: 's2' } };
+    vi.stubGlobal('fetch', answer({ capabilities: ['board'] }));
+    rerender();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.isAdmin).toBe(false);
+    await waitFor(() => expect(result.current.isAdmin).toBe(true));
   });
 
   it('stays loading while the session itself is pending', () => {
