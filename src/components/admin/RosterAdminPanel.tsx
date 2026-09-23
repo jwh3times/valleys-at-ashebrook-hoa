@@ -11,6 +11,7 @@ import {
   createOwnership,
   createPerson,
   createRepresentation,
+  createLot,
   endContactMethod,
   endOwnership,
   endRepresentation,
@@ -18,6 +19,7 @@ import {
   fetchRoster,
   retireLot,
   setPreferredContactMethod,
+  updateLot,
   voidContactMethod,
   voidOwnership,
   voidRepresentation,
@@ -96,6 +98,17 @@ interface EvidenceState {
 }
 
 const NO_EVIDENCE: EvidenceState = { kind: 'none', reference: '' };
+
+const EMPTY_LOT_FORM = { address: '', unit: '', voteWeight: '' };
+
+/** The inline Lot editor's text state; the weight stays a string until the
+ * blank-first parse on save. */
+interface LotEditState {
+  lotId: string;
+  address: string;
+  unit: string;
+  voteWeight: string;
+}
 
 const BASIC_KINDS: EvidenceKind[] = [
   'none',
@@ -370,6 +383,9 @@ export default function RosterAdminPanel() {
   const [section, setSection] = useState<SectionKey>('lots');
 
   // Lots
+  const [lotForm, setLotForm] = useState(EMPTY_LOT_FORM);
+  const [lotEvidence, setLotEvidence] = useState<EvidenceState>(NO_EVIDENCE);
+  const [lotEdit, setLotEdit] = useState<LotEditState | null>(null);
   const [retireForm, setRetireForm] = useState({ lotId: '', effectiveDay: '' });
   const [retireEvidence, setRetireEvidence] =
     useState<EvidenceState>(NO_EVIDENCE);
@@ -479,6 +495,47 @@ export default function RosterAdminPanel() {
   const ownerlessLotIds = roster.advisories.ownerlessLotIds;
 
   // ---- Lots ---------------------------------------------------------------
+
+  function submitLot(e: React.FormEvent) {
+    e.preventDefault();
+    const unit = lotForm.unit.trim();
+    // Blank-first: a blank weight is absent (the server's default of 1),
+    // never `Number('') || 1`.
+    const rawWeight = lotForm.voteWeight.trim();
+    void run(async () => {
+      await createLot({
+        address: lotForm.address.trim(),
+        unit: unit === '' ? undefined : unit,
+        voteWeight: rawWeight === '' ? undefined : Number(rawWeight),
+        evidence: buildBasicEvidence(lotEvidence),
+      });
+      setLotForm(EMPTY_LOT_FORM);
+      setLotEvidence(NO_EVIDENCE);
+      await reload();
+    }, 'Lot recorded.');
+  }
+
+  function saveLotEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lotEdit) return;
+    const rawWeight = lotEdit.voteWeight.trim();
+    // An edit states the weight outright: blank is refused, not guessed.
+    if (rawWeight === '') {
+      setMsg('Error: Enter a vote weight of 1 or more.');
+      return;
+    }
+    const unit = lotEdit.unit.trim();
+    void run(async () => {
+      await updateLot({
+        lotId: lotEdit.lotId,
+        address: lotEdit.address.trim(),
+        unit: unit === '' ? null : unit,
+        voteWeight: Number(rawWeight),
+      });
+      setLotEdit(null);
+      await reload();
+    }, 'Lot updated.');
+  }
 
   function submitRetire(e: React.FormEvent) {
     e.preventDefault();
@@ -850,6 +907,71 @@ export default function RosterAdminPanel() {
             <>
               <form
                 className="panel-card"
+                onSubmit={submitLot}
+                style={{ marginBottom: '26px' }}
+              >
+                <div className="panel-editor__title">Add a lot</div>
+                <div className="field-grid" style={{ marginBottom: '16px' }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label htmlFor="add-lot-address">Address</label>
+                    <input
+                      id="add-lot-address"
+                      value={lotForm.address}
+                      onChange={(e) =>
+                        setLotForm({ ...lotForm, address: e.target.value })
+                      }
+                      required
+                      disabled={busy}
+                    />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label htmlFor="add-lot-unit">Unit (optional)</label>
+                    <input
+                      id="add-lot-unit"
+                      value={lotForm.unit}
+                      onChange={(e) =>
+                        setLotForm({ ...lotForm, unit: e.target.value })
+                      }
+                      disabled={busy}
+                    />
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label htmlFor="add-lot-weight">
+                      Vote weight (blank means 1)
+                    </label>
+                    <input
+                      id="add-lot-weight"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={lotForm.voteWeight}
+                      onChange={(e) =>
+                        setLotForm({ ...lotForm, voteWeight: e.target.value })
+                      }
+                      disabled={busy}
+                    />
+                  </div>
+                </div>
+                <EvidenceFields
+                  idPrefix="add-lot"
+                  kinds={BASIC_KINDS}
+                  value={lotEvidence}
+                  onChange={setLotEvidence}
+                  disabled={busy}
+                />
+                <div className="btn-row">
+                  <button
+                    className="btn btn--small"
+                    type="submit"
+                    disabled={busy}
+                  >
+                    {busy ? 'Saving…' : 'Add lot'}
+                  </button>
+                </div>
+              </form>
+
+              <form
+                className="panel-card"
                 onSubmit={submitRetire}
                 style={{ marginBottom: '26px' }}
               >
@@ -953,7 +1075,110 @@ export default function RosterAdminPanel() {
                             </button>
                           </div>
                         )}
+                        {lot.retiredAt === null &&
+                          lotEdit?.lotId !== lot.id && (
+                            <div className="row-actions">
+                              <button
+                                className="row-link"
+                                type="button"
+                                aria-label={`Edit lot: ${lotLabel(lot.id)}`}
+                                onClick={() =>
+                                  setLotEdit({
+                                    lotId: lot.id,
+                                    address: lot.address,
+                                    unit: lot.unit ?? '',
+                                    voteWeight: String(lot.voteWeight),
+                                  })
+                                }
+                                disabled={busy}
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          )}
                       </div>
+                      {lotEdit?.lotId === lot.id && (
+                        <form
+                          onSubmit={saveLotEdit}
+                          style={{ marginTop: '14px' }}
+                        >
+                          <div
+                            className="field-grid"
+                            style={{ marginBottom: '16px' }}
+                          >
+                            <div className="field" style={{ margin: 0 }}>
+                              <label htmlFor="edit-lot-address">Address</label>
+                              <input
+                                id="edit-lot-address"
+                                value={lotEdit.address}
+                                onChange={(e) =>
+                                  setLotEdit({
+                                    ...lotEdit,
+                                    address: e.target.value,
+                                  })
+                                }
+                                required
+                                disabled={busy}
+                              />
+                            </div>
+                            <div className="field" style={{ margin: 0 }}>
+                              <label htmlFor="edit-lot-unit">Unit</label>
+                              <input
+                                id="edit-lot-unit"
+                                value={lotEdit.unit}
+                                onChange={(e) =>
+                                  setLotEdit({
+                                    ...lotEdit,
+                                    unit: e.target.value,
+                                  })
+                                }
+                                disabled={busy}
+                              />
+                            </div>
+                            <div className="field" style={{ margin: 0 }}>
+                              <label htmlFor="edit-lot-weight">
+                                Vote weight
+                              </label>
+                              <input
+                                id="edit-lot-weight"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={lotEdit.voteWeight}
+                                onChange={(e) =>
+                                  setLotEdit({
+                                    ...lotEdit,
+                                    voteWeight: e.target.value,
+                                  })
+                                }
+                                disabled={busy}
+                              />
+                            </div>
+                          </div>
+                          <p className="muted" style={{ marginTop: 0 }}>
+                            A weight change never reaches an occasion already
+                            open: its eligibility is frozen with its own
+                            weights.
+                          </p>
+                          <div className="btn-row">
+                            <button
+                              className="btn btn--small"
+                              type="submit"
+                              disabled={busy}
+                            >
+                              {busy ? 'Saving…' : 'Save lot'}
+                            </button>
+                            <button
+                              className="btn btn--small btn--ghost"
+                              type="button"
+                              onClick={() => setLotEdit(null)}
+                              disabled={busy}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )}
                     </div>
                   ))
                 )}

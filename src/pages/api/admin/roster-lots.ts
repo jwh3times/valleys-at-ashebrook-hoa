@@ -8,8 +8,9 @@ import {
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { associationDateIso } from '../../../lib/format';
-import { isoDateOrError } from '../../../lib/types';
+import { isoDateOrError, normalizePropertyInput } from '../../../lib/types';
 import { properties } from '../../../server/db/schema';
+import { normalizeAddress } from '../../../server/roster/normalize';
 import {
   AuditCorrelation,
   operationKey,
@@ -316,6 +317,228 @@ async function correctRetirement(
   return new Response(null, { status: 204 });
 }
 
+// Recording and editing a Lot (#212, replacing the legacy Homes & owners
+// panel). Only the address, unit, and vote weight are editable here: `status`
+// follows retirement above, and `notes` is legacy free text the new roster
+// deliberately does not carry. The address and unit are masked by the
+// assistant's pseudonymizer, so the ledger records only that they changed
+// (`lot_address`); the vote weight is a non-personal scalar, recorded
+// old-and-new. Frozen eligibility snapshots carry their own weight, so an
+// edit never reaches an occasion already open.
+
+// D1 surfaces a UNIQUE failure on the cause chain of the batch error.
+function isUniqueViolation(err: unknown): boolean {
+  for (let e: unknown = err; e instanceof Error; e = e.cause)
+    if (/UNIQUE constraint failed/i.test(e.message)) return true;
+  return false;
+}
+
+const ADDRESS_TAKEN = 'A lot with this address is already on the roster';
+
+type LotInput = { address?: string; unit?: string | null; voteWeight?: number };
+
+function parseLotInput(
+  body: unknown,
+  mode: 'create' | 'patch',
+): { ok: true; value: LotInput } | { ok: false; error: string } {
+  const r = (body ?? {}) as Record<string, unknown>;
+  if ('status' in r)
+    return { ok: false, error: 'status is set by retiring a lot, not here' };
+  if ('notes' in r)
+    return { ok: false, error: 'notes are not recorded on the roster' };
+  const result = normalizePropertyInput(body, mode);
+  if (!result.ok) return result;
+  const { address, unit, voteWeight } = result.value;
+  return { ok: true, value: { address, unit, voteWeight } };
+}
+
+async function actorOf(
+  locals: App.Locals | undefined,
+  request: Request,
+): Promise<string> {
+  return (await resolveAuthContext(locals, request, env))?.userId ?? 'unknown';
+}
+
+async function createLot(
+  body: unknown,
+  locals: App.Locals | undefined,
+  request: Request,
+): Promise<Response> {
+  const input = parseLotInput(body, 'create');
+  if (!input.ok) return new Response(input.error, { status: 400 });
+  const evidenceResult = parseEvidence(body);
+  if (!evidenceResult.ok)
+    return new Response(evidenceResult.error, { status: 400 });
+  const address = input.value.address!; // create mode guarantees it
+  const voteWeight = input.value.voteWeight ?? 1;
+
+  const lotId = crypto.randomUUID();
+  const nowMs = Date.now();
+  const nowSeconds = Math.floor(nowMs / 1000);
+  const correlation = new AuditCorrelation(env.DATABASE, {
+    operationKey: operationKey('roster-lots', 'create'),
+    actorAccountId: await actorOf(locals, request),
+    nowMs,
+  });
+  correlation.event({
+    kind: 'lot_recorded',
+    guard: {
+      sql: 'EXISTS (SELECT 1 FROM properties WHERE id = ?)',
+      binds: [lotId],
+    },
+    sensitive: ['lot_address'],
+    scalars: [
+      {
+        fieldKey: 'vote_weight',
+        valueType: 'integer',
+        old: null,
+        new: voteWeight,
+      },
+    ],
+    detail: {
+      family: 'roster_change',
+      effective: 'not_applicable',
+      reason: 'board_recorded',
+      evidence: evidenceResult.value,
+      subjects: [{ column: 'lot_id', id: lotId, role: 'primary' }],
+    },
+  });
+
+  try {
+    await env.DATABASE.batch([
+      env.DATABASE.prepare(
+        `INSERT INTO properties (id, address, address_normalized, unit, status, vote_weight, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
+      ).bind(
+        lotId,
+        address,
+        normalizeAddress(address),
+        input.value.unit ?? null,
+        voteWeight,
+        nowSeconds,
+        nowSeconds,
+      ),
+      ...correlation.statements,
+    ]);
+  } catch (err) {
+    if (isUniqueViolation(err))
+      return new Response(ADDRESS_TAKEN, { status: 409 });
+    throw err;
+  }
+  return Response.json({ id: lotId }, { status: 201 });
+}
+
+async function updateLot(
+  body: unknown,
+  locals: App.Locals | undefined,
+  request: Request,
+): Promise<Response> {
+  const lotId = stringField(body, 'lotId');
+  if (!lotId) return new Response('lotId is required', { status: 400 });
+  const input = parseLotInput(body, 'patch');
+  if (!input.ok) return new Response(input.error, { status: 400 });
+  const evidenceResult = parseEvidence(body);
+  if (!evidenceResult.ok)
+    return new Response(evidenceResult.error, { status: 400 });
+
+  const [lot] = await getDb(env)
+    .select({
+      address: properties.address,
+      unit: properties.unit,
+      voteWeight: properties.voteWeight,
+      retiredAt: properties.retiredAt,
+    })
+    .from(properties)
+    .where(eq(properties.id, lotId))
+    .limit(1);
+  if (!lot) return new Response('Lot not found', { status: 404 });
+  if (lot.retiredAt !== null)
+    return new Response('A retired lot cannot be edited', { status: 409 });
+
+  const next = {
+    address: input.value.address ?? lot.address,
+    unit: input.value.unit !== undefined ? input.value.unit : lot.unit,
+    voteWeight: input.value.voteWeight ?? lot.voteWeight,
+  };
+  const addressChanged = next.address !== lot.address || next.unit !== lot.unit;
+  const weightChanged = next.voteWeight !== lot.voteWeight;
+  // Idempotent no-op without a ledger row, as `setPreferred` does: a ledger
+  // event for a non-change is noise the correction views must then explain.
+  if (!addressChanged && !weightChanged)
+    return new Response(null, { status: 204 });
+
+  const nowMs = Date.now();
+  const nowSeconds = Math.floor(nowMs / 1000);
+  const correlation = new AuditCorrelation(env.DATABASE, {
+    operationKey: operationKey('roster-lots', 'update'),
+    actorAccountId: await actorOf(locals, request),
+    nowMs,
+  });
+  correlation.event({
+    kind: 'lot_updated',
+    // The post-state itself, not the seconds-resolution `updated_at` alone,
+    // so an unrelated write in the same second cannot satisfy the marker.
+    guard: {
+      sql: `EXISTS (SELECT 1 FROM properties WHERE id = ? AND updated_at = ?
+              AND address = ? AND unit IS ? AND vote_weight = ?)`,
+      binds: [lotId, nowSeconds, next.address, next.unit, next.voteWeight],
+    },
+    sensitive: addressChanged ? ['lot_address'] : [],
+    scalars: weightChanged
+      ? [
+          {
+            fieldKey: 'vote_weight',
+            valueType: 'integer',
+            old: lot.voteWeight,
+            new: next.voteWeight,
+          },
+        ]
+      : [],
+    detail: {
+      family: 'roster_change',
+      effective: 'not_applicable',
+      reason: 'board_recorded',
+      evidence: evidenceResult.value,
+      subjects: [{ column: 'lot_id', id: lotId, role: 'primary' }],
+    },
+  });
+
+  let results: D1Result[];
+  try {
+    results = await env.DATABASE.batch([
+      // Re-checks retirement and the values the ledger records as "old", so a
+      // concurrent edit or retirement loses the command rather than leaving
+      // an event whose old weight never existed.
+      env.DATABASE.prepare(
+        `UPDATE properties
+         SET address = ?, address_normalized = ?, unit = ?, vote_weight = ?, updated_at = ?
+         WHERE id = ? AND retired_at IS NULL
+           AND address = ? AND unit IS ? AND vote_weight = ?`,
+      ).bind(
+        next.address,
+        normalizeAddress(next.address),
+        next.unit,
+        next.voteWeight,
+        nowSeconds,
+        lotId,
+        lot.address,
+        lot.unit,
+        lot.voteWeight,
+      ),
+      ...correlation.statements,
+    ]);
+  } catch (err) {
+    if (isUniqueViolation(err))
+      return new Response(ADDRESS_TAKEN, { status: 409 });
+    throw err;
+  }
+  if (results[0].meta.changes !== 1)
+    return new Response('The lot changed or was retired — reload and retry', {
+      status: 409,
+    });
+  return new Response(null, { status: 204 });
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
@@ -328,6 +551,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return retireLot(parsed.value, locals, request, associationDateIso());
     case 'correctRetirement':
       return correctRetirement(parsed.value, locals, request);
+    case 'create':
+      return createLot(parsed.value, locals, request);
+    case 'update':
+      return updateLot(parsed.value, locals, request);
     default:
       return new Response('Unknown action', { status: 400 });
   }

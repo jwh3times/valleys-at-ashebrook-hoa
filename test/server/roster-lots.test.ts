@@ -285,3 +285,247 @@ describe('correctRetirement', () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Recording and editing a Lot on the party roster (#212), replacing the
+ * legacy Homes & owners panel's writes. The address is personal enough to be
+ * masked by the assistant's pseudonymizer, so the ledger records only that it
+ * changed (`lot_address`); the vote weight is a non-personal scalar and is
+ * recorded old-and-new.
+ */
+async function eventsOfKind(kind: string) {
+  return getDb(env).all<{ id: string; reason_code: string }>(
+    sql`SELECT e.id, r.reason_code FROM audit_events e
+        JOIN roster_changes r ON r.event_id = e.id
+        WHERE e.event_kind = ${kind}`,
+  );
+}
+
+async function lotSubjectsOf(eventId: string) {
+  return getDb(env).all<{ lot_id: string; role: string }>(
+    sql`SELECT lot_id, role FROM roster_change_subjects WHERE event_id = ${eventId}`,
+  );
+}
+
+async function sensitiveOf(eventId: string) {
+  return (
+    await getDb(env).all<{ field_category: string }>(
+      sql`SELECT field_category FROM audit_sensitive_field_changes WHERE event_id = ${eventId}`,
+    )
+  ).map((r) => r.field_category);
+}
+
+async function scalarsOf(eventId: string) {
+  return getDb(env).all<{
+    field_key: string;
+    old_integer: number | null;
+    new_integer: number | null;
+  }>(
+    sql`SELECT field_key, old_integer, new_integer FROM audit_scalar_changes WHERE event_id = ${eventId}`,
+  );
+}
+
+describe('create', () => {
+  it('records a live lot with its weight and an audited change', async () => {
+    const res = await POST(
+      req({
+        action: 'create',
+        address: '7 Oak Lane',
+        unit: 'B',
+        voteWeight: 2,
+      }),
+    );
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+
+    const [lot] = await getDb(env)
+      .select()
+      .from(properties)
+      .where(eq(properties.id, id));
+    expect(lot.address).toBe('7 Oak Lane');
+    expect(lot.addressNormalized).toBe('7 oak lane');
+    expect(lot.unit).toBe('B');
+    expect(lot.voteWeight).toBe(2);
+    expect(lot.status).toBe('active');
+    expect(lot.retiredAt).toBeNull();
+
+    const [event] = await eventsOfKind('lot_recorded');
+    expect(event.reason_code).toBe('board_recorded');
+    expect(await lotSubjectsOf(event.id)).toEqual([
+      { lot_id: id, role: 'primary' },
+    ]);
+    expect(await sensitiveOf(event.id)).toEqual(['lot_address']);
+    expect(await scalarsOf(event.id)).toEqual([
+      { field_key: 'vote_weight', old_integer: null, new_integer: 2 },
+    ]);
+    expect(
+      await getDb(env).all(sql`SELECT * FROM audit_integrity_violations_v`),
+    ).toEqual([]);
+  });
+
+  it('defaults the vote weight to 1', async () => {
+    const res = await POST(req({ action: 'create', address: '8 Oak Lane' }));
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    const [lot] = await getDb(env)
+      .select()
+      .from(properties)
+      .where(eq(properties.id, id));
+    expect(lot.voteWeight).toBe(1);
+  });
+
+  it('409s an address already on the roster and records nothing', async () => {
+    await seedLot('lot-1');
+    const res = await POST(
+      req({ action: 'create', address: 'LOT-1  Ashebrook Lane' }),
+    );
+    expect(res.status).toBe(409);
+    expect(await eventsOfKind('lot_recorded')).toEqual([]);
+  });
+
+  it('refuses status and notes, which the new roster does not take here', async () => {
+    const status = await POST(
+      req({ action: 'create', address: '9 Oak Lane', status: 'inactive' }),
+    );
+    expect(status.status).toBe(400);
+    expect(await status.text()).toBe(
+      'status is set by retiring a lot, not here',
+    );
+    const notes = await POST(
+      req({ action: 'create', address: '9 Oak Lane', notes: 'x' }),
+    );
+    expect(notes.status).toBe(400);
+    expect(await notes.text()).toBe('notes are not recorded on the roster');
+    expect(await getDb(env).select().from(properties)).toEqual([]);
+  });
+
+  it('400s a missing address and a weight below 1, zero included', async () => {
+    const missing = await POST(req({ action: 'create' }));
+    expect(missing.status).toBe(400);
+    expect(await missing.text()).toBe('address is required');
+    for (const voteWeight of [0, -1]) {
+      const res = await POST(
+        req({ action: 'create', address: 'x', voteWeight }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe(
+        'voteWeight must be a whole number of 1 or more',
+      );
+    }
+    expect(await getDb(env).select().from(properties)).toEqual([]);
+  });
+});
+
+describe('update', () => {
+  it('changes address, unit, and weight with one audited change', async () => {
+    await seedLot('lot-1');
+    const res = await POST(
+      req({
+        action: 'update',
+        lotId: 'lot-1',
+        address: '12 Elm Court',
+        unit: '2',
+        voteWeight: 3,
+      }),
+    );
+    expect(res.status).toBe(204);
+
+    const [lot] = await getDb(env)
+      .select()
+      .from(properties)
+      .where(eq(properties.id, 'lot-1'));
+    expect(lot.address).toBe('12 Elm Court');
+    expect(lot.addressNormalized).toBe('12 elm court');
+    expect(lot.unit).toBe('2');
+    expect(lot.voteWeight).toBe(3);
+
+    const [event] = await eventsOfKind('lot_updated');
+    expect(event.reason_code).toBe('board_recorded');
+    expect(await lotSubjectsOf(event.id)).toEqual([
+      { lot_id: 'lot-1', role: 'primary' },
+    ]);
+    expect(await sensitiveOf(event.id)).toEqual(['lot_address']);
+    expect(await scalarsOf(event.id)).toEqual([
+      { field_key: 'vote_weight', old_integer: 1, new_integer: 3 },
+    ]);
+    expect(
+      await getDb(env).all(sql`SELECT * FROM audit_integrity_violations_v`),
+    ).toEqual([]);
+  });
+
+  it('records a weight-only change without an address category', async () => {
+    await seedLot('lot-1');
+    const res = await POST(
+      req({ action: 'update', lotId: 'lot-1', voteWeight: 4 }),
+    );
+    expect(res.status).toBe(204);
+    const [event] = await eventsOfKind('lot_updated');
+    expect(await sensitiveOf(event.id)).toEqual([]);
+    expect(await scalarsOf(event.id)).toEqual([
+      { field_key: 'vote_weight', old_integer: 1, new_integer: 4 },
+    ]);
+  });
+
+  it('writes no ledger row when nothing changes', async () => {
+    await seedLot('lot-1');
+    const res = await POST(
+      req({
+        action: 'update',
+        lotId: 'lot-1',
+        address: 'lot-1 Ashebrook Lane',
+        voteWeight: 1,
+      }),
+    );
+    expect(res.status).toBe(204);
+    expect(await eventsOfKind('lot_updated')).toEqual([]);
+  });
+
+  it('409s a retired lot and 404s an unknown one', async () => {
+    await seedLot('lot-1');
+    await POST(req({ action: 'retire', lotId: 'lot-1' }));
+    const retired = await POST(
+      req({ action: 'update', lotId: 'lot-1', voteWeight: 2 }),
+    );
+    expect(retired.status).toBe(409);
+    const [lot] = await getDb(env)
+      .select()
+      .from(properties)
+      .where(eq(properties.id, 'lot-1'));
+    expect(lot.voteWeight).toBe(1);
+
+    const unknown = await POST(
+      req({ action: 'update', lotId: 'nope', voteWeight: 2 }),
+    );
+    expect(unknown.status).toBe(404);
+  });
+
+  it('409s an address another lot already has', async () => {
+    await seedLot('lot-1');
+    await seedLot('lot-2');
+    const res = await POST(
+      req({
+        action: 'update',
+        lotId: 'lot-2',
+        address: 'lot-1 Ashebrook Lane',
+      }),
+    );
+    expect(res.status).toBe(409);
+    expect(await eventsOfKind('lot_updated')).toEqual([]);
+  });
+
+  it('refuses status and notes', async () => {
+    await seedLot('lot-1');
+    const status = await POST(
+      req({ action: 'update', lotId: 'lot-1', status: 'inactive' }),
+    );
+    expect(status.status).toBe(400);
+    expect(await status.text()).toBe(
+      'status is set by retiring a lot, not here',
+    );
+    const notes = await POST(
+      req({ action: 'update', lotId: 'lot-1', notes: 'x' }),
+    );
+    expect(notes.status).toBe(400);
+    expect(await notes.text()).toBe('notes are not recorded on the roster');
+  });
+});
