@@ -129,7 +129,6 @@ function memberCtx(userId: string, personId: string): AuthContext {
     contentTier: 'homeowner',
     hasCurrentBoardTerm: false,
     role: 'homeowner',
-    propertyIds: ['lot-1'],
   };
 }
 

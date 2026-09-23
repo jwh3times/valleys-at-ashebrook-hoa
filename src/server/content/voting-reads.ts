@@ -46,7 +46,7 @@ export async function fetchOpenVotingFor(
   if (tiers.length === 0) return [];
 
   const db = getDb(env);
-  // NOT ctx.propertyIds: that set is filtered to active properties, which
+  // NOT ctx.lotIds: that set is filtered to active properties, which
   // would drop a lot deactivated after the occasion opened — and, because of
   // the empty-set early return below, would take the caller's proxies for
   // OTHER lots with it. The frozen snapshot decides eligibility (ADR 0020).

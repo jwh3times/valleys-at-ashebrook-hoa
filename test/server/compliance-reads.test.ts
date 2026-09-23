@@ -84,7 +84,6 @@ function systemAdminContext(): AuthContext {
     contentTier: 'board',
     hasCurrentBoardTerm: false,
     role: 'board',
-    propertyIds: [],
   };
 }
 

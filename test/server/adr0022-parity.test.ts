@@ -420,10 +420,9 @@ describe('the flag selects the model, for every caller class', () => {
             `${account} should hold ${capability} under ${mode}`,
           ).toBe(true);
         }
-        // The compatibility aliases must track, or every untouched call site
+        // The compatibility alias must track, or every untouched call site
         // silently reads a different answer than the guards do.
         expect(ctx?.role).toBe(ctx?.contentTier);
-        expect(ctx?.propertyIds).toEqual(ctx?.lotIds);
       });
     }
 

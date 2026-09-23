@@ -144,7 +144,6 @@ function memberCtx(
     contentTier: 'homeowner',
     hasCurrentBoardTerm: false,
     role: 'homeowner',
-    propertyIds: lotIds,
   };
 }
 

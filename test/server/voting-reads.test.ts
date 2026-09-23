@@ -36,7 +36,7 @@ beforeAll(async () => {
 
 const now = new Date('2026-08-05T12:00:00Z');
 
-// propertyIds is deliberately left EMPTY. getAuthContext populates it by
+// lotIds is deliberately left EMPTY. getAuthContext populates it by
 // inner-joining `properties` and filtering to status = 'active', so a lot
 // deactivated after an occasion opened would be missing from it in
 // production. fetchOpenVotingFor must resolve lots from user_property_links
@@ -399,7 +399,7 @@ describe('fetchOpenVotingFor', () => {
     // The shared beforeEach already deactivates property-own AFTER the
     // occasion opened. ADR 0020 says the frozen snapshot decides eligibility,
     // and the cast path has always honoured that — but the read model used
-    // AuthContext.propertyIds, which excludes inactive lots, so the page and
+    // AuthContext.lotIds, which excludes inactive lots, so the page and
     // POST /api/vote disagreed. Worse, losing the only own lot also emptied
     // the caller's held-proxy list via the no-lots early return, so a lot
     // going inactive silently removed authority over an unrelated lot.
