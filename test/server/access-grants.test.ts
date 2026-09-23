@@ -163,7 +163,6 @@ function sysAdminCtx(userId = 'sa-1'): AuthContext {
     lotIds: [],
     contentTier: 'board',
     hasCurrentBoardTerm: false,
-    role: 'board',
   };
 }
 

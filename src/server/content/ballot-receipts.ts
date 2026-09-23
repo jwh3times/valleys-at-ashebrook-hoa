@@ -43,7 +43,10 @@ export interface ReceiptElection {
  * literal — never interpolated from anything a caller supplied. Mirrors
  * `visibilityPredicate` in `voting.ts`.
  */
-function visibilityPredicate(alias: string, tier: AuthContext['role']): string {
+function visibilityPredicate(
+  alias: string,
+  tier: AuthContext['contentTier'],
+): string {
   if (tier === 'board') return '1 = 1';
   if (tier === 'homeowner')
     return `${alias}.visibility IN ('public', 'homeowner')`;

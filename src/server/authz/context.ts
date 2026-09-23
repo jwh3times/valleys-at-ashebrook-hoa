@@ -57,11 +57,10 @@ export function legacyAuthContext(
     lotIds,
     contentTier: role,
     hasCurrentBoardTerm: false,
-    role,
   };
 }
 
-/** Derived facts, shaped as an `AuthContext`. Adds only the compat alias. */
+/** Derived facts, shaped as an `AuthContext`. */
 export function derivedContext(access: DerivedAccess): AuthContext {
   return {
     userId: access.userId,
@@ -70,7 +69,6 @@ export function derivedContext(access: DerivedAccess): AuthContext {
     lotIds: access.lotIds,
     contentTier: access.contentTier,
     hasCurrentBoardTerm: access.hasCurrentBoardTerm,
-    role: access.contentTier,
   };
 }
 

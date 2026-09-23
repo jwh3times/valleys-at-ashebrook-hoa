@@ -91,21 +91,22 @@ describe('the authorization layer and the legacy role column', () => {
   });
 });
 
-describe('the compatibility alias feeds only content reads', () => {
-  // `AuthContext.role` survives phase 3 as `contentTier` under its old name,
-  // and the contract (guards.ts) is that it feeds nothing but content reads. A
-  // COMPARISON on it is a guard-shaped use — capability questions belong to
-  // `ctx.capabilities` — and this scan keeps the call sites fixed in phase 3a
-  // (owner-lookup, the voting preflights, the proxies and vote pages) from
-  // growing back.
+describe('the content tier is never used as an access check', () => {
+  // `contentTier` answers what a caller may READ; what a caller may DO is
+  // `ctx.capabilities`. A COMPARISON on the tier is a guard-shaped use, and
+  // this scan keeps the call sites fixed in phase 3a (owner-lookup, the
+  // voting preflights, the proxies and vote pages) from growing back. Phase 4
+  // (#212) retired the `role` alias this used to watch; the rule moved with
+  // the value it named.
   //
   // A convention scan, not a proof: it matches the `ctx` naming convention, so
   // a differently-named context variable slips it (src/lib/site.ts's `auth`
-  // param does, legitimately — its role reads decide which nav links render,
-  // which is presentation). Reads that pass `ctx.role` onward, like
-  // `visibleTiers(ctx.role)`, are the alias's job and deliberately not matched.
+  // param does, legitimately — its tier reads decide which nav links render,
+  // which is presentation). Reads that pass the tier onward, like
+  // `visibleTiers(ctx.contentTier)`, are content reads and deliberately not
+  // matched.
   it('is never compared against a literal outside the guards', () => {
-    const pattern = /\bctx[!?]?\.role\s*[!=]==/;
+    const pattern = /\bctx[!?]?\.contentTier\s*[!=]==/;
     const src = join(process.cwd(), 'src');
     const offenders: string[] = [];
     for (const file of files(src, ['.ts', '.tsx', '.astro'])) {

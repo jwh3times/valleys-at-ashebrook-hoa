@@ -19,7 +19,7 @@ const KIND_LABELS: Record<MeetingKind, string> = {
 // Read tier-filtered, approved-only meetings server-side (SEO / first paint /
 // no-JS) — fetchMeetingsFor already excludes drafts unconditionally, even for
 // a board caller, so no extra filtering belongs here.
-const role = Astro.locals.authContext?.role ?? 'visitor';
+const role = Astro.locals.authContext?.contentTier ?? 'visitor';
 const meetings = await fetchMeetingsFor(env, role);
 ---
 

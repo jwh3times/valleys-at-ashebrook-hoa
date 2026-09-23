@@ -24,7 +24,7 @@ export const GET: APIRoute = async ({ request, locals }) => {
   const gate = await requireMemberApi(locals, request, env);
   if (!gate.ok) return gate.res;
   return Response.json(
-    await fetchMemberProxies(env, gate.ctx.role, gate.ctx.lotIds),
+    await fetchMemberProxies(env, gate.ctx.contentTier, gate.ctx.lotIds),
   );
 };
 
@@ -80,7 +80,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // failing either is the same 404, never confirming a board-only occasion
   // exists. Grantable = member-body + not yet past (meetings), non-terminal
   // + not yet past (elections). ISO dates compare lexically.
-  const tiers = visibleTiers(ctx.role);
+  const tiers = visibleTiers(ctx.contentTier);
   if (meetingId !== null) {
     const [m] = await db
       .select({

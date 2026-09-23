@@ -40,17 +40,6 @@ export interface AuthContext {
   /** Content sensitivity — a separate axis from what the caller may DO. */
   contentTier: Role;
   hasCurrentBoardTerm: boolean;
-
-  /**
-   * COMPATIBILITY ALIAS, retained through phase 3 and deleted in phase 4
-   * (#212). `role` is `contentTier` under its old name and feeds nothing but
-   * content reads. (`propertyIds`, the `lotIds` alias, is already gone.)
-   *
-   * It exists so phase 3 did not have to rename an identifier across its call
-   * sites while simultaneously changing what it meant: renaming and re-sourcing
-   * at once would make every such diff impossible to review for behavior change.
-   */
-  role: Role;
 }
 
 const RANK: Record<Role, number> = { visitor: 0, homeowner: 1, board: 2 };

@@ -7,6 +7,6 @@ export const prerender = false;
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const role =
-    (await resolveAuthContext(locals, request, env))?.role ?? 'visitor';
+    (await resolveAuthContext(locals, request, env))?.contentTier ?? 'visitor';
   return Response.json(await fetchDocumentsFor(env, role));
 };

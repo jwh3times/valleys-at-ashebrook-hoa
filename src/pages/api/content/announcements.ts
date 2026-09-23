@@ -7,7 +7,7 @@ export const prerender = false;
 
 export const GET: APIRoute = async ({ request, locals }) => {
   const role =
-    (await resolveAuthContext(locals, request, env))?.role ?? 'visitor';
+    (await resolveAuthContext(locals, request, env))?.contentTier ?? 'visitor';
   // Clamp to a non-negative integer; a negative limit would otherwise drop items
   // off the end via slice(0, -n). Anything invalid means "no limit".
   const rawLimit = new URL(request.url).searchParams.get('limit');

@@ -151,22 +151,22 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `associationDateIso()`, never read from `locals` or recomputed downstream.
   `users.role` is read ONLY inside
   `context.ts` — `test/unit/authz-legacy-role.test.ts` pins that by import-scanning the rest of
-  `authz/`, and separately scans all of `src/` for a `ctx.role` comparison outside the guards (a
-  read like `visibleTiers(ctx.role)` passes the alias onward rather than comparing it, so it is not
+  `authz/`, and separately scans all of `src/` for a `ctx.contentTier` comparison outside the
+  guards — access questions belong to `ctx.capabilities` (a read like
+  `visibleTiers(ctx.contentTier)` passes the tier onward rather than comparing it, so it is not
   matched). `guards.ts` defines the `AuthContext` shape — `userId`, `personId` (null under
   `legacy`, which has no Person concept), a `capabilities` **set** of `member`/`board`/
   `systemAdmin` (deliberately not a ladder: `systemAdmin` implies `board`, but neither implies
   `member`, which comes only from Lot authority), `lotIds`, `contentTier`, `hasCurrentBoardTerm`,
-  plus the compatibility alias `role` (= `contentTier`) that feeds nothing but content reads —
-  `tierAllows`/`visibleTiers` and their call sites are unchanged — retained through phase 3 and
-  deleted in phase 4 (#212; the `propertyIds` alias is already gone) — and its two check primitives:
+  (the phase-3 compatibility aliases `role` and `propertyIds` are gone, #212) — and its two check
+  primitives:
   `requireCapability(ctx, capability)` (set membership, the primitive every route gate is now built
   on) and `requireRole` (survives only for content-tier questions, since `contentTier` is
   genuinely ordered, unlike capability). `requireBoard`, `requireMemberApi` (official-mode-first
   homeowner-write gate), and `requireVotingApi` (feature flags, write freeze, exact Origin, JSON
   media type, session, then `member` capability, in that order) keep their signatures but now gate
   on `ctx.capabilities` — `board` for the admin gate, `member` for the member and voting gates — as
-  does middleware's backstop for each surface. Four call sites that used to compare `ctx.role`
+  does middleware's backstop for each surface. Four call sites that used to compare the content tier
   directly now ask `ctx.capabilities.has(...)`/`ctx.lotIds` instead: `/api/member/owner-lookup`,
   both cast preflights in `content/voting.ts`, and the `verified` checks on `/proxies` and `/vote`
   — identical behavior under `legacy`; under `derived`, a board member who owns no Lot is refused

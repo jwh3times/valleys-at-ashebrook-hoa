@@ -82,7 +82,7 @@ export function aboutParagraphs(s: Pick<SiteSettings, 'aboutBody'>): string[] {
 
 /** Minimal auth shape the header needs (structurally satisfied by AuthContext). */
 export interface AccountNavAuth {
-  role: 'visitor' | 'homeowner' | 'board';
+  contentTier: 'visitor' | 'homeowner' | 'board';
   lotIds: string[];
 }
 
@@ -115,7 +115,7 @@ export function accountNav(
         { href: '/register', label: 'Register' },
       ],
     };
-  if (auth.role === 'board')
+  if (auth.contentTier === 'board')
     return {
       signedIn: true,
       links: [
@@ -136,7 +136,7 @@ export function accountNav(
           : []),
       ],
     };
-  if (auth.role !== 'homeowner')
+  if (auth.contentTier !== 'homeowner')
     return {
       signedIn: true,
       links: [{ href: '/verify-property', label: 'Verify your property' }],

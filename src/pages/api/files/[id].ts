@@ -18,7 +18,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
 
   if (doc.visibility !== 'public') {
     const ctx = await resolveAuthContext(locals, request, env);
-    const role = ctx?.role ?? 'visitor';
+    const role = ctx?.contentTier ?? 'visitor';
     if (!tierAllows(role, doc.visibility))
       return new Response('Forbidden', { status: 403 });
   }

@@ -41,7 +41,7 @@ const id = Astro.params.id!;
 // caller. A null result must render the generic 404, never a 403: a 403
 // would confirm to the caller that a draft or board-only meeting exists at
 // this id.
-const role = Astro.locals.authContext?.role ?? 'visitor';
+const role = Astro.locals.authContext?.contentTier ?? 'visitor';
 const meeting = await fetchMeetingFor(env, role, id);
 
 if (!meeting) {
