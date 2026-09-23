@@ -51,7 +51,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   any of them.
 - `src/lib/roster-admin.ts` (ADR 0022 phase 3e, #221) handles board — and, for its three
   System-Administrator-only actions, capability-gated — writes to every phase 3b/3c/3d roster admin
-  surface, one group per admin panel: Roster (`fetchRoster`, lot retire/correct, party
+  surface, one group per admin panel: Roster (`fetchRoster`, lot create/update/retire/correct, party
   create/correct/consolidate, ownership create/end/void, representation
   create/end/void/correctScope, contact-method add/end/void/setPreferred, `exportRoster`), Board
   (`fetchBoardService` plus the nine create/end/cancel/void-term, substitute-qualifying-lot,

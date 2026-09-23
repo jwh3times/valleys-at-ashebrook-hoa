@@ -30,10 +30,17 @@ Members panel (`MembersManager`, `GET`/`POST /api/admin/members`, and their `fet
 `memberAction` client helpers): revocation now happens only through `/api/admin/person-links`
 `unlink` and the homeowner's own `POST /api/verify/unlink`, both of which now also write the
 legacy `users.role`/`user_property_links` mirrors under `derived` (`endedLinkMirrorStatements`,
-below). What remains — the rest of wave 1 (the `role`/`propertyIds` compatibility aliases, the
-`user_property_links` readers) and wave 2's one-way step (the `legacy` branch, `users.role`, and
-the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is tracked on #212. The write freeze, the permission matrix, and the ballot-privacy
-suites are retained permanently per #206/#212, not retired with the migration.
+below). The Lots section of the roster panel gained its own `create`/`update` actions on
+`/api/admin/roster-lots` (recording a new Lot and correcting its address, unit, or vote weight;
+see [`http-endpoints.md`](./http-endpoints.md)), which removes the last capability the legacy
+**Homes & owners (legacy)** panel (`RosterManager`, backed by `properties`/`owners` reads and
+writes outside the roster) held alone — that panel itself is still up and still deletable only as
+part of wave 1, not yet removed. What remains — the rest of wave 1 (deleting `RosterManager` and
+its `/api/admin/properties`/`/api/admin/owners` routes, the `role`/`propertyIds` compatibility
+aliases, the `user_property_links` readers) and wave 2's one-way step (the `legacy` branch,
+`users.role`, and the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is
+tracked on #212. The write freeze, the permission matrix, and the ballot-privacy suites are
+retained permanently per #206/#212, not retired with the migration.
 
 ## The seam
 

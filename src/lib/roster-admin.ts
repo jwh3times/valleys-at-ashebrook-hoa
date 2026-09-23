@@ -217,6 +217,44 @@ export async function retireLot(input: RetireLotInput): Promise<void> {
   );
 }
 
+export interface CreateLotInput {
+  address: string;
+  unit?: string;
+  /** Absent means the server default of 1 — never a coerced blank. */
+  voteWeight?: number;
+  evidence?: BasicEvidence;
+}
+
+export async function createLot(input: CreateLotInput): Promise<void> {
+  await rosterRequest(
+    '/api/admin/roster-lots',
+    'POST',
+    { action: 'create', ...input },
+    'Record lot failed',
+  );
+}
+
+export interface UpdateLotInput {
+  lotId: string;
+  address: string;
+  /** Null clears the unit. */
+  unit: string | null;
+  voteWeight: number;
+  evidence?: BasicEvidence;
+  /** The values the editor loaded; the server refuses a save made from a
+   * stale form. */
+  expected?: { address: string; unit: string | null; voteWeight: number };
+}
+
+export async function updateLot(input: UpdateLotInput): Promise<void> {
+  await rosterRequest(
+    '/api/admin/roster-lots',
+    'POST',
+    { action: 'update', ...input },
+    'Update lot failed',
+  );
+}
+
 /** Restores a Lot retired in error. Deliberately does NOT restore the
  * Ownerships that retirement ended — each is its own void-and-recreate. */
 export async function correctLotRetirement(lotId: string): Promise<void> {

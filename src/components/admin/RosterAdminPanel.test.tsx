@@ -203,3 +203,104 @@ describe('RosterAdminPanel', () => {
     expect(createObjectUrl).toHaveBeenCalled();
   });
 });
+
+describe('RosterAdminPanel lot records', () => {
+  it('adds a lot, leaving a blank weight to the server default', async () => {
+    const user = userEvent.setup();
+    mocked.createLot.mockResolvedValue(undefined);
+    render(<RosterAdminPanel />);
+
+    await user.type(await screen.findByLabelText('Address'), '5 Pine Way');
+    await user.click(screen.getByRole('button', { name: 'Add lot' }));
+
+    await waitFor(() =>
+      expect(mocked.createLot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          address: '5 Pine Way',
+          unit: undefined,
+          voteWeight: undefined,
+        }),
+      ),
+    );
+    expect(await screen.findByText('Lot recorded.')).toBeInTheDocument();
+  });
+
+  it('sends a typed weight as a number', async () => {
+    const user = userEvent.setup();
+    mocked.createLot.mockResolvedValue(undefined);
+    render(<RosterAdminPanel />);
+
+    await user.type(await screen.findByLabelText('Address'), '5 Pine Way');
+    await user.type(screen.getByLabelText('Vote weight (blank means 1)'), '2');
+    await user.click(screen.getByRole('button', { name: 'Add lot' }));
+
+    await waitFor(() =>
+      expect(mocked.createLot).toHaveBeenCalledWith(
+        expect.objectContaining({ voteWeight: 2 }),
+      ),
+    );
+  });
+
+  it('edits a lot through a row action named for the lot', async () => {
+    const user = userEvent.setup();
+    mocked.fetchRoster.mockResolvedValue(roster({ lots: [lot()] }));
+    mocked.updateLot.mockResolvedValue(undefined);
+    render(<RosterAdminPanel />);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit lot: 100 Main St' }),
+    );
+    const weight = screen.getByLabelText('Vote weight');
+    await user.clear(weight);
+    await user.type(weight, '3');
+    await user.click(screen.getByRole('button', { name: 'Save lot' }));
+
+    await waitFor(() =>
+      expect(mocked.updateLot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lotId: 'l1',
+          address: '100 Main St',
+          unit: null,
+          voteWeight: 3,
+          expected: { address: '100 Main St', unit: null, voteWeight: 1 },
+        }),
+      ),
+    );
+    expect(await screen.findByText('Lot updated.')).toBeInTheDocument();
+  });
+
+  it('refuses a blank weight on edit instead of guessing one', async () => {
+    const user = userEvent.setup();
+    mocked.fetchRoster.mockResolvedValue(roster({ lots: [lot()] }));
+    render(<RosterAdminPanel />);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Edit lot: 100 Main St' }),
+    );
+    await user.clear(screen.getByLabelText('Vote weight'));
+    await user.click(screen.getByRole('button', { name: 'Save lot' }));
+
+    expect(
+      await screen.findByText(/Enter a vote weight of 1 or more/),
+    ).toBeInTheDocument();
+    expect(mocked.updateLot).not.toHaveBeenCalled();
+  });
+
+  it('offers no edit on a retired lot', async () => {
+    mocked.fetchRoster.mockResolvedValue(
+      roster({
+        lots: [lot({ retiredDay: '2026-01-01', retiredAt: 1767225600000 })],
+      }),
+    );
+    render(<RosterAdminPanel />);
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Correct retirement of 100 Main St',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Edit lot: 100 Main St' }),
+    ).not.toBeInTheDocument();
+  });
+});
