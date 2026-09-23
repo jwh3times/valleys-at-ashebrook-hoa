@@ -7,6 +7,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.26] - 2026-09-23
+
+### Changed
+
+- **The admin site decides who sees the board panels the same way the admin
+  API does.** It used to go by the role stored on the account. Under the
+  current access model that role is only a copy of the account's board grant,
+  so it could lag behind: the panels could appear for someone whose every
+  action would then be refused, or stay hidden from someone the API would
+  allow. The site now asks the server what the signed-in account may do, and
+  shows the panels only when the answer includes board access. It asks again
+  on every sign-in, and shows the non-admin view until the answer arrives or
+  if the answer cannot be read. Part of ADR 0022 phase 4 (#212).
+
 ## [1.2.25] - 2026-09-23
 
 ### Removed
@@ -3612,7 +3626,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.25...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.26...HEAD
+[1.2.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.25...v1.2.26
 [1.2.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.24...v1.2.25
 [1.2.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.22...v1.2.23
