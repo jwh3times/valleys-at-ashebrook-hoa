@@ -461,9 +461,19 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
     never implicitly by anything else.
   - Roster: `GET /api/admin/roster` (full-detail Roster surface with the live Ownerless-Lot
     advisory; single-record reads never write the ledger) plus per-entity `POST` action buses —
-    `/api/admin/roster-lots` (`retire` — ends current Ownerships as caused Roster Changes,
-    dual-writes legacy `properties.status`, refuses over a live qualifying term or an open frozen
-    snapshot; `correctRetirement` restores the Lot but never the ownerships), `/api/admin/
+    `/api/admin/roster-lots` (`create` — inserts a live Lot with vote weight defaulting to 1,
+    `409` on a normalized-address collision; `update` — address/unit/vote weight only, both
+    `status` and `notes` refused with `400` (retirement and legacy free text are out of scope
+    here), `404` unknown, `409` retired, `409` on a stale `expected` snapshot (the values the
+    editor loaded) or an address collision, and a no-op diff is a `204` with no ledger row; the
+    `UPDATE`'s own `WHERE` re-checks retirement and the prior address/unit/weight, and
+    `assertInBatch` on `changes() = 1` rolls the whole batch back rather than record an edit that
+    did not happen — a weight change ledgers as `board_recorded` effective today, an address/unit
+    -only change as `recorded_in_error` effective `not_applicable`, either way tagged
+    `lot_address` sensitive whenever address or unit changed; `retire` — ends current Ownerships
+    as caused Roster Changes, dual-writes legacy `properties.status`, refuses over a live
+    qualifying term or an open frozen snapshot; `correctRetirement` restores the Lot but never the
+    ownerships), `/api/admin/
 roster-parties` (`createPerson`/`createOrganization` — party+subtype in one batch, org name
     collisions warn rather than merge; name corrections; `consolidate` with an explicit survivor,
     same-kind/one-hop/both-linked refusals; `correctConsolidation` clears the pointer),

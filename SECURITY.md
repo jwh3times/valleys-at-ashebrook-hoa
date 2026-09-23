@@ -401,7 +401,11 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   is deliberately not filtered by status, interval, void, or consolidation: a former owner or an
   ended contact value still appears in old documents and must still be masked. A redacted name or
   contact value arrives as a NULL and contributes nothing, so redaction is never undone by the
-  dictionary.
+  dictionary. A Lot address is the one exception to that "still appears, still masked" rule: it is
+  read from the current `properties.address` row only, so editing a Lot's address on the admin
+  Roster panel (`update`, #212) overwrites the prior value in place, and any document text carrying
+  the address as it read before the edit is no longer matched by the dictionary and goes
+  unmasked. A Lot's unit carries no PII and is never in the dictionary.
   This is **best-effort, not a guarantee**: it only catches PII matching a current roster entry or
   the email/phone patterns, so it does not cover non-resident names or other free text that doesn't
   match those patterns, and has narrow documented edge cases (for example, a roster value whose

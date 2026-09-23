@@ -7,6 +7,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.24] - 2026-09-23
+
+### Added
+
+- **The board can add and edit lots on the Roster panel.** Until now only the
+  legacy _Homes & owners_ panel could record a new lot or change a lot's
+  address, unit or vote weight. That was the last thing keeping it alive, and
+  ADR 0022 phase 4 (#212) retires it. _Add a lot_ and the per-lot _Edit_ action
+  now do both on the audited roster. A vote-weight change is recorded as a
+  board decision taking effect today, with its old and new weight. An
+  address or unit change on its own is recorded as a correction, and the
+  record notes only that the address changed, never what it said.
+
+  A lot's weight must still be at least 1. A lot that should not vote is
+  retired, not given weight 0. Occasions that have already frozen their
+  eligibility keep the weights they froze. If someone else changed the lot
+  after you opened its editor, saving tells you to reload instead of quietly
+  putting back the value they replaced.
+
 ## [1.2.23] - 2026-09-23
 
 ### Removed
@@ -3570,7 +3589,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.23...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.24...HEAD
+[1.2.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.23...v1.2.24
 [1.2.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.20...v1.2.21
