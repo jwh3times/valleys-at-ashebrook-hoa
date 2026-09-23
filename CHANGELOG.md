@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.29] - 2026-09-23
+
+### Security
+
+- **A document you cannot see now looks exactly like one that does not
+  exist.** Opening a homeowner-only or board-only document's download link
+  without the access for it answered _Forbidden_, which confirmed the document
+  existed to anyone holding the link. It now answers _Not Found_, the same as a
+  link to nothing. That matches how the site already treats every other hidden
+  record. Someone signed out who follows a homeowner document link now sees
+  _Not Found_, and signing in is still the way to reach it.
+
 ## [1.2.28] - 2026-09-23
 
 ### Changed
@@ -3649,7 +3661,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.28...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.29...HEAD
+[1.2.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.26...v1.2.27
 [1.2.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.25...v1.2.26

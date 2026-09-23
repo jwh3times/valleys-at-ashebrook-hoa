@@ -35,7 +35,9 @@ API routes live under `src/pages/api/`:
   blob's read is **not** here: it is `GET /api/admin/dues`, board-only beside the `PUT` it
   mirrors, because the board's Dues panel is its only caller and `/dues` reads
   `getDuesSettings` in its own frontmatter (#364).
-- Gated document download from R2 with tier checks: `GET /api/files/[id]`.
+- Gated document download from R2 with tier checks: `GET /api/files/[id]`. A document outside
+  the caller's tier answers `404 Not Found`, exactly as an unknown id does, so the response never
+  confirms it exists.
 - The caller's own access: `GET /api/me` returns `{ capabilities, contentTier }` from the same
   `AuthContext` every route gate reads (`401` when anonymous, `no-store`). It sits outside the
   gated prefixes on purpose — any signed-in account may ask about itself — and answers about the

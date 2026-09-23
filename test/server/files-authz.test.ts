@@ -59,7 +59,9 @@ describe('file serving — authenticated homeowner', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('homeowner-bytes');
   });
-  it('403s a board-tier file for a homeowner', async () => {
-    expect((await GET(ctx('doc-brd2'))).status).toBe(403);
+  it('404s a board-tier file for a homeowner, never confirming it exists', async () => {
+    const res = await GET(ctx('doc-brd2'));
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe('Not Found');
   });
 });
