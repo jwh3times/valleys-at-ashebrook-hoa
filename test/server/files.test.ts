@@ -54,7 +54,12 @@ describe('file serving', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('public-bytes');
   });
-  it('403s a homeowner-tier file for an anonymous caller', async () => {
-    expect((await GET(ctx('doc-hoa'))).status).toBe(403);
+  it('answers a homeowner-tier file to an anonymous caller exactly as a missing one', async () => {
+    // A hidden record renders 404, never 403: the answer must not confirm
+    // the document exists (AGENTS.md).
+    const hidden = await GET(ctx('doc-hoa'));
+    const missing = await GET(ctx('nope'));
+    expect(hidden.status).toBe(404);
+    expect(await hidden.text()).toBe(await missing.text());
   });
 });

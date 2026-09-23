@@ -19,8 +19,10 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
   if (doc.visibility !== 'public') {
     const ctx = await resolveAuthContext(locals, request, env);
     const role = ctx?.contentTier ?? 'visitor';
+    // A hidden record renders 404, never 403 — the same answer as an unknown
+    // id, so the response never confirms the document exists.
     if (!tierAllows(role, doc.visibility))
-      return new Response('Forbidden', { status: 403 });
+      return new Response('Not Found', { status: 404 });
   }
 
   const object = await env.DOCS.get(doc.r2Key);
