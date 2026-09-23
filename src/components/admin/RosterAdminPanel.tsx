@@ -108,6 +108,10 @@ interface LotEditState {
   address: string;
   unit: string;
   voteWeight: string;
+  /** What the editor loaded, sent so a stale save refuses instead of
+   * restoring a value someone else changed meanwhile. */
+  loaded: { address: string; unit: string | null; voteWeight: number };
+  evidence: EvidenceState;
 }
 
 const BASIC_KINDS: EvidenceKind[] = [
@@ -531,6 +535,8 @@ export default function RosterAdminPanel() {
         address: lotEdit.address.trim(),
         unit: unit === '' ? null : unit,
         voteWeight: Number(rawWeight),
+        evidence: buildBasicEvidence(lotEdit.evidence),
+        expected: lotEdit.loaded,
       });
       setLotEdit(null);
       await reload();
@@ -1088,6 +1094,12 @@ export default function RosterAdminPanel() {
                                     address: lot.address,
                                     unit: lot.unit ?? '',
                                     voteWeight: String(lot.voteWeight),
+                                    loaded: {
+                                      address: lot.address,
+                                      unit: lot.unit,
+                                      voteWeight: lot.voteWeight,
+                                    },
+                                    evidence: NO_EVIDENCE,
                                   })
                                 }
                                 disabled={busy}
@@ -1155,10 +1167,19 @@ export default function RosterAdminPanel() {
                               />
                             </div>
                           </div>
-                          <p className="muted" style={{ marginTop: 0 }}>
-                            A weight change never reaches an occasion already
-                            open: its eligibility is frozen with its own
-                            weights.
+                          <EvidenceFields
+                            idPrefix="edit-lot"
+                            kinds={BASIC_KINDS}
+                            value={lotEdit.evidence}
+                            onChange={(evidence) =>
+                              setLotEdit({ ...lotEdit, evidence })
+                            }
+                            disabled={busy}
+                          />
+                          <p className="muted">
+                            A weight change is a board decision taking effect
+                            today. Occasions that have already frozen their
+                            eligibility keep the weights they froze.
                           </p>
                           <div className="btn-row">
                             <button

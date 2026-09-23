@@ -15,6 +15,7 @@ import {
   boardServiceTerms,
 } from '../../src/server/db/roster-schema';
 import { POST } from '../../src/pages/api/admin/roster-lots';
+import { pauseNextBatch } from './fixtures';
 
 /**
  * #218's Lot retirement (#205): ownerships end as caused Roster Changes in
@@ -352,7 +353,7 @@ describe('create', () => {
     const [event] = await eventsOfKind('lot_recorded');
     expect(event.reason_code).toBe('board_recorded');
     expect(await lotSubjectsOf(event.id)).toEqual([
-      { lot_id: id, role: 'primary' },
+      { lot_id: id, role: 'created' },
     ]);
     expect(await sensitiveOf(event.id)).toEqual(['lot_address']);
     expect(await scalarsOf(event.id)).toEqual([
@@ -453,6 +454,18 @@ describe('update', () => {
     ).toEqual([]);
   });
 
+  it('records an address-only change as a correction, not a decision', async () => {
+    await seedLot('lot-1');
+    const res = await POST(
+      req({ action: 'update', lotId: 'lot-1', address: '3 Fixed Typo Rd' }),
+    );
+    expect(res.status).toBe(204);
+    const [event] = await eventsOfKind('lot_updated');
+    expect(event.reason_code).toBe('recorded_in_error');
+    expect(await sensitiveOf(event.id)).toEqual(['lot_address']);
+    expect(await scalarsOf(event.id)).toEqual([]);
+  });
+
   it('records a weight-only change without an address category', async () => {
     await seedLot('lot-1');
     const res = await POST(
@@ -527,5 +540,60 @@ describe('update', () => {
     );
     expect(notes.status).toBe(400);
     expect(await notes.text()).toBe('notes are not recorded on the roster');
+  });
+});
+
+describe('update under a race', () => {
+  it('records nothing when an identical edit lands first in the same second', async () => {
+    await seedLot('lot-1');
+    // The route stamps `updated_at` in seconds; pin the clock so the
+    // competing write lands in exactly that second — the case the post-state
+    // guard alone cannot tell apart from this command's own write.
+    const T = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(T);
+    const pause = pauseNextBatch();
+    try {
+      const pending = POST(
+        req({ action: 'update', lotId: 'lot-1', voteWeight: 3 }),
+      );
+      await pause.reached;
+      await env.DATABASE.prepare(
+        'UPDATE properties SET vote_weight = 3, updated_at = ? WHERE id = ?',
+      )
+        .bind(Math.floor(T / 1000), 'lot-1')
+        .run();
+      pause.release();
+      const res = await pending;
+      expect(res.status).toBe(409);
+    } finally {
+      pause.restore();
+      clock.mockRestore();
+    }
+    expect(await eventsOfKind('lot_updated')).toEqual([]);
+  });
+
+  it('409s when the lot changed since the editor loaded it', async () => {
+    await seedLot('lot-1');
+    await POST(req({ action: 'update', lotId: 'lot-1', voteWeight: 2 }));
+    const res = await POST(
+      req({
+        action: 'update',
+        lotId: 'lot-1',
+        address: '1 Renamed Way',
+        voteWeight: 1,
+        expected: {
+          address: 'lot-1 Ashebrook Lane',
+          unit: null,
+          voteWeight: 1,
+        },
+      }),
+    );
+    expect(res.status).toBe(409);
+    const [lot] = await getDb(env)
+      .select()
+      .from(properties)
+      .where(eq(properties.id, 'lot-1'));
+    expect(lot.voteWeight).toBe(2);
+    expect(lot.address).toBe('lot-1 Ashebrook Lane');
   });
 });

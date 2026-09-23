@@ -262,6 +262,7 @@ describe('RosterAdminPanel lot records', () => {
           address: '100 Main St',
           unit: null,
           voteWeight: 3,
+          expected: { address: '100 Main St', unit: null, voteWeight: 1 },
         }),
       ),
     );

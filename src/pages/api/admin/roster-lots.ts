@@ -13,6 +13,8 @@ import { properties } from '../../../server/db/schema';
 import { normalizeAddress } from '../../../server/roster/normalize';
 import {
   AuditCorrelation,
+  assertInBatch,
+  isBatchAssertionError,
   operationKey,
   updatedRowGuard,
   OPERATOR_OBSERVATION,
@@ -320,11 +322,13 @@ async function correctRetirement(
 // Recording and editing a Lot (#212, replacing the legacy Homes & owners
 // panel). Only the address, unit, and vote weight are editable here: `status`
 // follows retirement above, and `notes` is legacy free text the new roster
-// deliberately does not carry. The address and unit are masked by the
-// assistant's pseudonymizer, so the ledger records only that they changed
+// deliberately does not carry. The address is masked by the assistant's
+// pseudonymizer, so the ledger records only that the address or unit changed
 // (`lot_address`); the vote weight is a non-personal scalar, recorded
-// old-and-new. Frozen eligibility snapshots carry their own weight, so an
-// edit never reaches an occasion already open.
+// old-and-new. A weight change is a board decision taking effect today; an
+// address or unit change alone is a correction of what was recorded. Frozen
+// eligibility snapshots carry their own weights, so an edit never reaches an
+// occasion that has already frozen its eligibility.
 
 // D1 surfaces a UNIQUE failure on the cause chain of the batch error.
 function isUniqueViolation(err: unknown): boolean {
@@ -363,6 +367,7 @@ async function createLot(
   body: unknown,
   locals: App.Locals | undefined,
   request: Request,
+  associationDay: string,
 ): Promise<Response> {
   const input = parseLotInput(body, 'create');
   if (!input.ok) return new Response(input.error, { status: 400 });
@@ -397,10 +402,10 @@ async function createLot(
     ],
     detail: {
       family: 'roster_change',
-      effective: 'not_applicable',
+      effective: { day: associationDay },
       reason: 'board_recorded',
       evidence: evidenceResult.value,
-      subjects: [{ column: 'lot_id', id: lotId, role: 'primary' }],
+      subjects: [{ column: 'lot_id', id: lotId, role: 'created' }],
     },
   });
 
@@ -428,10 +433,30 @@ async function createLot(
   return Response.json({ id: lotId }, { status: 201 });
 }
 
+/** What the editor loaded, when it says. Lets a save made from a stale form
+ * refuse instead of silently restoring a value someone else just changed. */
+function parseExpected(
+  body: unknown,
+): { address: string; unit: string | null; voteWeight: number } | null {
+  const raw = (body as Record<string, unknown> | null | undefined)?.expected;
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (
+    typeof r.address !== 'string' ||
+    (r.unit !== null && typeof r.unit !== 'string') ||
+    typeof r.voteWeight !== 'number'
+  )
+    return null;
+  return { address: r.address, unit: r.unit, voteWeight: r.voteWeight };
+}
+
+const LOT_CHANGED = 'The lot changed or was retired — reload and retry';
+
 async function updateLot(
   body: unknown,
   locals: App.Locals | undefined,
   request: Request,
+  associationDay: string,
 ): Promise<Response> {
   const lotId = stringField(body, 'lotId');
   if (!lotId) return new Response('lotId is required', { status: 400 });
@@ -454,6 +479,14 @@ async function updateLot(
   if (!lot) return new Response('Lot not found', { status: 404 });
   if (lot.retiredAt !== null)
     return new Response('A retired lot cannot be edited', { status: 409 });
+  const expected = parseExpected(body);
+  if (
+    expected &&
+    (expected.address !== lot.address ||
+      expected.unit !== lot.unit ||
+      expected.voteWeight !== lot.voteWeight)
+  )
+    return new Response(LOT_CHANGED, { status: 409 });
 
   const next = {
     address: input.value.address ?? lot.address,
@@ -496,16 +529,22 @@ async function updateLot(
       : [],
     detail: {
       family: 'roster_change',
-      effective: 'not_applicable',
-      reason: 'board_recorded',
+      ...(weightChanged
+        ? {
+            effective: { day: associationDay },
+            reason: 'board_recorded' as const,
+          }
+        : {
+            effective: 'not_applicable' as const,
+            reason: 'recorded_in_error' as const,
+          }),
       evidence: evidenceResult.value,
       subjects: [{ column: 'lot_id', id: lotId, role: 'primary' }],
     },
   });
 
-  let results: D1Result[];
   try {
-    results = await env.DATABASE.batch([
+    await env.DATABASE.batch([
       // Re-checks retirement and the values the ledger records as "old", so a
       // concurrent edit or retirement loses the command rather than leaving
       // an event whose old weight never existed.
@@ -525,17 +564,20 @@ async function updateLot(
         lot.unit,
         lot.voteWeight,
       ),
+      // The post-state guard below cannot tell this command's write from an
+      // identical one committed first in the same second, so the UPDATE's own
+      // effect decides: a batch whose UPDATE changed nothing rolls back whole
+      // rather than recording an edit it did not make.
+      assertInBatch(env.DATABASE, { sql: 'changes() = 1', binds: [] }),
       ...correlation.statements,
     ]);
   } catch (err) {
     if (isUniqueViolation(err))
       return new Response(ADDRESS_TAKEN, { status: 409 });
+    if (isBatchAssertionError(err))
+      return new Response(LOT_CHANGED, { status: 409 });
     throw err;
   }
-  if (results[0].meta.changes !== 1)
-    return new Response('The lot changed or was retired — reload and retry', {
-      status: 409,
-    });
   return new Response(null, { status: 204 });
 }
 
@@ -552,9 +594,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'correctRetirement':
       return correctRetirement(parsed.value, locals, request);
     case 'create':
-      return createLot(parsed.value, locals, request);
+      return createLot(parsed.value, locals, request, associationDateIso());
     case 'update':
-      return updateLot(parsed.value, locals, request);
+      return updateLot(parsed.value, locals, request, associationDateIso());
     default:
       return new Response('Unknown action', { status: 400 });
   }

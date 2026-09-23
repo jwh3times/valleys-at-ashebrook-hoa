@@ -241,6 +241,9 @@ export interface UpdateLotInput {
   unit: string | null;
   voteWeight: number;
   evidence?: BasicEvidence;
+  /** The values the editor loaded; the server refuses a save made from a
+   * stale form. */
+  expected?: { address: string; unit: string | null; voteWeight: number };
 }
 
 export async function updateLot(input: UpdateLotInput): Promise<void> {
