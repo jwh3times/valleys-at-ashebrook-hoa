@@ -354,15 +354,22 @@ export async function endLinkStatements(
  * account its access back.
  *
  * Only under `derived`: under `legacy` these columns ARE the authority, and
- * ending a Person Link must not revoke anything there. Each statement is
- * guarded on this command having ended the link, so a batch that lost its
- * race writes nothing here either. Deleted with the legacy model (#212).
+ * ending a Person Link must not revoke anything there. The mode is decided in
+ * the SQL, not by the caller reading `getCutoverMode` first: that read falls
+ * back to `legacy` on error, which is right for choosing an authorization
+ * model but here would commit the link ending while silently skipping the
+ * mirrors. Each statement is also guarded on this command having ended the
+ * link, so a batch that lost its race writes nothing here either. Deleted
+ * with the legacy model (#212).
  */
 export function endedLinkMirrorStatements(
   database: D1Database,
   opts: { linkId: string; accountId: string; nowMs: number },
 ): D1PreparedStatement[] {
-  const ended = endedLinkGuard(opts.linkId, opts.nowMs);
+  const ended = andGuards(endedLinkGuard(opts.linkId, opts.nowMs), {
+    sql: "EXISTS (SELECT 1 FROM cutover_settings WHERE key = 'cutover_mode' AND value = 'derived')",
+    binds: [],
+  });
   return [
     database
       .prepare(

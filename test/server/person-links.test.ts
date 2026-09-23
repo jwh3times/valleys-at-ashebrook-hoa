@@ -15,6 +15,11 @@ import {
   accessGrants,
 } from '../../src/server/db/roster-schema';
 import { pauseNextBatch } from './fixtures';
+import { operationKey } from '../../src/server/roster/audit';
+import {
+  endLinkStatements,
+  endedLinkMirrorStatements,
+} from '../../src/server/roster/identity';
 import { GET, POST } from '../../src/pages/api/admin/person-links';
 
 /**
@@ -663,23 +668,43 @@ describe('unlink and the legacy mirrors', () => {
     expect(await legacyLinksOf('acct-1')).toHaveLength(1);
   });
 
-  it('leaves the mirrors alone when the unlink is refused', async () => {
+  it('leaves the mirrors alone when the batch does not end the link', async () => {
+    // Drives the batch itself: the route's preflights would refuse before
+    // building it, so only this reaches the guard on the mirror statements.
+    // The link is already ended, so the primary UPDATE matches nothing and
+    // the mirrors must not fire either.
     await setMode('derived');
     await seedPerson('per-1');
     await seedLink('acct-1', 'per-1');
     await seedLegacyAccess('acct-1');
-    // The only System Administrator: the link-ending statement refuses.
-    caller.systemAdmin = true;
-    await seedGrant('g-sa', 'acct-1', 'system_admin');
+    await getDb(env)
+      .update(personLinks)
+      .set({
+        endedAt: new Date(Date.now() + 1000),
+        endReason: 'recorded_in_error',
+        endedByAccountId: 'board-1',
+      })
+      .where(eq(personLinks.id, 'link-acct-1'));
 
-    const res = await POST(
-      req({
-        action: 'unlink',
+    const nowMs = Date.now();
+    const statements = await endLinkStatements({
+      database: env.DATABASE,
+      linkId: 'link-acct-1',
+      accountId: 'acct-1',
+      actorAccountId: 'board-1',
+      endReason: 'no_longer_qualifies',
+      nowMs,
+      operationKey: operationKey('person-links', 'unlink'),
+    });
+    const results = await env.DATABASE.batch([
+      ...statements,
+      ...endedLinkMirrorStatements(env.DATABASE, {
         linkId: 'link-acct-1',
-        endReason: 'no_longer_qualifies',
+        accountId: 'acct-1',
+        nowMs,
       }),
-    );
-    expect(res.status).toBe(409);
+    ]);
+    expect(results[0].meta.changes).toBe(0);
     expect(await roleOf('acct-1')).toBe('homeowner');
     expect(await legacyLinksOf('acct-1')).toHaveLength(1);
   });

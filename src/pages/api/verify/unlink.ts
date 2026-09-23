@@ -3,7 +3,6 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { resolveAuthContext } from '../../../server/authz/api-guards';
 import { writeFreezeError } from '../../../server/authz/write-freeze';
-import { getCutoverMode } from '../../../server/authz/cutover-mode';
 import { getDb } from '../../../server/db/client';
 import { personLinks } from '../../../server/db/roster-schema';
 import {
@@ -69,14 +68,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
     nowMs,
     operationKey: operationKey('verify-unlink', 'unlink'),
   });
-  if ((await getCutoverMode(env)) === 'derived')
-    statements.push(
-      ...endedLinkMirrorStatements(env.DATABASE, {
-        linkId: link.id,
-        accountId: ctx.userId,
-        nowMs,
-      }),
-    );
+  statements.push(
+    ...endedLinkMirrorStatements(env.DATABASE, {
+      linkId: link.id,
+      accountId: ctx.userId,
+      nowMs,
+    }),
+  );
   let results: D1Result[];
   try {
     results = await env.DATABASE.batch(statements);
