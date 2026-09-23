@@ -1366,7 +1366,7 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   const meetingCheck = await checkMeetingExists(db, input.meetingId);
   if (meetingCheck) return meetingCheck;
   // An election is not moved between meetings' bookkeeping via any other
-  // mechanism — only these fields, matching owners.ts's PATCH allow-list.
+  // mechanism — only the fields below are patchable.
   const set: Record<string, unknown> = { updatedAt: new Date() };
   if (input.title !== undefined) set.title = input.title;
   if (input.seats !== undefined) set.seats = input.seats;

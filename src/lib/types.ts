@@ -425,28 +425,6 @@ export interface LotSummary {
   voteWeight: number;
 }
 
-export interface Property {
-  id: string;
-  address: string;
-  unit: string | null;
-  status: 'active' | 'inactive';
-  notes: string | null;
-  /** Vote "shares" at member meetings. Always present, defaults to 1. */
-  voteWeight: number;
-}
-
-export interface Owner {
-  id: string;
-  propertyId: string;
-  fullName: string;
-  phone: string | null; // E.164
-  email: string | null;
-  status: 'active' | 'inactive';
-  notes: string | null;
-}
-
-export type PropertyWithOwners = Property & { owners: Owner[] };
-
 export interface MemberUser {
   id: string;
   name: string;
@@ -503,15 +481,6 @@ export interface PropertyInput {
   status?: 'active' | 'inactive';
   notes?: string | null;
   voteWeight?: number;
-}
-
-export interface OwnerInput {
-  propertyId?: string;
-  fullName?: string;
-  phone?: string | null;
-  email?: string | null;
-  status?: 'active' | 'inactive';
-  notes?: string | null;
 }
 
 type WriteMode = 'create' | 'patch';
@@ -724,42 +693,6 @@ export function normalizePropertyInput(
   const voteWeight = normalizeVoteWeight(raw);
   if (!voteWeight.ok) return voteWeight;
   if (voteWeight.value !== undefined) out.voteWeight = voteWeight.value;
-  return { ok: true, value: out };
-}
-
-export function normalizeOwnerInput(
-  raw: unknown,
-  mode: WriteMode,
-): InputResult<OwnerInput> {
-  const r = asRecord(raw);
-  const out: OwnerInput = {};
-  const propertyId = coreString(
-    r,
-    'propertyId',
-    INPUT_LIMITS.propertyId,
-    'propertyId',
-    mode,
-  );
-  if (!propertyId.ok) return propertyId;
-  if (propertyId.value !== undefined) out.propertyId = propertyId.value;
-  const fullName = coreString(
-    r,
-    'fullName',
-    INPUT_LIMITS.fullName,
-    'fullName',
-    mode,
-  );
-  if (!fullName.ok) return fullName;
-  if (fullName.value !== undefined) out.fullName = fullName.value;
-  const phone = nullableString(r, 'phone', INPUT_LIMITS.phone, 'phone');
-  if (!phone.ok) return phone;
-  if (phone.value !== undefined) out.phone = phone.value;
-  const email = nullableString(r, 'email', INPUT_LIMITS.email, 'email');
-  if (!email.ok) return email;
-  if (email.value !== undefined) out.email = email.value;
-  const status = statusField(r, 'status');
-  if (!status.ok) return status;
-  if (status.value !== undefined) out.status = status.value;
   return { ok: true, value: out };
 }
 

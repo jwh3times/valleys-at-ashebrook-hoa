@@ -7,7 +7,6 @@ import DocumentsManager from './DocumentsManager';
 import DuplicatesManager from './DuplicatesManager';
 import DuesManager from './DuesManager';
 import SiteManager from './SiteManager';
-import RosterManager from './RosterManager';
 import RosterAdminPanel from './RosterAdminPanel';
 import BoardServicePanel from './BoardServicePanel';
 import AccessPanel from './AccessPanel';
@@ -36,13 +35,6 @@ const SECTIONS = [
     key: 'duplicates',
     label: 'Duplicates',
     render: () => <DuplicatesManager />,
-  },
-  // The legacy homes+owners editor. Writable and authoritative until the ADR
-  // 0022 flip; retired in phase 4 (#212).
-  {
-    key: 'roster',
-    label: 'Homes & owners (legacy)',
-    render: () => <RosterManager />,
   },
   // ADR 0022 phase 3e (#221): the five writable surfaces over the party
   // roster, per #205's taxonomy. They replace the phase-2 read-only preview;

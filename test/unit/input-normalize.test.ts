@@ -3,7 +3,6 @@ import {
   INPUT_LIMITS,
   normalizeAnnouncementInput,
   normalizePropertyInput,
-  normalizeOwnerInput,
 } from '../../src/lib/types';
 
 describe('normalizeAnnouncementInput', () => {
@@ -122,37 +121,6 @@ describe('normalizePropertyInput', () => {
   it('rejects an over-length address', () => {
     const r = normalizePropertyInput(
       { address: 'x'.repeat(INPUT_LIMITS.address + 1) },
-      'create',
-    );
-    expect(r.ok).toBe(false);
-  });
-});
-
-describe('normalizeOwnerInput', () => {
-  it('requires propertyId and fullName on create', () => {
-    const r = normalizeOwnerInput({ fullName: 'Jane' }, 'create');
-    expect(r.ok).toBe(false);
-  });
-
-  it('trims fields and maps empty email/phone to null', () => {
-    const r = normalizeOwnerInput(
-      { propertyId: 'p1', fullName: '  Jane Doe  ', email: '', phone: '' },
-      'create',
-    );
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.value.fullName).toBe('Jane Doe');
-    expect(r.value.email).toBeNull();
-    expect(r.value.phone).toBeNull();
-  });
-
-  it('rejects an over-length email', () => {
-    const r = normalizeOwnerInput(
-      {
-        propertyId: 'p1',
-        fullName: 'J',
-        email: 'x'.repeat(INPUT_LIMITS.email + 1),
-      },
       'create',
     );
     expect(r.ok).toBe(false);

@@ -5,7 +5,6 @@ import type {
   DuesSettings,
   SiteSettings,
   SiteGateKey,
-  PropertyWithOwners,
   LotSummary,
   MemberUser,
   DuplicatesView,
@@ -482,42 +481,6 @@ export async function fetchLots(): Promise<LotSummary[]> {
     undefined,
     'Load lots failed',
   );
-}
-
-export async function fetchProperties(): Promise<PropertyWithOwners[]> {
-  return adminRequest(
-    '/api/admin/properties',
-    'GET',
-    undefined,
-    'Load homes failed',
-  );
-}
-
-export async function saveProperty(
-  data: {
-    address?: string;
-    unit?: string | null;
-    notes?: string | null;
-    status?: 'active' | 'inactive';
-    voteWeight?: number;
-  },
-  id?: string,
-): Promise<void> {
-  await adminSave('/api/admin/properties', data, id, 'Save home failed');
-}
-
-export async function saveOwner(
-  data: {
-    propertyId?: string;
-    fullName?: string;
-    phone?: string | null;
-    email?: string | null;
-    notes?: string | null;
-    status?: 'active' | 'inactive';
-  },
-  id?: string,
-): Promise<void> {
-  await adminSave('/api/admin/owners', data, id, 'Save owner failed');
 }
 
 // ---------- Board membership (handoff) ----------

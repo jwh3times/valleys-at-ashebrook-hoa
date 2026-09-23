@@ -15,6 +15,7 @@ import {
   boardServiceTerms,
 } from '../../src/server/db/roster-schema';
 import { GET, POST } from '../../src/pages/api/admin/roster-lots';
+import { INPUT_LIMITS } from '../../src/lib/types';
 import { pauseNextBatch } from './fixtures';
 
 /**
@@ -398,6 +399,16 @@ describe('create', () => {
     expect(notes.status).toBe(400);
     expect(await notes.text()).toBe('notes are not recorded on the roster');
     expect(await getDb(env).select().from(properties)).toEqual([]);
+  });
+
+  it('400s an over-length address', async () => {
+    const res = await POST(
+      req({ action: 'create', address: 'x'.repeat(INPUT_LIMITS.address + 1) }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe(
+      `address must be ${INPUT_LIMITS.address} characters or fewer`,
+    );
   });
 
   it('400s a missing address and a weight below 1, zero included', async () => {
