@@ -7,7 +7,7 @@ import type {
   ProxyDetail,
   MeetingSummary,
   ElectionDetail,
-  PropertyWithOwners,
+  LotSummary,
 } from '../../lib/types';
 
 vi.mock('../../lib/admin');
@@ -16,7 +16,7 @@ const mocked = vi.mocked(admin);
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocked.fetchProperties.mockResolvedValue([]);
+  mocked.fetchLots.mockResolvedValue([]);
   mocked.fetchLotPeople.mockResolvedValue([]);
   mocked.fetchMeetings.mockResolvedValue([]);
   mocked.fetchElections.mockResolvedValue([]);
@@ -76,17 +76,13 @@ function election(overrides: Partial<ElectionDetail> = {}): ElectionDetail {
   };
 }
 
-function property(
-  overrides: Partial<PropertyWithOwners> = {},
-): PropertyWithOwners {
+function property(overrides: Partial<LotSummary> = {}): LotSummary {
   return {
     id: 'p1',
     address: '100 Main St',
     unit: null,
     status: 'active',
-    notes: null,
     voteWeight: 1,
-    owners: [],
     ...overrides,
   };
 }
@@ -149,7 +145,7 @@ describe('ProxiesManager', () => {
 
   it('creating a proxy posts propertyId, grantorPersonId, holderName and the chosen occasion', async () => {
     mocked.fetchProxies.mockResolvedValue([]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       property({ id: 'p1', address: '100 Main St' }),
     ]);
     mocked.fetchLotPeople.mockResolvedValue([
@@ -259,7 +255,7 @@ describe('ProxiesManager', () => {
 
     it('explains occasion-date validation when the grantor is no longer current', async () => {
       mocked.fetchProxies.mockResolvedValue([]);
-      mocked.fetchProperties.mockResolvedValue([
+      mocked.fetchLots.mockResolvedValue([
         property({ id: 'p1', address: '100 Main St' }),
       ]);
       mocked.fetchLotPeople.mockResolvedValue(grantorLotPeople());
@@ -282,7 +278,7 @@ describe('ProxiesManager', () => {
 
     it('does not warn when the grantor is an active owner', async () => {
       mocked.fetchProxies.mockResolvedValue([]);
-      mocked.fetchProperties.mockResolvedValue([
+      mocked.fetchLots.mockResolvedValue([
         property({ id: 'p1', address: '100 Main St' }),
       ]);
       mocked.fetchLotPeople.mockResolvedValue(grantorLotPeople());
@@ -300,7 +296,7 @@ describe('ProxiesManager', () => {
 
   describe('edit affordance', () => {
     function setupEditFixtures() {
-      mocked.fetchProperties.mockResolvedValue([
+      mocked.fetchLots.mockResolvedValue([
         property({ id: 'p1', address: '100 Main St' }),
       ]);
       mocked.fetchLotPeople.mockResolvedValue([

@@ -6,6 +6,7 @@ import type {
   SiteSettings,
   SiteGateKey,
   PropertyWithOwners,
+  LotSummary,
   MemberUser,
   DuplicatesView,
   MeetingSummary,
@@ -472,6 +473,17 @@ export async function setSiteGate(
 }
 
 // ---------- Roster (board-only reads + writes) ----------
+/** Every Lot, for the pickers in the meeting, election, proxy, violation, and
+ * dues panels. */
+export async function fetchLots(): Promise<LotSummary[]> {
+  return adminRequest(
+    '/api/admin/roster-lots',
+    'GET',
+    undefined,
+    'Load lots failed',
+  );
+}
+
 export async function fetchProperties(): Promise<PropertyWithOwners[]> {
   return adminRequest(
     '/api/admin/properties',

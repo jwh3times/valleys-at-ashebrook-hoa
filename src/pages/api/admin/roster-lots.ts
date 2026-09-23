@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -580,6 +580,29 @@ async function updateLot(
   }
   return new Response(null, { status: 204 });
 }
+
+/**
+ * The Lot list the admin panels pick from (elections, meetings, proxies,
+ * violations, dues). Only what they use, so a picker never carries the
+ * legacy `notes` or anything personal. `status` rather than a derived
+ * "retired" flag: the election and motion SQL still decides live Lots from
+ * `status`, and every writer keeps it in step with retirement.
+ */
+export const GET: APIRoute = async ({ request, locals }) => {
+  const denied = await requireBoard(locals, request, env);
+  if (denied) return denied;
+  const rows = await getDb(env)
+    .select({
+      id: properties.id,
+      address: properties.address,
+      unit: properties.unit,
+      status: properties.status,
+      voteWeight: properties.voteWeight,
+    })
+    .from(properties)
+    .orderBy(asc(properties.address));
+  return Response.json(rows);
+};
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);

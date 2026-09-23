@@ -415,6 +415,16 @@ export const DOCUMENT_CATEGORIES = [
   'Rosters & Contacts',
 ] as const;
 
+/** A Lot as the admin pickers see it (`GET /api/admin/roster-lots`). */
+export interface LotSummary {
+  id: string;
+  address: string;
+  unit: string | null;
+  status: 'active' | 'inactive';
+  /** Vote "shares" at member meetings. Always present, defaults to 1. */
+  voteWeight: number;
+}
+
 export interface Property {
   id: string;
   address: string;

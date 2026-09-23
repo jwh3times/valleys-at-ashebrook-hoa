@@ -3,13 +3,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LotViolationsManager from './LotViolationsManager';
 import * as admin from '../../lib/admin';
-import type { LotViolationDetail, PropertyWithOwners } from '../../lib/types';
+import type { LotViolationDetail, LotSummary } from '../../lib/types';
 
 vi.mock('../../lib/admin');
 
 const mocked = vi.mocked(admin);
 
-function lot(id: string, address: string): PropertyWithOwners {
+function lot(id: string, address: string): LotSummary {
   return {
     id,
     address,
@@ -18,8 +18,7 @@ function lot(id: string, address: string): PropertyWithOwners {
     status: 'active',
     voteWeight: 1,
     notes: null,
-    owners: [],
-  } as unknown as PropertyWithOwners;
+  } as unknown as LotSummary;
 }
 
 function violation(
@@ -45,7 +44,7 @@ const loaded = () => screen.findByText('Boat parked in the street');
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocked.fetchProperties.mockResolvedValue([
+  mocked.fetchLots.mockResolvedValue([
     lot('lot-a', '1 Ashebrook Lane'),
     lot('lot-b', '2 Ashebrook Lane'),
   ]);

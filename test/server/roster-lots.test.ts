@@ -14,7 +14,7 @@ import {
   ownerships,
   boardServiceTerms,
 } from '../../src/server/db/roster-schema';
-import { POST } from '../../src/pages/api/admin/roster-lots';
+import { GET, POST } from '../../src/pages/api/admin/roster-lots';
 import { pauseNextBatch } from './fixtures';
 
 /**
@@ -595,5 +595,38 @@ describe('update under a race', () => {
       .where(eq(properties.id, 'lot-1'));
     expect(lot.voteWeight).toBe(2);
     expect(lot.address).toBe('lot-1 Ashebrook Lane');
+  });
+});
+
+describe('GET', () => {
+  it('lists every lot with only the fields the admin panels use', async () => {
+    await seedLot('lot-b');
+    await seedLot('lot-a');
+    await POST(req({ action: 'retire', lotId: 'lot-b' }));
+    await getDb(env)
+      .update(properties)
+      .set({ notes: 'legacy note', unit: '2' })
+      .where(eq(properties.id, 'lot-a'));
+
+    const res = await GET({
+      request: new Request('http://localhost/api/admin/roster-lots'),
+    } as never);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([
+      {
+        id: 'lot-a',
+        address: 'lot-a Ashebrook Lane',
+        unit: '2',
+        status: 'active',
+        voteWeight: 1,
+      },
+      {
+        id: 'lot-b',
+        address: 'lot-b Ashebrook Lane',
+        unit: null,
+        status: 'inactive',
+        voteWeight: 1,
+      },
+    ]);
   });
 });

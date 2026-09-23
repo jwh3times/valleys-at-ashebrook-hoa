@@ -14,7 +14,7 @@ import { ELECTION_STATUSES } from '../../lib/types';
 import type {
   ElectionDetail,
   CandidateSummary,
-  PropertyWithOwners,
+  LotSummary,
 } from '../../lib/types';
 
 vi.mock('../../lib/admin');
@@ -25,7 +25,7 @@ const mockedContent = vi.mocked(content);
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocked.fetchProperties.mockResolvedValue([]);
+  mocked.fetchLots.mockResolvedValue([]);
   mocked.fetchLotPeople.mockResolvedValue([]);
   mocked.fetchMeetingRosterPeople.mockResolvedValue([]);
   mocked.fetchRosterPeople.mockResolvedValue([]);
@@ -60,17 +60,13 @@ function candidate(
   };
 }
 
-function property(
-  overrides: Partial<PropertyWithOwners> = {},
-): PropertyWithOwners {
+function property(overrides: Partial<LotSummary> = {}): LotSummary {
   return {
     id: 'p1',
     address: '100 Main St',
     unit: null,
     status: 'active',
-    notes: null,
     voteWeight: 1,
-    owners: [],
     ...overrides,
   };
 }
@@ -441,7 +437,7 @@ describe('ElectionsManager', () => {
   });
 
   it('retains tally and ballot editors for recorded elections', async () => {
-    mocked.fetchProperties.mockResolvedValue([property()]);
+    mocked.fetchLots.mockResolvedValue([property()]);
     mocked.fetchElections.mockResolvedValue([
       election({
         title: 'Recorded election',
@@ -528,15 +524,13 @@ describe('ElectionsManager', () => {
         candidates: [candidate({ id: 'c1', fullName: 'Alice', sequence: 1 })],
       }),
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'lot-1',
         address: '1 Ashebrook Lane',
         unit: null,
         status: 'active' as const,
         voteWeight: 1,
-        notes: null,
-        owners: [],
       },
     ]);
     mocked.fetchRosterPeople.mockResolvedValue([
@@ -769,15 +763,13 @@ describe('ElectionsManager', () => {
         candidates: [candidate({ id: 'c1', fullName: 'Alice' })],
       }),
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'lot-1',
         address: '1 Ashebrook Lane',
         unit: null,
         status: 'active' as const,
         voteWeight: 1,
-        notes: null,
-        owners: [],
       },
     ]);
     mocked.certifyElection.mockRejectedValue(
@@ -924,7 +916,7 @@ describe('ElectionsManager', () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       property({ id: 'p1', address: '100 Main St' }),
       property({ id: 'p2', address: '200 Oak St' }),
     ]);
@@ -1022,7 +1014,7 @@ describe('ElectionsManager', () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       property({ id: 'p1', address: '100 Main St' }),
     ]);
     mocked.fetchLotPeople.mockResolvedValue([
@@ -1094,8 +1086,8 @@ describe('ElectionsManager', () => {
         meetingId: 'm1',
       }),
     ]);
-    mocked.fetchProperties.mockResolvedValue([
-      property({ id: 'p1', address: '100 Main St', owners: [] }),
+    mocked.fetchLots.mockResolvedValue([
+      property({ id: 'p1', address: '100 Main St' }),
     ]);
     mocked.fetchProxies.mockResolvedValue([
       {
@@ -1146,7 +1138,7 @@ describe('ElectionsManager', () => {
     mocked.fetchElections.mockResolvedValue([
       election({ id: 'e1', title: 'Board Election 2026', status: 'closed' }),
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       property({ id: 'p1', address: '100 Main St' }),
     ]);
     mocked.fetchLotPeople.mockResolvedValue([

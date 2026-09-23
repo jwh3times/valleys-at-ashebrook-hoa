@@ -5,7 +5,7 @@ import {
   createLotViolation,
   transitionLotViolation,
   editLotViolation,
-  fetchProperties,
+  fetchLots,
 } from '../../lib/admin';
 import { fetchSiteSettings } from '../../lib/content';
 import {
@@ -15,7 +15,7 @@ import {
   type LotRecordReasonCode,
   type LotViolationCategory,
   type LotViolationDetail,
-  type PropertyWithOwners,
+  type LotSummary,
 } from '../../lib/types';
 // Shared with the homeowner page, so the board and the homeowner cannot word
 // the same category differently.
@@ -74,7 +74,7 @@ const emptyForm = {
 
 export default function LotViolationsManager() {
   const [rows, setRows] = useState<LotViolationDetail[]>([]);
-  const [lots, setLots] = useState<PropertyWithOwners[]>([]);
+  const [lots, setLots] = useState<LotSummary[]>([]);
   const [gateOff, setGateOff] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -137,7 +137,7 @@ export default function LotViolationsManager() {
   const loadContext = useCallback(async (isStale: () => boolean) => {
     const [site, properties] = await Promise.all([
       fetchSiteSettings().catch(() => null),
-      fetchProperties().catch(() => [] as PropertyWithOwners[]),
+      fetchLots().catch(() => [] as LotSummary[]),
     ]);
     if (isStale()) return;
     if (site) setGateOff(!(site.officialMode && site.lotRecordsEnabled));

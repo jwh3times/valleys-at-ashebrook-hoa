@@ -25,7 +25,7 @@ function deferred<T>() {
 beforeEach(() => {
   vi.resetAllMocks();
   mocked.fetchMeetingRosterPeople.mockResolvedValue([]);
-  mocked.fetchProperties.mockResolvedValue([]);
+  mocked.fetchLots.mockResolvedValue([]);
   mocked.fetchLotPeople.mockResolvedValue([]);
   mocked.fetchMeeting.mockResolvedValue(meetingDetail());
   mocked.fetchProxies.mockResolvedValue([]);
@@ -561,15 +561,13 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -592,24 +590,20 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
       {
         id: 'prop2',
         address: '16 Oak Lane',
         unit: null,
         status: 'inactive',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -643,15 +637,13 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
     ]);
     render(<MeetingsManager />);
@@ -672,24 +664,20 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
       {
         id: 'prop2',
         address: '14 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 2,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -736,24 +724,20 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
       {
         id: 'prop2',
         address: '14 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 3,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -802,24 +786,20 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
       {
         id: 'prop2',
         address: '14 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 3,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -855,15 +835,13 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -890,24 +868,20 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 5,
-        owners: [],
       },
       {
         id: 'prop2',
         address: '14 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 3,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -955,24 +929,20 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
       {
         id: 'prop2',
         address: '14 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(meetingDetail({ ...memberMeeting }));
@@ -1028,15 +998,13 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
     ]);
     mocked.fetchProxies.mockResolvedValue([
@@ -1120,15 +1088,13 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 1,
-        owners: [],
       },
     ]);
     mocked.fetchProxies.mockResolvedValue([
@@ -1698,15 +1664,13 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 2,
-        owners: [],
       },
     ]);
     const authoritativeVote = {
@@ -1816,15 +1780,13 @@ describe('MeetingsManager', () => {
         persons: [{ id: 'o1', fullName: 'Jane Doe', current: true }],
       },
     ]);
-    mocked.fetchProperties.mockResolvedValue([
+    mocked.fetchLots.mockResolvedValue([
       {
         id: 'prop1',
         address: '12 Oak Lane',
         unit: null,
         status: 'active',
-        notes: null,
         voteWeight: 2,
-        owners: [],
       },
     ]);
     mocked.fetchMeeting.mockResolvedValue(

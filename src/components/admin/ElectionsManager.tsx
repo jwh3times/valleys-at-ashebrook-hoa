@@ -12,7 +12,7 @@ import {
   setBallots,
   saveCandidate,
   deleteCandidate,
-  fetchProperties,
+  fetchLots,
   fetchLotPeople,
   fetchMeetingRosterPeople,
   fetchRosterPeople,
@@ -31,7 +31,7 @@ import type {
   CandidateInput,
   CandidateSummary,
   Visibility,
-  PropertyWithOwners,
+  LotSummary,
   ProxyDetail,
 } from '../../lib/types';
 import type { LotPeople } from '../../lib/admin';
@@ -130,13 +130,13 @@ export default function ElectionsManager() {
   // elections, independent of useAdminResource since it isn't the panel's
   // primary save/delete target. Only active properties are eligible to cast
   // a ballot, matching ADR 0015's treatment of member-meeting attendance.
-  const [properties, setProperties] = useState<PropertyWithOwners[]>([]);
+  const [properties, setProperties] = useState<LotSummary[]>([]);
   // Who may act for each lot, for the ballot caster picker — the roster's Lot
   // Authority since #248 part 2, former holders included so a paper election
   // from before a sale stays recordable.
   const [lotPeople, setLotPeople] = useState<LotPeople[]>([]);
   useEffect(() => {
-    fetchProperties()
+    fetchLots()
       .then(setProperties)
       .catch((err: unknown) => {
         const message =
