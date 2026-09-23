@@ -55,7 +55,7 @@ API routes live under `src/pages/api/`:
   pauses new opens and casts without deleting lifecycle state, snapshots, turnout, votes, or
   choices; an occasion still open resumes when both flags return true.
 - Board-only writes: `/api/admin/{documents,announcements,dues,site}` and
-  `/api/admin/{properties,owners,members}`. `dues` is a read/write pair rather than a
+  `/api/admin/{properties,owners}`. `dues` is a read/write pair rather than a
   write-only module: it carries the board's `GET` for the dues blob as well as the `PUT`
   (#364). `/api/admin/board-people` and
   `/api/admin/board-terms` were **retired by phase 3b (#218), not ported**: the identity layer
@@ -426,15 +426,6 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   `endBoardGrantsStatements`, and the chain/mirror reads) live in the new
   `src/server/roster/access.ts`, called by both this route and `/api/admin/access-grants` so the two
   surfaces can never write different grants.
-- Member revocation, also re-pointed by phase 3e: `GET`/`POST /api/admin/members` lists recently
-  verified homeowners plus the legacy manual-approval queue (write-dead since v0.10.0 — nothing
-  enqueues to it in either cutover mode; its `approve`/`deny` actions stay legacy-queue-only and
-  unbranched). `POST { action: 'revoke', userId }` ends a homeowner's access: under `legacy` it
-  clears `users.role` to `visitor` and deletes the account's `user_property_links`, refusing (`409`)
-  a current board member exactly as before; under `derived` it ends the account's Person Link via
-  the shared `endLinkStatements` (reason `no_longer_qualifies`), writing the same
-  `users.role`/`user_property_links` mirrors in the same batch, and decides the board-member
-  refusal from live Board grants — never from the mirror it is itself writing.
 - ADR 0022 phase 2 roster preview, `requireBoard`-gated and read-only:
   `GET /api/admin/roster-preview` returns structural counts (IDs and non-personal fields only, not
   a roster browser) across five sections — Roster, Board, Access, Review, Compliance — including
@@ -564,14 +555,25 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   `/api/member/*` and `officialMode`, gated only by the write freeze and an authenticated session —
   ending the caller's own Person Link and every Access Grant it currently supports in one batch,
   refusing (`409`) to strip the last System Administrator and permanently recording that refusal
-  as a denied Access Event. The board's mirror surfaces are flat, `requireBoard`-gated, and
+  as a denied Access Event. Under `derived`, this batch (and `/api/admin/person-links`' `unlink`
+  below) also appends `endedLinkMirrorStatements` (#212): a `users.role='visitor'` update and a
+  `user_property_links` delete, each guarded on the link having just ended in that batch AND on
+  the mode being `derived` evaluated inside the SQL, so a flag written back to `legacy` can never
+  hand the account its access back. Under `legacy` those columns are the authority and unlink
+  leaves them untouched — there is no longer a board surface that clears a homeowner's
+  `users.role`/`user_property_links` under `legacy`, since `/api/admin/members` is gone; that is
+  acceptable only while `legacy` is a rollback target rather than the serving model. The board's
+  mirror surfaces are flat, `requireBoard`-gated, and
   new-model-always (no mode branch): `/api/admin/person-links` (`GET` the full link register with
   verification provenance; `POST` `manualVerify { accountId, personId, reason:
 'manual_board_decision'|'migration_reverification', evidence }` links an EXISTING Person — never
   creates one — with readable `404`/`409` pre-checks for an unknown/organization/consolidated
   Person or either side already linked, and `unlink { linkId, endReason }` for every admin-facing
-  end reason except `self_unlink`, sharing the same grant-ending batch and last-System-
-  Administrator guard as `/api/verify/unlink`) and `/api/admin/verification-requests` (`GET` the
+  end reason except `self_unlink`, sharing the same grant-ending batch, mirror write, and
+  last-System-Administrator guard as `/api/verify/unlink`; #212 deleted the standalone
+  `/api/admin/members` revoke surface, so `unlink` is now the only board-initiated way to end a
+  homeowner's access, and a Board Access holder may unlink an account holding only Board grants,
+  their own included) and `/api/admin/verification-requests` (`GET` the
   open review queue; `POST` `accept { id, personId, reason? }` is a `manualVerify` whose evidence
   cites the request's own id, resolving the row `accepted` in the same batch; `decline { id }`
   marks the row `declined` and writes a durable `identity` ledger event — denial IS ledgered here,

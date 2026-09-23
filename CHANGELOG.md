@@ -7,6 +7,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.23] - 2026-09-23
+
+### Removed
+
+- **The legacy Members panel is gone from the admin site.** Its one live
+  action, revoking a homeowner's access, did exactly what the Access panel's
+  _Unlink_ already does. Board members now revoke there, naming why the link
+  is ending. Its approve/deny queue had received nothing since v0.10.0, and
+  approving from it granted no access under the current model. This is the
+  second slice of ADR 0022 phase 4 (#212).
+
+  One behaviour goes with it: the old revoke refused an account that held
+  Board Access and sent the board to the Board panel. The Access panel lets a
+  board member end such a link, as it always has. Ending another account's
+  System Administration still takes a System Administrator, and the last one
+  still cannot be removed.
+
+### Fixed
+
+- **Ending a Person Link now keeps the legacy role mirror in step.** Revoking
+  from the Access panel, or a homeowner ending their own link, left the old
+  stored role and property links saying the account was still a homeowner.
+  Nothing reads those for access today. But the site can still be switched
+  back to the legacy model until phase 4 finishes, and that switch would have
+  handed the access back. Both paths now clear the mirror in the same atomic
+  write as the link ending. They do so only while the current model is live,
+  a condition checked inside that write so a failed read cannot skip it.
+
 ## [1.2.22] - 2026-09-22
 
 ### Fixed
@@ -3542,7 +3570,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.22...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.23...HEAD
+[1.2.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.22...v1.2.23
 [1.2.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.21...v1.2.22
 [1.2.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.20...v1.2.21
 [1.2.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.19...v1.2.20

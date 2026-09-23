@@ -25,8 +25,12 @@ by import-scanning the rest of `authz/`.
 is consumed and a re-run answers `410`.
 
 **Phase 4 (#212) is under way.** Wave 1 deleted the shadow layer (`shadow.ts`, `shadow-compare.ts`,
-the `CUTOVER_SHADOW` env var, and the offline `scripts/shadow-sweep.ts` sweep). What remains —
-the rest of wave 1 (the legacy Members panel, the `role`/`propertyIds` compatibility aliases, the
+the `CUTOVER_SHADOW` env var, and the offline `scripts/shadow-sweep.ts` sweep) and the legacy
+Members panel (`MembersManager`, `GET`/`POST /api/admin/members`, and their `fetchMembers`/
+`memberAction` client helpers): revocation now happens only through `/api/admin/person-links`
+`unlink` and the homeowner's own `POST /api/verify/unlink`, both of which now also write the
+legacy `users.role`/`user_property_links` mirrors under `derived` (`endedLinkMirrorStatements`,
+below). What remains — the rest of wave 1 (the `role`/`propertyIds` compatibility aliases, the
 `user_property_links` readers) and wave 2's one-way step (the `legacy` branch, `users.role`, and
 the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is tracked on #212. The write freeze, the permission matrix, and the ballot-privacy
 suites are retained permanently per #206/#212, not retired with the migration.
@@ -184,12 +188,12 @@ last-System-Administrator invariant lives on exactly that one route as a mutatio
 never in evaluation, and a refused attempt is permanently recorded as a denied Access Event.
 
 **Only a System Administrator may end another account's System Administration**, on every path
-that can end one. `/api/admin/access-grants` `revoke` has always asked this; the two paths that
-end grants as a _consequence_ of ending a Person Link — `/api/admin/person-links` `unlink` and
-`/api/admin/members` `revoke` under `derived` — did not, so any Board Access holder could demote a
-System Administrator by unlinking them. Both now refuse with `403` when the target holds a live
-`system_admin` grant and the caller is not one, and pass
-`refuseIfTargetIsSystemAdministrator` to `endLinkStatements`, which repeats the condition inside
+that can end one. `/api/admin/access-grants` `revoke` has always asked this; the path that ends
+grants as a _consequence_ of ending a Person Link — `/api/admin/person-links` `unlink` (the now-
+deleted `/api/admin/members` `revoke` carried the same fix before #212 removed the surface) — did
+not, so any Board Access holder could demote a System Administrator by unlinking them. It now
+refuses with `403` when the target holds a live `system_admin` grant and the caller is not one,
+passing `refuseIfTargetIsSystemAdministrator` to `endLinkStatements`, which repeats the condition inside
 the link-ending `UPDATE`'s `WHERE` so a grant created between the preflight and the batch loses
 the whole command (`409`) rather than being ended by a caller who may not touch it. Board Access
 is unaffected: a Board Access holder may still unlink an account holding only Board grants, their
