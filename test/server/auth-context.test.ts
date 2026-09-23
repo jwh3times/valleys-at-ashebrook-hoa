@@ -100,7 +100,7 @@ describe('getAuthContext', () => {
 
     const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);
 
-    expect(ctx?.role).toBe('visitor');
+    expect(ctx?.contentTier).toBe('visitor');
   });
 });
 

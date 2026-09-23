@@ -113,7 +113,6 @@ function localsFor(
       lotIds: overrides.lotIds ?? [],
       contentTier: role,
       hasCurrentBoardTerm: false,
-      role,
     },
   } as unknown as App.Locals;
 }

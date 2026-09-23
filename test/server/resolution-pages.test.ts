@@ -68,7 +68,7 @@ function renderAs(
         : ({
             authContext: {
               userId: 'u',
-              role,
+              contentTier: role,
               lotIds: [],
             },
           } as unknown as App.Locals),

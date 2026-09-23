@@ -8,7 +8,7 @@ import { fetchDocumentsFor } from '../server/content/reads';
 // Read tier-filtered documents server-side (SEO / first paint / no-JS). The
 // D1 `updatedAt` comes back as a Date; the JSON API path serialized it to an
 // ISO string, so match that here to satisfy the DocumentItem contract.
-const role = Astro.locals.authContext?.role ?? 'visitor';
+const role = Astro.locals.authContext?.contentTier ?? 'visitor';
 const docs = (await fetchDocumentsFor(env, role)).map((d) => ({
   ...d,
   updatedAt: d.updatedAt.toISOString(),

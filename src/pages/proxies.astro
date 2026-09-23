@@ -35,7 +35,7 @@ const today = associationDateIso();
 const [lots, occasions] = verified
   ? await Promise.all([
       fetchMemberLots(env, ctx!.lotIds),
-      fetchUpcomingOccasionsFor(env, ctx!.role, today),
+      fetchUpcomingOccasionsFor(env, ctx!.contentTier, today),
     ])
   : [[], []];
 ---

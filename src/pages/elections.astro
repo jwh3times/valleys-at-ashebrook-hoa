@@ -18,7 +18,7 @@ import { formatDate } from '../lib/format';
 // comment) — this page renders aggregate turnout only and must never reach
 // for `ballots`, even defensively.
 const ctx = Astro.locals.authContext ?? null;
-const role = ctx?.role ?? 'visitor';
+const role = ctx?.contentTier ?? 'visitor';
 const electionList = await fetchElectionsFor(env, role);
 
 // #302 / ADR 0026: a lot's own holders on the election date may see whether

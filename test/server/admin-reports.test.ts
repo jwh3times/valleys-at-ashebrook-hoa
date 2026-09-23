@@ -27,7 +27,6 @@ const { retrieveMock, genState, authState, anthropicState } = vi.hoisted(
         lotIds: [],
         contentTier: 'board',
         hasCurrentBoardTerm: false,
-        role: 'board',
       } as import('../../src/server/authz/guards').AuthContext | null,
     },
     anthropicState: { throwNotConfigured: false },

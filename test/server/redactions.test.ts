@@ -107,7 +107,6 @@ function systemAdminContext(): AuthContext {
     lotIds: [],
     contentTier: 'board',
     hasCurrentBoardTerm: false,
-    role: 'board',
   };
 }
 

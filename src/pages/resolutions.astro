@@ -11,7 +11,7 @@ import { formatDate } from '../lib/format';
 // for a board caller, so no extra filtering belongs here. Never
 // fetchAdminResolutions: that helper is board-only by call-site contract,
 // returns drafts, and applies no tier filter at all.
-const role = Astro.locals.authContext?.role ?? 'visitor';
+const role = Astro.locals.authContext?.contentTier ?? 'visitor';
 const includeHistoric = Astro.url.searchParams.get('status') === 'all';
 const resolutionList = await fetchResolutionsFor(env, role, {
   includeHistoric,

@@ -67,7 +67,6 @@ function caller(overrides: Partial<AuthContext> = {}): AuthContext {
     lotIds: ['lot-a'],
     contentTier: 'homeowner',
     hasCurrentBoardTerm: false,
-    role: 'homeowner',
     ...overrides,
   };
 }
@@ -571,7 +570,6 @@ describe('who is refused, and how', () => {
       caller({
         capabilities: new Set(['board']),
         contentTier: 'board',
-        role: 'board',
         hasCurrentBoardTerm: true,
         lotIds: [],
       }),

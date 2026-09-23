@@ -141,7 +141,10 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-function visibilityPredicate(alias: string, role: AuthContext['role']): string {
+function visibilityPredicate(
+  alias: string,
+  role: AuthContext['contentTier'],
+): string {
   if (role === 'board') return '1 = 1';
   if (role === 'homeowner')
     return `${alias}.visibility IN ('public', 'homeowner')`;
@@ -227,7 +230,7 @@ async function electionPreflightError(
   // to be denied by the casting SQL underneath.
   if (!ctx.capabilities.has('member')) return failure(403, 'Forbidden');
   const db = getDb(env);
-  const tiers = visibleTiers(ctx.role);
+  const tiers = visibleTiers(ctx.contentTier);
   const electionRows = await db
     .select({
       id: elections.id,
@@ -327,7 +330,7 @@ async function motionPreflightError(
   // to be denied by the casting SQL underneath.
   if (!ctx.capabilities.has('member')) return failure(403, 'Forbidden');
   const db = getDb(env);
-  const tiers = visibleTiers(ctx.role);
+  const tiers = visibleTiers(ctx.contentTier);
   const motionRows = await db
     .select({
       id: motions.id,
@@ -531,7 +534,7 @@ export async function castElectionBallot(
      WHERE election.id = ?
        AND election.source = 'conducted'
        AND election.status = 'open'
-       AND ${visibilityPredicate('election', ctx.role)}
+       AND ${visibilityPredicate('election', ctx.contentTier)}
        AND ${LIVE_VOTING_ENABLED_SQL}
        AND ? <= election.seats
        AND (
@@ -622,7 +625,7 @@ export async function castMotionVote(
        AND motion.voting_state = 'open'
        AND meeting.body = 'member'
        AND meeting.status = 'draft'
-       AND ${visibilityPredicate('meeting', ctx.role)}
+       AND ${visibilityPredicate('meeting', ctx.contentTier)}
        AND ${LIVE_VOTING_ENABLED_SQL}
        AND ${authority.sql}
        AND NOT EXISTS (

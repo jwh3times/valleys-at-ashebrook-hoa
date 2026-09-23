@@ -529,7 +529,6 @@ describe('fetchPaperBallotReceipts', () => {
         memberCtx({
           capabilities: new Set(['member', 'board']),
           contentTier: 'board',
-          role: 'board',
         }),
         [electionArg('e1')],
       )

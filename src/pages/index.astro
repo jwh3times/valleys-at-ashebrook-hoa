@@ -13,7 +13,7 @@ const official = site.officialMode;
 
 // Read one extra row so the home page can render 3 while preserving "View all"
 // when more announcements exist.
-const role = Astro.locals.authContext?.role ?? 'visitor';
+const role = Astro.locals.authContext?.contentTier ?? 'visitor';
 const announcements = await fetchAnnouncementsFor(env, role, 4);
 const description = official
   ? 'Official website for the Valleys at Ashebrook Homeowners Association — announcements, community calendar, governing documents, dues, and board contact.'

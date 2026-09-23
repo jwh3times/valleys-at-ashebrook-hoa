@@ -371,7 +371,7 @@ describe('fetchOpenVotingFor', () => {
 
     const boardItems = await fetchOpenVotingFor(env, {
       ...homeowner,
-      role: 'board',
+      contentTier: 'board',
     });
     expect(boardItems.map((item) => `${item.kind}:${item.id}`).sort()).toEqual([
       'election:election-board-tier',

@@ -42,7 +42,7 @@ export async function fetchOpenVotingFor(
   env: Env,
   ctx: AuthContext,
 ): Promise<OpenVotingItem[]> {
-  const tiers = visibleTiers(ctx.role);
+  const tiers = visibleTiers(ctx.contentTier);
   if (tiers.length === 0) return [];
 
   const db = getDb(env);

@@ -78,7 +78,6 @@ function caller(id: string, ...capabilities: Capability[]): AuthContext {
     lotIds: set.has('member') ? ['lot-1'] : [],
     contentTier,
     hasCurrentBoardTerm: set.has('board'),
-    role: contentTier,
   };
 }
 
