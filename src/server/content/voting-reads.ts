@@ -34,8 +34,8 @@ interface EligibilityRow {
 
 /**
  * Private, caller-specific projection for voting that is currently open.
- * Authority comes from verified lots, and from Persons holding Lot Authority
- * over those lots who also hold an occasion-scoped proxy. Eligibility and
+ * Authority comes from the caller's casting-authority Lots, and from Persons
+ * holding Lot Authority over those Lots who also hold an occasion-scoped proxy. Eligibility and
  * weight come only from the frozen snapshots created when voting opened.
  */
 export async function fetchOpenVotingFor(
@@ -46,11 +46,12 @@ export async function fetchOpenVotingFor(
   if (tiers.length === 0) return [];
 
   const db = getDb(env);
-  // NOT ctx.lotIds: that set is filtered to active properties, which
-  // would drop a lot deactivated after the occasion opened — and, because of
-  // the empty-set early return below, would take the caller's proxies for
-  // OTHER lots with it. The frozen snapshot decides eligibility (ADR 0020).
-  const { ownLots } = await resolveCastingAuthority(db, ctx.userId);
+  // NOT ctx.lotIds: derived access excludes retired Lots, while legacy access
+  // filters on the old status field. Either can drop a Lot after the occasion
+  // opened — and, because of the empty-set early return below, take the
+  // caller's proxies for OTHER Lots with it. The frozen snapshot decides
+  // eligibility (ADR 0020); current Lot Authority decides who may act for it.
+  const { ownLots } = await resolveCastingAuthority(db, ctx);
   if (ownLots.size === 0) return [];
   const callerLotIds = [...ownLots];
   const [electionRows, motionRows] = await Promise.all([

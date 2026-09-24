@@ -134,34 +134,22 @@ const CONSUMERS = new Map<string, Consumer>([
     },
   ],
 
-  // ---- THE PHASE-4 WORK LIST: live behavior on a doomed table -----------
-  [
-    'server/content/voting.ts',
-    {
-      disposition: 'needs-repointing',
-      reason:
-        "the atomic cast re-checks the CALLER's claim on the lot by joining " +
-        'user_property_links inside the mutation SQL. Its owners half is gone: ' +
-        '#248 part 2 moved who-may-act to the roster (roster/authority.ts), ' +
-        'leaving only the account-to-lot link phase 4 replaces with person_links',
-    },
-  ],
+  // ---- Dual-read compatibility: delete the legacy arm in wave 2 --------
   [
     'server/content/casting-authority.ts',
     {
-      disposition: 'needs-repointing',
-      reason: 'the verified lots of a caller, read from user_property_links',
+      disposition: 'already-dual-read',
+      reason:
+        'derived casting reads the current Person Link and party-roster Lot ' +
+        'Authority; only the legacy rollback arm still reads user_property_links',
     },
   ],
 
-  // The two entries above are what #248 left behind, and they are the same
-  // entry twice: an ACCOUNT's claim on a lot, read from `user_property_links`.
-  // Part 2 repointed six modules off `owners` onto the party roster
-  // (proxy-guards, voting-reads, content/reads, roster/lookup, and both proxy
-  // routes), which is why they are no longer listed. What survives is not a
-  // roster question at all — the roster says who may act for a lot, while
-  // `user_property_links` says which lots this LOGIN was verified for, and
-  // phase 4 answers that from `person_links` instead.
+  // #248 had left the account's casting claim on user_property_links in both
+  // voting.ts and casting-authority.ts. Wave 1 now answers that claim from the
+  // current Person Link plus Lot Authority under derived mode; voting.ts no
+  // longer names the doomed table at all. The resolver retains one legacy arm
+  // until wave 2 removes the rollback model and the table together.
 
   // ---- Blocked on the meeting record Person repointing ------------------
   // EMPTY since #248 part 1, which repointed the meeting and elections records
@@ -258,14 +246,15 @@ describe('consumers of the legacy roster tables', () => {
     expect(stale).toEqual([]);
   });
 
-  it('leave a phase-4 work list that is real work, not an empty gesture', () => {
-    // If this ever reads zero, either phase 4 is finished or the scan broke.
-    // Both deserve a human look, and a green suite would announce neither.
+  it('leave no live behavior to repoint before the legacy tables are dropped', () => {
+    // #212's acceptance criterion is now met: the remaining declarations are
+    // surfaces, mirrors, or dual-read compatibility arms that wave 2 deletes.
+    // Nothing still depends on a doomed table for derived-mode behavior.
     const repointing = [...CONSUMERS.values()].filter(
       (c) => c.disposition === 'needs-repointing',
     );
 
-    expect(repointing.length).toBeGreaterThan(0);
+    expect(repointing).toEqual([]);
     for (const consumer of CONSUMERS.values())
       expect(consumer.reason.length).toBeGreaterThan(20);
   });

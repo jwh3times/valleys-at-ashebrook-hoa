@@ -25,7 +25,11 @@ import {
 } from '../roster/authority';
 import { associationDateIso } from '../../lib/format';
 import { proxyUseError } from './proxy-guards';
-import { resolveCastingAuthority } from './casting-authority';
+import {
+  castingAuthorityExists,
+  personSharesCastingAuthority,
+  resolveCastingAuthority,
+} from './casting-authority';
 import { visibleTiers } from './visibility';
 import { LIVE_VOTING_ENABLED_SQL } from './voting-state';
 
@@ -172,10 +176,10 @@ async function ownCastingError(
 
   // Same definition the /vote read model uses, so the page and the cast
   // path cannot disagree about which lots this caller controls.
-  const { ownLots } = await resolveCastingAuthority(db, ctx.userId);
+  const { ownLots } = await resolveCastingAuthority(db, ctx);
   return ownLots.has(propertyId)
     ? null
-    : failure(403, 'Caller is not verified for this lot');
+    : failure(403, 'Caller does not hold casting authority for this lot');
 }
 
 async function proxyCastingError(
@@ -193,10 +197,10 @@ async function proxyCastingError(
   if (scopeError) return failure(scopeError.status, scopeError.message);
 
   // The caller holds this proxy when its holder Person holds Lot Authority
-  // over one of the caller's own verified lots — the same reach the legacy
-  // check expressed as "the holder is an active owner of a lot this account is
-  // linked to", now asked of the roster. `ownLots` is the snapshot-governed
-  // set `/vote` and the cast path share (see casting-authority.ts).
+  // over one of the caller's casting-authority Lots. In derived mode those
+  // Lots come from the linked Person; in legacy mode they come from the mirror.
+  // `ownLots` is the snapshot-governed set `/vote` and the cast path share (see
+  // casting-authority.ts).
   const holderRows = await db
     .select({ holderPersonId: proxies.holderPersonId })
     .from(proxies)
@@ -205,7 +209,7 @@ async function proxyCastingError(
   const holderPersonId = holderRows[0]?.holderPersonId ?? null;
   if (holderPersonId === null)
     return failure(403, 'Caller does not hold this proxy');
-  const { ownLots } = await resolveCastingAuthority(db, ctx.userId);
+  const { ownLots } = await resolveCastingAuthority(db, ctx);
   const callerLots = [...ownLots];
   const holderAuthority = await fetchLotAuthorityKeys(
     db,
@@ -403,15 +407,15 @@ function electionAuthorityPredicate(
       { column: 'ee.property_id' },
       day,
     );
+    const caller = castingAuthorityExists(
+      ctx,
+      { column: 'ee.property_id' },
+      day,
+    );
     return {
       sql: `${acting.sql}
-      AND EXISTS (
-        SELECT 1
-        FROM user_property_links caller_link
-        WHERE caller_link.property_id = ee.property_id
-          AND caller_link.user_id = ?
-      )`,
-      binds: [...acting.binds, ctx.userId],
+      AND ${caller.sql}`,
+      binds: [...acting.binds, ...caller.binds],
     };
   }
   // The grantor-currency check is the ADR 0022 phase-3d addition (#220 /
@@ -421,11 +425,12 @@ function electionAuthorityPredicate(
   // the stored meeting or election day instead.
   //
   // #248 part 2 re-keyed both sides to Persons: the holder reaches the caller
-  // through Lot Authority over a lot this account is verified for, which is
-  // what "the holder is an active owner of one of your lots" meant before.
-  const holder = lotAuthorityExists(
+  // through shared Lot Authority over one of the caller's casting-authority
+  // Lots, preserving what "the holder is an active owner of one of your lots"
+  // meant before.
+  const holder = personSharesCastingAuthority(
+    ctx,
     { column: 'selected_proxy.holder_person_id' },
-    { column: 'caller_link.property_id' },
     day,
   );
   const grantor = lotAuthorityExists(
@@ -437,8 +442,6 @@ function electionAuthorityPredicate(
     sql: `EXISTS (
       SELECT 1
       FROM proxies selected_proxy
-      INNER JOIN user_property_links caller_link
-        ON caller_link.user_id = ?
       WHERE selected_proxy.id = ?
         AND selected_proxy.property_id = ee.property_id
         AND (
@@ -451,7 +454,7 @@ function electionAuthorityPredicate(
         AND ${holder.sql}
         AND ${grantor.sql}
     )`,
-    binds: [ctx.userId, input.proxyId, ...holder.binds, ...grantor.binds],
+    binds: [input.proxyId, ...holder.binds, ...grantor.binds],
   };
 }
 
@@ -466,22 +469,22 @@ function motionAuthorityPredicate(
       { column: 'me.property_id' },
       day,
     );
+    const caller = castingAuthorityExists(
+      ctx,
+      { column: 'me.property_id' },
+      day,
+    );
     return {
       sql: `${acting.sql}
-      AND EXISTS (
-        SELECT 1
-        FROM user_property_links caller_link
-        WHERE caller_link.property_id = me.property_id
-          AND caller_link.user_id = ?
-      )`,
-      binds: [...acting.binds, ctx.userId],
+      AND ${caller.sql}`,
+      binds: [...acting.binds, ...caller.binds],
     };
   }
   // Same phase-3d grantor-currency re-check as the election predicate above;
   // an open motion's cast happens now, so today's day is exact.
-  const holder = lotAuthorityExists(
+  const holder = personSharesCastingAuthority(
+    ctx,
     { column: 'selected_proxy.holder_person_id' },
-    { column: 'caller_link.property_id' },
     day,
   );
   const grantor = lotAuthorityExists(
@@ -493,15 +496,13 @@ function motionAuthorityPredicate(
     sql: `EXISTS (
       SELECT 1
       FROM proxies selected_proxy
-      INNER JOIN user_property_links caller_link
-        ON caller_link.user_id = ?
       WHERE selected_proxy.id = ?
         AND selected_proxy.property_id = me.property_id
         AND selected_proxy.meeting_id = meeting.id
         AND ${holder.sql}
         AND ${grantor.sql}
     )`,
-    binds: [ctx.userId, input.proxyId, ...holder.binds, ...grantor.binds],
+    binds: [input.proxyId, ...holder.binds, ...grantor.binds],
   };
 }
 

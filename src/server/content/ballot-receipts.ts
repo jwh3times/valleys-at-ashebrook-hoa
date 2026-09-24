@@ -15,12 +15,12 @@ import type { AuthContext } from '../authz/guards';
  * `reads-all-scoped.test.ts` classifies.
  *
  * **Why it does not reuse the conducted receipt's scoping.** `/vote`'s
- * `hasCast` scopes through `resolveCastingAuthority`, which reads
- * `user_property_links` — a legacy write-behind mirror that ADR 0022 phase 4
- * (#212) drops. Reusing it would add a consumer to a table on its way out.
- * This module embeds `LOT_SQL` itself, so there stays exactly ONE definition
- * of "the caller's Lots", including Representation, one-hop consolidation, and
- * retired-lot exclusion.
+ * `resolveCastingAuthority` asks for current authority and lets the frozen
+ * eligibility snapshot decide whether an open occasion's Lot still counts.
+ * This receipt instead asks who held authority on the recorded election's own
+ * historical Association Day and excludes retired Lots, so it embeds
+ * `LOT_SQL` with that day. Both paths include Representation and one-hop
+ * consolidation; their time and retirement questions deliberately differ.
  */
 
 export interface PaperBallotReceiptLot {

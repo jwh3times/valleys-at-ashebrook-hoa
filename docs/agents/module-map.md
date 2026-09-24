@@ -243,7 +243,14 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   directly by a plain `personId` field — `PersonFieldName` widens `ProvenancePersonKey` to admit
   that fifth field name without letting `parseProvenance` itself be asked for it), `voting-state.ts`
   (the shared SQL predicate requiring both official mode and live voting to be literal JSON
-  booleans `true` for database-conditioned open and cast transitions), `voting-reads.ts`
+  booleans `true` for database-conditioned open and cast transitions), `casting-authority.ts`
+  (`resolveCastingAuthority`, the shared read/preflight resolver: derived mode resolves the
+  Account's current Person Link, canonicalizes a consolidated Person one hop to the survivor, and
+  reads that Person's current Lot Authority; only the legacy rollback arm reads
+  `user_property_links`. Its raw-SQL `castingAuthorityExists` counterpart repeats the current
+  Person Link plus canonical Lot Authority check inside the cast `INSERT`, while
+  `personSharesCastingAuthority` intersects those caller Lots with the uncanonicalized historical
+  proxy-holder Person's Lot Authority), `voting-reads.ts`
   (`fetchOpenVotingFor`, the server-only caller-specific projection of visible open occasions,
   eligible own/proxied lots, frozen weights, valid provenance options, candidates, and `hasCast`
   receipts; it never reads `ballot_choices` or returns live tallies), and `voting.ts`
@@ -285,9 +292,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   classifies). For each visible `recorded` election, it returns a `{ address, recorded }` row per
   lot the caller's Person held Lot Authority over on that election's own Association Day — never a
   selection, weight, or proxy/caster provenance, and never logged. It embeds `derive.ts`'s
-  `LOT_SQL` directly as a subquery rather than reusing `/vote`'s `resolveCastingAuthority`, which
-  scopes through `user_property_links` — a legacy write-behind mirror ADR 0022 phase 4 (#212) drops
-  — so there stays exactly one definition of "the caller's Lots".
+  `LOT_SQL` directly as a subquery because a recorded-election receipt asks for authority on that
+  election's historical Association Day and excludes retired Lots; `/vote`'s
+  `resolveCastingAuthority` asks for current authority and lets the frozen eligibility snapshot,
+  not current Lot status, decide whether an open occasion's Lot still counts.
 - `db/`: Drizzle `schema.ts`, `auth-schema.ts`, `client.ts` (`getDb(env)`), migrations, and
   `invariants.ts` (`INVARIANT_CHECKS`, `runInvariants(env)`, `formatInvariantRun` — see the
   invariant-gate section of [`roster-and-access.md`](./roster-and-access.md)).

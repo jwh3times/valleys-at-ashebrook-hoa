@@ -209,15 +209,19 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   session (`401` when anonymous); then require at least the `homeowner` role (`403` otherwise).
   Only after those gates does input normalization run. Resource reads then mask out-of-tier or
   unknown elections and motions as `404`, while own-lot and held-proxy authority, frozen-snapshot
-  eligibility, open state, and one-cast-per-lot constraints are checked server-side.
+  eligibility, open state, and one-cast-per-lot constraints are checked server-side. Under derived
+  access, casting authority comes from the Account's current Person Link, its one-hop canonical
+  Person, and that Person's Lot Authority rather than from the legacy account-to-Lot mirror.
 - **Casting re-checks authority and live state at the mutation boundary.** The insert predicates
-  repeat the caller's own-lot or occasion-scoped held-proxy authority, visibility tier, frozen
-  eligibility, open lifecycle state, and both feature flags inside D1. Election turnout and all
-  retained choices are one checked batch; motion voting checks the single insert result. A close,
-  duplicate cast, authority change, or global-pause race therefore records nothing and maps to
-  `409` rather than relying on the earlier preflight. Turning off either flag pauses new opens and
-  casts without deleting open state, snapshots, turnout, votes, or retained choices; re-enabling
-  resumes an occasion that is still open.
+  repeat the current Person Link and canonical own-lot or occasion-scoped held-proxy Lot Authority,
+  visibility tier, frozen eligibility, open lifecycle state, and both feature flags inside D1. A
+  held proxy intersects the canonical caller's Lots with the uncanonicalized historical holder
+  Person's Lot Authority; no choice data participates in that check. Election turnout and all
+  retained choices are one checked batch; motion voting checks the single insert result. A stale
+  link, close, duplicate cast, authority change, or global-pause race therefore records nothing and
+  maps to `409` rather than relying on the earlier preflight. Turning off either flag pauses new
+  opens and casts without deleting open state, snapshots, turnout, votes, or retained choices;
+  re-enabling resumes an occasion that is still open.
 - **The homeowner voting experience preserves finality and selection non-disclosure.** There is no
   GET voting API: the feature-gated SSR `/vote` page calls the server-only `fetchOpenVotingFor`
   projection, which returns visible open occasions and eligible lots the caller controls directly
