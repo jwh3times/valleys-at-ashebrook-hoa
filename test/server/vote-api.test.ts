@@ -20,7 +20,13 @@ import {
   userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
-import { parties, people, ownerships } from '../../src/server/db/roster-schema';
+import {
+  parties,
+  people,
+  ownerships,
+  personLinks,
+  personVerifications,
+} from '../../src/server/db/roster-schema';
 import { legacyAuthContext } from '../../src/server/authz/context';
 
 beforeAll(async () => {
@@ -33,6 +39,16 @@ const homeowner: AuthContext = legacyAuthContext('caller-user', 'homeowner', [
   'property-own',
   'property-no-snapshot',
 ]);
+const derivedHomeowner: AuthContext = {
+  userId: 'caller-user',
+  personId: 'owner-own',
+  capabilities: new Set(['member']),
+  // Deliberately empty: casting must re-read the roster instead of trusting
+  // the request context's general-access Lot set.
+  lotIds: [],
+  contentTier: 'homeowner',
+  hasCurrentBoardTerm: false,
+};
 
 beforeEach(async () => {
   const db = getDb(env);
@@ -47,10 +63,13 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(userPropertyLinks);
+  await db.delete(personLinks);
+  await db.delete(personVerifications);
   // #248 part 2: ownerships reference both parties and properties with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
+  await db.update(parties).set({ consolidatedIntoPartyId: null });
   await db.delete(parties);
   await db.delete(properties);
   await db.delete(settings);
@@ -244,6 +263,64 @@ describe('POST /api/vote gate and parsing', () => {
 });
 
 describe('POST /api/vote ballot casting', () => {
+  it('casts for a linked Person with roster authority and no legacy mirror', async () => {
+    const db = getDb(env);
+    await db.delete(userPropertyLinks);
+    await linkAccount('caller-user', 'owner-own');
+
+    const response = await callVote(validBallot(), { ctx: derivedHomeowner });
+
+    expect(response.status).toBe(204);
+  });
+
+  it('casts through the survivor of a consolidated linked Person', async () => {
+    const db = getDb(env);
+    await db.delete(userPropertyLinks);
+    await seedPersons([
+      person('owner-duplicate', 'property-unheld', 'Duplicate Owner'),
+    ]);
+    await db
+      .update(parties)
+      .set({ consolidatedIntoPartyId: 'owner-own' })
+      .where(eq(parties.id, 'owner-duplicate'));
+    await linkAccount('caller-user', 'owner-duplicate');
+
+    const response = await callVote(validBallot(), {
+      ctx: { ...derivedHomeowner, personId: 'owner-duplicate' },
+    });
+
+    expect(response.status).toBe(204);
+  });
+
+  it('rejects a stale derived context after its Person Link ends', async () => {
+    const db = getDb(env);
+    await linkAccount('caller-user', 'owner-own');
+    await db
+      .update(personLinks)
+      .set({
+        endedAt: new Date(now.getTime() + 1_000),
+        endedByAccountId: 'caller-user',
+        endReason: 'self_unlink',
+      })
+      .where(eq(personLinks.accountId, 'caller-user'));
+
+    const response = await callVote(validBallot(), { ctx: derivedHomeowner });
+    const ballotRows = await db
+      .select({ id: ballots.id })
+      .from(ballots)
+      .where(eq(ballots.electionId, 'election-open'));
+    const choiceRows = await db
+      .select({ id: ballotChoices.id })
+      .from(ballotChoices)
+      .where(eq(ballotChoices.electionId, 'election-open'));
+
+    expect({
+      status: response.status,
+      ballots: ballotRows.length,
+      choices: choiceRows.length,
+    }).toEqual({ status: 409, ballots: 0, choices: 0 });
+  });
+
   it('casts an anonymous-choice ballot with frozen snapshot weights', async () => {
     const response = await callVote(validBallot());
     expect(response.status).toBe(204);
@@ -307,6 +384,42 @@ describe('POST /api/vote ballot casting', () => {
       castByPersonId: null,
       proxyId,
     });
+  });
+
+  it('casts through a proxy held via derived roster authority without a legacy mirror', async () => {
+    const db = getDb(env);
+    await db.delete(userPropertyLinks);
+    await seedPersons([
+      person('owner-coholder', 'property-own', 'Co-holder Owner'),
+      person('owner-duplicate', 'property-unheld', 'Duplicate Owner'),
+    ]);
+    await db
+      .update(parties)
+      .set({ consolidatedIntoPartyId: 'owner-own' })
+      .where(eq(parties.id, 'owner-duplicate'));
+    await linkAccount('caller-user', 'owner-duplicate');
+    await db
+      .update(proxies)
+      .set({
+        holderPersonId: 'owner-coholder',
+        holderName: 'Co-holder Owner',
+      })
+      .where(eq(proxies.id, 'proxy-election'));
+
+    const response = await callVote(
+      {
+        ...validBallot(),
+        propertyId: 'property-proxy',
+        candidateIds: ['candidate-one'],
+        castByPersonId: null,
+        proxyId: 'proxy-election',
+      },
+      {
+        ctx: { ...derivedHomeowner, personId: 'owner-duplicate' },
+      },
+    );
+
+    expect(response.status).toBe(204);
   });
 
   it('returns 404 before validating an unknown or out-of-tier election', async () => {
@@ -450,6 +563,18 @@ describe('POST /api/vote ballot casting', () => {
 });
 
 describe('POST /api/vote motion casting', () => {
+  it('casts for a linked Person with roster authority and no legacy mirror', async () => {
+    const db = getDb(env);
+    await db.delete(userPropertyLinks);
+    await linkAccount('caller-user', 'owner-own');
+
+    const response = await callVote(validMotionVote(), {
+      ctx: derivedHomeowner,
+    });
+
+    expect(response.status).toBe(204);
+  });
+
   it('casts an attributable motion vote with the frozen snapshot weight', async () => {
     const response = await callVote(validMotionVote());
     expect(response.status).toBe(204);
@@ -487,6 +612,25 @@ describe('POST /api/vote motion casting', () => {
       choice: 'abstain',
       weight: 2,
     });
+  });
+
+  it('casts a proxy vote held via derived roster authority without a legacy mirror', async () => {
+    const db = getDb(env);
+    await db.delete(userPropertyLinks);
+    await linkAccount('caller-user', 'owner-own');
+
+    const response = await callVote(
+      {
+        ...validMotionVote(),
+        propertyId: 'property-proxy',
+        choice: 'abstain',
+        castByPersonId: null,
+        proxyId: 'proxy-meeting',
+      },
+      { ctx: derivedHomeowner },
+    );
+
+    expect(response.status).toBe(204);
   });
 
   it('returns 404 for unknown or out-of-tier motions', async () => {
@@ -605,6 +749,26 @@ function link(id: string, propertyId: string) {
     verifiedAt: now,
     method: 'board_manual' as const,
   };
+}
+
+async function linkAccount(accountId: string, personId: string) {
+  const db = getDb(env);
+  await db.insert(personVerifications).values({
+    id: `verification-${accountId}`,
+    accountId,
+    personId,
+    method: 'manual',
+    approverAccountId: accountId,
+    reason: 'manual_board_decision',
+    verifiedAt: now,
+  });
+  await db.insert(personLinks).values({
+    id: `person-link-${accountId}`,
+    accountId,
+    personId,
+    verificationId: `verification-${accountId}`,
+    startedAt: now,
+  });
 }
 
 interface PersonSpec {

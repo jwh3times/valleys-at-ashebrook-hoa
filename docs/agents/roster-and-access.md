@@ -16,10 +16,12 @@ state, the invariants that hold it together, and the work that remains.
 capabilities and content tier are recomputed per request from the party roster — Person Link,
 Ownerships and Representations, Board Terms, and Access Grants — with nothing cached.
 
-`users.role` and `user_property_links` survive only as **write-behind mirrors**, kept so the
-legacy read model and Better Auth sessions stay coherent. Neither is read for authorization
-anywhere outside `context.ts`'s `legacy` branch, which `test/unit/authz-legacy-role.test.ts` pins
-by import-scanning the rest of `authz/`.
+`users.role` and `user_property_links` survive only as **legacy compatibility state**, with
+derived writes mirrored into them so the rollback model and Better Auth sessions stay coherent.
+`users.role` is read for authorization nowhere outside `context.ts`'s `legacy` branch, which
+`test/unit/authz-legacy-role.test.ts` pins by import-scanning the rest of `authz/`.
+`user_property_links` also remains behind the shared casting-authority resolver's `legacy` arm;
+derived casting does not consult it.
 
 `POST /api/bootstrap/board` is permanently self-disabled: its `system_admin_bootstrap` singleton
 is consumed and a re-run answers `410`.
@@ -42,10 +44,16 @@ admin panels now read the Lot list from the board-gated `GET /api/admin/roster-l
 nowhere; exporting them before the tables are dropped is #212's migration step 1, a human step.
 The admin `useAuth` hook now decides the board view from `GET /api/me` (the caller's own derived
 capabilities) instead of the session's `role` mirror. Both phase-3 compatibility aliases are gone:
-`propertyIds` is `lotIds` and `role` is `contentTier` everywhere. What remains of wave 1 — live
-voting's casting authority, which still reads the `user_property_links` mirror directly under both
-modes (`content/voting.ts`, `content/casting-authority.ts`; live voting is off in production) — and wave 2's one-way step (the `legacy` branch, `users.role`, and
-the `properties` → `lots` and `board_service_terms` → `board_terms` renames) — is tracked on #212.
+`propertyIds` is `lotIds` and `role` is `contentTier` everywhere. Wave 1's final behavioral
+repoint is complete: live voting's shared casting-authority module resolves a derived caller's
+current Person Link, canonicalizes a consolidated Person one hop to the survivor, and derives that
+Person's current Lot Authority. The cast SQL re-checks the current Person Link and canonical Lot
+Authority inside the `INSERT`; proxy holding intersects those canonical caller Lots with the raw
+historical holder Person's Lot Authority. Frozen eligibility still decides whether a Lot counts
+after an occasion opens, and the predicates never inspect `ballot_choices`. Only the resolver's
+`legacy` arm still reads `user_property_links` (live voting is off in production). Wave 2's one-way
+step — the `legacy` branch, `users.role`, and the `properties` → `lots` and
+`board_service_terms` → `board_terms` renames — is tracked on #212.
 The write freeze, the permission matrix, and the ballot-privacy suites are retained permanently per
 #206/#212, not retired with the migration.
 
@@ -312,16 +320,17 @@ Each declared module carries one of five dispositions:
 
 | Disposition                    | Meaning                                                                               |
 | ------------------------------ | ------------------------------------------------------------------------------------- |
-| `deleted-with-the-table`       | Five legacy surfaces #212 deletes outright, including `context.ts`'s `legacy` branch. |
+| `deleted-with-the-table`       | Remaining legacy surfaces #212 deletes, including `context.ts`'s `legacy` branch.     |
 | `write-behind-mirror`          | Two modules whose write nothing reads for behavior.                                   |
-| `already-dual-read`            | `server/ai/assistant.ts`, the #233 fix — phase 4 drops only its legacy arm.           |
-| `needs-repointing`             | `content/voting.ts` and `content/casting-authority.ts`.                               |
+| `already-dual-read`            | The AI pseudonymizer and casting-authority resolver — wave 2 drops their legacy arms. |
+| `needs-repointing`             | Now **empty**: no derived-mode behavior depends on a table phase 4 drops.             |
 | `blocked-on-person-repointing` | Now **empty**, kept as a heading.                                                     |
 
-The `needs-repointing` pair is the same question twice: an **account's** claim on a lot, read from
-`user_property_links`. That is not a roster question at all, which is why the roster work did not
-close it — the roster says who may act for a lot, `user_property_links` says which lots this
-_login_ was verified for, and phase 4 answers that from `person_links`.
+The `needs-repointing` list is empty. Derived casting now answers an **account's** claim on a Lot
+from its current Person Link plus the canonical Person's current Lot Authority, including the same
+facts re-checked inside the cast `INSERT`. `content/voting.ts` no longer names
+`user_property_links`; `content/casting-authority.ts` is `already-dual-read` only because its
+legacy rollback arm retains that mirror until wave 2 removes the model and table together.
 
 **#248 closed the FK precondition.** Migrations `0028` and `0029` repointed every FK column off
 `board_people` and `owners` onto `people(party_id)`, so **no table phase 4 keeps references either

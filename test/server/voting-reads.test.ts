@@ -21,7 +21,13 @@ import {
   proxies,
   userPropertyLinks,
 } from '../../src/server/db/schema';
-import { parties, people, ownerships } from '../../src/server/db/roster-schema';
+import {
+  parties,
+  people,
+  ownerships,
+  personLinks,
+  personVerifications,
+} from '../../src/server/db/roster-schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   fetchElectionsFor,
@@ -47,6 +53,14 @@ const homeowner: AuthContext = legacyAuthContext(
   'homeowner',
   [],
 );
+const derivedHomeowner: AuthContext = {
+  userId: 'homeowner-user',
+  personId: 'owner-one',
+  capabilities: new Set(['member']),
+  lotIds: [],
+  contentTier: 'homeowner',
+  hasCurrentBoardTerm: false,
+};
 
 beforeEach(async () => {
   const db = getDb(env);
@@ -61,10 +75,13 @@ beforeEach(async () => {
   await db.delete(motions);
   await db.delete(meetings);
   await db.delete(userPropertyLinks);
+  await db.delete(personLinks);
+  await db.delete(personVerifications);
   // #248 part 2: ownerships reference both parties and properties with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
+  await db.update(parties).set({ consolidatedIntoPartyId: null });
   await db.delete(parties);
   await db.delete(properties);
   await db.delete(users);
@@ -283,6 +300,57 @@ beforeEach(async () => {
 });
 
 describe('fetchOpenVotingFor', () => {
+  it("derives a linked Person's own lots from roster authority without legacy mirrors", async () => {
+    const db = getDb(env);
+    await db.delete(userPropertyLinks);
+    await linkAccount('homeowner-user', 'owner-one');
+
+    const items = await fetchOpenVotingFor(env, derivedHomeowner);
+    const electionItem = items.find(
+      (item): item is OpenElectionVotingItem =>
+        item.kind === 'election' && item.id === 'election-visible',
+    );
+
+    expect(
+      electionItem?.lots.map((lot) => ({
+        id: lot.propertyId,
+        weight: lot.weight,
+      })),
+    ).toEqual([
+      { id: 'property-own', weight: 7 },
+      { id: 'property-held', weight: 3 },
+      { id: 'property-meeting', weight: 4 },
+    ]);
+  });
+
+  it('uses the survivor when the linked Person was consolidated', async () => {
+    const db = getDb(env);
+    await db.delete(userPropertyLinks);
+    await seedPersons([
+      person('owner-duplicate', 'property-unrepresented', 'Duplicate Owner'),
+    ]);
+    await db
+      .update(parties)
+      .set({ consolidatedIntoPartyId: 'owner-one' })
+      .where(eq(parties.id, 'owner-duplicate'));
+    await linkAccount('homeowner-user', 'owner-duplicate');
+
+    const items = await fetchOpenVotingFor(env, {
+      ...derivedHomeowner,
+      personId: 'owner-duplicate',
+    });
+    const electionItem = items.find(
+      (item): item is OpenElectionVotingItem =>
+        item.kind === 'election' && item.id === 'election-visible',
+    );
+
+    expect(electionItem?.lots.map((lot) => lot.propertyId)).toEqual([
+      'property-own',
+      'property-held',
+      'property-meeting',
+    ]);
+  });
+
   it('combines own-lot and valid held-proxy authority into deduplicated snapshot lots', async () => {
     const items: OpenVotingItem[] = await fetchOpenVotingFor(env, homeowner);
     const electionItem = items.find(
@@ -505,6 +573,26 @@ async function seedPersons(specs: PersonSpec[]) {
       updatedAt: now,
     })),
   );
+}
+
+async function linkAccount(accountId: string, personId: string) {
+  const db = getDb(env);
+  await db.insert(personVerifications).values({
+    id: `verification-${accountId}`,
+    accountId,
+    personId,
+    method: 'manual',
+    approverAccountId: accountId,
+    reason: 'manual_board_decision',
+    verifiedAt: now,
+  });
+  await db.insert(personLinks).values({
+    id: `person-link-${accountId}`,
+    accountId,
+    personId,
+    verificationId: `verification-${accountId}`,
+    startedAt: now,
+  });
 }
 
 function meeting(

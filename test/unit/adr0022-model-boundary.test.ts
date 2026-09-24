@@ -75,6 +75,11 @@ const ALLOWED = new Set([
  */
 const ROSTER_READING_CONTENT = new Map([
   [
+    'casting-authority.ts',
+    'the shared voting read and mutation predicates, which resolve the ' +
+      "current Person Link and that Person's Lot Authority",
+  ],
+  [
     'proxy-guards.ts',
     'the phase-3d grantor re-validation, which asks whether a proxy grantor ' +
       'still holds the lot',
@@ -101,6 +106,7 @@ const ROSTER_READING_CONTENT = new Map([
 const ROSTER_TABLES_ALLOWED_IN_CONTENT = new Set([
   'parties',
   'ownerships',
+  'person_links',
   'representations',
 ]);
 
