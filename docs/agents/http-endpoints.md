@@ -50,11 +50,15 @@ API routes live under `src/pages/api/`:
   `src/server/authz/write-freeze.ts` below), exact equality of the required `Origin` header with
   `new URL(request.url).origin` (`403`), `application/json` media type (`415`), authenticated
   session (`401`), then `homeowner`-or-higher role (`403`). Only then are the action and resource
-  resolved. Out-of-tier or unknown occasions are masked as `404`; own-lot or occasion-scoped
-  held-proxy authority — a held-proxy cast also re-checks that the proxy's grantor still holds Lot
-  Authority over the lot (the ADR 0022 phase 3d grantor re-validation, #220/#204, asked of the
-  party roster since #248 part 2, and exact at-the-occasion semantics for a live cast) — frozen-snapshot eligibility and weight, open state, both
-  feature flags, and
+  resolved. Out-of-tier or unknown occasions are masked as `404`. In derived mode, own-lot and
+  occasion-scoped held-proxy authority resolve the Account's current Person Link, canonicalize a
+  consolidated Person one hop to its survivor, and read Lot Authority from the party roster; only
+  the legacy rollback mode reads `user_property_links`. The mutation SQL repeats the current-link
+  and canonical Lot Authority predicates, and a held-proxy cast intersects those caller Lots with
+  the uncanonicalized historical holder Person's Lot Authority. It also re-checks that the proxy's
+  grantor holds Lot Authority over the proxy Lot (the ADR 0022 phase 3d grantor re-validation,
+  #220/#204, exact at-the-occasion semantics for a live cast). Frozen-snapshot eligibility and
+  weight, open state, both feature flags, and
   one cast per lot are re-checked inside the mutation SQL. Election turnout and identity-unlinked
   retained choices are a single checked D1 batch, and a race with close, pause, authority change,
   or another cast returns `409` without a partial write. Conducted ballots are final: supported

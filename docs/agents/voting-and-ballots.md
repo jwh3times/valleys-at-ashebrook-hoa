@@ -92,6 +92,15 @@ controls an eligible snapshotted lot directly or holds an occasion-scoped proxy,
 weights, valid provenance options, candidates, and a per-lot `hasCast` receipt. It never reads
 `ballot_choices` and never returns a live conducted tally.
 
+`src/server/content/casting-authority.ts` is the shared authority seam for that read model and both
+cast preflights. In derived mode it resolves the Account's current Person Link, canonicalizes a
+consolidated Person one hop to the survivor, and derives that Person's current Lot Authority; only
+its legacy rollback arm reads `user_property_links`. Proxy holding intersects the canonical
+caller's Lot Authority with the uncanonicalized historical holder Person's Lot Authority,
+preserving who the proxy names while still following a consolidated caller to the survivor's Lots.
+Frozen eligibility, not current Lot status, remains the authority on whether one of those Lots
+counts for the already-open occasion.
+
 **There is no GET voting API.** The feature-gated SSR `/vote` page calls that read model directly.
 `POST /api/vote` accepts `castBallot` and `castMotionVote` only.
 
@@ -101,9 +110,12 @@ the Origin and media-type checks — it is a statement about the server, not the
 can land during a backfill.
 
 A passed preflight grants no general lot authority. `src/server/content/voting.ts` repeats the
-caller's active own-lot or occasion-scoped held-proxy predicate **inside the insert**, together
-with visibility, frozen eligibility, open state, both feature flags, and duplicate exclusion — so
-a race with close, pause, authority change, or another cast returns `409` without a partial write.
+current Person Link and canonical own-lot or occasion-scoped held-proxy Lot Authority predicates
+**inside the insert**, together with visibility, frozen eligibility, open state, both feature
+flags, and duplicate exclusion — so a stale link or race with close, pause, authority change, or
+another cast returns `409` without a partial write. The legacy branch repeats its
+`user_property_links` predicate instead, preserving rollback behavior until phase 4 wave 2 removes
+that model.
 An election cast writes the per-lot turnout row and every independent choice row in **one checked
 D1 batch**, taking both weights from `election_eligibility`.
 

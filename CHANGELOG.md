@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.30] - 2026-09-24
+
+### Security
+
+- **Online voting now rechecks the resident roster when a ballot is cast.** A
+  homeowner's direct and proxy voting authority comes from their current
+  verified Person Link and Lot Authority, including the surviving Person after
+  a duplicate record is consolidated. Election snapshots still decide which
+  lots may vote and at what weight, while an ended account link or lost current
+  authority now stops the cast at the mutation boundary.
+
 ## [1.2.29] - 2026-09-23
 
 ### Security
@@ -3661,7 +3672,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.29...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.30...HEAD
+[1.2.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.27...v1.2.28
 [1.2.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.26...v1.2.27
