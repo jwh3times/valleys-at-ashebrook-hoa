@@ -21,3 +21,14 @@ links at generated-tree boundaries without traversing or modifying their targets
 
 This supersedes ADR 0011, whose Claude-authored direction and assumption that Codex lacked a
 project custom-agent registry no longer match the installed toolchain or repository layout.
+
+## Update (2026-09-25): shared synchronizer
+
+The TypeScript synchronizer `scripts/sync-agent-skills.ts` was replaced by
+`scripts/sync-agents.mjs`, a plain-JavaScript script shared byte-for-byte across repositories and
+tested with `node --test scripts/sync-agents.test.mjs`. The decision above is unchanged: the same
+authored sources generate the same trees, links in authored trees are still rejected, and
+`npm run sync:agents:check` remains the CI gate. Generated output changed shape — a banner that
+names the regenerate command, `developer_instructions` as a TOML multi-line literal, and
+`sandbox_mode = "read-only"` for agents whose tool list cannot write — and drift comparison now
+tolerates CRLF line endings.

@@ -8,7 +8,7 @@ grouped dependency PR hide a real failure.
 `.github/workflows/build.yml` runs on every PR and every push to `main`, in this order:
 
 ```
-types:worker (regenerate) → format:check → lint → sync:agents -- --check
+types:worker (regenerate) → format:check → lint → sync-agents node:test → sync:agents:check
   → lint:coercions → lint:migrations → lint:fixtures → check → test → test:server
   → build → deploy:check → worker-types drift verdict
 ```

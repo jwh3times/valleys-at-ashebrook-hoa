@@ -205,7 +205,7 @@ Show findings before acting. Work through:
   unrelated reasons:
 
   ```bash
-  npm run sync:agents -- --check   # .claude/skills + .codex/agents match .agents/skills + .claude/agents
+  npm run sync:agents:check        # .claude/skills + .codex/agents match .agents/skills + .claude/agents
   npm run format:check             # Prettier over the whole repo
   npm run types:worker:check       # generated Cloudflare types match wrangler.toml + .env.example
   ```

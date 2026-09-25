@@ -75,6 +75,14 @@
   },
   "overrides": [
     {
+      // The shared node:test suite is copied byte-for-byte from other repositories; node:test
+      // awaits the promises its top-level test() calls return.
+      "files": ["scripts/sync-agents.test.mjs"],
+      "rules": {
+        "typescript/no-floating-promises": "off",
+      },
+    },
+    {
       // Astro generates this reference and requires it for project types.
       "files": ["src/env.d.ts"],
       "rules": {

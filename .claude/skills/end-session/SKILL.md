@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/end-session/SKILL.md
+# GENERATED — do not edit. Source: .agents/skills/end-session/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: end-session
 description: End the day's work session cleanly — capture what was learned into memory, bring GitHub issues and private/ docs up to date, and clean the local workspace. Use when the user says "end session", "wrap up", "done for the day", or asks to clean things up before stopping.
 ---
@@ -206,7 +206,7 @@ Show findings before acting. Work through:
   unrelated reasons:
 
   ```bash
-  npm run sync:agents -- --check   # .claude/skills + .codex/agents match .agents/skills + .claude/agents
+  npm run sync:agents:check        # .claude/skills + .codex/agents match .agents/skills + .claude/agents
   npm run format:check             # Prettier over the whole repo
   npm run types:worker:check       # generated Cloudflare types match wrangler.toml + .env.example
   ```

@@ -6,3 +6,6 @@ package-lock.json
 worker-configuration.d.ts
 .claude/skills/
 .codex/agents/
+# Shared byte-for-byte across repositories; formatting it here would fork it.
+scripts/sync-agents.mjs
+scripts/sync-agents.test.mjs
