@@ -75,15 +75,10 @@
   },
   "overrides": [
     {
-      // The agent synchronizer and its node:test suite are shared byte-for-byte with other
-      // repositories, so they cannot be edited to satisfy this config. The control-character
-      // regexes are deliberate (they reject control characters in frontmatter), the sorts are
-      // over path strings where the default code-unit order is the intended one, and node:test's
-      // top-level test() promises are awaited by the runner.
-      "files": ["scripts/sync-agents.mjs", "scripts/sync-agents.test.mjs"],
+      // The shared node:test suite is copied byte-for-byte from other repositories; node:test
+      // awaits the promises its top-level test() calls return.
+      "files": ["scripts/sync-agents.test.mjs"],
       "rules": {
-        "eslint/no-control-regex": "off",
-        "typescript/require-array-sort-compare": "off",
         "typescript/no-floating-promises": "off",
       },
     },
