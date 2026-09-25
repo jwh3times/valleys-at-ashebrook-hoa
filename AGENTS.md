@@ -76,7 +76,8 @@ npm run format:check      # Prettier check, enforced by CI
 npm run lint              # type-aware Oxlint
 npm run lint:fix          # apply Oxlint's safe fixes
 npm run sync:agents       # regenerate the Claude skills and Codex agents
-npm run sync:agents -- --check # fail if generated agent trees drifted, enforced by CI
+npm run sync:agents:check # fail if generated agent trees drifted, enforced by CI
+node --test scripts/sync-agents.test.mjs # the synchronizer's own node:test suite, enforced by CI
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run lint:migrations   # migrations directory is well-formed and contiguous, enforced by CI
 npm run lint:fixtures     # every phone number and email address is a reserved synthetic value, enforced by CI
@@ -410,14 +411,19 @@ generated trees or reintroduce skill symlinks: with `core.symlinks=false`, Git s
 contents as duplicate files. Each authored Claude custom agent is rendered as a Codex custom-agent
 TOML file, preserving its name, description, and developer instructions. The `PostToolUse` hook in
 `.claude/settings.json` re-syncs after authored inputs change, and CI plus `/ship` run
-`npm run sync:agents -- --check` to reject generated-tree drift. See
+`npm run sync:agents:check` to reject generated-tree drift. See
 [ADR 0021](./docs/adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
+
+`scripts/sync-agents.mjs` and its `node:test` suite `scripts/sync-agents.test.mjs` are the one
+exception to TypeScript-only `scripts/`: the pair is shared **byte-for-byte** with other
+repositories, so it is plain `.mjs`, Prettier-ignored, outside the TypeScript programs and Vitest,
+and must never be edited here — change it in the canonical copy and copy it to every repository.
 
 The user-invokable **`ship`** skill takes a branch from code-complete to an open PR: it classifies
 the complete branch diff as a major, minor, or build release, applies any major/minor
 package-version change idempotently, invokes `docs-updater` scoped to that branch's diff, writes
 the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts, runs the fast
-`sync:agents -- --check` / `format:check` / `lint` / `lint:coercions` / `lint:fixtures` / `check`
+`sync:agents:check` / `format:check` / `lint` / `lint:coercions` / `lint:fixtures` / `check`
 gates, pushes and opens or updates the PR, then files any human follow-up the merge will leave
 and links it from the PR body. Documentation is kept in sync at ship time through that
 `docs-updater` pass, so there is no per-turn docs hook.

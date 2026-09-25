@@ -64,8 +64,11 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       # Fails if the generated Claude and Codex agent trees drift from their
-      # authored inputs. Fix with `npm run sync:agents`.
-      - run: npm run sync:agents -- --check
+      # authored inputs. Fix with `npm run sync:agents`. The synchronizer is
+      # shared byte-for-byte across repositories, so its own node:test suite
+      # runs here rather than under Vitest.
+      - run: node --test scripts/sync-agents.test.mjs
+      - run: npm run sync:agents:check
       # Fails on `Number(x) || <default>`, which silently rewrites a typed zero
       # because Number('') and Number('0') are both 0. Has bitten twice.
       - run: npm run lint:coercions

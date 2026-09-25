@@ -159,7 +159,7 @@ The full `test`, `test:server`, and `build` suites are **not** run here; CI owns
 These are the cheap gates that catch most mistakes in seconds:
 
 ```bash
-npm run sync:agents -- --check # generated agent trees match their authored inputs (CI gate)
+npm run sync:agents:check # generated agent trees match their authored inputs (CI gate)
 npm run format:check   # Prettier over the WHOLE repo — .md, .astro, .ts, .tsx, .json, .css
 npm run lint           # type-aware Oxlint correctness and React Hooks checks (CI gate)
 npm run lint:coercions # no `Number(x) || <default>` form coercions (CI gate)

@@ -1,5 +1,5 @@
 ---
-# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md
+# GENERATED — do not edit. Source: .agents/skills/ship/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: ship
 description: Ship the current branch — classify its release impact, select the major, minor, or build version this merge will mint, refresh docs and CHANGELOG, run fast checks, push, and open or update the PR. Use when a feature branch is ready for review, or when the user says "ship it", "open a PR", or "push this".
 ---
@@ -160,7 +160,7 @@ The full `test`, `test:server`, and `build` suites are **not** run here; CI owns
 These are the cheap gates that catch most mistakes in seconds:
 
 ```bash
-npm run sync:agents -- --check # generated agent trees match their authored inputs (CI gate)
+npm run sync:agents:check # generated agent trees match their authored inputs (CI gate)
 npm run format:check   # Prettier over the WHOLE repo — .md, .astro, .ts, .tsx, .json, .css
 npm run lint           # type-aware Oxlint correctness and React Hooks checks (CI gate)
 npm run lint:coercions # no `Number(x) || <default>` form coercions (CI gate)

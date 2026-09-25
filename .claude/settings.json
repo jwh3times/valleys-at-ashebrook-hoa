@@ -12,6 +12,9 @@
       "Bash(npm run lint:migrations:*)",
       "Bash(npm run lint:fixtures:*)",
       "Bash(npm run sync:agents:*)",
+      "Bash(npm run sync:agents:check:*)",
+      "Bash(node scripts/sync-agents.mjs:*)",
+      "Bash(node --test scripts/sync-agents.test.mjs:*)",
       "Bash(npm run test:*)",
       "Bash(npm run test:server:*)",
       "Bash(npm run test:watch:*)",
@@ -44,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node --experimental-strip-types scripts/sync-agent-skills.ts --hook",
+            "command": "node scripts/sync-agents.mjs --hook",
             "timeout": 20
           }
         ]

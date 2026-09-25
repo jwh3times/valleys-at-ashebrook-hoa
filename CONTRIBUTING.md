@@ -27,7 +27,8 @@ file with the configuration change.
    npm run types:worker:check # generated Worker types match Cloudflare configuration
    npm run format:check   # Prettier (fix with: npm run format)
    npm run lint           # type-aware Oxlint correctness and React Hooks checks
-   npm run sync:agents -- --check # generated agent trees match authored inputs
+   npm run sync:agents:check # generated agent trees match authored inputs
+   node --test scripts/sync-agents.test.mjs # the shared agent synchronizer's own tests
    npm run lint:coercions # reject blank/zero numeric coercion bugs
    npm run lint:migrations # validate the hand-authored migration sequence
    npm run check          # TypeScript 7 + Astro type checks

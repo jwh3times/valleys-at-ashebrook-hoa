@@ -7,6 +7,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [1.2.33] - 2026-09-25
+
+### Changed
+
+- **The agent-skill synchronizer is now the shared cross-repository
+  script.** `scripts/sync-agent-skills.ts` is replaced by
+  `scripts/sync-agents.mjs`, kept byte-for-byte identical across repositories
+  and tested with `node --test scripts/sync-agents.test.mjs` in CI. The check
+  command is now `npm run sync:agents:check`. Generated Codex agents carry
+  their instructions as a readable multi-line string, and the read-only
+  `code-reviewer` agent now runs in Codex's read-only sandbox.
+
 ## [1.2.30] - 2026-09-24
 
 ### Security
