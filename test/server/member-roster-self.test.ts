@@ -2,7 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { settings, properties } from '../../src/server/db/schema';
+import { settings, lots } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   parties,
@@ -10,7 +10,7 @@ import {
   contactMethods,
   ownerships,
 } from '../../src/server/db/roster-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
   fetchAdminRoster,
@@ -42,7 +42,7 @@ beforeEach(async () => {
   for (const table of NEW_TABLES) {
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw('DELETE FROM properties'));
+  await db.run(sql.raw('DELETE FROM lots'));
   await db.run(sql.raw('DELETE FROM users'));
   await db.delete(settings).where(eq(settings.key, 'site'));
   await db.insert(settings).values({
@@ -69,7 +69,7 @@ async function seedAccount(id: string) {
 async function seedLot(id: string) {
   const now = new Date();
   await getDb(env)
-    .insert(properties)
+    .insert(lots)
     .values({
       id,
       address: `${id} Ashebrook Lane`,
@@ -193,11 +193,9 @@ describe('GET /api/member/roster-self', () => {
 
   it('403s with a verification message when the caller has no linked Person', async () => {
     await seedAccount('mem-2');
-    // legacyAuthContext always sets personId: null — the shape every caller
+    // callerContext always sets personId: null — the shape every caller
     // has under cutover_mode = legacy, since legacy has no Person concept.
-    const res = await GET(
-      memberReq(legacyAuthContext('mem-2', 'homeowner', [])),
-    );
+    const res = await GET(memberReq(callerContext('mem-2', 'homeowner', [])));
     expect(res.status).toBe(403);
     expect(await res.text()).toBe(
       'Your account is not linked to a resident record — complete verification first.',
@@ -206,9 +204,7 @@ describe('GET /api/member/roster-self', () => {
 
   it('never returns 401/404 for the not-linked case — it is a 403, not a masked absence', async () => {
     await seedAccount('mem-2b');
-    const res = await GET(
-      memberReq(legacyAuthContext('mem-2b', 'homeowner', [])),
-    );
+    const res = await GET(memberReq(callerContext('mem-2b', 'homeowner', [])));
     expect(res.status).not.toBe(401);
     expect(res.status).not.toBe(404);
   });

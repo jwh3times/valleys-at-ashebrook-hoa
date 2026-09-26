@@ -63,7 +63,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   (`fetchRedactions`/`redactPersonName`/`redactContactMethod`/`recordRedactionCleanup`,
   `fetchAccessDenials`, `fetchAuditIntegrity`). `isCapabilityRefusal` identifies the bare `403`
   every System-Administrator-only helper returns to a caller holding no live `system_admin` grant
-  — which, while `cutover_mode = legacy`, is every caller. The five admin
+  . The five admin
   panels (`RosterAdminPanel`, `BoardServicePanel`, `AccessPanel`, `ReviewPanel`, `CompliancePanel`)
   call only these helpers, never the routes directly.
 - `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for one-time
@@ -135,43 +135,14 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   in KV must be requested again. The Cloudflare adapter's Drizzle/core peers are
   explicitly aligned with Better Auth 1.7.3.
 - `authz/`: `context.ts` is the single seam every guard, page, and route resolves its caller
-  through. `getAuthContext(request, env, associationDay)` resolves the session, then reads
-  `cutover-mode.ts`'s `getCutoverMode` (the uncached `cutover_settings.cutover_mode` singleton,
-  `test/server/cutover-mode.test.ts`) to decide which model answers: `legacy` calls
-  `legacyAuthContext`, which synthesizes an `AuthContext` from the stored `users.role`/
-  `user_property_links`, deliberately reproducing the old rank ladder (a board caller gets `member`
-  too) so `cutover_mode = legacy` is bit-for-bit what the site was; `derived` calls
-  `derivedContext(deriveAccess(...))` (below). `getCutoverMode` fails closed to **`legacy`** — the
-  opposite polarity from the write freeze below, deliberately: the freeze falls back to frozen
-  because refusing is the restrictive answer, while the safe answer here is whichever model is
-  already serving production. Since the phase 3f flip the row exists and reads `derived`; an
-  absent row now means the singleton was never written, and answers `legacy`. `associationDay` is a
-  required third parameter, computed once per request by `src/middleware.ts` and by
-  `resolveAuthContext` (middleware-first caller resolution with a fail-closed fallback) via
-  `associationDateIso()`, never read from `locals` or recomputed downstream.
-  `users.role` is read ONLY inside
-  `context.ts` — `test/unit/authz-legacy-role.test.ts` pins that by import-scanning the rest of
-  `authz/`, and separately scans all of `src/` for a `ctx.contentTier` comparison outside the
-  guards — access questions belong to `ctx.capabilities` (a read like
-  `visibleTiers(ctx.contentTier)` passes the tier onward rather than comparing it, so it is not
-  matched). `guards.ts` defines the `AuthContext` shape — `userId`, `personId` (null under
-  `legacy`, which has no Person concept), a `capabilities` **set** of `member`/`board`/
-  `systemAdmin` (deliberately not a ladder: `systemAdmin` implies `board`, but neither implies
-  `member`, which comes only from Lot authority), `lotIds`, `contentTier`, `hasCurrentBoardTerm`,
-  (the phase-3 compatibility aliases `role` and `propertyIds` are gone, #212) — and its two check
-  primitives:
-  `requireCapability(ctx, capability)` (set membership, the primitive every route gate is now built
-  on) and `requireRole` (survives only for content-tier questions, since `contentTier` is
-  genuinely ordered, unlike capability). `requireBoard`, `requireMemberApi` (official-mode-first
-  homeowner-write gate), and `requireVotingApi` (feature flags, write freeze, exact Origin, JSON
-  media type, session, then `member` capability, in that order) keep their signatures but now gate
-  on `ctx.capabilities` — `board` for the admin gate, `member` for the member and voting gates — as
-  does middleware's backstop for each surface. Four call sites that used to compare the content tier
-  directly now ask `ctx.capabilities.has(...)`/`ctx.lotIds` instead: `/api/member/owner-lookup`,
-  both cast preflights in `content/voting.ts`, and the `verified` checks on `/proxies` and `/vote`
-  — identical behavior under `legacy`; under `derived`, a board member who owns no Lot is refused
-  these member surfaces while still admitted to board ones. `requirePropertyAccess` remains the
-  per-property access check (no route calls it yet), and Turnstile checks are unchanged.
+  through. `getAuthContext(request, env, associationDay)` resolves the session and always calls
+  `deriveAccess` against current D1 facts. No cutover setting or stored role selects another model.
+  `associationDay` is computed once by middleware or `resolveAuthContext`, never trusted from
+  caller-controlled data. `guards.ts` defines `AuthContext`: `userId`, nullable `personId`, a
+  capability set (`member`, `board`, `systemAdmin`), `lotIds`, `contentTier`, and
+  `hasCurrentBoardTerm`. System Administration implies Board Access; neither implies Lot
+  Authority or member access. `requireCapability` gates actions; `requireRole` is for content tiers.
+  Admin, member, and voting routes retain their per-handler guards and middleware backstops.
   `request-path.ts` (`routedPathname`) is the shared normalizer for anything that classifies a
   path rather than just reading it: it repeatedly runs `decodeURI` — matching Astro's own
   `validateAndDecodePathname`, capped at 10 iterations — so `/api/%61dmin/roles` and the
@@ -205,10 +176,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   been voided (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on
   the strength of it, independent of whether the write path already ended the grant. `context.ts`
   records that finding as a day-idempotent Access Event through `revalidation-event.ts`'s
-  `recordGrantRevalidationDenial`, only when `derived` is the serving model (#217, option 1). The
+  `recordGrantRevalidationDenial` (#217, option 1). The
   phase-2 shadow layer (`shadow.ts`, `shadow-compare.ts`, the `CUTOVER_SHADOW` env var, and the
-  offline `scripts/shadow-sweep.ts` sweep) was deleted in phase 4 (#212). Legacy `getAuthContext`/`resolveAuthContext` remain the entry
-  point for every request regardless of which model answers it.
+  offline `scripts/shadow-sweep.ts` sweep) was deleted in phase 4 (#212). `getAuthContext`/`resolveAuthContext` remain the entry
+  point for every request.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
@@ -244,10 +215,9 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   that fifth field name without letting `parseProvenance` itself be asked for it), `voting-state.ts`
   (the shared SQL predicate requiring both official mode and live voting to be literal JSON
   booleans `true` for database-conditioned open and cast transitions), `casting-authority.ts`
-  (`resolveCastingAuthority`, the shared read/preflight resolver: derived mode resolves the
+  (`resolveCastingAuthority`, the shared read/preflight resolver: resolves the
   Account's current Person Link, canonicalizes a consolidated Person one hop to the survivor, and
-  reads that Person's current Lot Authority; only the legacy rollback arm reads
-  `user_property_links`. Its raw-SQL `castingAuthorityExists` counterpart repeats the current
+  reads that Person's current Lot Authority; there is no account-to-Lot fallback. Its raw-SQL `castingAuthorityExists` counterpart repeats the current
   Person Link plus canonical Lot Authority check inside the cast `INSERT`, while
   `personSharesCastingAuthority` intersects those caller Lots with the uncanonicalized historical
   proxy-holder Person's Lot Authority), `voting-reads.ts`
@@ -323,11 +293,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `lotAuthorityExists`'s builder and additionally bounds the result to records dated on or after the
   start of the caller's own period of authority — the read condition Lot Records need and Lot
   Authority itself does not; see the `lot-records/` entry below.
-  `verification/property.ts` is the unchanged-shape legacy backend (minus its
-  three retired auto-enqueue paths, and now holding the `getActiveOwnersForProperty` reader that
-  moved out of `roster/lookup.ts` when the member surfaces left the legacy roster — it is the only
-  caller left) and `verification/rate-limit.ts` holds the shared KV throttles
-  both backends call, including the phase 3c per-Person and distinct-claimed-names caps.
+  `verification/rate-limit.ts` holds the KV verification throttles, including per-Person and
+  distinct-claimed-name limits. Person verification lives in `roster/verification.ts`.
 - `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3, and
   slice 4 completed the feature with the homeowner-facing `/lot-records` page): `gate.ts` exports
   `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment),
@@ -382,8 +349,8 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   documents, drops orphan/empty chunks, and builds the pseudonymized, per-document
   `[Source N]`-numbered excerpt text), `anthropic.ts` (`getAnthropic`, Anthropic client + config
   guard), `assistant.ts` (`answer`, `loadRosterEntries` — the pseudonymization dictionary source,
-  unioning Person names and Contact Methods from the live party roster (`people`, `contact_methods`)
-  with owner names/phones/emails from the legacy `owners` table and `properties.address`, deduped
+  combining Person names and Contact Methods from the party roster (`people`, `contact_methods`)
+  with `lots.address`, deduped
   by `(type, value)`; unfiltered by status/interval/void/consolidation so a former owner or an
   ended contact value already used in a document stays masked, redacted rows arrive `NULL` and are
   skipped, and Organization names are deliberately excluded from tokenized name matching (their

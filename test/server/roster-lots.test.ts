@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import {
-  properties,
+  lots,
   elections,
   electionEligibility,
 } from '../../src/server/db/schema';
@@ -12,7 +12,7 @@ import {
   parties,
   people,
   ownerships,
-  boardServiceTerms,
+  boardTerms,
 } from '../../src/server/db/roster-schema';
 import { GET, POST } from '../../src/pages/api/admin/roster-lots';
 import { INPUT_LIMITS } from '../../src/lib/types';
@@ -29,9 +29,7 @@ import { pauseNextBatch } from './fixtures';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -47,7 +45,7 @@ const CLEAR = [
   'roster_changes',
   'access_events',
   'audit_events',
-  'board_service_terms',
+  'board_terms',
   'ownerships',
   'people',
   'parties',
@@ -65,7 +63,7 @@ beforeEach(async () => {
     }
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw('DELETE FROM properties'));
+  await db.run(sql.raw('DELETE FROM lots'));
   await db.run(sql.raw('DELETE FROM users'));
   const now = new Date();
   await db.insert(users).values({
@@ -81,7 +79,7 @@ beforeEach(async () => {
 async function seedLot(id: string) {
   const now = new Date();
   await getDb(env)
-    .insert(properties)
+    .insert(lots)
     .values({
       id,
       address: `${id} Ashebrook Lane`,
@@ -146,10 +144,7 @@ describe('retire', () => {
     expect(res.status).toBe(204);
 
     const db = getDb(env);
-    const [lot] = await db
-      .select()
-      .from(properties)
-      .where(eq(properties.id, 'lot-1'));
+    const [lot] = await db.select().from(lots).where(eq(lots.id, 'lot-1'));
     expect(lot.status).toBe('inactive');
     expect(lot.retiredAt).not.toBeNull();
     expect(lot.retiredDay).not.toBeNull();
@@ -187,7 +182,7 @@ describe('retire', () => {
     await seedPerson('per-1');
     await seedOwnership('own-1', 'per-1', 'lot-1');
     const now = new Date();
-    await getDb(env).insert(boardServiceTerms).values({
+    await getDb(env).insert(boardTerms).values({
       id: 'term-1',
       personId: 'per-1',
       qualifyingLotId: 'lot-1',
@@ -201,10 +196,7 @@ describe('retire', () => {
     expect(res.status).toBe(409);
     expect(await res.text()).toContain('qualifying lot');
     const db = getDb(env);
-    const [lot] = await db
-      .select()
-      .from(properties)
-      .where(eq(properties.id, 'lot-1'));
+    const [lot] = await db.select().from(lots).where(eq(lots.id, 'lot-1'));
     expect(lot.retiredAt).toBeNull();
   });
 
@@ -262,10 +254,7 @@ describe('correctRetirement', () => {
     expect(res.status).toBe(204);
 
     const db = getDb(env);
-    const [lot] = await db
-      .select()
-      .from(properties)
-      .where(eq(properties.id, 'lot-1'));
+    const [lot] = await db.select().from(lots).where(eq(lots.id, 'lot-1'));
     expect(lot.status).toBe('active');
     expect(lot.retiredAt).toBeNull();
     expect(lot.retiredDay).toBeNull();
@@ -340,10 +329,7 @@ describe('create', () => {
     expect(res.status).toBe(201);
     const { id } = (await res.json()) as { id: string };
 
-    const [lot] = await getDb(env)
-      .select()
-      .from(properties)
-      .where(eq(properties.id, id));
+    const [lot] = await getDb(env).select().from(lots).where(eq(lots.id, id));
     expect(lot.address).toBe('7 Oak Lane');
     expect(lot.addressNormalized).toBe('7 oak lane');
     expect(lot.unit).toBe('B');
@@ -369,10 +355,7 @@ describe('create', () => {
     const res = await POST(req({ action: 'create', address: '8 Oak Lane' }));
     expect(res.status).toBe(201);
     const { id } = (await res.json()) as { id: string };
-    const [lot] = await getDb(env)
-      .select()
-      .from(properties)
-      .where(eq(properties.id, id));
+    const [lot] = await getDb(env).select().from(lots).where(eq(lots.id, id));
     expect(lot.voteWeight).toBe(1);
   });
 
@@ -398,7 +381,7 @@ describe('create', () => {
     );
     expect(notes.status).toBe(400);
     expect(await notes.text()).toBe('notes are not recorded on the roster');
-    expect(await getDb(env).select().from(properties)).toEqual([]);
+    expect(await getDb(env).select().from(lots)).toEqual([]);
   });
 
   it('400s an over-length address', async () => {
@@ -424,7 +407,7 @@ describe('create', () => {
         'voteWeight must be a whole number of 1 or more',
       );
     }
-    expect(await getDb(env).select().from(properties)).toEqual([]);
+    expect(await getDb(env).select().from(lots)).toEqual([]);
   });
 });
 
@@ -444,8 +427,8 @@ describe('update', () => {
 
     const [lot] = await getDb(env)
       .select()
-      .from(properties)
-      .where(eq(properties.id, 'lot-1'));
+      .from(lots)
+      .where(eq(lots.id, 'lot-1'));
     expect(lot.address).toBe('12 Elm Court');
     expect(lot.addressNormalized).toBe('12 elm court');
     expect(lot.unit).toBe('2');
@@ -513,8 +496,8 @@ describe('update', () => {
     expect(retired.status).toBe(409);
     const [lot] = await getDb(env)
       .select()
-      .from(properties)
-      .where(eq(properties.id, 'lot-1'));
+      .from(lots)
+      .where(eq(lots.id, 'lot-1'));
     expect(lot.voteWeight).toBe(1);
 
     const unknown = await POST(
@@ -569,7 +552,7 @@ describe('update under a race', () => {
       );
       await pause.reached;
       await env.DATABASE.prepare(
-        'UPDATE properties SET vote_weight = 3, updated_at = ? WHERE id = ?',
+        'UPDATE lots SET vote_weight = 3, updated_at = ? WHERE id = ?',
       )
         .bind(Math.floor(T / 1000), 'lot-1')
         .run();
@@ -602,8 +585,8 @@ describe('update under a race', () => {
     expect(res.status).toBe(409);
     const [lot] = await getDb(env)
       .select()
-      .from(properties)
-      .where(eq(properties.id, 'lot-1'));
+      .from(lots)
+      .where(eq(lots.id, 'lot-1'));
     expect(lot.voteWeight).toBe(2);
     expect(lot.address).toBe('lot-1 Ashebrook Lane');
   });
@@ -615,9 +598,9 @@ describe('GET', () => {
     await seedLot('lot-a');
     await POST(req({ action: 'retire', lotId: 'lot-b' }));
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ notes: 'legacy note', unit: '2' })
-      .where(eq(properties.id, 'lot-a'));
+      .where(eq(lots.id, 'lot-a'));
 
     const res = await GET({
       request: new Request('http://localhost/api/admin/roster-lots'),

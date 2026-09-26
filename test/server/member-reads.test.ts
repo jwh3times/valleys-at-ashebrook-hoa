@@ -3,8 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import * as fx from './fixtures';
 import {
-  properties,
-  owners,
+  lots,
   meetings,
   motions,
   memberAttendance,
@@ -38,13 +37,12 @@ beforeEach(async () => {
   await db.delete(elections);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(owners);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
 });
 
 async function seedProperty(
@@ -168,7 +166,7 @@ describe('member meeting assembly', () => {
     expect(byProperty.get('p2')?.representedByName).toBeNull();
   });
 
-  it('computes totalActiveWeight as the summed weight of ACTIVE properties only', async () => {
+  it('computes totalActiveWeight as the summed weight of ACTIVE lots only', async () => {
     await seedProperty('p1', { weight: 2, status: 'active' });
     await seedProperty('p2', { weight: 3, status: 'active' });
     await seedMeeting('m1');
@@ -179,7 +177,7 @@ describe('member meeting assembly', () => {
     expect(detail.totalActiveWeight).toBe(5);
   });
 
-  it('excludes inactive properties from totalActiveWeight', async () => {
+  it('excludes inactive lots from totalActiveWeight', async () => {
     await seedProperty('p1', { weight: 2, status: 'active' });
     await seedProperty('p2', { weight: 10, status: 'inactive' });
     await seedMeeting('m1');
@@ -333,7 +331,7 @@ describe('member meeting assembly', () => {
     expect(detail.totalActiveWeight).toBe(4);
   });
 
-  it('coalesces totalActiveWeight to 0 when there are no active properties', async () => {
+  it('coalesces totalActiveWeight to 0 when there are no active lots', async () => {
     await seedProperty('p1', { weight: 10, status: 'inactive' });
     await seedMeeting('m1');
 
@@ -378,7 +376,7 @@ async function seedOccasionProperty(
   status = 'active',
 ) {
   await getDb(env)
-    .insert(properties)
+    .insert(lots)
     .values({
       id,
       address,

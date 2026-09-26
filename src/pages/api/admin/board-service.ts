@@ -9,10 +9,10 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { associationDateIso } from '../../../lib/format';
 import { isoDateOrError } from '../../../lib/types';
-import { properties, elections } from '../../../server/db/schema';
+import { lots, elections } from '../../../server/db/schema';
 import {
   people,
-  boardServiceTerms,
+  boardTerms,
   boardOfficeAssignments,
 } from '../../../server/db/roster-schema';
 import {
@@ -134,8 +134,8 @@ interface TermRow {
 async function loadTerm(termId: string): Promise<TermRow | null> {
   const [row] = await getDb(env)
     .select()
-    .from(boardServiceTerms)
-    .where(eq(boardServiceTerms.id, termId))
+    .from(boardTerms)
+    .where(eq(boardTerms.id, termId))
     .limit(1);
   return row ?? null;
 }
@@ -161,7 +161,7 @@ async function concludeTermTail(opts: {
 }): Promise<D1PreparedStatement[]> {
   const { term, mode, effectiveDay, nowMs, correlation } = opts;
   const statements: D1PreparedStatement[] = [];
-  const termMarker = updatedRowGuard('board_service_terms', term.id, nowMs);
+  const termMarker = updatedRowGuard('board_terms', term.id, nowMs);
 
   const [offices, grants] = await env.DATABASE.batch([
     env.DATABASE.prepare(
@@ -318,9 +318,9 @@ async function createTerm(
   if (personRows.length === 0)
     return new Response('Person not found', { status: 404 });
   const lotRows = await db
-    .select({ id: properties.id, retiredAt: properties.retiredAt })
-    .from(properties)
-    .where(eq(properties.id, qualifyingLotId))
+    .select({ id: lots.id, retiredAt: lots.retiredAt })
+    .from(lots)
+    .where(eq(lots.id, qualifyingLotId))
     .limit(1);
   if (lotRows.length === 0)
     return new Response('Lot not found', { status: 404 });
@@ -398,10 +398,10 @@ async function createTerm(
   const id = crypto.randomUUID();
   const nowMs = Date.now();
   const primary = env.DATABASE.prepare(
-    `INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, election_id, start_day, scheduled_end_day, created_at, updated_at)
+    `INSERT INTO board_terms (id, person_id, qualifying_lot_id, election_id, start_day, scheduled_end_day, created_at, updated_at)
      SELECT ?, ?, ?, ?, ?, ?, ?, ?
      WHERE (${qualifies.sql}) AND (${personClear.sql}) AND (${lotClear.sql})
-       AND EXISTS (SELECT 1 FROM properties WHERE id = ? AND retired_at IS NULL)`,
+       AND EXISTS (SELECT 1 FROM lots WHERE id = ? AND retired_at IS NULL)`,
   ).bind(
     id,
     personId,
@@ -424,7 +424,7 @@ async function createTerm(
   });
   correlation.event({
     kind: 'board_term_created',
-    guard: insertedRowGuard('board_service_terms', id),
+    guard: insertedRowGuard('board_terms', id),
     detail: {
       family: 'board_service_change',
       effective: { day: startDay },
@@ -484,7 +484,7 @@ async function endTerm(
   const nowMs = Date.now();
   const actorAccountId = await actor(locals, request);
   const primary = env.DATABASE.prepare(
-    `UPDATE board_service_terms SET actual_end_day = ?, updated_at = ?
+    `UPDATE board_terms SET actual_end_day = ?, updated_at = ?
      WHERE id = ? AND actual_end_day IS NULL AND cancelled_at IS NULL AND voided_at IS NULL`,
   ).bind(endDay, nowMs, termId);
 
@@ -495,7 +495,7 @@ async function endTerm(
   });
   correlation.event({
     kind: 'board_term_ended',
-    guard: updatedRowGuard('board_service_terms', termId, nowMs),
+    guard: updatedRowGuard('board_terms', termId, nowMs),
     detail: {
       family: 'board_service_change',
       effective: { day: endDay },
@@ -555,7 +555,7 @@ async function cancelTerm(
   // The cancellation day is today, which precedes the (future) start day, so
   // `board_service_terms_cancelled_before_start` holds by construction.
   const primary = env.DATABASE.prepare(
-    `UPDATE board_service_terms SET cancelled_day = ?, cancelled_at = ?, updated_at = ?
+    `UPDATE board_terms SET cancelled_day = ?, cancelled_at = ?, updated_at = ?
      WHERE id = ? AND actual_end_day IS NULL AND cancelled_at IS NULL AND voided_at IS NULL
        AND ? < start_day`,
   ).bind(associationDay, nowMs, nowMs, termId, associationDay);
@@ -567,7 +567,7 @@ async function cancelTerm(
   });
   correlation.event({
     kind: 'board_term_cancelled',
-    guard: updatedRowGuard('board_service_terms', termId, nowMs),
+    guard: updatedRowGuard('board_terms', termId, nowMs),
     detail: {
       family: 'board_service_change',
       effective: { day: associationDay },
@@ -622,7 +622,7 @@ async function voidTerm(
     });
 
   const primary = env.DATABASE.prepare(
-    `UPDATE board_service_terms
+    `UPDATE board_terms
      SET voided_at = ?, actual_end_day = NULL, cancelled_day = NULL, cancelled_at = NULL, updated_at = ?
      WHERE id = ? AND voided_at IS NULL`,
   ).bind(nowMs, nowMs, termId);
@@ -634,7 +634,7 @@ async function voidTerm(
   });
   correlation.event({
     kind: 'board_term_voided',
-    guard: updatedRowGuard('board_service_terms', termId, nowMs),
+    guard: updatedRowGuard('board_terms', termId, nowMs),
     scalars,
     detail: {
       family: 'board_service_change',
@@ -669,9 +669,9 @@ async function substituteQualifyingLot(
   if (!term) return new Response('Term not found', { status: 404 });
   const db = getDb(env);
   const lotRows = await db
-    .select({ id: properties.id, retiredAt: properties.retiredAt })
-    .from(properties)
-    .where(eq(properties.id, qualifyingLotId))
+    .select({ id: lots.id, retiredAt: lots.retiredAt })
+    .from(lots)
+    .where(eq(lots.id, qualifyingLotId))
     .limit(1);
   if (lotRows.length === 0)
     return new Response('Lot not found', { status: 404 });
@@ -711,7 +711,7 @@ async function substituteQualifyingLot(
 
   const nowMs = Date.now();
   const primary = env.DATABASE.prepare(
-    `UPDATE board_service_terms SET qualifying_lot_id = ?, updated_at = ?
+    `UPDATE board_terms SET qualifying_lot_id = ?, updated_at = ?
      WHERE id = ? AND actual_end_day IS NULL AND cancelled_at IS NULL AND voided_at IS NULL
        AND (${qualifies.sql}) AND (${lotClear.sql})`,
   ).bind(qualifyingLotId, nowMs, termId, ...qualifies.binds, ...lotClear.binds);
@@ -724,7 +724,7 @@ async function substituteQualifyingLot(
   correlation.event({
     kind: 'qualifying_lot_substituted',
     guard: {
-      sql: `EXISTS (SELECT 1 FROM board_service_terms WHERE id = ? AND qualifying_lot_id = ? AND updated_at = ?)`,
+      sql: `EXISTS (SELECT 1 FROM board_terms WHERE id = ? AND qualifying_lot_id = ? AND updated_at = ?)`,
       binds: [termId, qualifyingLotId, nowMs],
     },
     detail: {
@@ -798,9 +798,9 @@ async function correctTerm(
     if (!qualifyingLotId)
       return new Response('qualifyingLotId is required', { status: 400 });
     const lotRows = await getDb(env)
-      .select({ id: properties.id, retiredAt: properties.retiredAt })
-      .from(properties)
-      .where(eq(properties.id, qualifyingLotId))
+      .select({ id: lots.id, retiredAt: lots.retiredAt })
+      .from(lots)
+      .where(eq(lots.id, qualifyingLotId))
       .limit(1);
     if (lotRows.length === 0)
       return new Response('Lot not found', { status: 404 });
@@ -847,7 +847,7 @@ async function correctTerm(
   binds.push(nowMs);
   const guardSql = guards.map((g) => ` AND (${g.sql})`).join('');
   const primary = env.DATABASE.prepare(
-    `UPDATE board_service_terms SET ${sets.join(', ')} WHERE id = ?${guardSql}`,
+    `UPDATE board_terms SET ${sets.join(', ')} WHERE id = ?${guardSql}`,
   ).bind(...binds, termId, ...guards.flatMap((g) => g.binds));
 
   const correlation = new AuditCorrelation(env.DATABASE, {
@@ -857,7 +857,7 @@ async function correctTerm(
   });
   correlation.event({
     kind: 'board_term_corrected',
-    guard: updatedRowGuard('board_service_terms', termId, nowMs),
+    guard: updatedRowGuard('board_terms', termId, nowMs),
     detail: {
       family: 'board_service_change',
       effective: 'not_applicable',
@@ -963,7 +963,7 @@ async function assignOffice(
      SELECT ?, ?, ?, ?, ?, ?, ?
      WHERE (${officeClear.sql}) AND (${personClear.sql})
        AND EXISTS (
-         SELECT 1 FROM board_service_terms
+         SELECT 1 FROM board_terms
          WHERE id = ? AND actual_end_day IS NULL AND cancelled_at IS NULL AND voided_at IS NULL
        )`,
   ).bind(

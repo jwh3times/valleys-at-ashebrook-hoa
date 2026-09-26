@@ -10,7 +10,7 @@ import {
   contactMethods,
   correctionRequests,
 } from '../../src/server/db/roster-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
   GET as memberList,
@@ -35,9 +35,7 @@ import {
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -61,7 +59,7 @@ beforeEach(async () => {
   for (const table of CLEAR) {
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw('DELETE FROM properties'));
+  await db.run(sql.raw('DELETE FROM lots'));
   await db.run(sql.raw('DELETE FROM users'));
   await db.delete(settings).where(eq(settings.key, 'site'));
   await db.insert(settings).values({
@@ -280,7 +278,7 @@ describe('member correction requests', () => {
     expect(((await list.json()) as unknown[]).length).toBe(1);
 
     const unlinked = await memberList(
-      memberReq(legacyAuthContext('mem-1', 'homeowner', []), 'GET'),
+      memberReq(callerContext('mem-1', 'homeowner', []), 'GET'),
     );
     expect(unlinked.status).toBe(403);
   });

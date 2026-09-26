@@ -3,13 +3,7 @@ import { eq } from 'drizzle-orm';
 import { vi } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import {
-  properties,
-  owners,
-  userPropertyLinks,
-  propertyVerifications,
-  manualApprovalQueue,
-  boardPeople,
-  boardTerms,
+  lots,
   meetings,
   boardAttendance,
   motions,
@@ -108,11 +102,11 @@ export function pauseNextBatch() {
  *   with NO ACTION (ADR 0018 — and, since migration 0029 rebuilt them, by
  *   decision rather than drizzle-kit's ALTER trap), so they must go before
  *   `proxies`.
- * - `proxies` references `people` and `properties` with RESTRICT (#248 part 2;
+ * - `proxies` references `people` and `lots` with RESTRICT (#248 part 2;
  *   it referenced `owners` until migration 0029).
  * - `candidates` and `board_terms` reference `board_people` with RESTRICT.
  * - `election_eligibility`, `motion_eligibility` and `ballots` reference
- *   `properties` with RESTRICT.
+ *   `lots` with RESTRICT.
  *
  * `resolutions` self-references with RESTRICT, which is safe here because
  * SQLite checks immediate FKs at the END of a statement, so clearing the whole
@@ -120,7 +114,7 @@ export function pauseNextBatch() {
  */
 export async function truncateAll() {
   const db = getDb(env);
-  // Vote/ballot leaves first — these cite proxies, properties and candidates.
+  // Vote/ballot leaves first — these cite proxies, lots and candidates.
   await db.delete(ballotChoices);
   await db.delete(ballots);
   await db.delete(electionEligibility);
@@ -133,12 +127,10 @@ export async function truncateAll() {
   await db.delete(proxies);
   // Resolutions cite motions; board terms cite elections and board people.
   await db.delete(resolutions);
-  await db.delete(boardTerms);
   await db.delete(candidates);
   await db.delete(motions);
   await db.delete(elections);
   await db.delete(meetings);
-  await db.delete(boardPeople);
   // #248: board attendance, roll call, movers, and candidate links now cite
   // `people`, which cites `parties`. Both go after every table above that
   // references them. Only the Person subtype is cleared — a test that seeds
@@ -147,12 +139,15 @@ export async function truncateAll() {
   //
   // #248 part 2: `ownerships` joins that set, because seedLotAuthority below
   // writes one per (person, lot) pair and it references BOTH `parties` and
-  // `properties` with RESTRICT — so it goes after every table citing a Person
+  // `lots` with RESTRICT — so it goes after every table citing a Person
   // and before both of its own parents.
+  await env.DATABASE.prepare('DELETE FROM person_links').run();
+  await env.DATABASE.prepare('DELETE FROM person_verifications').run();
+  await env.DATABASE.prepare('DELETE FROM contact_methods').run();
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  // ADR 0024 Lot Records cite `properties` with RESTRICT, so they clear before
+  // ADR 0024 Lot Records cite `lots` with RESTRICT, so they clear before
   // it; `lot_record_events` cites nothing (its subject is (type, id) with no
   // FK) but belongs with the records it logs.
   await db.delete(lotRecordEvents);
@@ -167,12 +162,8 @@ export async function truncateAll() {
     .delete(duesLedgerEntries)
     .where(eq(duesLedgerEntries.kind, 'reversal'));
   await db.delete(duesLedgerEntries);
-  // Roster: links and verifications cite properties.
-  await db.delete(propertyVerifications);
-  await db.delete(manualApprovalQueue);
-  await db.delete(userPropertyLinks);
-  await db.delete(owners);
-  await db.delete(properties);
+  // Roster: links and verifications cite lots.
+  await db.delete(lots);
   // Standalone content.
   await db.delete(reports);
   await db.delete(documents);
@@ -185,7 +176,7 @@ export async function seedProperty(
   overrides: Record<string, unknown> = {},
 ) {
   await getDb(env)
-    .insert(properties)
+    .insert(lots)
     .values({
       id,
       address: `${id} Ashebrook Lane`,
@@ -193,27 +184,6 @@ export async function seedProperty(
       unit: null,
       status: 'active',
       voteWeight: 1,
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-      ...overrides,
-    });
-}
-
-export async function seedOwner(
-  id: string,
-  propertyId: string,
-  overrides: Record<string, unknown> = {},
-) {
-  await getDb(env)
-    .insert(owners)
-    .values({
-      id,
-      propertyId,
-      fullName: `Owner ${id}`,
-      phone: null,
-      email: null,
-      status: 'active',
       notes: null,
       createdAt: now,
       updatedAt: now,

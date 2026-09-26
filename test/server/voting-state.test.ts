@@ -59,7 +59,7 @@ describe('live voting database predicate', () => {
       expected: [0, 0],
     },
     {
-      label: 'missing properties',
+      label: 'missing lots',
       value: {},
       expected: [0, 0],
     },

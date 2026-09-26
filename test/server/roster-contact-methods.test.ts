@@ -19,9 +19,7 @@ import { POST } from '../../src/pages/api/admin/roster-contact-methods';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {

@@ -33,7 +33,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   vi.clearAllMocks();
   vi.mocked(sendEmail).mockResolvedValue(undefined);
-  // verification_codes references people/contact_methods/properties with
+  // verification_codes references people/contact_methods/lots with
   // RESTRICT, so it must be cleared BEFORE resetRoster() deletes those.
   await getDb(env).run(sql.raw('DELETE FROM verification_codes'));
   await getDb(env).run(sql.raw('DELETE FROM verification_review_requests'));
@@ -165,7 +165,7 @@ describe('matchPersonForVerification', () => {
   it('an organization-owned Lot never matches, even the applicant naming themself', async () => {
     const now = 1;
     await getDb(env).run(
-      sql`INSERT INTO properties (id, address, address_normalized, status, vote_weight, created_at, updated_at)
+      sql`INSERT INTO lots (id, address, address_normalized, status, vote_weight, created_at, updated_at)
           VALUES ('lot-org', 'lot-org Way', 'lot-org way', 'active', 1, ${now}, ${now})`,
     );
     await getDb(env).run(

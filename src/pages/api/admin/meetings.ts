@@ -17,7 +17,7 @@ import {
   elections,
   proxies,
   ballots,
-  properties,
+  lots,
 } from '../../../server/db/schema';
 import { people, parties } from '../../../server/db/roster-schema';
 import { associationDateIso, personDisplayLabel } from '../../../lib/format';
@@ -127,7 +127,7 @@ interface MemberAttendanceEntry {
 /**
  * The lots in `propertyIds` that do not exist.
  *
- * `member_attendance.property_id` is a NOT NULL FK to `properties`, so an
+ * `member_attendance.property_id` is a NOT NULL FK to `lots`, so an
  * unknown id reaches D1 as a raw FOREIGN KEY error rather than a 400 (#234).
  * The sibling actions get this for free — `setMemberVotes` and `setBallots`
  * each resolve a weight per lot and already fail the entry on a miss — but
@@ -141,10 +141,7 @@ async function unknownLots(db: Db, propertyIds: string[]): Promise<string[]> {
   const ids = [...new Set(propertyIds)];
   if (ids.length === 0) return [];
   const found = await chunkedIn(ids, (batch) =>
-    db
-      .select({ id: properties.id })
-      .from(properties)
-      .where(inArray(properties.id, batch)),
+    db.select({ id: lots.id }).from(lots).where(inArray(lots.id, batch)),
   );
   const known = new Set(found.map((r) => r.id));
   return ids.filter((id) => !known.has(id));
@@ -259,11 +256,9 @@ async function setMemberAttendance(
       presentIds,
       (batch) =>
         db
-          .select({ id: properties.id })
-          .from(properties)
-          .where(
-            and(inArray(properties.id, batch), ne(properties.status, 'active')),
-          ),
+          .select({ id: lots.id })
+          .from(lots)
+          .where(and(inArray(lots.id, batch), ne(lots.status, 'active'))),
       // One less than the limit: the status predicate binds a parameter too,
       // which is the caveat chunkedIn documents.
       D1_MAX_BOUND_PARAMS - 1,
@@ -287,7 +282,7 @@ async function setMemberAttendance(
   // Full replace, atomically: a property omitted from `entries` is removed,
   // not left at its previous value. Weight is intentionally not stamped here
   // — member_attendance has no weight column, and attendance weight is
-  // resolved live from properties.vote_weight at read time, because quorum
+  // resolved live from lots.vote_weight at read time, because quorum
   // is a question about the roster as it stands today. The no-op UPDATE is the
   // replacement's mutation-boundary guard: it repeats the meeting context and
   // every proxy condition after preflight. The delete runs only when that

@@ -172,29 +172,17 @@ The invariant run is what catches a botched table rebuild — a row left pointin
 longer exists — which a migration that rebuilds tables under `PRAGMA defer_foreign_keys` can
 otherwise leave behind silently.
 
-## 5. Import the Owner Roster
+## 5. Prepare the Party Roster
 
-Homeowner verification uses the owner roster only to send one-time codes to contacts already on
-file. Keep roster files and generated import SQL under the configured private root. Operator tools
-read `ASHEBROOK_PRIVATE_ROOT`; unset or blank preserves the existing `private/` default, while a
-relative value resolves from the public repository root and an absolute value may point at an
-approved external records working directory. See
-[Workstation bootstrap](./docs/workstation-bootstrap.md).
+Verification uses the party roster's People, Contact Methods, and Ownerships. Maintain these
+from the admin Roster panel after bootstrap. The historical owner import and phase-2 backfill
+commands were retired with migration `0037`; they must not be run against the permanent schema.
 
-```bash
-npm run roster:import
-# Review the generated private SQL, then apply it with wrangler d1 execute.
-```
-
-The board maintains roster records afterward from `/admin` -> **Roster**. Public docs should not
-contain resident data, derived roster files, or deployment-specific deletion/export commands.
-
-### Privacy — Handling the Owner Roster
-
-The roster contains personal data and is used only for owner verification. It is not shown publicly
-and should not be committed. Production operators should document removal, erasure, backup, and
-retention procedures privately because those procedures depend on the deployment owner and data
-handling process.
+A fresh deployment needs its initial Person seeded before bootstrap. Prepare reviewed SQL for
+the permanent `parties`/`people` schema and its audit baseline in the private operations repository;
+rehearse it locally and obtain confirmation before applying it remotely. This one-time seed is
+separate from account creation. Keep resident data and generated SQL under the configured
+private root, never in the public repository. See [Workstation bootstrap](./docs/workstation-bootstrap.md).
 
 ## 6. Bootstrap the First System Administrator
 
@@ -207,17 +195,7 @@ Bootstrap **links** an already-signed-in account to an already-recorded roster P
 create a new account from board credentials.
 
 1. Sign up a normal account on the site (email/password) and sign in with it.
-2. Make sure the Person you intend to bootstrap already exists in the party roster. On a fresh
-   deploy this means running the roster import from §5 and then the roster backfill:
-   ```bash
-   npm run roster:backfill -- --local --write --operator=<accountId>
-   # drop --local for the remote database once you've reviewed the dry-run output
-   ```
-   Look up the target Person's id if you don't already have it, e.g.:
-   ```bash
-   npx wrangler d1 execute <database-name> --command \
-     "SELECT party_id, full_name FROM people WHERE full_name LIKE '%Name%'"
-   ```
+2. Prepare the initial Person as described in §5 and retain its `people.party_id` for bootstrap.
 3. While signed in as the account from step 1, call the endpoint with the bootstrap secret and
    that Person's id:
    ```bash
@@ -246,8 +224,8 @@ create a new account from board credentials.
    route there.
 
 A successful call links the account to that Person, records a `bootstrap` Person Verification,
-grants `system_admin` Access, and mirrors `users.role = 'board'` so the admin panel works
-immediately. Keep the exact bootstrap command, secret, and session details in private operations
+grants `system_admin` Access, and records its audit provenance. Access is derived immediately;
+`users.role` stays a neutral Better Auth field. Keep the exact bootstrap command, secret, and session details in private operations
 notes. After the first account exists, board and System Administrator access are managed from
 `/admin`.
 

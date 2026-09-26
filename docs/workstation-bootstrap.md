@@ -161,7 +161,6 @@ python scripts/build-import-manifest.py
 npm run docs:import
 npm run docs:dedupe
 npm run corpus:import
-npm run roster:import
 ```
 
 These commands may write generated manifests, reports, or SQL beneath the selected private root,

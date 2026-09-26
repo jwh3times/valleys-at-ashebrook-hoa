@@ -4,8 +4,7 @@
 // by phases 3b/3c/3d.
 //
 // This module is the single seam between the new admin panels and those
-// routes. `src/lib/admin.ts` stays legacy-only; the two never merge, because
-// phase 4 (#212) deletes the legacy half and keeps this one.
+// routes. Content-management helpers remain in `src/lib/admin.ts`.
 //
 // Every interface below MIRRORS a route's request or response contract — it
 // is deliberately re-declared rather than imported, because `src/server/**`
@@ -1167,10 +1166,8 @@ export async function resolveReviewFlag(
 // ---------------------------------------------------------------------------
 // System-Administrator-only, on two distinct technical capabilities:
 // `redactionAuthorize` for the read and the two redactions, the narrower
-// `redactionCleanup` for recording a cleanup outcome. Under `cutover_mode =
-// legacy` nobody holds either, so every caller gets a 403 until the flip —
-// the Compliance panel renders that as a capability-required card, not an
-// error.
+// `redactionCleanup` for recording a cleanup outcome. A missing capability
+// returns 403, which the Compliance panel renders as a capability-required card.
 
 export type RedactionFieldCategory = 'person_name' | 'email' | 'phone';
 export type RedactionAuthorityKind = 'legal_requirement' | 'binding_policy';
@@ -1372,10 +1369,8 @@ export async function fetchAuditIntegrity(): Promise<AuditIntegrityView> {
  *
  * It lives here, beside the request helper that produces the message, so a
  * panel never has to guess at server wording. The Compliance panel is the one
- * caller: every read it makes is System-Administrator-only, and under
- * `cutover_mode = legacy` nobody holds those capabilities, so this refusal is
- * the NORMAL pre-flip answer and has to render as an explanation rather than
- * as an error.
+ * caller: every read it makes is System-Administrator-only, so a refusal
+ * renders as an explanation of the required capability rather than an error.
  *
  * Accepts either the thrown error or a message already extracted from one.
  */

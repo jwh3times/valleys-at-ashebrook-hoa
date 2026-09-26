@@ -7,7 +7,7 @@ import {
   lotRecordEvents,
   settings,
 } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import {
   DEFAULT_SITE_SETTINGS,
   LOT_RECORD_REASON_CODES,
@@ -31,8 +31,8 @@ import { seedProperty, truncateAll } from './fixtures';
  *    terminal — nothing is hard-deleted, and nothing resurrects.
  */
 
-const board = legacyAuthContext('board-1', 'board', []);
-const homeowner = legacyAuthContext('owner-1', 'homeowner', ['lot-a']);
+const board = callerContext('board-1', 'board', []);
+const homeowner = callerContext('owner-1', 'homeowner', ['lot-a']);
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -40,7 +40,7 @@ beforeAll(async () => {
 
 function post(
   body: unknown,
-  ctx: ReturnType<typeof legacyAuthContext> | null = board,
+  ctx: ReturnType<typeof callerContext> | null = board,
 ) {
   return POST({
     request: new Request('http://localhost/api/admin/lot-violations', {
@@ -52,10 +52,7 @@ function post(
   } as never) as Promise<Response>;
 }
 
-function get(
-  query = '',
-  ctx: ReturnType<typeof legacyAuthContext> | null = board,
-) {
+function get(query = '', ctx: ReturnType<typeof callerContext> | null = board) {
   const url = `http://localhost/api/admin/lot-violations${query}`;
   return GET({
     request: new Request(url),

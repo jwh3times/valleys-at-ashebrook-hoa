@@ -3,17 +3,17 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/auth-schema';
-import { properties, userPropertyLinks } from '../../src/server/db/schema';
+import { lots } from '../../src/server/db/schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 import {
   parties,
   people,
   personVerifications,
   personLinks,
-  boardServiceTerms,
+  boardTerms,
   accessGrants,
 } from '../../src/server/db/roster-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import type { AuthContext } from '../../src/server/authz/guards';
 import { POST } from '../../src/pages/api/verify/unlink';
 import { POST as adminUnlinkPost } from '../../src/pages/api/admin/person-links';
@@ -48,7 +48,7 @@ const CLEAR = [
   'access_grants',
   'person_links',
   'person_verifications',
-  'board_service_terms',
+  'board_terms',
   'people',
   'parties',
 ];
@@ -56,8 +56,7 @@ const CLEAR = [
 beforeEach(async () => {
   const db = getDb(env);
   await db.delete(cutoverSettings);
-  await db.delete(userPropertyLinks);
-  await db.delete(properties);
+  await db.delete(lots);
   for (const table of CLEAR) {
     if (table === 'audit_events') {
       await db.run(
@@ -130,7 +129,7 @@ async function seedLink(accountId: string, personId: string) {
 
 async function seedTerm(id: string, personId: string) {
   const now = new Date();
-  await getDb(env).insert(boardServiceTerms).values({
+  await getDb(env).insert(boardTerms).values({
     id,
     personId,
     qualifyingLotId: null,
@@ -161,7 +160,7 @@ async function seedGrant(
 }
 
 function ctxFor(accountId: string): AuthContext {
-  return legacyAuthContext(accountId, 'homeowner', []);
+  return callerContext(accountId, 'homeowner', []);
 }
 
 function req(accountId: string | undefined): never {
@@ -292,7 +291,7 @@ describe('the admin unlink path also refuses the last System Administrator', () 
   // the last-administrator invariant is consulted, so only an administrator
   // reaches the refusal this case is about.
   function systemAdminContext() {
-    const ctx = legacyAuthContext('board-1', 'board', []);
+    const ctx = callerContext('board-1', 'board', []);
     ctx.capabilities.add('systemAdmin');
     return ctx;
   }
@@ -356,65 +355,3 @@ describe('the admin unlink path also refuses the last System Administrator', () 
  * restore access the homeowner gave up; untouched under `legacy`, where they
  * are the authority.
  */
-describe('self-unlink and the legacy mirrors', () => {
-  async function setMode(value: 'legacy' | 'derived') {
-    await getDb(env)
-      .insert(cutoverSettings)
-      .values({ key: 'cutover_mode', value, updatedAt: new Date() });
-  }
-
-  async function seedLegacyAccess(accountId: string) {
-    const db = getDb(env);
-    const now = new Date();
-    await db
-      .update(users)
-      .set({ role: 'homeowner' })
-      .where(eq(users.id, accountId));
-    await db.insert(properties).values({
-      id: 'lot-1',
-      address: '1 Mirror Lane',
-      addressNormalized: '1 mirror lane',
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.insert(userPropertyLinks).values({
-      id: `upl-${accountId}`,
-      userId: accountId,
-      propertyId: 'lot-1',
-      verifiedAt: now,
-      method: 'otp_email',
-    });
-  }
-
-  const roleOf = async (id: string) =>
-    (await getDb(env).select().from(users).where(eq(users.id, id)))[0]?.role;
-  const legacyLinksOf = async (id: string) =>
-    getDb(env)
-      .select()
-      .from(userPropertyLinks)
-      .where(eq(userPropertyLinks.userId, id));
-
-  it('clears the stored role and property links under derived', async () => {
-    await setMode('derived');
-    await seedPerson('per-1');
-    await seedLink('acct-1', 'per-1');
-    await seedLegacyAccess('acct-1');
-
-    const res = await POST(req('acct-1'));
-    expect(res.status).toBe(204);
-    expect(await roleOf('acct-1')).toBe('visitor');
-    expect(await legacyLinksOf('acct-1')).toHaveLength(0);
-  });
-
-  it('leaves the stored role and property links alone under legacy', async () => {
-    await setMode('legacy');
-    await seedPerson('per-1');
-    await seedLink('acct-1', 'per-1');
-    await seedLegacyAccess('acct-1');
-
-    const res = await POST(req('acct-1'));
-    expect(res.status).toBe(204);
-    expect(await roleOf('acct-1')).toBe('homeowner');
-    expect(await legacyLinksOf('acct-1')).toHaveLength(1);
-  });
-});

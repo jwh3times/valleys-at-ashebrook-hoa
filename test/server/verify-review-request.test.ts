@@ -12,17 +12,16 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
     callerState.userId
-      ? legacyAuthContext(callerState.userId, 'homeowner', [])
+      ? callerContext(callerState.userId, 'homeowner', [])
       : null,
 }));
 
 import { getDb } from '../../src/server/db/client';
 import { verificationReviewRequests } from '../../src/server/db/roster-schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { POST as reviewPOST } from '../../src/pages/api/verify/review';
 import { UNIFORM_REQUEST_RESPONSE } from '../../src/pages/api/verify/request';
-import { requestPropertyVerification } from '../../src/server/verification/property';
 import { requestPersonVerification } from '../../src/server/roster/verification';
 import { resetRoster, seedRoster } from './dual-fixtures';
 import { users } from '../../src/server/db/schema';
@@ -67,21 +66,6 @@ function reviewReq(body: unknown) {
 }
 
 describe('nothing auto-queues on internal request failures', () => {
-  it('legacy: address not found, no contact, and send-fail all create zero review rows', async () => {
-    await seedAccount('acct-legacy-nf');
-    const notFound = await requestPropertyVerification(
-      env,
-      'acct-legacy-nf',
-      '0000 Nowhere',
-      '',
-      'email',
-    );
-    expect(notFound).toEqual({ ok: false, outcome: 'not_found' });
-
-    const rows = await getDb(env).select().from(verificationReviewRequests);
-    expect(rows).toHaveLength(0);
-  });
-
   it('derived: an unmatched name and no-contact both create zero review rows', async () => {
     await seedRoster({
       lots: [

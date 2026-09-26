@@ -2,7 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { properties } from '../../src/server/db/schema';
+import { lots } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
 import {
   parties,
@@ -26,9 +26,7 @@ import type { AdminRoster } from '../../src/server/roster/reads';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -61,7 +59,7 @@ beforeEach(async () => {
     }
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw('DELETE FROM properties'));
+  await db.run(sql.raw('DELETE FROM lots'));
   await db.run(sql.raw('DELETE FROM users'));
   const now = new Date();
   await db.insert(users).values({
@@ -310,7 +308,7 @@ describe('GET /api/admin/roster', () => {
   it('assembles the surface with the ownerless advisory and redaction fallbacks', async () => {
     const db = getDb(env);
     const now = new Date();
-    await db.insert(properties).values({
+    await db.insert(lots).values({
       id: 'lot-1',
       address: '1 Ashebrook Lane',
       addressNormalized: '1 ashebrook lane',

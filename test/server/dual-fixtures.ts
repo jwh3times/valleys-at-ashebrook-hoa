@@ -2,18 +2,7 @@ import { env } from 'cloudflare:test';
 import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 
-// ONE declarative description, emitting BOTH shapes (issue #210, phase 2).
-//
-// The obvious alternative — a legacy builder plus a new-model builder — quietly
-// breaks the parity suite. Two independent builders let the two models be set
-// up from subtly different worlds, and the suite would then compare two
-// different setups and report agreement: a green test proving nothing, which is
-// worse than no test because it retires the question.
-//
-// So a spec here says "this Lot, these owners, this account verified against
-// it" once, and both models are written from that single statement of fact.
-//
-// The legacy half is deleted in phase 4; the description format stays.
+// One declarative roster fixture: Lots, Persons, relationships, and grants.
 
 export interface OwnerSpec {
   id: string;
@@ -35,8 +24,6 @@ export interface AccountSpec {
   id: string;
   /** Legacy `users.role`. */
   role?: 'visitor' | 'homeowner' | 'board' | null;
-  /** Legacy `user_property_links` rows. */
-  legacyLots?: string[];
   /** New-model Person Link. Omit to leave the account unlinked, which is the
    * accepted mass re-verification case. */
   linkedTo?: string;
@@ -57,10 +44,9 @@ const q = (v: string | null | undefined) =>
   v === null || v === undefined ? 'NULL' : `'${v.replace(/'/g, "''")}'`;
 
 const NEW_TABLES = [
-  'cutover_shadow_mismatches',
   'access_grants',
   'board_office_assignments',
-  'board_service_terms',
+  'board_terms',
   'person_links',
   'person_verifications',
   'representation_lots',
@@ -72,36 +58,28 @@ const NEW_TABLES = [
   'parties',
 ];
 
-const LEGACY_TABLES = ['user_property_links', 'owners', 'properties'];
+const LOT_TABLES = ['lots'];
 
 export async function resetRoster(): Promise<void> {
-  for (const table of [...NEW_TABLES, ...LEGACY_TABLES]) {
+  for (const table of [...NEW_TABLES, ...LOT_TABLES]) {
     await db().run(sql.raw(`DELETE FROM "${table}"`));
   }
 }
 
-/** Writes the spec into both models. */
+/** Writes the declarative spec into the permanent roster. */
 export async function seedRoster(spec: RosterSpec): Promise<void> {
   const statements: string[] = [];
   const now = 1;
 
   for (const lot of spec.lots ?? []) {
-    // The Lot IS `properties` — there is no separate lots table, and no Lot
-    // backfill, because every Lot already exists with its identity intact.
     statements.push(
-      `INSERT INTO properties (id, address, address_normalized, status, vote_weight, retired_at, created_at, updated_at)
+      `INSERT INTO lots (id, address, address_normalized, status, vote_weight, retired_at, created_at, updated_at)
        VALUES (${q(lot.id)}, ${q(`${lot.id} Way`)}, ${q(`${lot.id} way`)},
                ${lot.retired ? "'inactive'" : "'active'"}, 1, ${lot.retired ? 99 : 'NULL'}, ${now}, ${now})`,
     );
 
     for (const owner of lot.owners) {
       const active = owner.active ?? true;
-      // Legacy shape.
-      statements.push(
-        `INSERT INTO owners (id, property_id, full_name, phone, email, status, created_at, updated_at)
-         VALUES (${q(owner.id)}, ${q(lot.id)}, ${q(owner.name)}, ${q(owner.phone)}, ${q(owner.email)},
-                 ${active ? "'active'" : "'inactive'"}, ${now}, ${now})`,
-      );
       // New shape: one Party per owner row, never merged.
       statements.push(
         `INSERT INTO parties (id, kind, created_at, updated_at) VALUES (${q(owner.id)}, 'person', ${now}, ${now})`,
@@ -130,13 +108,6 @@ export async function seedRoster(spec: RosterSpec): Promise<void> {
                ${account.role === undefined ? 'NULL' : q(account.role)}, ${now}, ${now})`,
     );
 
-    for (const lotId of account.legacyLots ?? []) {
-      statements.push(
-        `INSERT INTO user_property_links (id, user_id, property_id, verified_at, method)
-         VALUES (${q(`${account.id}-${lotId}`)}, ${q(account.id)}, ${q(lotId)}, ${now}, 'otp_email')`,
-      );
-    }
-
     if (account.linkedTo) {
       statements.push(
         `INSERT INTO person_verifications (id, account_id, person_id, method, approver_account_id, reason, verified_at)
@@ -149,7 +120,7 @@ export async function seedRoster(spec: RosterSpec): Promise<void> {
     const termId = `${account.id}-term`;
     if (account.boardTerm && account.linkedTo) {
       statements.push(
-        `INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, created_at, updated_at)
+        `INSERT INTO board_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, created_at, updated_at)
          VALUES (${q(termId)}, ${q(account.linkedTo)}, ${q(account.boardTerm.lotId)},
                  ${q(account.boardTerm.startDay)}, ${q(account.boardTerm.scheduledEndDay)}, ${now}, ${now})`,
       );
@@ -166,56 +137,4 @@ export async function seedRoster(spec: RosterSpec): Promise<void> {
   for (const statement of statements) {
     await db().run(sql.raw(statement));
   }
-}
-
-/**
- * The legacy authorization answer, read from the legacy tables.
- *
- * Mirrors `getAuthContext`'s two facts — the stored role, coerced to visitor
- * for anything unrecognised, and the links joined to ACTIVE properties — without
- * needing a session. Session plumbing is not what the parity suite is testing.
- */
-export async function legacyContext(
-  accountId: string,
-): Promise<{ role: 'visitor' | 'homeowner' | 'board'; propertyIds: string[] }> {
-  const rows = await db().all<{ role: string | null }>(
-    sql`SELECT role FROM users WHERE id = ${accountId}`,
-  );
-  const raw = rows[0]?.role;
-  const role =
-    raw === 'homeowner' || raw === 'board' ? raw : ('visitor' as const);
-  const links = await db().all<{ property_id: string }>(
-    sql`SELECT l.property_id FROM user_property_links l
-        JOIN properties p ON p.id = l.property_id AND p.status = 'active'
-        WHERE l.user_id = ${accountId}`,
-  );
-  return { role, propertyIds: links.map((l) => l.property_id) };
-}
-
-/**
- * The parity suite's comparison of the two models.
- *
- * Compares the content tier and the lot SET — sorted and de-duplicated, because
- * ordering is an artifact of the query plan and would otherwise report a
- * mismatch that does not exist. Moved here from the deleted request-path shadow
- * layer (#212); it goes when the legacy model does.
- */
-export function compareContexts(
-  legacy: { role: string; propertyIds: string[] },
-  derived: { contentTier: string; lotIds: string[] },
-): {
-  matched: boolean;
-  legacyRole: string;
-  derivedContentTier: string;
-} {
-  const legacyLots = [...new Set(legacy.propertyIds)].sort();
-  const derivedLots = [...new Set(derived.lotIds)].sort();
-  return {
-    matched:
-      legacy.role === derived.contentTier &&
-      legacyLots.length === derivedLots.length &&
-      legacyLots.every((id, i) => id === derivedLots[i]),
-    legacyRole: legacy.role,
-    derivedContentTier: derived.contentTier,
-  };
 }

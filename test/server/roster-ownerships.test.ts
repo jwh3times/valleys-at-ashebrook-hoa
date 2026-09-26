@@ -2,7 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { properties } from '../../src/server/db/schema';
+import { lots } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
 import { associationDateIso } from '../../src/lib/format';
 import {
@@ -11,7 +11,7 @@ import {
   organizations,
   ownerships,
   representations,
-  boardServiceTerms,
+  boardTerms,
   boardOfficeAssignments,
   accessGrants,
 } from '../../src/server/db/roster-schema';
@@ -29,9 +29,7 @@ import { POST } from '../../src/pages/api/admin/roster-ownerships';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -55,7 +53,7 @@ const CLEAR = [
   'audit_events',
   'access_grants',
   'board_office_assignments',
-  'board_service_terms',
+  'board_terms',
   'representation_lots',
   'representations',
   'ownerships',
@@ -77,7 +75,7 @@ beforeEach(async () => {
     }
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw('DELETE FROM properties'));
+  await db.run(sql.raw('DELETE FROM lots'));
   await db.run(sql.raw('DELETE FROM users'));
   const now = new Date();
   await db.insert(users).values({
@@ -93,7 +91,7 @@ beforeEach(async () => {
 async function seedLot(id: string) {
   const now = new Date();
   await getDb(env)
-    .insert(properties)
+    .insert(lots)
     .values({
       id,
       address: `${id} Ashebrook Lane`,
@@ -162,7 +160,7 @@ async function seedTerm(
 ) {
   const now = new Date();
   await getDb(env)
-    .insert(boardServiceTerms)
+    .insert(boardTerms)
     .values({
       id,
       personId,
@@ -264,7 +262,7 @@ describe('create', () => {
     expect(future.status).toBe(400);
 
     await getDb(env).run(
-      sql`UPDATE properties SET retired_at = ${Date.now()} WHERE id = ${'lot-1'}`,
+      sql`UPDATE lots SET retired_at = ${Date.now()} WHERE id = ${'lot-1'}`,
     );
     const retired = await POST(
       req({
@@ -351,8 +349,8 @@ describe('end, and the consequence engine', () => {
     const db = getDb(env);
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.actualEndDay).toBe('2026-07-01');
     const [grant] = await db
       .select()
@@ -416,8 +414,8 @@ describe('end, and the consequence engine', () => {
     const db = getDb(env);
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.qualifyingLotId).toBe('lot-2');
     expect(term.actualEndDay).toBeNull();
 
@@ -466,8 +464,8 @@ describe('end, and the consequence engine', () => {
     expect(own.endDay).toBeNull();
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.qualifyingLotId).toBe('lot-1');
     expect(term.actualEndDay).toBeNull();
     expect(await db.all(sql`SELECT * FROM audit_events`)).toEqual([]);
@@ -489,8 +487,8 @@ describe('end, and the consequence engine', () => {
     const db = getDb(env);
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-sched'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-sched'));
     expect(term.cancelledAt).not.toBeNull();
     expect(term.actualEndDay).toBeNull();
     expect(term.cancelledDay! < '2030-01-01').toBe(true);
@@ -528,8 +526,8 @@ describe('end, and the consequence engine', () => {
     const db = getDb(env);
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.actualEndDay).toBeNull();
     expect(term.cancelledAt).toBeNull();
     await integrityClean();
@@ -542,8 +540,8 @@ describe('end, and the consequence engine', () => {
     expect(res2.status).toBe(204);
     const [after] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(after.actualEndDay).toBe(TODAY);
     const [rep] = await db
       .select()
@@ -581,8 +579,8 @@ describe('void', () => {
     expect(own.voidedAt).not.toBeNull();
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.actualEndDay).toBe(TODAY);
     await integrityClean();
   });

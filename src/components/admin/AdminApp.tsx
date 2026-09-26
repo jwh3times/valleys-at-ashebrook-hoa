@@ -78,12 +78,9 @@ const SECTIONS = [
     render: () => <ProxiesManager />,
   },
   {
-    // Legacy site sign-in access (users.role). Its buttons drive the
-    // re-pointed /api/admin/roles, so it acts on whichever model cutover_mode
-    // says is live; the Access panel above is the grant-level surface.
-    // Retired in phase 4 (#212).
+    // Board handoff uses the same Access Grant builders as the Access panel.
     key: 'board',
-    label: 'Board access (legacy)',
+    label: 'Board access',
     render: () => <BoardAccessManager />,
   },
   {

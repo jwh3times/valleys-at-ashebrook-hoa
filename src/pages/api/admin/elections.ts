@@ -11,7 +11,7 @@ import type { Db } from '../../../server/db/client';
 import {
   elections,
   candidates,
-  properties,
+  lots,
   meetings,
 } from '../../../server/db/schema';
 import { people } from '../../../server/db/roster-schema';
@@ -304,9 +304,9 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
   const propertyRows =
     propertyIds.length > 0
       ? await db
-          .select({ id: properties.id, voteWeight: properties.voteWeight })
-          .from(properties)
-          .where(inArray(properties.id, propertyIds))
+          .select({ id: lots.id, voteWeight: lots.voteWeight })
+          .from(lots)
+          .where(inArray(lots.id, propertyIds))
       : [];
   const weightById = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
 
@@ -468,7 +468,7 @@ async function openElection(
                AND candidates.withdrawn = 0
            )
            AND EXISTS (
-             SELECT 1 FROM properties WHERE properties.status = 'active'
+             SELECT 1 FROM lots WHERE lots.status = 'active'
            )
            AND ${LIVE_VOTING_ENABLED_SQL}
          RETURNING id`,
@@ -477,9 +477,9 @@ async function openElection(
     database
       .prepare(
         `INSERT INTO election_eligibility (election_id, property_id, weight)
-         SELECT ?, properties.id, properties.vote_weight
-         FROM properties
-         WHERE properties.status = 'active'
+         SELECT ?, lots.id, lots.vote_weight
+         FROM lots
+         WHERE lots.status = 'active'
            AND changes() = 1`,
       )
       .bind(id),
@@ -611,7 +611,7 @@ interface Winner {
 
 /**
  * ADR 0022 phase 3b (#218), per #203: certification creates PARTY-ROSTER
- * facts — a `board_service_terms` row per winner (election provenance
+ * facts — a `board_terms` row per winner (election provenance
  * stamped), an optional Office Assignment — and never a legacy
  * board_people/board_terms row; the legacy identity layer is retired, not
  * ported. `qualifyingLotId` is required and validated as a Lot the winner
@@ -731,9 +731,9 @@ async function certifyElection(
         status: 400,
       });
     const lotRows = await db
-      .select({ id: properties.id, retiredAt: properties.retiredAt })
-      .from(properties)
-      .where(eq(properties.id, lotRaw))
+      .select({ id: lots.id, retiredAt: lots.retiredAt })
+      .from(lots)
+      .where(eq(lots.id, lotRaw))
       .limit(1);
     if (lotRows.length === 0)
       return new Response('Lot not found', { status: 404 });
@@ -919,7 +919,7 @@ async function certifyElection(
     );
     children.push(
       env.DATABASE.prepare(
-        `INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, election_id, start_day, scheduled_end_day, created_at, updated_at)
+        `INSERT INTO board_terms (id, person_id, qualifying_lot_id, election_id, start_day, scheduled_end_day, created_at, updated_at)
          SELECT ?, ?, ?, ?, ?, ?, ?, ?
          WHERE ${guard.sql}
            AND (${qualifies.sql}) AND (${personClear.sql}) AND (${lotClear.sql})`,
@@ -939,10 +939,7 @@ async function certifyElection(
       ),
     );
     asserts.push(
-      assertInBatch(
-        env.DATABASE,
-        insertedRowGuard('board_service_terms', w.termId),
-      ),
+      assertInBatch(env.DATABASE, insertedRowGuard('board_terms', w.termId)),
     );
     if (w.office) {
       const officeId = crypto.randomUUID();
@@ -950,7 +947,7 @@ async function certifyElection(
         env.DATABASE.prepare(
           `INSERT INTO board_office_assignments (id, board_term_id, person_id, office, start_day, created_at, updated_at)
            SELECT ?, ?, ?, ?, ?, ?, ?
-           WHERE EXISTS (SELECT 1 FROM board_service_terms WHERE id = ?)
+           WHERE EXISTS (SELECT 1 FROM board_terms WHERE id = ?)
              AND NOT EXISTS (SELECT 1 FROM board_office_assignments WHERE office = ? AND end_day IS NULL AND voided_at IS NULL)
              AND NOT EXISTS (SELECT 1 FROM board_office_assignments WHERE person_id = ? AND end_day IS NULL AND voided_at IS NULL)`,
         ).bind(
@@ -1088,7 +1085,7 @@ async function certifyElection(
  * leaves voided rows visible. Office assignments on those terms are voided
  * with them, and any Board grants they qualified end now with
  * `recorded_in_error`. An election certified under the retired legacy model
- * has no `board_service_terms` rows; its uncertify finds nothing to void and
+ * has no `board_terms` rows; its uncertify finds nothing to void and
  * simply reverses the status.
  */
 async function uncertifyElection(
@@ -1112,7 +1109,7 @@ async function uncertifyElection(
     });
 
   const termRows = await env.DATABASE.prepare(
-    `SELECT id FROM board_service_terms WHERE election_id = ? AND voided_at IS NULL`,
+    `SELECT id FROM board_terms WHERE election_id = ? AND voided_at IS NULL`,
   )
     .bind(id)
     .all<{ id: string }>();
@@ -1160,7 +1157,7 @@ async function uncertifyElection(
   if (termIds.length) {
     children.push(
       env.DATABASE.prepare(
-        `UPDATE board_service_terms
+        `UPDATE board_terms
          SET voided_at = ?, actual_end_day = NULL, cancelled_day = NULL, cancelled_at = NULL, updated_at = ?
          WHERE election_id = ? AND voided_at IS NULL AND ${guard.sql}`,
       ).bind(nowMs, nowMs, id, ...guard.binds),

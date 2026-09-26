@@ -1,9 +1,10 @@
+import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 // Retrieval is mocked (no AI binding in the test pool); Anthropic is mocked to
@@ -51,9 +52,9 @@ vi.mock('../../src/server/ai/anthropic', () => ({
 import { answer, loadRosterEntries } from '../../src/server/ai/assistant';
 import { buildPseudonymizer } from '../../src/server/ai/pii';
 import { getDb } from '../../src/server/db/client';
-import { owners, properties, documents } from '../../src/server/db/schema';
+import { lots, documents } from '../../src/server/db/schema';
 import { POST } from '../../src/pages/api/admin/assistant';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 // Derive the surrogate the mock will echo, from the same roster the test seeds.
 let SURROGATE_NAME = '';
@@ -72,7 +73,7 @@ beforeAll(async () => {
       },
     },
   ]);
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id: 'uuid-1',
     address: '123 Ashebrook Lane',
     addressNormalized: '123 ashebrook lane',
@@ -80,7 +81,7 @@ beforeAll(async () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
-  await getDb(env).insert(owners).values({
+  await seedRosterOwner({
     id: 'o1',
     propertyId: 'uuid-1',
     fullName: 'Jane Q Homeowner',
@@ -93,7 +94,7 @@ beforeAll(async () => {
   // A former (inactive) owner — must still be pseudonymized even though the
   // roster feed is not filtered to active status (loadRosterEntries feeds
   // only the PII dictionary, never a user-facing read).
-  await getDb(env).insert(owners).values({
+  await seedRosterOwner({
     id: 'o2',
     propertyId: 'uuid-1',
     fullName: 'Pat Pastowner',
@@ -375,7 +376,7 @@ describe('POST /api/admin/assistant', () => {
     // relying on module-cache resets.
     const res = await POST({
       locals: {
-        authContext: legacyAuthContext('h', 'homeowner', []),
+        authContext: callerContext('h', 'homeowner', []),
       },
       request: new Request('http://localhost/api/admin/assistant', {
         method: 'POST',

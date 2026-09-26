@@ -260,6 +260,13 @@
       "when": 1789905600000,
       "tag": "0036_dues_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1790380800000,
+      "tag": "0037_adr0022_contract",
+      "breakpoints": true
     }
   ]
 }

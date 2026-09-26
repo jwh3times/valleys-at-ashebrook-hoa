@@ -51,11 +51,7 @@ export async function requireBoard(
  * redaction cleanup, access-denial detail, and the audit integrity views.
  *
  * Identical order to `requireBoard`: freeze (mutating verbs only), then
- * session, then the capability. Under `cutover_mode = legacy` nobody holds
- * these capabilities — System Administration is a new-model concept with no
- * legacy equivalent — so these routes answer 403 for every caller until the
- * flip, which is correct: the surfaces they gate act on new-model rows that
- * production does not yet serve.
+ * session, then the capability. Technical capabilities require System Administration Access.
  */
 export async function requireApiCapability(
   locals: App.Locals | undefined,

@@ -45,9 +45,7 @@ import { DELETE as PROXY_DELETE } from '../../src/pages/api/admin/proxies';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -76,7 +74,7 @@ const CLEAR = [
   'audit_events',
   'access_grants',
   'board_office_assignments',
-  'board_service_terms',
+  'board_terms',
   'person_links',
   'person_verifications',
   'representation_lots',

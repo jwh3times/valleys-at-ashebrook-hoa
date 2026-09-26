@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/schema';
 import type { AuthContext, Capability } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { GET as getAccessDenials } from '../../src/pages/api/admin/access-denials';
 import { GET as getAuditIntegrity } from '../../src/pages/api/admin/audit-integrity';
 
@@ -116,7 +116,7 @@ describe('access-denials admin route', () => {
 
   it('refuses a plain board caller', async () => {
     const res = await getAccessDenials(
-      req(denialsUrl, legacyAuthContext('b', 'board', [])),
+      req(denialsUrl, callerContext('b', 'board', [])),
     );
     expect(res.status).toBe(403);
   });
@@ -167,7 +167,7 @@ describe('audit-integrity admin route', () => {
 
   it('refuses a plain board caller', async () => {
     const res = await getAuditIntegrity(
-      req(integrityUrl, legacyAuthContext('b', 'board', [])),
+      req(integrityUrl, callerContext('b', 'board', [])),
     );
     expect(res.status).toBe(403);
   });

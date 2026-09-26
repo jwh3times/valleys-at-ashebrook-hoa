@@ -1,3 +1,4 @@
+import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
@@ -15,7 +16,7 @@ const { retrieveMock, genState, authState, anthropicState } = vi.hoisted(
     // this mock — `null ?? x` evaluates `x` — see src/server/authz/api-guards.ts).
     // Defaults to a board caller so existing tests need no changes; flipped
     // to `null` by the 401 fail-closed test below.
-    // Built inline rather than via legacyAuthContext: vi.hoisted runs before
+    // Built inline rather than via callerContext: vi.hoisted runs before
     // module imports initialize, so calling it here throws on the uninitialized
     // binding. Kept in sync by the type annotation — a field added to
     // AuthContext fails this file at compile time.
@@ -87,18 +88,13 @@ vi.mock('../../src/server/ai/anthropic', () => {
 
 import { POST, GET, DELETE } from '../../src/pages/api/admin/reports';
 import { getDb } from '../../src/server/db/client';
-import {
-  owners,
-  properties,
-  documents,
-  reports,
-} from '../../src/server/db/schema';
+import { lots, documents, reports } from '../../src/server/db/schema';
 import { AiSearchUnavailableError } from '../../src/server/ai/search';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id: 'doc-1',
     address: '123 Ashebrook Lane',
     addressNormalized: '123 ashebrook lane',
@@ -106,7 +102,7 @@ beforeAll(async () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
-  await getDb(env).insert(owners).values({
+  await seedRosterOwner({
     id: 'o1',
     propertyId: 'doc-1',
     fullName: 'Jane Q Homeowner',
@@ -152,7 +148,7 @@ function post(body: unknown, locals?: unknown) {
 }
 
 const homeownerLocals = {
-  authContext: legacyAuthContext('h1', 'homeowner', []),
+  authContext: callerContext('h1', 'homeowner', []),
 };
 
 // Reassemble the `event: token` frames' text payloads. The de-anonymization
@@ -182,7 +178,7 @@ describe('POST /api/admin/reports', () => {
       const res = await post({ template: 'rentals' }, {});
       expect(res.status).toBe(401);
     } finally {
-      authState.ctx = legacyAuthContext('board-1', 'board', []);
+      authState.ctx = callerContext('board-1', 'board', []);
     }
   });
 

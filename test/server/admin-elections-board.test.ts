@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { GET, POST, PATCH, DELETE } from '../../src/pages/api/admin/elections';
@@ -14,14 +14,14 @@ import {
   candidates,
   ballotChoices,
   ballots,
-  properties,
+  lots,
   meetings,
   settings,
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { pauseNextBatch } from './fixtures';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -34,12 +34,12 @@ beforeEach(async () => {
   await db.delete(electionEligibility);
   await db.delete(candidates);
   await db.delete(elections);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(meetings);
   await db.delete(settings);
 });
@@ -106,7 +106,7 @@ async function createProperty(
   voteWeight = 1,
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id,
     address,
     addressNormalized: address.toLowerCase(),
@@ -412,9 +412,9 @@ describe('elections admin route — board', () => {
     await createCandidate(id, 1);
     const propertyId = await createProperty('6 Inactive Lane');
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ status: 'inactive' })
-      .where(eq(properties.id, propertyId));
+      .where(eq(lots.id, propertyId));
 
     const res = await POST(req(url, 'POST', { action: 'open', id }));
 
@@ -434,9 +434,9 @@ describe('elections admin route — board', () => {
     const zeroPropertyId = await createProperty('8 Zero Lane', 0);
     const inactivePropertyId = await createProperty('9 Inactive Lane', 9);
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ status: 'inactive' })
-      .where(eq(properties.id, inactivePropertyId));
+      .where(eq(lots.id, inactivePropertyId));
 
     const responses = await Promise.all([
       POST(req(url, 'POST', { action: 'open', id })),

@@ -8,8 +8,7 @@ const turnstileState = vi.hoisted(() => ({
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () =>
-    legacyAuthContext('captcha-user', 'homeowner', []),
+  getAuthContext: async () => callerContext('captcha-user', 'homeowner', []),
 }));
 vi.mock('../../src/server/authz/turnstile', () => ({
   verifyTurnstile: async (_env: unknown, token?: string) => {
@@ -23,7 +22,7 @@ vi.mock('../../src/server/auth/senders', () => ({
 }));
 
 import { POST } from '../../src/pages/api/verify/request';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 // This route reads the write-freeze setting before anything else, and that read
 // fails closed — so it needs a migrated database even though every other

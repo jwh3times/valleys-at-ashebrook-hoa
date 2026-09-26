@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-07-08
 
+**Phase 4 implementation note (#212):** The original owner/link/verification schema is removed. Lots live in `lots`; authority comes from Person Links and the party roster. See [ADR 0022](./0022-party-roster-derived-access.md).
+
 ## Context
 
 The owner roster can contain multiple owners for one property. A flat "one row per

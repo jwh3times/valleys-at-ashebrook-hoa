@@ -12,7 +12,7 @@ import {
   representations,
   ownerships as ownershipsTable,
 } from '../../src/server/db/roster-schema';
-import { properties, proxies } from '../../src/server/db/schema';
+import { lots, proxies } from '../../src/server/db/schema';
 import { deriveAccess } from '../../src/server/authz/derive';
 import {
   now,
@@ -47,7 +47,7 @@ const CLEAR = [
   'representation_lots',
   'representations',
   'access_grants',
-  'board_service_terms',
+  'board_terms',
   'ownerships',
   'organizations',
 ];
@@ -426,8 +426,8 @@ describe('fetchPaperBallotReceipts', () => {
     ).get('e1')!;
 
     const all = await getDb(env)
-      .select({ id: properties.id, address: properties.address })
-      .from(properties);
+      .select({ id: lots.id, address: lots.address })
+      .from(lots);
     const expected = all
       .filter((p) => derived.lotIds.includes(p.id))
       .map((p) => p.address)

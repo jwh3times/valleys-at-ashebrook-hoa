@@ -40,10 +40,8 @@ import {
  *     never as "unset means open".
  *  3. Session — the caller must already be signed in (401). Resolved
  *     directly from the Better Auth session rather than through
- *     `getAuthContext`/`cutover_mode`: bootstrap runs at flip step 4 while
- *     `cutover_mode` may still read `legacy`, and its own outcome (creating
- *     the account's Person Link) must not depend on which model happens to
- *     be answering at that moment.
+ *     derived authorization: creating the first Person Link cannot require
+ *     that the account already has roster-derived authority.
  *  4. The operator names the Person to link (`{ personId }`). Readable
  *     404/409 pre-checks are safe here — the route sits behind the secret.
  *
@@ -133,7 +131,7 @@ export async function handleBootstrapBoard(
     return new Response('Forbidden', { status: 403 });
 
   // 3. Session gate. Read directly off Better Auth — never through
-  // `getAuthContext`/`cutover_mode` (see the module comment above).
+  // derived authorization (see the module comment above).
   const auth = createAuth(env);
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) return new Response('Unauthorized', { status: 401 });
@@ -216,16 +214,11 @@ export async function handleBootstrapBoard(
   // command's success apart from another's — a batch that lost the race (its
   // own `verificationPrimary` found the singleton already taken and inserted
   // nothing) would otherwise see the WINNER's singleton and try to write a
-  // root Identity Event and role-mirror update that dangle off ITS OWN
+  // root Identity Event that depends on ITS OWN
   // never-inserted verification/link/grant rows, which fails a foreign key
   // rather than cleanly no-op'ing. `grantLanded` is per-command unique (a
   // fresh UUID each call) and can only be true when this command's own chain
   // — verification, then link, then grant — actually landed.
-  const roleMirror = env.DATABASE.prepare(
-    `UPDATE users SET role = 'board', updated_at = ?
-     WHERE id = ? AND ${grantLanded.sql}`,
-  ).bind(nowMs, accountId, ...grantLanded.binds);
-
   const correlation = new AuditCorrelation(env.DATABASE, {
     operationKey: operationKey('bootstrap-board', 'bootstrap'),
     actorAccountId: accountId,
@@ -279,7 +272,6 @@ export async function handleBootstrapBoard(
       linkPrimary,
       grantPrimary,
       singletonPrimary,
-      roleMirror,
       ...correlation.statements,
       assertInBatch(env.DATABASE, consistencyGuard),
     ]);

@@ -14,16 +14,15 @@ const callerState = vi.hoisted(() => ({ userId: 'placeholder' }));
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    legacyAuthContext(callerState.userId, 'homeowner', []),
+    callerContext(callerState.userId, 'homeowner', []),
 }));
 
 import {
   POST,
   UNIFORM_REQUEST_RESPONSE,
 } from '../../src/pages/api/verify/request';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { getDb } from '../../src/server/db/client';
-import { properties, owners, users } from '../../src/server/db/schema';
 import { contactMethods } from '../../src/server/db/roster-schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 import { seedRoster } from './dual-fixtures';
@@ -49,19 +48,6 @@ function req(body: Record<string, unknown>) {
 
 /** Every scenario below uses a unique account, so the per-account cooldown
  * and daily counter never bleed between cases. */
-async function seedAccount(id: string) {
-  await getDb(env)
-    .insert(users)
-    .values({
-      id,
-      name: id,
-      email: `${id}@example.test`,
-      emailVerified: false,
-      role: 'homeowner',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-}
 
 async function expectUniform(res: Response) {
   expect(res.status).toBe(200);
@@ -72,9 +58,6 @@ async function expectUniform(res: Response) {
 describe('derived mode: every path converges', () => {
   beforeAll(async () => {
     await getDb(env).delete(cutoverSettings);
-    await getDb(env)
-      .insert(cutoverSettings)
-      .values({ key: 'cutover_mode', value: 'derived', updatedAt: new Date() });
 
     await seedRoster({
       lots: [
@@ -209,7 +192,7 @@ describe('derived mode: every path converges', () => {
     // Organization-owned Lot: no Person owner at all.
     const now = 1;
     await getDb(env).run(
-      sql`INSERT INTO properties (id, address, address_normalized, status, vote_weight, created_at, updated_at)
+      sql`INSERT INTO lots (id, address, address_normalized, status, vote_weight, created_at, updated_at)
           VALUES ('ur-lot-org', 'ur-lot-org Way', 'ur-lot-org way', 'active', 1, ${now}, ${now})`,
     );
     await getDb(env).run(
@@ -374,54 +357,5 @@ describe('derived mode: every path converges', () => {
         channel: 'email',
       }),
     );
-  });
-});
-
-describe('legacy mode: a known address and an unknown address are identical', () => {
-  beforeAll(async () => {
-    await getDb(env).delete(cutoverSettings);
-
-    const now = new Date();
-    await getDb(env).insert(properties).values({
-      id: 'ur-legacy-prop',
-      address: '5 Legacy Ln',
-      addressNormalized: '5 legacy ln',
-      unit: null,
-      status: 'active',
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await getDb(env).insert(owners).values({
-      id: 'ur-legacy-own',
-      propertyId: 'ur-legacy-prop',
-      fullName: 'Legacy Owner',
-      phone: null,
-      email: 'legacy@example.test',
-      status: 'active',
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await seedAccount('ur-acct-legacy-known');
-    await seedAccount('ur-acct-legacy-unknown');
-  });
-
-  it('both answer the same uniform response', async () => {
-    callerState.userId = 'ur-acct-legacy-known';
-    const known = await req({
-      address: '5 Legacy Ln',
-      name: '',
-      channel: 'email',
-    });
-    await expectUniform(known);
-
-    callerState.userId = 'ur-acct-legacy-unknown';
-    const unknown = await req({
-      address: '0000 Nowhere',
-      name: '',
-      channel: 'email',
-    });
-    await expectUniform(unknown);
   });
 });

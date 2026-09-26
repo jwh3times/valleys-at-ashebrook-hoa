@@ -9,7 +9,7 @@ import {
   candidates,
   ballots,
   meetings,
-  properties,
+  lots,
 } from '../../src/server/db/schema';
 import { people } from '../../src/server/db/roster-schema';
 
@@ -135,9 +135,7 @@ describe('elections schema', () => {
       castByPersonId: null,
       recordedAt: now,
     });
-    await expect(
-      db.delete(properties).where(eq(properties.id, 'p1')),
-    ).rejects.toThrow();
+    await expect(db.delete(lots).where(eq(lots.id, 'p1'))).rejects.toThrow();
   });
 
   it('refuses to delete a Person linked to a candidate', async () => {

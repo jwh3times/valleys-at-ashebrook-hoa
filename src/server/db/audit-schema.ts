@@ -10,7 +10,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { users } from './auth-schema';
 import {
-  properties,
+  lots,
   documents,
   meetings,
   elections,
@@ -28,7 +28,7 @@ import {
   representations,
   personLinks,
   personVerifications,
-  boardServiceTerms,
+  boardTerms,
   boardOfficeAssignments,
   accessGrants,
 } from './roster-schema';
@@ -526,7 +526,7 @@ export const rosterChangeSubjects = sqliteTable(
       .notNull()
       .references(() => auditEvents.id, { onDelete: 'restrict' }),
     role: text('role', { enum: SUBJECT_ROLES }).notNull(),
-    lotId: text('lot_id').references(() => properties.id, {
+    lotId: text('lot_id').references(() => lots.id, {
       onDelete: 'restrict',
     }),
     partyId: text('party_id').references(() => parties.id, {
@@ -574,14 +574,14 @@ export const boardServiceChangeSubjects = sqliteTable(
       .notNull()
       .references(() => auditEvents.id, { onDelete: 'restrict' }),
     role: text('role', { enum: SUBJECT_ROLES }).notNull(),
-    boardTermId: text('board_term_id').references(() => boardServiceTerms.id, {
+    boardTermId: text('board_term_id').references(() => boardTerms.id, {
       onDelete: 'restrict',
     }),
     officeAssignmentId: text('office_assignment_id').references(
       () => boardOfficeAssignments.id,
       { onDelete: 'restrict' },
     ),
-    lotId: text('lot_id').references(() => properties.id, {
+    lotId: text('lot_id').references(() => lots.id, {
       onDelete: 'restrict',
     }),
   },
@@ -724,7 +724,7 @@ export const reviewFlags = sqliteTable(
       onDelete: 'set null',
     }),
     impactedBoardTermId: text('impacted_board_term_id').references(
-      () => boardServiceTerms.id,
+      () => boardTerms.id,
       { onDelete: 'restrict' },
     ),
     impactedAccessGrantId: text('impacted_access_grant_id').references(

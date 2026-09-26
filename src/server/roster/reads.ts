@@ -1,7 +1,7 @@
 // Read assembly for the ADR 0022 phase-3b roster surfaces (#218): the
 // board-only Roster / Board / Access reads and the member self-read.
 //
-// Privacy boundaries live HERE, as properties of the reads themselves:
+// Privacy boundaries live HERE, as lots of the reads themselves:
 //
 //  - Contact Method values are board-and-above, plus a member's OWN methods on
 //    the self-read. No member-reachable shape carries another party's contact
@@ -15,7 +15,7 @@
 
 import { asc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { properties } from '../db/schema';
+import { lots as lotsTable } from '../db/schema';
 import { users } from '../db/auth-schema';
 import {
   parties,
@@ -25,7 +25,7 @@ import {
   ownerships,
   representations,
   representationLots,
-  boardServiceTerms,
+  boardTerms,
   boardOfficeAssignments,
   accessGrants,
   correctionRequests,
@@ -139,7 +139,7 @@ export async function fetchAdminRoster(
     repLotRows,
     contactRows,
   ] = await Promise.all([
-    db.select().from(properties).orderBy(asc(properties.address)),
+    db.select().from(lotsTable).orderBy(asc(lotsTable.address)),
     db
       .select({
         partyId: people.partyId,
@@ -303,18 +303,13 @@ export async function fetchBoardService(
 ): Promise<BoardServiceDetail> {
   const db = getDb(env);
   const [termRows, officeRows, personRows, lotRows] = await Promise.all([
-    db
-      .select()
-      .from(boardServiceTerms)
-      .orderBy(asc(boardServiceTerms.startDay)),
+    db.select().from(boardTerms).orderBy(asc(boardTerms.startDay)),
     db
       .select()
       .from(boardOfficeAssignments)
       .orderBy(asc(boardOfficeAssignments.startDay)),
     db.select().from(people),
-    db
-      .select({ id: properties.id, address: properties.address })
-      .from(properties),
+    db.select({ id: lotsTable.id, address: lotsTable.address }).from(lotsTable),
   ]);
 
   const names = new Map(
@@ -523,8 +518,8 @@ export async function fetchMemberRosterSelf(
     ]);
 
   const lotRows = await db
-    .select({ id: properties.id, address: properties.address })
-    .from(properties);
+    .select({ id: lotsTable.id, address: lotsTable.address })
+    .from(lotsTable);
   const addresses = new Map(lotRows.map((l) => [l.id, l.address]));
   const orgNames = new Map(
     orgRows.map((o) => [o.partyId, o.displayName ?? o.legalName]),

@@ -25,9 +25,7 @@ import { GET, POST } from '../../src/pages/api/admin/verification-requests';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: vi.fn(async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
   ),
 }));
 
@@ -49,7 +47,7 @@ const CLEAR = [
   'access_grants',
   'person_links',
   'person_verifications',
-  'board_service_terms',
+  'board_terms',
   'people',
   'parties',
 ];

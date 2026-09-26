@@ -1,26 +1,28 @@
+import { associationDateIso } from '../../src/lib/format';
+import { deriveAccess } from '../../src/server/authz/derive';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('board-1', 'board', []),
+  getAuthContext: async () => callerContext('board-1', 'board', []),
 }));
 
-import { POST } from '../../src/pages/api/admin/roles';
+import { GET, POST } from '../../src/pages/api/admin/roles';
 import { getDb } from '../../src/server/db/client';
-import { properties, users } from '../../src/server/db/schema';
+import { lots, users } from '../../src/server/db/schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 import {
   accessGrants,
-  boardServiceTerms,
+  boardTerms,
   ownerships,
   parties,
   people,
   personLinks,
   personVerifications,
 } from '../../src/server/db/roster-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 /**
  * The board handoff under `cutover_mode = derived` (#221).
@@ -51,7 +53,7 @@ const CLEAR = [
   'access_grants',
   'person_links',
   'person_verifications',
-  'board_service_terms',
+  'board_terms',
   'ownerships',
   'people',
   'parties',
@@ -67,12 +69,9 @@ beforeEach(async () => {
     }
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(users);
   await db.delete(cutoverSettings);
-  await db
-    .insert(cutoverSettings)
-    .values({ key: 'cutover_mode', value: 'derived', updatedAt: new Date() });
   for (const id of ['board-1', 'acct-1', 'acct-2']) {
     const now = new Date();
     await db.insert(users).values({
@@ -130,7 +129,7 @@ async function seedTerm(
 ) {
   const now = new Date();
   await getDb(env)
-    .insert(boardServiceTerms)
+    .insert(boardTerms)
     .values({
       id,
       personId,
@@ -161,7 +160,7 @@ async function seedBoardGrant(id: string, accountId: string, termId: string) {
 async function seedOwnedLot(lotId: string, personId: string) {
   const now = new Date();
   const db = getDb(env);
-  await db.insert(properties).values({
+  await db.insert(lots).values({
     id: lotId,
     address: `${lotId} Ashebrook Lane`,
     addressNormalized: `${lotId} ashebrook lane`,
@@ -188,8 +187,8 @@ function post(body: unknown) {
   } as never);
 }
 
-const roleOf = async (id: string) =>
-  (await getDb(env).select().from(users).where(eq(users.id, id)))[0]?.role;
+const tierOf = async (id: string) =>
+  (await deriveAccess(env, id, associationDateIso())).contentTier;
 
 const grantsFor = async (accountId: string) =>
   getDb(env)
@@ -198,7 +197,7 @@ const grantsFor = async (accountId: string) =>
     .where(eq(accessGrants.accountId, accountId));
 
 describe('promote', () => {
-  it('grants Board Access, records it, and mirrors the stored role', async () => {
+  it('grants Board Access, records it, and changes derived access', async () => {
     await seedPerson('per-1');
     await seedLink('acct-1', 'per-1');
     await seedTerm('term-1', 'per-1');
@@ -219,7 +218,7 @@ describe('promote', () => {
       endedAt: null,
     });
     // The write-behind mirror rides in the same batch.
-    expect(await roleOf('acct-1')).toBe('board');
+    expect(await tierOf('acct-1')).toBe('board');
 
     const db = getDb(env);
     const events = await db.all<{
@@ -243,7 +242,7 @@ describe('promote', () => {
     ).toEqual([]);
   });
 
-  it('404s an unknown email in either model', async () => {
+  it('404s an unknown email', async () => {
     const res = await post({ action: 'promote', email: 'nobody@example.test' });
     expect(res.status).toBe(404);
   });
@@ -253,8 +252,8 @@ describe('promote', () => {
     expect(res.status).toBe(409);
     expect(await res.text()).toContain('not linked to a person');
     expect(await grantsFor('acct-1')).toHaveLength(0);
-    // No partial state: the mirror never moves without the grant landing.
-    expect(await roleOf('acct-1')).toBe('homeowner');
+    // No partial state: failed promotion grants no access.
+    expect(await tierOf('acct-1')).toBe('visitor');
     expect(await getDb(env).all(sql`SELECT * FROM access_events`)).toHaveLength(
       0,
     );
@@ -267,7 +266,7 @@ describe('promote', () => {
     expect(res.status).toBe(409);
     expect(await res.text()).toContain('no current or scheduled Board Term');
     expect(await grantsFor('acct-1')).toHaveLength(0);
-    expect(await roleOf('acct-1')).toBe('homeowner');
+    expect(await tierOf('acct-1')).toBe('visitor');
   });
 
   it('does not count a lapsed term as qualifying', async () => {
@@ -307,7 +306,7 @@ describe('demote', () => {
       .where(eq(users.id, accountId));
   }
 
-  it('ends the grant, records it, and mirrors visitor with no lot authority', async () => {
+  it('ends the grant, records it, and derives visitor with no lot authority', async () => {
     await seedBoardAccount('acct-1', 'per-1', 'g-1');
     await seedBoardAccount('acct-2', 'per-2', 'g-2');
 
@@ -318,7 +317,7 @@ describe('demote', () => {
     expect(grant.endedAt).not.toBeNull();
     expect(grant.endReason).toBe('revoked');
     expect(grant.endedByAccountId).toBe('board-1');
-    expect(await roleOf('acct-2')).toBe('visitor');
+    expect(await tierOf('acct-2')).toBe('visitor');
     // The other board member is untouched.
     expect((await grantsFor('acct-1'))[0].endedAt).toBeNull();
 
@@ -336,7 +335,7 @@ describe('demote', () => {
     ).toEqual([]);
   });
 
-  it('mirrors homeowner when the linked person keeps lot authority', async () => {
+  it('retains member access when the linked person keeps lot authority', async () => {
     await seedBoardAccount('acct-1', 'per-1', 'g-1');
     await seedBoardAccount('acct-2', 'per-2', 'g-2');
     await seedOwnedLot('lot-2', 'per-2');
@@ -344,7 +343,7 @@ describe('demote', () => {
     const res = await post({ action: 'demote', userId: 'acct-2' });
     expect(res.status).toBe(204);
     // Demotion stops board access; it must not strip member access too.
-    expect(await roleOf('acct-2')).toBe('homeowner');
+    expect(await tierOf('acct-2')).toBe('homeowner');
   });
 
   it('refuses to end the last account holding Board Access', async () => {
@@ -353,7 +352,7 @@ describe('demote', () => {
     expect(res.status).toBe(409);
     expect(await res.text()).toBe('Cannot demote the last board member');
     expect((await grantsFor('acct-1'))[0].endedAt).toBeNull();
-    expect(await roleOf('acct-1')).toBe('board');
+    expect(await tierOf('acct-1')).toBe('board');
   });
 
   it('never empties the board when the final two demotions race', async () => {
@@ -382,6 +381,40 @@ describe('demote', () => {
     expect(res.status).toBe(409);
     expect(await res.text()).toContain('holds no Board Access to revoke');
     // Silently mirroring the role would have hidden the drift.
-    expect(await roleOf('acct-2')).toBe('board');
+    expect(await tierOf('acct-2')).toBe('visitor');
   });
+});
+
+it('lists grant holders independently of the stored role and excludes ended grants', async () => {
+  await getDb(env)
+    .update(users)
+    .set({ role: 'visitor' })
+    .where(eq(users.id, 'acct-1'));
+  await getDb(env)
+    .insert(accessGrants)
+    .values([
+      {
+        id: 'live-grant',
+        accountId: 'acct-1',
+        grantType: 'system_admin',
+        startedAt: new Date(1),
+      },
+      {
+        id: 'ended-grant',
+        accountId: 'acct-2',
+        grantType: 'system_admin',
+        startedAt: new Date(1),
+        endedAt: new Date(2),
+        endReason: 'revoked',
+      },
+    ]);
+  const response = await GET({
+    request: new Request('http://localhost/api/admin/roles'),
+  } as never);
+  expect(response.status).toBe(200);
+  expect(
+    ((await response.json()) as { board: { id: string }[] }).board.map(
+      (row) => row.id,
+    ),
+  ).toEqual(['acct-1']);
 });

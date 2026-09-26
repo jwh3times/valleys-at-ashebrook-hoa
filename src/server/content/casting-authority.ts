@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import { associationDateIso } from '../../lib/format';
 import type { AuthContext } from '../authz/guards';
 import type { Db } from '../db/client';
-import { userPropertyLinks } from '../db/schema';
 import { parties } from '../db/roster-schema';
 import {
   fetchPersonAuthority,
@@ -15,7 +14,7 @@ export interface CastingAuthority {
   /**
    * Every lot this caller holds casting authority for.
    *
-   * Deliberately NOT filtered by `properties.status`. Voting eligibility is
+   * Deliberately NOT filtered by `lots.status`. Voting eligibility is
    * decided by the frozen `election_eligibility` / `motion_eligibility`
    * snapshot taken when the occasion opened — [ADR 0020](../../../docs/adr/0020-digital-ballot-box.md):
    * "later roster, property-status, or weight changes do not alter who was
@@ -28,12 +27,11 @@ export interface CastingAuthority {
 /**
  * Resolves which lots a caller may act for.
  *
- * Derived mode resolves a consolidated linked Person one hop to the survivor,
+ * Resolves a consolidated linked Person one hop to the survivor,
  * then re-reads that Person's Lot Authority rather than using
  * `AuthContext.lotIds`, which excludes retired Lots. Voting instead lets the
  * frozen eligibility snapshot decide whether a Lot still counts after the
- * occasion opens. Legacy mode retains the account-to-Lot mirror until phase 4
- * removes that rollback model and its tables together.
+ * occasion opens.
  *
  * The read model and preflight both derive `ownLots` here. The mutation SQL
  * still repeats the predicate independently at the write boundary; that
@@ -63,47 +61,23 @@ export async function resolveCastingAuthority(
     return { ownLots: new Set(rows.map((row) => row.lotId)) };
   }
 
-  if (!ctx.capabilities.has('member')) return { ownLots: new Set() };
-  const rows = await db
-    .select({ propertyId: userPropertyLinks.propertyId })
-    .from(userPropertyLinks)
-    .where(eq(userPropertyLinks.userId, ctx.userId));
-  return { ownLots: new Set(rows.map((row) => row.propertyId)) };
+  return { ownLots: new Set() };
 }
 
 /**
  * Mutation-boundary counterpart to `resolveCastingAuthority` for one Lot.
  *
- * A derived request re-checks both halves of the capability: the Account's
+ * Each request re-checks both halves of the capability: the Account's
  * current Person Link must still name the same Person resolved into the
  * request context; its one-hop canonical survivor must still hold Lot
- * Authority. Legacy mode retains its mirror predicate until phase 4 removes
- * the rollback branch.
+ * Authority.
  */
 export function castingAuthorityExists(
   ctx: AuthContext,
   lot: SqlRef,
   day: string,
 ): AuthoritySql {
-  if (ctx.personId === null) {
-    const binds: unknown[] = [ctx.userId];
-    const lotRef =
-      'column' in lot
-        ? lot.column
-        : (() => {
-            binds.push(lot.value);
-            return '?';
-          })();
-    return {
-      sql: `EXISTS (
-        SELECT 1
-        FROM user_property_links caller_link
-        WHERE caller_link.user_id = ?
-          AND caller_link.property_id = ${lotRef}
-      )`,
-      binds,
-    };
-  }
+  if (ctx.personId === null) return { sql: '0', binds: [] };
 
   const authority = lotAuthorityExists(
     {
@@ -141,22 +115,7 @@ export function personSharesCastingAuthority(
   person: SqlRef,
   day: string,
 ): AuthoritySql {
-  if (ctx.personId === null) {
-    const holder = lotAuthorityExists(
-      person,
-      { column: 'casting_legacy_link.property_id' },
-      day,
-    );
-    return {
-      sql: `EXISTS (
-        SELECT 1
-        FROM user_property_links casting_legacy_link
-        WHERE casting_legacy_link.user_id = ?
-          AND ${holder.sql}
-      )`,
-      binds: [ctx.userId, ...holder.binds],
-    };
-  }
+  if (ctx.personId === null) return { sql: '0', binds: [] };
 
   const caller = lotAuthorityExists(
     {

@@ -1,3 +1,4 @@
+import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
@@ -54,7 +55,7 @@ import {
 import { loadRosterEntries } from '../../src/server/ai/assistant';
 import { buildPseudonymizer } from '../../src/server/ai/pii';
 import { getDb } from '../../src/server/db/client';
-import { owners, properties, documents } from '../../src/server/db/schema';
+import { lots, documents } from '../../src/server/db/schema';
 import { REPORT_TEMPLATES } from '../../src/lib/reports';
 
 let SURROGATE_NAME = '';
@@ -74,7 +75,7 @@ function chunk(id: string, score: number, content: string, docId: string) {
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id: 'doc-1',
     address: '123 Ashebrook Lane',
     addressNormalized: '123 ashebrook lane',
@@ -82,7 +83,7 @@ beforeAll(async () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
-  await getDb(env).insert(owners).values({
+  await seedRosterOwner({
     id: 'o1',
     propertyId: 'doc-1',
     fullName: 'Jane Q Homeowner',

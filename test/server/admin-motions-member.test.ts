@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { DELETE, PATCH, POST } from '../../src/pages/api/admin/motions';
@@ -18,13 +18,13 @@ import {
   motionEligibility,
   motions,
   memberVotes,
-  properties,
+  lots,
   settings,
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
 import { pauseNextBatch } from './fixtures';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -36,12 +36,12 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(settings);
 });
 
@@ -117,7 +117,7 @@ async function createProperty(
   voteWeight = 1,
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id,
     address,
     addressNormalized: address.toLowerCase(),
@@ -586,9 +586,9 @@ describe('motions admin route — member votes', () => {
     await enableLiveVoting();
     const inactiveId = await createProperty('1 Oak St');
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ status: 'inactive', updatedAt: new Date() })
-      .where(eq(properties.id, inactiveId));
+      .where(eq(lots.id, inactiveId));
     const id = await createMotion(await createMeeting());
 
     expect((await transitionVoting('openVoting', id)).status).toBe(409);
@@ -602,9 +602,9 @@ describe('motions admin route — member votes', () => {
     const p2 = await createProperty('2 Oak St', 0);
     const inactiveId = await createProperty('3 Oak St', 5);
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ status: 'inactive', updatedAt: new Date() })
-      .where(eq(properties.id, inactiveId));
+      .where(eq(lots.id, inactiveId));
     const id = await createMotion(await createMeeting());
 
     expect((await transitionVoting('openVoting', id)).status).toBe(204);
@@ -623,9 +623,9 @@ describe('motions admin route — member votes', () => {
     expect((await transitionVoting('closeVoting', id)).status).toBe(204);
     expect((await transitionVoting('closeVoting', id)).status).toBe(409);
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 9, updatedAt: new Date() })
-      .where(eq(properties.id, p1));
+      .where(eq(lots.id, p1));
     const addedAfterFreeze = await createProperty('4 Oak St', 4);
 
     expect((await transitionVoting('openVoting', id)).status).toBe(204);
@@ -662,9 +662,9 @@ describe('motions admin route — member votes', () => {
 
     expect((await transitionVoting('closeVoting', id)).status).toBe(204);
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 8, updatedAt: new Date() })
-      .where(eq(properties.id, p1));
+      .where(eq(lots.id, p1));
     const outsideSnapshot = await createProperty('3 Oak St', 3);
     const corrected = await POST(
       req(url, 'POST', {
@@ -878,9 +878,9 @@ describe('motions admin route — member votes', () => {
       // snapshot openVoting is about to freeze, which is the race this test
       // is actually about.
       await getDb(env)
-        .update(properties)
+        .update(lots)
         .set({ status: 'inactive', updatedAt: new Date() })
-        .where(eq(properties.id, outsideSnapshot));
+        .where(eq(lots.id, outsideSnapshot));
       expect((await transitionVoting('openVoting', id)).status).toBe(204);
       expect((await transitionVoting('closeVoting', id)).status).toBe(204);
       barrier.release();

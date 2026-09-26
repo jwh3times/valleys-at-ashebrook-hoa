@@ -226,7 +226,7 @@ describe('POST /api/bootstrap/board', () => {
       .select({ role: users.role })
       .from(users)
       .where(eq(users.id, 'acct-1'));
-    expect(account.role).toBe('board');
+    expect(account.role).toBe('visitor');
 
     const events = await db.all<{
       event_kind: string;
@@ -505,7 +505,7 @@ describe('POST /api/bootstrap/board', () => {
       .select({ role: users.role })
       .from(users)
       .where(eq(users.id, 'acct-b'));
-    expect(accountB.role).toBe('board');
+    expect(accountB.role).toBe('visitor');
 
     expect(
       await db.all(sql`SELECT * FROM audit_integrity_violations_v`),

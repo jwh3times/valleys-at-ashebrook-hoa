@@ -200,7 +200,7 @@ async function create(body: unknown, accountId: string): Promise<Response> {
     `INSERT INTO lot_violations
        (id, lot_id, category, effective_day, summary, internal_note, status, created_by, created_at)
      SELECT ?, ?, ?, ?, ?, ?, 'open', ?, ?
-      WHERE EXISTS (SELECT 1 FROM properties WHERE properties.id = ?)
+      WHERE EXISTS (SELECT 1 FROM lots WHERE lots.id = ?)
         AND ${LOT_RECORDS_ENABLED_SQL}`,
   ).bind(
     id,

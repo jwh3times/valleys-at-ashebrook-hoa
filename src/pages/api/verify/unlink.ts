@@ -11,7 +11,6 @@ import {
 } from '../../../server/roster/audit';
 import {
   endLinkStatements,
-  endedLinkMirrorStatements,
   denyIfLastSystemAdministrator,
 } from '../../../server/roster/identity';
 
@@ -68,13 +67,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     nowMs,
     operationKey: operationKey('verify-unlink', 'unlink'),
   });
-  statements.push(
-    ...endedLinkMirrorStatements(env.DATABASE, {
-      linkId: link.id,
-      accountId: ctx.userId,
-      nowMs,
-    }),
-  );
   let results: D1Result[];
   try {
     results = await env.DATABASE.batch(statements);

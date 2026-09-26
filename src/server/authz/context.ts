@@ -1,64 +1,7 @@
-import { and, eq } from 'drizzle-orm';
 import { createAuth } from '../auth';
-import { getDb } from '../db/client';
-import { properties, userPropertyLinks } from '../db/schema';
-import { getCutoverMode } from './cutover-mode';
 import { deriveAccess, type DerivedAccess } from './derive';
 import { recordGrantRevalidationDenial } from './revalidation-event';
-import type { AuthContext, Capability, Role } from './guards';
-
-const VALID_ROLES = new Set<string>(['visitor', 'homeowner', 'board']);
-
-/**
- * The single seam the ADR 0022 cutover swaps behind (#198, #217).
- *
- * Every guard, page, and route reads its caller from here. Which MODEL produced
- * that caller is decided by `cutover_mode` and by nothing else — there is no
- * dual-write, no read model, and no second code path through the app. That is
- * what makes the flip a flag change rather than a deploy, and the rollback a
- * flag change rather than a reconciliation.
- */
-
-/**
- * Legacy facts, shaped as an `AuthContext`.
- *
- * The capability set here deliberately REPRODUCES THE OLD RANK LADDER: a board
- * caller gets `member` as well as `board`, exactly as `requireRole(ctx,
- * 'homeowner')` used to let them through. This is the whole reason the flip is
- * safe to land ahead of the flag: with `cutover_mode = legacy` the site behaves
- * bit-for-bit as it did before, including the behaviors derived authorization
- * deliberately removes.
- *
- * Those removals — a board member who owns no Lot losing the free pass into
- * `/api/member/*` — appear at the moment the flag flips, which is where the
- * allow-list in #206 expects them and where the announcement to residents has
- * already accounted for them. Not before, and not scattered across whichever
- * routes got migrated first.
- *
- * `personId` is null and `hasCurrentBoardTerm` false because legacy has no
- * Person and no Board Term. Neither is consulted by any legacy-mode guard.
- */
-export function legacyAuthContext(
-  userId: string,
-  role: Role,
-  lotIds: string[],
-): AuthContext {
-  const capabilities = new Set<Capability>();
-  if (role === 'board') {
-    capabilities.add('board');
-    capabilities.add('member');
-  } else if (role === 'homeowner') {
-    capabilities.add('member');
-  }
-  return {
-    userId,
-    personId: null,
-    capabilities,
-    lotIds,
-    contentTier: role,
-    hasCurrentBoardTerm: false,
-  };
-}
+import type { AuthContext } from './guards';
 
 /** Derived facts, shaped as an `AuthContext`. */
 export function derivedContext(access: DerivedAccess): AuthContext {
@@ -72,84 +15,24 @@ export function derivedContext(access: DerivedAccess): AuthContext {
   };
 }
 
-/** The legacy links half: active-property links for one account. */
-async function activeLinkedPropertyIds(
-  env: Env,
-  userId: string,
-): Promise<string[]> {
-  const links = await getDb(env)
-    .select({ propertyId: userPropertyLinks.propertyId })
-    .from(userPropertyLinks)
-    .innerJoin(properties, eq(userPropertyLinks.propertyId, properties.id))
-    .where(
-      and(
-        eq(userPropertyLinks.userId, userId),
-        eq(properties.status, 'active'),
-      ),
-    );
-  return links.map((l) => l.propertyId);
-}
-
-const coerceRole = (rawRole: unknown): Role =>
-  typeof rawRole === 'string' && VALID_ROLES.has(rawRole)
-    ? (rawRole as Role)
-    : 'visitor';
-
-/** Read the legacy roster facts for an authenticated account. */
-async function readLegacyFacts(
-  env: Env,
-  userId: string,
-  rawRole: unknown,
-): Promise<AuthContext> {
-  return legacyAuthContext(
-    userId,
-    coerceRole(rawRole),
-    await activeLinkedPropertyIds(env, userId),
-  );
-}
-
-/**
- * Resolve the caller for this request.
- *
- * Returns null only for an anonymous caller — no session. An authenticated
- * caller always yields a context, even one with no capabilities at all, so
- * routes can tell "nobody is signed in" (401) apart from "you are signed in and
- * this is not yours" (403). Under `derived`, an authenticated account with no
- * current Person Link is exactly that second case: `capabilities` is empty and
- * `contentTier` is `visitor`, and the gates answer 403.
- *
- * A derivation error PROPAGATES. It must never be caught into a visitor
- * context: a transient D1 failure presenting a linked board member as anonymous
- * would look exactly like a permissions bug, and would be diagnosed as one.
- */
+/** Resolve every authenticated caller from current roster facts. Database errors
+ * propagate rather than turning a temporarily unreadable grant into a denial. */
 export async function getAuthContext(
   request: Request,
   env: Env,
   associationDay: string,
 ): Promise<AuthContext | null> {
-  const auth = createAuth(env);
-  const result = await auth.api.getSession({ headers: request.headers });
+  const result = await createAuth(env).api.getSession({
+    headers: request.headers,
+  });
   if (!result) return null;
-
-  const mode = await getCutoverMode(env);
-  if (mode === 'derived') {
-    const access = await deriveAccess(env, result.user.id, associationDay);
-    // A live Board grant that failed re-validation was refused by derivation;
-    // record the finding as a day-idempotent Access Event (#217's decision,
-    // implemented in 3b). Only when derived is the SERVING model — under
-    // `legacy` the caller was not actually denied anything.
-    if (access.invalidBoardGrantId) {
-      await recordGrantRevalidationDenial(env, {
-        accountId: result.user.id,
-        grantId: access.invalidBoardGrantId,
-        associationDay,
-      });
-    }
-    return derivedContext(access);
+  const access = await deriveAccess(env, result.user.id, associationDay);
+  if (access.invalidBoardGrantId) {
+    await recordGrantRevalidationDenial(env, {
+      accountId: result.user.id,
+      grantId: access.invalidBoardGrantId,
+      associationDay,
+    });
   }
-  return readLegacyFacts(
-    env,
-    result.user.id,
-    (result.user as { role?: unknown }).role,
-  );
+  return derivedContext(access);
 }

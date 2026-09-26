@@ -1,3 +1,4 @@
+import { seedAccountLink } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { asc, eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -20,23 +21,23 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  properties,
+  lots,
   settings,
-  userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
 const now = new Date('2026-08-05T12:00:00Z');
-const homeowner: AuthContext = legacyAuthContext('caller-user', 'homeowner', [
+const homeowner: AuthContext = callerContext('caller-user', 'homeowner', [
   'property-own',
 ]);
-const board: AuthContext = legacyAuthContext('board-user', 'board', []);
+homeowner.personId = 'owner-own';
+const board: AuthContext = callerContext('board-user', 'board', []);
 
 beforeEach(async () => {
   const db = getDb(env);
@@ -49,13 +50,14 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(userPropertyLinks);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
+  await env.DATABASE.prepare('DELETE FROM person_links').run();
+  await env.DATABASE.prepare('DELETE FROM person_verifications').run();
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(settings);
   await db.delete(users);
 
@@ -73,7 +75,7 @@ beforeEach(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  await db.insert(properties).values({
+  await db.insert(lots).values({
     id: 'property-own',
     address: '1 Ashebrook Lane',
     addressNormalized: '1 ashebrook lane',
@@ -81,13 +83,6 @@ beforeEach(async () => {
     voteWeight: 70,
     createdAt: now,
     updatedAt: now,
-  });
-  await db.insert(userPropertyLinks).values({
-    id: 'link-own',
-    userId: 'caller-user',
-    propertyId: 'property-own',
-    verifiedAt: now,
-    method: 'board_manual',
   });
   // #248 part 2: the caster is a roster Person holding a current Ownership.
   await db.insert(parties).values({
@@ -112,6 +107,7 @@ beforeEach(async () => {
     createdAt: now,
     updatedAt: now,
   });
+  await seedAccountLink('caller-user', 'owner-own');
   await db.insert(meetings).values({
     id: 'meeting-open',
     body: 'member',

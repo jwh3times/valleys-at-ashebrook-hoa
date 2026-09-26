@@ -7,7 +7,7 @@ import {
   lotRecordEvents,
   settings,
 } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
 import { seedProperty, truncateAll } from './fixtures';
 
@@ -21,8 +21,8 @@ import { seedProperty, truncateAll } from './fixtures';
  * number nobody meant.
  */
 
-const board = legacyAuthContext('board-1', 'board', []);
-const homeowner = legacyAuthContext('owner-1', 'homeowner', ['lot-a']);
+const board = callerContext('board-1', 'board', []);
+const homeowner = callerContext('owner-1', 'homeowner', ['lot-a']);
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -33,7 +33,7 @@ const nextKey = () => `op-${++keySequence}`;
 
 function post(
   body: Record<string, unknown>,
-  ctx: ReturnType<typeof legacyAuthContext> | null = board,
+  ctx: ReturnType<typeof callerContext> | null = board,
 ) {
   return POST({
     request: new Request('http://localhost/api/admin/dues-ledger', {
@@ -45,10 +45,7 @@ function post(
   } as never) as Promise<Response>;
 }
 
-function get(
-  query = '',
-  ctx: ReturnType<typeof legacyAuthContext> | null = board,
-) {
+function get(query = '', ctx: ReturnType<typeof callerContext> | null = board) {
   const url = `http://localhost/api/admin/dues-ledger${query}`;
   return GET({
     request: new Request(url),

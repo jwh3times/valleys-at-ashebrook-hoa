@@ -6,6 +6,20 @@ been bitten. Read this before writing a migration or running one against product
 Migrations are applied locally with `npm run db:migrate:local` via Wrangler, which tracks applied
 files in D1 independently of Drizzle's `meta/` snapshots.
 
+## Phase 4 contract (`0037`)
+
+The migration and matching Worker must ship under the operator write freeze. Confirm private
+legacy-note preservation first, export a recovery copy, and rehearse against an isolated local
+copy. Apply the migration only through `npm run db:migrate:remote`, then deploy the matching
+Worker and validate the 17 invariants, foreign keys, public reads, and authorized access before
+ending the freeze. Both production actions require explicit confirmation. There is no legacy
+mode rollback afterward. Any disaster recovery is a separate operator decision. Public reads
+need the matching table names during deployment even though the freeze permits those reads.
+
+`0037` drops obsolete roster/verification/link/shadow tables, renames Lots and Board Terms,
+removes the mode row, and neutralizes Better Auth's required role field. It preserves the
+`write_freeze` row, audit ledger/views, and surviving foreign keys through SQLite renames.
+
 ## The rules that bite
 
 **The directory is what runs.** `wrangler d1 migrations apply` reads every `.sql` file under
@@ -129,6 +143,7 @@ which migration introduced a shape without reading every file.
 | `0034`        | `lot_violations` (the first Lot Record type) and `lot_record_events` (the append-only event log every Lot Record type shares) — ADR 0024, #291 slice 1. Purely additive; safe in either order — the feature stays unreachable behind the default-off `lotRecordsEnabled` gate regardless of when it applies.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `0035`        | Rebuilds `lot_record_events` to bound `reason_code` to `LOT_RECORD_REASON_CODES` (ADR 0024, #291 slice 2). Additive in effect and safe in either order with the deploy — with `0035` unapplied the column is still free text and the route only ever writes values from the list. No FK PRAGMA: the table has no FK of its own, nothing references it, and no view reads it.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `0036`        | Creates `dues_ledger_entries` (the second Lot Record type, ADR 0025, #295 slice 1) and rebuilds `lot_record_events` a second time, widening its `record_type` CHECK to admit it and adding a pair CHECK that a `dues_ledger_entries` subject may only carry `action = 'created'`. Purely additive in effect and safe in either order with the deploy — this slice ships no write route, so nothing depends on the new table yet, and `lotRecordsEnabled` stays default-off regardless. No FK PRAGMA, for the same reason as `0035`: `lot_record_events` has no FK of its own, nothing references it, and no view reads it — `dues_ledger_entries` itself carries ordinary FKs (`lot_id` to `properties`, a self-reference on `reverses_entry_id`) that need no deferral since the table is new. |
+| `0037`        | ADR 0022 contract: drops obsolete roster, verification, link, and shadow tables; renames `properties` to `lots` and `board_service_terms` to `board_terms`; removes `cutover_mode` and neutralizes `users.role`. Requires the matching Worker under the write freeze; see above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ### `0024`-`0029`: the table-rebuild migrations
 

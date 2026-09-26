@@ -9,13 +9,11 @@ import {
   type AnySQLiteColumn,
 } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import { users } from './auth-schema';
 // #248: the meeting, proxies, and elections records name WHO ACTED, and that
 // identity is now the party roster's Person. This makes the two schema modules
-// mutually dependent — roster-schema imports `properties`/`elections` from
+// mutually dependent — roster-schema imports `lots`/`elections` from
 // here — which is safe only because every `references()` is a thunk Drizzle
-// calls after both modules have evaluated. Phase 4 (#212) is where the two
-// files should be relayered so the roster is unambiguously the foundation.
+// calls after both modules have evaluated. Keep cross-module references lazy.
 import { people } from './roster-schema';
 // ADR 0024 (#291): the Lot Record vocabulary lives in the pure types module so
 // these table definitions, the `src/server/lot-records/` module, and the admin
@@ -35,8 +33,8 @@ import {
 // Re-export the Better-Auth-generated tables so one schema covers everything.
 export * from './auth-schema';
 
-export const properties = sqliteTable(
-  'properties',
+export const lots = sqliteTable(
+  'lots',
   {
     id: text('id').primaryKey(),
     address: text('address').notNull(),
@@ -69,148 +67,6 @@ export const properties = sqliteTable(
   // a duplicate would make findActivePropertyByAddress pick an arbitrary row.
   (t) => [
     uniqueIndex('properties_address_normalized_unq').on(t.addressNormalized),
-  ],
-);
-
-export const owners = sqliteTable(
-  'owners',
-  {
-    id: text('id').primaryKey(),
-    propertyId: text('property_id')
-      .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
-    fullName: text('full_name').notNull(),
-    phone: text('phone'),
-    email: text('email'),
-    status: text('status', { enum: ['active', 'inactive'] })
-      .notNull()
-      .default('active'),
-    notes: text('notes'),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-  },
-  // Owners are read per home (roster nesting, verification fan-out).
-  (t) => [index('owners_property_id_idx').on(t.propertyId)],
-);
-
-export const userPropertyLinks = sqliteTable(
-  'user_property_links',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    propertyId: text('property_id')
-      .notNull()
-      .references(() => properties.id, { onDelete: 'cascade' }),
-    verifiedAt: integer('verified_at', { mode: 'timestamp' }).notNull(),
-    method: text('method', {
-      enum: ['otp_email', 'otp_sms', 'board_manual'],
-    }).notNull(),
-  },
-  // One link per (user, home) — re-verifying the same home must not accumulate
-  // duplicate rows. Also serves the by-user lookup (getAuthContext) as the
-  // leftmost-prefix of the composite, so no separate user_id index is needed.
-  (t) => [
-    uniqueIndex('user_property_links_user_property_unq').on(
-      t.userId,
-      t.propertyId,
-    ),
-  ],
-);
-
-export const propertyVerifications = sqliteTable(
-  'property_verifications',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    propertyId: text('property_id')
-      .notNull()
-      .references(() => properties.id, { onDelete: 'cascade' }),
-    channel: text('channel', { enum: ['email', 'sms'] }).notNull(),
-    codeHash: text('code_hash').notNull(),
-    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-    attempts: integer('attempts').notNull().default(0),
-    consumedAt: integer('consumed_at', { mode: 'timestamp' }),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  },
-  // The request/confirm flow reads and deletes pending codes by user.
-  (t) => [index('property_verifications_user_id_idx').on(t.userId)],
-);
-
-export const manualApprovalQueue = sqliteTable(
-  'manual_approval_queue',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    claimedAddress: text('claimed_address').notNull(),
-    reason: text('reason').notNull(),
-    status: text('status', { enum: ['pending', 'approved', 'denied'] })
-      .notNull()
-      .default('pending'),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  },
-  // Write-dead since v0.10.0. The Members panel that read the pending rows was
-  // deleted (#212); only the retention sweep in cleanup/verification.ts still
-  // touches it, until phase 4's migration drops the table.
-  (t) => [index('manual_approval_queue_status_idx').on(t.status)],
-);
-
-// The board record's identity layer. A person and a term of service are
-// separate rows: votes, motions, and attendance (PR 2) reference the *person*,
-// so a member who serves, leaves, and returns keeps one identity and one
-// voting history across both terms. Deliberately independent of Better Auth
-// `user` rows — demoting a site account must not rewrite who served, and a
-// member may serve with no login at all.
-export const boardPeople = sqliteTable('board_people', {
-  id: text('id').primaryKey(),
-  fullName: text('full_name').notNull(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-});
-
-export const boardTerms = sqliteTable(
-  'board_terms',
-  {
-    id: text('id').primaryKey(),
-    personId: text('person_id')
-      .notNull()
-      // Service history is the record; deleting a person who has served is
-      // refused. The route pre-checks and 409s, with this as defense in depth.
-      .references(() => boardPeople.id, { onDelete: 'restrict' }),
-    title: text('title'),
-    // Provenance: which election produced this term. Null for a term entered
-    // by hand. This is also how `uncertify` finds the terms certification
-    // created.
-    //
-    // TRAP: this is an ALTER TABLE ADD COLUMN, and drizzle-kit emits FK
-    // actions only on CREATE TABLE. The live column will get NO ACTION
-    // regardless of the annotation below — which is not inert the way
-    // deferred constraints would make it, since NO ACTION *errors* on a
-    // referenced-row delete where SET NULL would silently null this column
-    // instead; that's why two test files must clear it in `beforeEach`.
-    // Unreachable in production regardless: only draft elections are
-    // deletable, and a draft election has no terms. Do not trust the
-    // annotation for this column. Pinned by a test in
-    // test/server/election-schema.test.ts rather than hand-patched.
-    electionId: text('election_id').references(() => elections.id, {
-      onDelete: 'set null',
-    }),
-    termStart: text('term_start').notNull(),
-    termEnd: text('term_end'),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-  },
-  // Terms are read per person (roster nesting); the open-term lookup is
-  // "who is serving now" = WHERE term_end IS NULL.
-  (t) => [
-    index('board_terms_person_id_idx').on(t.personId),
-    index('board_terms_term_end_idx').on(t.termEnd),
   ],
 );
 
@@ -333,7 +189,7 @@ export const motionEligibility = sqliteTable(
       .references(() => motions.id, { onDelete: 'cascade' }),
     propertyId: text('property_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     weight: integer('weight').notNull(),
   },
   (t) => [
@@ -378,7 +234,7 @@ export const memberAttendance = sqliteTable(
       .references(() => meetings.id, { onDelete: 'cascade' }),
     propertyId: text('property_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     present: integer('present', { mode: 'boolean' }).notNull(),
     // #248 part 2: WHO ACTED is the party roster's Person, not a legacy
     // `owners` row. SET NULL is retained deliberately — see the ballots and
@@ -390,7 +246,7 @@ export const memberAttendance = sqliteTable(
     // No ON DELETE action, and since #248 part 2 that is a DECISION rather
     // than an artifact. It began as one: the column was added by ALTER TABLE
     // in 0014, and drizzle-kit silently drops the action on an ALTER-added FK
-    // (same trap as properties.vote_weight and board_terms.election_id).
+    // (same trap as lots.vote_weight and board_terms.election_id).
     // Migration 0029 rebuilds this table and could have written any action, so
     // it re-declares NO ACTION on purpose — deleting a used proxy is refused
     // by the DELETE pre-check in /api/admin/proxies (ADR 0018, deletion IS the
@@ -423,12 +279,12 @@ export const memberVotes = sqliteTable(
       .references(() => motions.id, { onDelete: 'cascade' }),
     propertyId: text('property_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     // #248 part 2: repointed off `owners` onto the party roster's Person.
     castByPersonId: text('cast_by_person_id').references(() => people.partyId, {
       onDelete: 'set null',
     }),
-    // Snapshot of properties.vote_weight when this vote was recorded.
+    // Snapshot of lots.vote_weight when this vote was recorded.
     // Correcting a property's weight later must not silently rewrite past
     // tallies — same reasoning as reports.sources_json.
     weight: integer('weight').notNull(),
@@ -438,7 +294,7 @@ export const memberVotes = sqliteTable(
     // No ON DELETE action, and since #248 part 2 that is a DECISION rather
     // than an artifact. It began as one: the column was added by ALTER TABLE
     // in 0014, and drizzle-kit silently drops the action on an ALTER-added FK
-    // (same trap as properties.vote_weight and board_terms.election_id).
+    // (same trap as lots.vote_weight and board_terms.election_id).
     // Migration 0029 rebuilds this table and could have written any action, so
     // it re-declares NO ACTION on purpose — deleting a used proxy is refused
     // by the DELETE pre-check in /api/admin/proxies (ADR 0018, deletion IS the
@@ -565,7 +421,7 @@ export const lotViolations = sqliteTable(
     id: text('id').primaryKey(),
     lotId: text('lot_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     category: text('category', {
       enum: LOT_VIOLATION_CATEGORIES,
     }).notNull(),
@@ -629,7 +485,7 @@ export const duesLedgerEntries = sqliteTable(
     id: text('id').primaryKey(),
     lotId: text('lot_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     kind: text('kind', { enum: DUES_LEDGER_KINDS }).notNull(),
     /** Integer CENTS, signed. Never a float, never parsed with `||`. */
     amountCents: integer('amount_cents').notNull(),
@@ -914,7 +770,7 @@ export const electionEligibility = sqliteTable(
       .references(() => elections.id, { onDelete: 'cascade' }),
     propertyId: text('property_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     weight: integer('weight').notNull(),
   },
   (t) => [
@@ -1008,8 +864,8 @@ export const ballots = sqliteTable(
       .references(() => elections.id, { onDelete: 'cascade' }),
     propertyId: text('property_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
-    // Snapshot of properties.vote_weight, per ADR 0015, so correcting a lot's
+      .references(() => lots.id, { onDelete: 'restrict' }),
+    // Snapshot of lots.vote_weight, per ADR 0015, so correcting a lot's
     // weight later cannot rewrite a past turnout figure.
     weight: integer('weight').notNull(),
     // #248 part 2: repointed off `owners` onto the party roster's Person.
@@ -1020,7 +876,7 @@ export const ballots = sqliteTable(
     // No ON DELETE action, and since #248 part 2 that is a DECISION rather
     // than an artifact. It began as one: the column was added by ALTER TABLE
     // in 0014, and drizzle-kit silently drops the action on an ALTER-added FK
-    // (same trap as properties.vote_weight and board_terms.election_id).
+    // (same trap as lots.vote_weight and board_terms.election_id).
     // Migration 0029 rebuilds this table and could have written any action, so
     // it re-declares NO ACTION on purpose — deleting a used proxy is refused
     // by the DELETE pre-check in /api/admin/proxies (ADR 0018, deletion IS the
@@ -1064,7 +920,7 @@ export const proxies = sqliteTable(
     id: text('id').primaryKey(),
     propertyId: text('property_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     // #248 part 2: the grantor is a roster Person. A plain FK to
     // `people(party_id)` is how this schema says "must be a Person" — the
     // pattern `person_verifications.person_id` already sets. For an

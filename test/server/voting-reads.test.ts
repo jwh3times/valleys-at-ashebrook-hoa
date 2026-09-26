@@ -17,9 +17,8 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  properties,
+  lots,
   proxies,
-  userPropertyLinks,
 } from '../../src/server/db/schema';
 import {
   parties,
@@ -34,7 +33,7 @@ import {
   fetchMeetingFor,
 } from '../../src/server/content/reads';
 import { fetchOpenVotingFor } from '../../src/server/content/voting-reads';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -43,16 +42,13 @@ beforeAll(async () => {
 const now = new Date('2026-08-05T12:00:00Z');
 
 // lotIds is deliberately left EMPTY. getAuthContext populates it by
-// inner-joining `properties` and filtering to status = 'active', so a lot
+// inner-joining `lots` and filtering to status = 'active', so a lot
 // deactivated after an occasion opened would be missing from it in
 // production. fetchOpenVotingFor must resolve lots from user_property_links
 // instead (ADR 0020's frozen electorate), and seeding an empty set here is
 // what proves it no longer reads this field.
-const homeowner: AuthContext = legacyAuthContext(
-  'homeowner-user',
-  'homeowner',
-  [],
-);
+const homeowner: AuthContext = callerContext('homeowner-user', 'homeowner', []);
+homeowner.personId = 'owner-one';
 const derivedHomeowner: AuthContext = {
   userId: 'homeowner-user',
   personId: 'owner-one',
@@ -74,16 +70,15 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(userPropertyLinks);
   await db.delete(personLinks);
   await db.delete(personVerifications);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.update(parties).set({ consolidatedIntoPartyId: null });
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(users);
 
   await db.insert(users).values({
@@ -97,7 +92,7 @@ beforeEach(async () => {
   });
 
   await db
-    .insert(properties)
+    .insert(lots)
     .values([
       property('property-own', '1 Ashebrook Lane', 70),
       property('property-held', '2 Ashebrook Lane', 30),
@@ -105,13 +100,6 @@ beforeEach(async () => {
       property('property-no-snapshot', '4 Ashebrook Lane', 50),
       property('property-unrepresented', '5 Ashebrook Lane', 90),
     ]);
-  await db.insert(userPropertyLinks).values({
-    id: 'link-own',
-    userId: 'homeowner-user',
-    propertyId: 'property-own',
-    verifiedAt: now,
-    method: 'otp_email',
-  });
   await seedPersons([
     person('owner-one', 'property-own', 'Alex Owner'),
     person('owner-two', 'property-own', 'Blair Owner'),
@@ -121,6 +109,7 @@ beforeEach(async () => {
     person('grantor-no-snapshot', 'property-no-snapshot', 'Emery Grantor'),
     person('grantor-unrepresented', 'property-unrepresented', 'Finley Grantor'),
   ]);
+  await linkAccount('homeowner-user', 'owner-one');
   await db
     .insert(meetings)
     .values([
@@ -294,15 +283,13 @@ beforeEach(async () => {
   // immutable snapshot above and must not re-qualify a snapshotted lot by its
   // current status or weight.
   await db
-    .update(properties)
+    .update(lots)
     .set({ status: 'inactive', voteWeight: 700 })
-    .where(eq(properties.id, 'property-own'));
+    .where(eq(lots.id, 'property-own'));
 });
 
 describe('fetchOpenVotingFor', () => {
   it("derives a linked Person's own lots from roster authority without legacy mirrors", async () => {
-    const db = getDb(env);
-    await db.delete(userPropertyLinks);
     await linkAccount('homeowner-user', 'owner-one');
 
     const items = await fetchOpenVotingFor(env, derivedHomeowner);
@@ -325,7 +312,6 @@ describe('fetchOpenVotingFor', () => {
 
   it('uses the survivor when the linked Person was consolidated', async () => {
     const db = getDb(env);
-    await db.delete(userPropertyLinks);
     await seedPersons([
       person('owner-duplicate', 'property-unrepresented', 'Duplicate Owner'),
     ]);
@@ -472,9 +458,9 @@ describe('fetchOpenVotingFor', () => {
     // the caller's held-proxy list via the no-lots early return, so a lot
     // going inactive silently removed authority over an unrelated lot.
     const own = await getDb(env)
-      .select({ status: properties.status })
-      .from(properties)
-      .where(eq(properties.id, 'property-own'));
+      .select({ status: lots.status })
+      .from(lots)
+      .where(eq(lots.id, 'property-own'));
     expect(own[0].status).toBe('inactive');
 
     const items = await fetchOpenVotingFor(env, homeowner);
@@ -499,7 +485,7 @@ describe('fetchOpenVotingFor', () => {
     expect(
       await fetchOpenVotingFor(
         env,
-        legacyAuthContext('unverified-user', 'homeowner', []),
+        callerContext('unverified-user', 'homeowner', []),
       ),
     ).toEqual([]);
   });
@@ -577,6 +563,10 @@ async function seedPersons(specs: PersonSpec[]) {
 
 async function linkAccount(accountId: string, personId: string) {
   const db = getDb(env);
+  await db.delete(personLinks).where(eq(personLinks.accountId, accountId));
+  await db
+    .delete(personVerifications)
+    .where(eq(personVerifications.accountId, accountId));
   await db.insert(personVerifications).values({
     id: `verification-${accountId}`,
     accountId,

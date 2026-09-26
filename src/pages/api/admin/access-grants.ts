@@ -13,10 +13,7 @@ import {
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { users } from '../../../server/db/auth-schema';
-import {
-  accessGrants,
-  boardServiceTerms,
-} from '../../../server/db/roster-schema';
+import { accessGrants, boardTerms } from '../../../server/db/roster-schema';
 import { associationDateIso } from '../../../lib/format';
 import {
   AuditCorrelation,
@@ -99,8 +96,8 @@ async function grantAccess(body: unknown, ctx: AuthContext): Promise<Response> {
   if (grantType === 'board') {
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, qualifyingBoardTermId))
+      .from(boardTerms)
+      .where(eq(boardTerms.id, qualifyingBoardTermId))
       .limit(1);
     if (!term) return new Response('Term not found', { status: 404 });
     // The same predicate derivation re-validates on every request: a

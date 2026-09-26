@@ -3,13 +3,13 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { PUT as putSite } from '../../src/pages/api/admin/site';
 import { PUT as putDues } from '../../src/pages/api/admin/dues';
 import { PATCH as patchDocument } from '../../src/pages/api/admin/documents';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 /**
  * Small contract failures on board-only routes, each of which answered with

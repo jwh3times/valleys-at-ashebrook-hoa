@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-07-08
 
+**Phase 4 implementation note (#212):** Verification now links an account to one Person through a uniquely attributable roster contact. The address-only legacy backend and property-link tables are removed. See [ADR 0022](./0022-party-roster-derived-access.md).
+
 ## Context
 
 Homeowner-only content needs an authorization boundary, but the app is operated by

@@ -10,7 +10,7 @@ const callerState = vi.hoisted(() => ({ userId: 'msguser' }));
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    legacyAuthContext(callerState.userId, 'homeowner', []),
+    callerContext(callerState.userId, 'homeowner', []),
 }));
 vi.mock('../../src/server/authz/turnstile', () => ({
   verifyTurnstile: async () => true,
@@ -26,8 +26,7 @@ import {
 } from '../../src/pages/api/verify/request';
 import { sendEmail } from '../../src/server/auth/senders';
 import { getDb } from '../../src/server/db/client';
-import { properties, owners, users } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 import { resetRoster, seedRoster } from './dual-fixtures';
 
@@ -49,58 +48,6 @@ function req(body: Record<string, unknown>) {
 // backends (D1), and D2's uniform response applies to a successful match too
 // — the caller learns nothing beyond "a code may have been sent."
 
-describe('POST /api/verify/request OTP message — legacy backend', () => {
-  beforeAll(async () => {
-    const now = new Date();
-    await getDb(env).insert(users).values({
-      id: 'msguser',
-      name: 'Req Uester',
-      email: 'requester@example.com',
-      role: 'homeowner',
-    });
-    await getDb(env).insert(properties).values({
-      id: 'msg-prop',
-      address: '9 Message Ln',
-      addressNormalized: '9 message ln',
-      unit: null,
-      status: 'active',
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await getDb(env).insert(owners).values({
-      id: 'msg-own',
-      propertyId: 'msg-prop',
-      fullName: 'Message Owner',
-      phone: null,
-      email: 'owner@example.com',
-      status: 'active',
-      notes: null,
-      createdAt: now,
-      updatedAt: now,
-    });
-  });
-
-  it('names the masked requester and still carries the code', async () => {
-    const res = await req({
-      address: '9 Message Ln',
-      name: '',
-      channel: 'email',
-      turnstileToken: 't',
-    });
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual(UNIFORM_REQUEST_RESPONSE);
-    expect(sendEmail).toHaveBeenCalled();
-    const message = (sendEmail as ReturnType<typeof vi.fn>).mock
-      .calls[0][3] as string;
-    // The 6-digit code is present...
-    expect(message).toMatch(/\b\d{6}\b/);
-    // ...and the requester is named, masked (never the full address).
-    expect(message).toContain('r***@example.com');
-    expect(message).not.toContain('requester@example.com');
-  });
-});
-
 describe('POST /api/verify/request OTP message — derived backend', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -109,9 +56,6 @@ describe('POST /api/verify/request OTP message — derived backend', () => {
     await resetRoster();
     await getDb(env).run(sql.raw('DELETE FROM users'));
     await getDb(env).delete(cutoverSettings);
-    await getDb(env)
-      .insert(cutoverSettings)
-      .values({ key: 'cutover_mode', value: 'derived', updatedAt: new Date() });
 
     await seedRoster({
       lots: [

@@ -1,7 +1,14 @@
 # ADR 0022: A Party Roster Separates Identity, Ownership, Representation, Service, and Access
 
-**Status:** Accepted
+**Status:** Implemented in code; production contract application pending (#212)
 **Date:** 2026-08-12
+
+**Implementation note (phase 4, #212):** The permanent schema uses `lots` and `board_terms`.
+The legacy authorization and verification branches, link/role mirrors, shadow table, and
+one-time import/backfill tools are removed. Better Auth still requires `users.role`, so migration
+`0037` neutralizes it instead of dropping it. The write freeze and invariant/permission/privacy
+checks remain permanent. Production application is a separately confirmed operator action;
+see [the migration contract](../agents/migrations.md#phase-4-contract-0037).
 
 ## Context
 

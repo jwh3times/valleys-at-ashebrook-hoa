@@ -5,7 +5,7 @@ import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 
 let role: 'visitor' | 'homeowner' | 'board' | null = null;
-// Only getAuthContext is stubbed. legacyAuthContext stays real, so these
+// Only getAuthContext is stubbed. callerContext stays real, so these
 // fixtures are built by the same synthesis production uses rather than by a
 // hand-written shape that could drift from it.
 vi.mock('../../src/server/authz/context', async (importActual) => ({
@@ -13,10 +13,7 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
   getAuthContext: vi.fn(),
 }));
 
-import {
-  getAuthContext,
-  legacyAuthContext,
-} from '../../src/server/authz/context';
+import { getAuthContext } from '../../src/server/authz/context';
 import { onRequest } from '../../src/middleware';
 
 beforeAll(async () => {
@@ -27,7 +24,7 @@ beforeEach(async () => {
   role = null;
   vi.mocked(getAuthContext).mockReset();
   vi.mocked(getAuthContext).mockImplementation(async () =>
-    role === null ? null : legacyAuthContext('u1', role, []),
+    role === null ? null : callerContext('u1', role, []),
   );
   await getDb(env).delete(settings).where(eq(settings.key, 'site'));
 });
@@ -176,13 +173,13 @@ describe('live-voting route protection', () => {
     expect(vi.mocked(getAuthContext).mock.calls.length).toBe(2);
   });
 
-  it('passes homeowner and board rank after both flags', async () => {
+  it('requires member capability after both flags', async () => {
     await setSiteSettings(true, true);
     for (const allowedRole of ['homeowner', 'board'] as const) {
       role = allowedRole;
       const { res, reached } = await run('/api/vote', validVotingRequest);
-      expect(res.status, `${allowedRole} should pass`).toBe(200);
-      expect(reached).toBe(true);
+      expect(res.status).toBe(allowedRole === 'homeowner' ? 200 : 403);
+      expect(reached).toBe(allowedRole === 'homeowner');
     }
   });
 
@@ -200,3 +197,5 @@ describe('live-voting route protection', () => {
     expect(reached).toBe(true);
   });
 });
+
+import { callerContext } from './caller-context';

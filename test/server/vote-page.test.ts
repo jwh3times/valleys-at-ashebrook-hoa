@@ -1,3 +1,5 @@
+import { seedRosterOwner } from './roster-fixtures';
+import { seedAccountLink } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
@@ -14,13 +16,12 @@ import {
   motionEligibility,
   motions,
   meetings,
-  properties,
+  lots,
   settings,
-  userPropertyLinks,
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { users } from '../../src/server/db/auth-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -37,13 +38,14 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(userPropertyLinks);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
+  await env.DATABASE.prepare('DELETE FROM person_links').run();
+  await env.DATABASE.prepare('DELETE FROM person_verifications').run();
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(users);
   await db.delete(settings);
 });
@@ -102,11 +104,10 @@ describe('/vote', () => {
     const container = await makeContainer();
     const html = await container.renderToString(VotePage, {
       request: new Request('http://localhost/vote'),
-      locals: localsWith(
-        true,
-        true,
-        legacyAuthContext('u1', 'homeowner', ['p1']),
-      ),
+      locals: localsWith(true, true, {
+        ...callerContext('u1', 'homeowner', ['p1']),
+        personId: 'person-u1',
+      }),
     });
     expect(html).toContain('Board election');
     expect(html).toContain('Candidate One');
@@ -117,11 +118,10 @@ describe('/vote', () => {
     const container = await makeContainer();
     const html = await container.renderToString(VotePage, {
       request: new Request('http://localhost/vote'),
-      locals: localsWith(
-        true,
-        true,
-        legacyAuthContext('u1', 'homeowner', ['p1']),
-      ),
+      locals: localsWith(true, true, {
+        ...callerContext('u1', 'homeowner', ['p1']),
+        personId: 'person-u1',
+      }),
     });
     expect(html).toContain(
       'There are no open ballots for your verified properties.',
@@ -131,7 +131,7 @@ describe('/vote', () => {
 
 async function insertOpenElection() {
   const db = getDb(env);
-  await db.insert(properties).values({
+  await db.insert(lots).values({
     id: 'p1',
     address: '101 Example Street',
     addressNormalized: '101 example street',
@@ -151,13 +151,12 @@ async function insertOpenElection() {
     createdAt: now,
     updatedAt: now,
   });
-  await db.insert(userPropertyLinks).values({
-    id: 'link-p1',
-    userId: 'u1',
+  await seedRosterOwner({
+    id: 'person-u1',
     propertyId: 'p1',
-    verifiedAt: now,
-    method: 'otp_email',
+    fullName: 'Home Owner',
   });
+  await seedAccountLink('u1', 'person-u1');
   await db.insert(elections).values({
     id: 'e1',
     title: 'Board election',

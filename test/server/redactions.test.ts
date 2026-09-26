@@ -11,7 +11,7 @@ import {
   redactionTasks,
 } from '../../src/server/db/audit-schema';
 import type { AuthContext, Capability } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { GET, POST } from '../../src/pages/api/admin/redactions';
 
 /**
@@ -557,7 +557,7 @@ describe('redactions admin route — recordCleanup', () => {
       req(
         'POST',
         { action: 'recordCleanup', taskId: 'whatever', status: 'succeeded' },
-        legacyAuthContext('b', 'board', []),
+        callerContext('b', 'board', []),
       ),
     );
     expect(res.status).toBe(403);
@@ -567,7 +567,7 @@ describe('redactions admin route — recordCleanup', () => {
 describe('redactions admin route — capability boundary', () => {
   it('refuses a plain board caller on GET and on a redact action', async () => {
     const getRes = await GET(
-      req('GET', undefined, legacyAuthContext('b', 'board', [])),
+      req('GET', undefined, callerContext('b', 'board', [])),
     );
     expect(getRes.status).toBe(403);
 
@@ -581,7 +581,7 @@ describe('redactions admin route — capability boundary', () => {
           authorityReference: 'x',
           reason: 'x',
         },
-        legacyAuthContext('b', 'board', []),
+        callerContext('b', 'board', []),
       ),
     );
     expect(postRes.status).toBe(403);

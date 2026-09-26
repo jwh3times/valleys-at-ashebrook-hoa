@@ -11,30 +11,10 @@ import {
 } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 import { users } from './auth-schema';
-import { properties, elections } from './schema';
+import { lots, elections } from './schema';
 
-// The ADR 0022 party roster: durable Lots, parties, relationships, and access.
-//
-// PHASE 1 ("expand") of the migration. Nothing in the application reads these
-// tables yet — see the phase tickets on issue #195. Two naming rules are
-// load-bearing and deliberately ugly until phase 4:
-//
-//  1. There is no `lots` table. The Lot *is* `properties`, which already holds
-//     every Lot with its identity intact; nine tables reference
-//     `properties.id`, and rebuilding all nine to change a name is exactly
-//     where this repo's drizzle FK trap bites. `lot_id` columns below therefore
-//     reference `properties.id`, and the physical rename waits for phase 4.
-//     The consequence is a feature, not a compromise: there is no Lot backfill.
-//
-//  2. Board service lives in `board_service_terms`, not `board_terms`. The
-//     legacy `board_terms` table still exists with a different shape, and every
-//     statement in this phase's migrations is `IF NOT EXISTS` — so a create
-//     under the real name would silently do nothing and surface much later as
-//     confusing column errors. Renamed in phase 4 once the legacy table drops.
-//
-// Instants are millisecond integers (matching the Better Auth tables rather
-// than the legacy app tables' seconds), and Association Days are ISO
-// `YYYY-MM-DD` text. Intervals are inclusive-start, exclusive-end.
+// Permanent party roster. Instants are milliseconds; Association Days are
+// ISO YYYY-MM-DD dates. Effective intervals include their start and exclude end.
 
 const day = (name: string) => text(name);
 const instant = (name: string) => integer(name, { mode: 'timestamp_ms' });
@@ -228,7 +208,7 @@ export const contactMethods = sqliteTable(
 // A Person or Organization owns a Lot for a period. Non-proportional: no
 // percentage, no legal subtype. Co-owners hold equal Lot Authority.
 //
-// `lot_id` references `properties.id` — see the naming note at the top.
+// `lot_id` references `lots.id` — see the naming note at the top.
 export const ownerships = sqliteTable(
   'ownerships',
   {
@@ -238,7 +218,7 @@ export const ownerships = sqliteTable(
       .references(() => parties.id, { onDelete: 'restrict' }),
     lotId: text('lot_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     // NULL only for accepted legacy history, read as negative infinity.
     // Anticipated starts are prohibited; so are anticipated *ends*, since a
     // closing can fall through and pre-recording it would strip authority
@@ -324,7 +304,7 @@ export const representationLots = sqliteTable(
       .references(() => representations.id, { onDelete: 'cascade' }),
     lotId: text('lot_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     voidedAt: instant('voided_at'),
     createdAt: instant('created_at').notNull(),
   },
@@ -484,8 +464,7 @@ export const personLinks = sqliteTable(
 // Board service
 // ---------------------------------------------------------------------------
 
-// NOTE THE TABLE NAME. See rule 2 in the header comment: this becomes
-// `board_terms` in phase 4, once the legacy table of that name is dropped.
+// `board_terms` is the permanent name after migration 0037.
 //
 // Three disjoint ending kinds, which behave differently and must not be
 // conflated:
@@ -494,8 +473,8 @@ export const personLinks = sqliteTable(
 //               the start day; no service ever occurred.
 //   voided    — `voided_at`. Recorded in error, never a fact. Excluded from
 //               composition counts, overlap checks, and every derivation.
-export const boardServiceTerms = sqliteTable(
-  'board_service_terms',
+export const boardTerms = sqliteTable(
+  'board_terms',
   {
     id: text('id').primaryKey(),
     personId: text('person_id')
@@ -503,7 +482,7 @@ export const boardServiceTerms = sqliteTable(
       .references(() => people.partyId, { onDelete: 'restrict' }),
     // NULL permitted only for accepted legacy terms that have already ended —
     // legacy recorded no qualifying Lot. A current term always names one.
-    qualifyingLotId: text('qualifying_lot_id').references(() => properties.id, {
+    qualifyingLotId: text('qualifying_lot_id').references(() => lots.id, {
       onDelete: 'restrict',
     }),
     // Which election produced this term, when one did. Created with the table,
@@ -576,7 +555,7 @@ export const boardOfficeAssignments = sqliteTable(
     id: text('id').primaryKey(),
     boardTermId: text('board_term_id')
       .notNull()
-      .references(() => boardServiceTerms.id, { onDelete: 'restrict' }),
+      .references(() => boardTerms.id, { onDelete: 'restrict' }),
     // Duplicated from the term so the overlap indexes below can be direct.
     // The composite FK keeps the pair honest.
     personId: text('person_id')
@@ -602,7 +581,7 @@ export const boardOfficeAssignments = sqliteTable(
     ),
     foreignKey({
       columns: [t.boardTermId, t.personId],
-      foreignColumns: [boardServiceTerms.id, boardServiceTerms.personId],
+      foreignColumns: [boardTerms.id, boardTerms.personId],
       name: 'board_office_assignments_term_person_fk',
     }).onDelete('restrict'),
     // Hard constraints: one current holder per office, and at most one office
@@ -639,7 +618,7 @@ export const accessGrants = sqliteTable(
       enum: ['board', 'system_admin'],
     }).notNull(),
     qualifyingBoardTermId: text('qualifying_board_term_id').references(
-      () => boardServiceTerms.id,
+      () => boardTerms.id,
       { onDelete: 'restrict' },
     ),
     startedAt: instant('started_at').notNull(),
@@ -819,7 +798,7 @@ export const verificationCodes = sqliteTable(
       .references(() => contactMethods.id, { onDelete: 'restrict' }),
     lotId: text('lot_id')
       .notNull()
-      .references(() => properties.id, { onDelete: 'restrict' }),
+      .references(() => lots.id, { onDelete: 'restrict' }),
     channel: text('channel', { enum: ['email', 'sms'] }).notNull(),
     codeHash: text('code_hash').notNull(),
     expiresAt: instant('expires_at').notNull(),

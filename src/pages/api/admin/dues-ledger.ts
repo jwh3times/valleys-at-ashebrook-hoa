@@ -139,7 +139,7 @@ function entryInsert(input: EntryInput) {
   return env.DATABASE.prepare(
     `INSERT INTO dues_ledger_entries ${ENTRY_COLUMNS}
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, 'board', NULL, NULL, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM properties WHERE properties.id = ?)
+      WHERE EXISTS (SELECT 1 FROM lots WHERE lots.id = ?)
         AND ${LOT_RECORDS_ENABLED_SQL}`,
   ).bind(
     input.id,
@@ -551,10 +551,10 @@ async function postBulkAssessment(body: unknown, accountId: string) {
   const [inserted, logged] = await env.DATABASE.batch([
     env.DATABASE.prepare(
       `INSERT INTO dues_ledger_entries ${ENTRY_COLUMNS}
-       SELECT lower(hex(randomblob(16))), properties.id, 'charge', ?, ?, ?,
+       SELECT lower(hex(randomblob(16))), lots.id, 'charge', ?, ?, ?,
               ?, NULL, NULL, 'board', NULL, NULL, ?, ?, ?
-         FROM properties
-        WHERE properties.retired_at IS NULL
+         FROM lots
+        WHERE lots.retired_at IS NULL
           AND ${LOT_RECORDS_ENABLED_SQL}
        ON CONFLICT (operation_key, lot_id) DO NOTHING`,
     ).bind(

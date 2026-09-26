@@ -15,15 +15,12 @@ import { req } from './fixtures';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: vi.fn(async (): Promise<AuthContext | null> =>
-    legacyAuthContext('b', 'board', []),
+    callerContext('b', 'board', []),
   ),
 }));
 
 import { POST } from '../../src/pages/api/admin/roster-export';
-import {
-  getAuthContext,
-  legacyAuthContext,
-} from '../../src/server/authz/context';
+import { getAuthContext } from '../../src/server/authz/context';
 import { fetchAdminRoster } from '../../src/server/roster/reads';
 import { associationDateIso } from '../../src/lib/format';
 
@@ -119,3 +116,5 @@ describe('roster-export admin route', () => {
     expect(events).toHaveLength(0);
   });
 });
+
+import { callerContext } from './caller-context';

@@ -2,7 +2,7 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { properties } from '../../src/server/db/schema';
+import { lots } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
 import { associationDateIso } from '../../src/lib/format';
 import {
@@ -12,7 +12,7 @@ import {
   ownerships,
   representations,
   representationLots,
-  boardServiceTerms,
+  boardTerms,
 } from '../../src/server/db/roster-schema';
 import { POST } from '../../src/pages/api/admin/roster-representations';
 
@@ -26,9 +26,7 @@ import { POST } from '../../src/pages/api/admin/roster-representations';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -51,7 +49,7 @@ const CLEAR = [
   'audit_events',
   'access_grants',
   'board_office_assignments',
-  'board_service_terms',
+  'board_terms',
   'representation_lots',
   'representations',
   'ownerships',
@@ -70,7 +68,7 @@ beforeEach(async () => {
     }
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw('DELETE FROM properties'));
+  await db.run(sql.raw('DELETE FROM lots'));
   await db.run(sql.raw('DELETE FROM users'));
   const now = new Date();
   await db.insert(users).values({
@@ -86,7 +84,7 @@ beforeEach(async () => {
 async function seedLot(id: string) {
   const now = new Date();
   await getDb(env)
-    .insert(properties)
+    .insert(lots)
     .values({
       id,
       address: `${id} Ashebrook Lane`,
@@ -144,7 +142,7 @@ async function seedOwnership(id: string, ownerPartyId: string, lotId: string) {
 
 async function seedTerm(id: string, personId: string, qualifyingLotId: string) {
   const now = new Date();
-  await getDb(env).insert(boardServiceTerms).values({
+  await getDb(env).insert(boardTerms).values({
     id,
     personId,
     qualifyingLotId,
@@ -321,8 +319,8 @@ describe('end', () => {
     const db = getDb(env);
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.actualEndDay).toBeNull();
     expect(term.cancelledAt).toBeNull();
     await integrityClean();
@@ -352,8 +350,8 @@ describe('end', () => {
     const db = getDb(env);
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.actualEndDay).toBe(TODAY);
     await integrityClean();
   });
@@ -405,8 +403,8 @@ describe('correctScope', () => {
 
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.actualEndDay).toBe(TODAY);
     await integrityClean();
   });
@@ -440,8 +438,8 @@ describe('void', () => {
     expect(rep.voidedAt).not.toBeNull();
     const [term] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, 'term-1'));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, 'term-1'));
     expect(term.actualEndDay).toBe(TODAY);
     await integrityClean();
   });

@@ -5,7 +5,7 @@ import { requireVotingApi } from '../../src/server/authz/voting-guards';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -33,7 +33,7 @@ function localsFor(ctx: AuthContext | null) {
   return { authContext: ctx } as unknown as App.Locals;
 }
 
-const homeowner: AuthContext = legacyAuthContext('homeowner-1', 'homeowner', [
+const homeowner: AuthContext = callerContext('homeowner-1', 'homeowner', [
   'property-1',
 ]);
 
@@ -136,12 +136,12 @@ describe('requireVotingApi', () => {
     ).toBe(401);
   });
 
-  it('rejects visitors but passes homeowner and board rank', async () => {
+  it('admits members and refuses visitors and board callers without member authority', async () => {
     const visitor = await call({
       official: true,
       live: true,
       origin: 'http://localhost',
-      ctx: legacyAuthContext('visitor-1', 'visitor', []),
+      ctx: callerContext('visitor-1', 'visitor', []),
     });
     expect(visitor.status).toBe(403);
 
@@ -157,8 +157,8 @@ describe('requireVotingApi', () => {
       official: true,
       live: true,
       origin: 'http://localhost',
-      ctx: legacyAuthContext('board-1', 'board', []),
+      ctx: callerContext('board-1', 'board', []),
     });
-    expect(board.status).toBe(200);
+    expect(board.status).toBe(403);
   });
 });

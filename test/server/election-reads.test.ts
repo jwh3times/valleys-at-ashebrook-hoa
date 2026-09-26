@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import * as fx from './fixtures';
-import { electionEligibility, properties } from '../../src/server/db/schema';
+import { electionEligibility, lots } from '../../src/server/db/schema';
 import {
   fetchElectionsFor,
   fetchAdminElections,
@@ -97,7 +97,7 @@ describe('election read helpers', () => {
     // deliberately different from p2's CURRENT voteWeight of 2 — this is
     // the snapshot ADR 0015 exists to protect. weightCast must come from
     // the stored ballots.weight (1 + 5 = 6), never from re-reading
-    // properties.voteWeight live (which would wrongly sum to 1 + 2 = 3).
+    // lots.voteWeight live (which would wrongly sum to 1 + 2 = 3).
     await seedBallot('b1', 'e1', 'p1', { weight: 1 });
     await seedBallot('b2', 'e1', 'p2', { weight: 5 });
 
@@ -133,13 +133,13 @@ describe('election read helpers', () => {
     // The live roster now says one eligible lot with weight 11. Historical
     // turnout must continue to report the two-lot, weight-3 snapshot.
     await db
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 11 })
-      .where(eq(properties.id, 'property-a'));
+      .where(eq(lots.id, 'property-a'));
     await db
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 22, status: 'inactive' })
-      .where(eq(properties.id, 'property-b'));
+      .where(eq(lots.id, 'property-b'));
 
     const publicDetail = (await fetchElectionsFor(env, 'visitor')).find(
       (election) => election.id === 'e1',
@@ -183,13 +183,13 @@ describe('election read helpers', () => {
     ]);
 
     await db
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 10 })
-      .where(eq(properties.id, 'property-a'));
+      .where(eq(lots.id, 'property-a'));
     await db
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 22, status: 'inactive' })
-      .where(eq(properties.id, 'property-b'));
+      .where(eq(lots.id, 'property-b'));
 
     const publicById = new Map(
       (await fetchElectionsFor(env, 'visitor')).map((election) => [

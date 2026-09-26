@@ -96,7 +96,7 @@ export function noOverlapGuard(
 ): SqlGuard {
   return {
     sql: `NOT EXISTS (
-      SELECT 1 FROM board_service_terms x
+      SELECT 1 FROM board_terms x
       WHERE x.${column} = ? AND x.cancelled_at IS NULL AND x.voided_at IS NULL
         AND x.start_day < ? AND ? < COALESCE(x.actual_end_day, x.scheduled_end_day)
         ${excludeTermId ? 'AND x.id <> ?' : ''}
@@ -166,7 +166,7 @@ export async function lossConsequences(
   const candidates = await input.database
     .prepare(
       `SELECT t.id, t.person_id, t.qualifying_lot_id, t.start_day, t.scheduled_end_day
-       FROM board_service_terms t
+       FROM board_terms t
        WHERE t.qualifying_lot_id IN (${placeholders})
          AND t.actual_end_day IS NULL AND t.cancelled_at IS NULL AND t.voided_at IS NULL
          AND ? < t.scheduled_end_day`,
@@ -236,14 +236,14 @@ export async function lossConsequences(
       statements.push(
         input.database
           .prepare(
-            `UPDATE board_service_terms SET qualifying_lot_id = ?, updated_at = ?
+            `UPDATE board_terms SET qualifying_lot_id = ?, updated_at = ?
              WHERE id = ? AND actual_end_day IS NULL AND cancelled_at IS NULL AND voided_at IS NULL
                AND (${canSubstitute.sql})`,
           )
           .bind(substitute, input.nowMs, term.id, ...canSubstitute.binds),
       );
       const landed: SqlGuard = {
-        sql: `EXISTS (SELECT 1 FROM board_service_terms WHERE id = ? AND qualifying_lot_id = ? AND updated_at = ?)`,
+        sql: `EXISTS (SELECT 1 FROM board_terms WHERE id = ? AND qualifying_lot_id = ? AND updated_at = ?)`,
         binds: [term.id, substitute, input.nowMs],
       };
       input.correlation.event({
@@ -275,7 +275,7 @@ export async function lossConsequences(
     statements.push(
       input.database
         .prepare(
-          `UPDATE board_service_terms SET
+          `UPDATE board_terms SET
              actual_end_day = CASE WHEN start_day < ? THEN ? ELSE NULL END,
              cancelled_day  = CASE WHEN start_day < ? THEN NULL ELSE MIN(?, date(start_day, '-1 day')) END,
              cancelled_at   = CASE WHEN start_day < ? THEN NULL ELSE ? END,
@@ -297,11 +297,11 @@ export async function lossConsequences(
     );
 
     const endedMarker: SqlGuard = {
-      sql: `EXISTS (SELECT 1 FROM board_service_terms WHERE id = ? AND updated_at = ? AND actual_end_day IS NOT NULL)`,
+      sql: `EXISTS (SELECT 1 FROM board_terms WHERE id = ? AND updated_at = ? AND actual_end_day IS NOT NULL)`,
       binds: [term.id, input.nowMs],
     };
     const cancelledMarker: SqlGuard = {
-      sql: `EXISTS (SELECT 1 FROM board_service_terms WHERE id = ? AND updated_at = ? AND cancelled_at IS NOT NULL)`,
+      sql: `EXISTS (SELECT 1 FROM board_terms WHERE id = ? AND updated_at = ? AND cancelled_at IS NOT NULL)`,
       binds: [term.id, input.nowMs],
     };
 
@@ -404,14 +404,14 @@ export async function lossConsequences(
       // The grant ends NOW, whatever day the term ended — access cannot be
       // retroactively un-exercised (#203's effective-versus-recorded split).
       const termConcluded: SqlGuard = {
-        sql: `EXISTS (SELECT 1 FROM board_service_terms WHERE id = ? AND updated_at = ? AND (actual_end_day IS NOT NULL OR cancelled_at IS NOT NULL))`,
+        sql: `EXISTS (SELECT 1 FROM board_terms WHERE id = ? AND updated_at = ? AND (actual_end_day IS NOT NULL OR cancelled_at IS NOT NULL))`,
         binds: [term.id, input.nowMs],
       };
       statements.push(
         input.database
           .prepare(
             `UPDATE access_grants SET ended_at = ?, ended_by_account_id = ?,
-               end_reason = CASE WHEN EXISTS (SELECT 1 FROM board_service_terms WHERE id = ? AND cancelled_at IS NOT NULL) THEN 'term_cancelled' ELSE 'term_ended' END
+               end_reason = CASE WHEN EXISTS (SELECT 1 FROM board_terms WHERE id = ? AND cancelled_at IS NOT NULL) THEN 'term_cancelled' ELSE 'term_ended' END
              WHERE id = ? AND ended_at IS NULL AND (${termConcluded.sql})`,
           )
           .bind(

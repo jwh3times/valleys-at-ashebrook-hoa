@@ -26,8 +26,6 @@ import type { InvariantRun } from '../../src/server/db/invariants';
 const env = {} as Env;
 
 const CLEAN_SWEEP = {
-  verificationRows: 1,
-  manualApprovalRows: 2,
   verificationCodeRows: 3,
   reviewRequestRows: 4,
 };

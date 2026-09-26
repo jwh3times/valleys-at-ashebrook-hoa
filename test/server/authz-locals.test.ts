@@ -12,10 +12,10 @@ import {
   resolveAuthContext,
   requireBoard,
 } from '../../src/server/authz/api-guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
-const boardCtx = legacyAuthContext('u1', 'board', []);
-const homeownerCtx = legacyAuthContext('u2', 'homeowner', ['p1']);
+const boardCtx = callerContext('u1', 'board', []);
+const homeownerCtx = callerContext('u2', 'homeowner', ['p1']);
 const req = new Request('http://localhost/api/admin/site');
 
 beforeEach(() => vi.mocked(getAuthContext).mockReset());

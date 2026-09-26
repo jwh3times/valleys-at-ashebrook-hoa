@@ -61,7 +61,7 @@ interface ContactRow {
 async function findLot(env: Env, address: string): Promise<LotRow | null> {
   const norm = normalizeAddress(address);
   const row = await env.DATABASE.prepare(
-    `SELECT id FROM properties
+    `SELECT id FROM lots
      WHERE address_normalized = ? AND status = 'active' AND retired_at IS NULL
      LIMIT 1`,
   )
@@ -501,40 +501,12 @@ export async function confirmPersonVerification(
     },
   });
 
-  // Write-behind mirrors (#221's pattern): never read for authorization,
-  // kept only so the legacy read model and Better Auth session stay coherent
-  // through the flip. Both are gated on the SAME primary marker as the
-  // domain rows above, so a lost race leaves neither behind either.
-  const mirrorLink = env.DATABASE.prepare(
-    `INSERT INTO user_property_links (id, user_id, property_id, verified_at, method)
-     SELECT ?, ?, ?, ?, ?
-     WHERE ${primaryGuard.sql} AND NOT EXISTS (
-       SELECT 1 FROM user_property_links WHERE user_id = ? AND property_id = ?
-     )`,
-  ).bind(
-    crypto.randomUUID(),
-    accountId,
-    row.lotId,
-    Math.floor(nowMs / 1000),
-    method,
-    ...primaryGuard.binds,
-    accountId,
-    row.lotId,
-  );
-
-  const mirrorRole = env.DATABASE.prepare(
-    `UPDATE users SET role = 'homeowner'
-     WHERE id = ? AND role = 'visitor' AND ${primaryGuard.sql}`,
-  ).bind(accountId, ...primaryGuard.binds);
-
   try {
     const results = await env.DATABASE.batch([
       primary,
       insertVerification,
       insertLink,
       ...correlation.statements,
-      mirrorLink,
-      mirrorRole,
     ]);
     if (results[0].meta.changes !== 1) return { ok: false, reason: 'mismatch' };
     return { ok: true };

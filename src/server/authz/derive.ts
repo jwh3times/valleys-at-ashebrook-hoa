@@ -3,7 +3,7 @@ import type { Capability, Role } from './guards';
 // ADR 0022 derived authorization (issue #210, phase 2).
 //
 // The serving model since the phase-3 flip: `context.ts` answers every request
-// from this module whenever `cutover_mode = derived`.
+// from this module on every request.
 //
 // Three rules this module exists to enforce, each of which the old rank ladder
 // broke:
@@ -85,7 +85,7 @@ export const CAPABILITY_SQL = `
     ) AS has_system_admin,
     EXISTS (
       SELECT 1 FROM access_grants g
-      JOIN board_service_terms t ON t.id = g.qualifying_board_term_id
+      JOIN board_terms t ON t.id = g.qualifying_board_term_id
       WHERE g.account_id = ?1
         AND g.grant_type = 'board'
         AND g.ended_at IS NULL
@@ -94,7 +94,7 @@ export const CAPABILITY_SQL = `
         AND ?2 < COALESCE(t.actual_end_day, t.scheduled_end_day)
     ) AS has_board,
     EXISTS (
-      SELECT 1 FROM board_service_terms t
+      SELECT 1 FROM board_terms t
       WHERE t.person_id = pl.person_id
         AND t.voided_at IS NULL
         AND t.cancelled_at IS NULL
@@ -103,7 +103,7 @@ export const CAPABILITY_SQL = `
     ) AS has_current_board_term,
     (
       SELECT g.id FROM access_grants g
-      LEFT JOIN board_service_terms t ON t.id = g.qualifying_board_term_id
+      LEFT JOIN board_terms t ON t.id = g.qualifying_board_term_id
       WHERE g.account_id = ?1
         AND g.grant_type = 'board'
         AND g.ended_at IS NULL
@@ -131,7 +131,7 @@ export const CAPABILITY_SQL = `
  * intersected with that same Current Ownership, so a scoped Lot the entity has
  * since sold grants nothing.
  *
- * Retired Lots are excluded. `properties.status` is deliberately not consulted:
+ * Retired Lots are excluded. `lots.status` is deliberately not consulted:
  * it remains the legacy field, and `retired_at` is the new model's answer.
  */
 export const LOT_SQL = `
@@ -171,7 +171,7 @@ export const LOT_SQL = `
         )
       )
   ) x
-  JOIN properties p ON p.id = x.lot_id
+  JOIN lots p ON p.id = x.lot_id
   WHERE p.retired_at IS NULL
 `;
 

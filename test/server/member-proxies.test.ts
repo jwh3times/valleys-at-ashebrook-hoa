@@ -5,7 +5,7 @@ import { GET, POST, DELETE } from '../../src/pages/api/member/proxies';
 import { getDb } from '../../src/server/db/client';
 import {
   settings,
-  properties,
+  lots,
   meetings,
   elections,
   proxies,
@@ -13,7 +13,7 @@ import {
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -31,7 +31,7 @@ beforeEach(async () => {
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(settings).where(eq(settings.key, 'site'));
   // Default ON for this suite; the gate's off-behavior is covered in
   // member-guards.test.ts and the meta-test.
@@ -58,13 +58,13 @@ function call(
   } as never);
 }
 
-const jane: AuthContext = legacyAuthContext('u1', 'homeowner', ['p1']);
+const jane: AuthContext = callerContext('u1', 'homeowner', ['p1']);
 
-const board: AuthContext = legacyAuthContext('b1', 'board', ['p1']);
+const board: AuthContext = callerContext('b1', 'board', ['p1']);
 
 async function seedRoster() {
   const db = getDb(env);
-  await db.insert(properties).values([
+  await db.insert(lots).values([
     {
       id: 'p1',
       address: '1 Oak St',

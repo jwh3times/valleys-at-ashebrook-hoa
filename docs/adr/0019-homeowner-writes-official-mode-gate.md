@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-08-04
 
+**Phase 4 implementation note (#212):** The official-mode gate remains. Member access and Lot Authority derive from the party roster, without a stored-role or account-to-property fallback. See [ADR 0022](./0022-party-roster-derived-access.md).
+
 ## Context
 
 PRs 1–6 record association events that happened elsewhere. PR 7b is the first surface on which a

@@ -22,7 +22,7 @@ beforeEach(async () => {
   for (const table of [
     'access_grants',
     'board_office_assignments',
-    'board_service_terms',
+    'board_terms',
     'person_links',
     'person_verifications',
     'representation_lots',
@@ -35,7 +35,7 @@ beforeEach(async () => {
   ]) {
     await db().run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db().run(sql.raw('DELETE FROM properties'));
+  await db().run(sql.raw('DELETE FROM lots'));
 });
 
 async function account(id: string) {
@@ -70,7 +70,7 @@ async function person(id: string) {
 async function lot(id: string, retired = false) {
   await db().run(
     sql.raw(
-      `INSERT INTO properties (id, address, address_normalized, status, vote_weight, retired_at, created_at, updated_at)
+      `INSERT INTO lots (id, address, address_normalized, status, vote_weight, retired_at, created_at, updated_at)
        VALUES ('${id}', '${id} Way', '${id} way', 'active', 1, ${retired ? 99 : 'NULL'}, 1, 1)`,
     ),
   );
@@ -114,7 +114,7 @@ async function term(
 ) {
   await db().run(
     sql.raw(
-      `INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, created_at, updated_at)
+      `INSERT INTO board_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, created_at, updated_at)
        VALUES ('${id}', '${personId}', ${lotId ? `'${lotId}'` : 'NULL'}, '${startDay}', '${scheduledEndDay}', 1, 1)`,
     ),
   );
@@ -323,7 +323,7 @@ describe('grants are re-validated at evaluation', () => {
     await link('a12', 'p12');
     await term('t-void', 'p12', null, '2026-01-01', '2027-01-01');
     await db().run(
-      sql`UPDATE board_service_terms SET voided_at = 99 WHERE id = 't-void'`,
+      sql`UPDATE board_terms SET voided_at = 99 WHERE id = 't-void'`,
     );
     await grant('g-void', 'a12', 'board', 't-void');
 

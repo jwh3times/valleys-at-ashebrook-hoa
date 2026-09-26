@@ -90,8 +90,8 @@ export const INVARIANT_CHECKS: Check[] = [
   {
     name: 'board_term_person_overlap',
     meaning: 'one Person holds two overlapping Board Terms',
-    sql: `SELECT a.id AS a_id, b.id AS b_id FROM board_service_terms a
-          JOIN board_service_terms b ON a.person_id = b.person_id AND a.id < b.id
+    sql: `SELECT a.id AS a_id, b.id AS b_id FROM board_terms a
+          JOIN board_terms b ON a.person_id = b.person_id AND a.id < b.id
           WHERE a.voided_at IS NULL AND b.voided_at IS NULL
             AND a.cancelled_at IS NULL AND b.cancelled_at IS NULL
             AND a.start_day < COALESCE(b.actual_end_day, b.scheduled_end_day)
@@ -100,8 +100,8 @@ export const INVARIANT_CHECKS: Check[] = [
   {
     name: 'board_term_lot_overlap',
     meaning: 'one Lot qualifies two overlapping Board Terms',
-    sql: `SELECT a.id AS a_id, b.id AS b_id FROM board_service_terms a
-          JOIN board_service_terms b ON a.qualifying_lot_id = b.qualifying_lot_id AND a.id < b.id
+    sql: `SELECT a.id AS a_id, b.id AS b_id FROM board_terms a
+          JOIN board_terms b ON a.qualifying_lot_id = b.qualifying_lot_id AND a.id < b.id
           WHERE a.voided_at IS NULL AND b.voided_at IS NULL
             AND a.cancelled_at IS NULL AND b.cancelled_at IS NULL
             AND a.start_day < COALESCE(b.actual_end_day, b.scheduled_end_day)

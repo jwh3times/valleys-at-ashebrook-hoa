@@ -87,14 +87,12 @@ npm run auth:generate     # regenerate Better Auth schema from config
 npm run sync:main         # fast-forward this checkout AND private/ to the latest default branch
 npm run bootstrap:private # clone the private ops companion into gitignored private/ via 1Password
 npm run bootstrap:env     # materialize .env/.dev.vars for this worktree
-npm run roster:import     # import owner roster for homeowner verification
 npm run secrets:put -- <NAME> # deploy one Worker secret from 1Password; never prints the value
 npm run docs:import       # generate documents-manifest.json; see SETUP.md
 npm run docs:dedupe       # dry-run document duplicate report; see SETUP.md
 npm run corpus:import     # clean-replace R2/D1 doc + rag-twin corpus import; see SETUP.md §7
 npm run ocr:scanned       # OCR scanned/"unsupported" PDF uploads into search twins
 npm run verify:invariants # ADR 0022 migration invariant gate; pass --local or --remote
-npm run roster:backfill   # ADR 0022 roster backfill; dry-run by default
 npm run deploy            # build and deploy with Wrangler
 npm run deploy:check      # dry-run the built Worker's generated Wrangler config
 ```
@@ -232,9 +230,8 @@ resolves to visitor, and unknown states resolve to the most restrictive behavior
 
 Production runs ADR 0022 **derived access**: a caller's capabilities and content tier are derived
 per request from the party roster — Person Link, Ownerships and Representations, Board Terms, and
-Access Grants. `users.role` is a **write-behind mirror, not the authority**, and is read for
-authorization nowhere outside `context.ts`'s `legacy` branch (pinned by
-`test/unit/authz-legacy-role.test.ts`). See
+Access Grants. `users.role` is a neutral Better Auth compatibility field, never site authority.
+There is no legacy authorization branch or cutover-mode switch. See
 [`roster-and-access.md`](./docs/agents/roster-and-access.md).
 
 **Every gated API namespace is gated in two places, deliberately.** `src/middleware.ts` rejects
@@ -262,7 +259,7 @@ returns `409` rather than a partial write. A successful member call is scoped ag
 caller's own lots (and active roster rows where identity matters), so the homeowner role alone
 never grants access to an arbitrary lot.
 
-**Role changes are direct D1 writes (`legacy`) or Access Grant writes (`derived`), never Better
+**Access changes are Access Grant writes, never Better
 Auth admin API calls.** The Better Auth admin plugin's impersonation, ban, and set-role endpoints
 are **not** granted to board sessions; see `src/server/auth/permissions.ts`. A board admin cannot
 escalate their own access beyond `board`.
@@ -280,11 +277,11 @@ See [`migrations.md`](./docs/agents/migrations.md) before writing or applying on
 They are deliberately distinct; conflating them in code or copy is the mistake this table exists
 to prevent. Use these words in that sense.
 
-| Term              | Is                                                                     | Lives in                                                                                                  | Has history?                                                                                   |
-| ----------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **board admin**   | An access level. Grants admin writes _and_ the top content tier.       | `access_grants` (a live `board` or `system_admin` grant); `user.role` is now only its write-behind mirror | The grant has an interval, so ending one is recorded; the mirror column is current-state only. |
-| **board member**  | A person who serves on the board.                                      | `board_service_terms` (the legacy `board_people` shape is retired for new writes)                         | Yes — the record is the point.                                                                 |
-| **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_service_terms` + `board_office_assignments`                                                        | Yes — a person may hold several, with gaps.                                                    |
+| Term              | Is                                                                     | Lives in                                                                                               | Has history?                                                                                        |
+| ----------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| **board admin**   | An access level. Grants admin writes _and_ the top content tier.       | `access_grants` (a live `board` or `system_admin` grant); `user.role` is a neutral compatibility field | The grant has an interval, so ending one is recorded; the compatibility column grants no authority. |
+| **board member**  | A person who serves on the board.                                      | `board_terms`                                                                                          | Yes — the record is the point.                                                                      |
+| **office / term** | One period of service, optionally with a title (President, Treasurer). | `board_terms` + `board_office_assignments`                                                             | Yes — a person may hold several, with gaps.                                                         |
 
 A board member need not be a board admin, and a board admin need not be a board member. Promoting
 or demoting a site account has no effect on the service roster, and a person can be recorded there

@@ -10,11 +10,10 @@ Schema lives in `src/server/db/schema.ts`, with the ADR 0022 roster, audit, and 
 [`migrations.md`](./migrations.md); for the roster tables' operational model see
 [`roster-and-access.md`](./roster-and-access.md).
 
-**Two naming rules hold until ADR 0022 phase 4** and are worth knowing before touching any of
-this: there is no `lots` table — the Lot remains `properties`, and every `lot_id` column
-references `properties.id` — and board service lives in `board_service_terms`, not `board_terms`,
-because the legacy `board_terms` table still exists with a different shape and every phase-1
-`CREATE TABLE` is `IF NOT EXISTS`, so creating under the real name would silently no-op.
+**Permanent names:** Lots live in `lots`, and board service in `board_terms`.
+Migration `0037` renames the former `properties` and `board_service_terms` tables after
+dropping the unrelated legacy `board_terms`. Existing `property_id` column names remain
+for compatibility; their foreign keys now reference `lots.id`.
 
 ## Core tables
 
@@ -45,12 +44,12 @@ de-anonymized markdown), `sources_json` (a `{id, title, category}` snapshot), in
 completed generation is saved, so a failed or client-disconnected generation leaves no row;
 after 90 days or any authorized roster name/contact redaction, `topic`, `content_md`, and
 `sources_json` are replaced with a fixed non-PII removal state while the other metadata remains),
-`board_people` and `board_terms` (the board roster's identity layer, per
-[ADR 0012](../adr/0012-board-record-as-structured-rows.md): `board_people` records a person,
-with a nullable `user_id` link to a Better Auth `user` row kept for display only and never for
-authorization; `board_terms` records a term of service — `person_id`, nullable `title`,
-`term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
-across terms; deleting a person with a term on record is refused with `409`), `meetings`,
+`board_terms` and `board_office_assignments` (the party roster's service history, per
+[ADR 0022](../adr/0022-party-roster-derived-access.md): a term references `people.party_id`,
+a qualifying Lot, and optional election, with `start_day`, `scheduled_end_day`, and separate
+actual-end, cancellation, and void state. Offices are assignments within a term, not a `title`
+column on the term). `board_people` and the old term shape were dropped by migration `0037`.
+Meeting records live in `meetings`,
 `board_attendance`, `motions`, `board_votes`, `member_attendance`, and `member_votes` (the meeting
 record — board and member meetings; proxies may be board-recorded or granted online by homeowners,
 with the default-off live-voting lifecycle foundation described in ADR 0020 — per
@@ -81,13 +80,13 @@ and freezes each active property's non-negative weight at first open for unchang
 `board_votes` is one roll-call vote per motion per `people(party_id)` row (repointed from
 `board_people` by #248; `choice`:
 `yes`/`no`/`abstain`/`recused`/`absent`), unique per pair;
-`member_attendance` is one present/absent row per meeting per `properties` row, unique per pair,
+`member_attendance` is one present/absent row per meeting per `lots` row, unique per pair,
 with nullable `represented_by_person_id` (referencing `people(party_id)` on delete-set-null,
 repointed from `owners` by #248 part 2) and a nullable `proxy_id` referencing `proxies` (see below;
 carries no `ON DELETE` action, deliberately); `member_votes` is one vote per
-motion per `properties` row — that uniqueness is what enforces one vote per lot — with nullable
+motion per `lots` row — that uniqueness is what enforces one vote per lot — with nullable
 `cast_by_person_id` (the same Person FK) and the same nullable, actionless `proxy_id`, a `weight` column snapshotting
-`properties.vote_weight` as stamped from the current property before first open or from the
+`lots.vote_weight` as stamped from the current property before first open or from the
 immutable `motion_eligibility` record-date row afterward (so correcting a property's weight later
 cannot rewrite a past live-voting tally), and `choice` restricted to `yes`/`no`/`abstain`
 (`recused`/`absent` are board
@@ -100,19 +99,16 @@ is always derived from
 `board_votes` or `member_votes` by the single `tallyVotes` in `src/lib/types.ts`, which sums each
 vote's `weight` (defaulting to 1, so board votes — which carry none — tally exactly as before, with
 no separate weighted/unweighted mode); `motions.outcome` itself is board-entered and never
-computed, because passage thresholds vary and quorum is not modelled), roster/verification tables
-(`properties` — including `vote_weight`, an integer `NOT NULL DEFAULT 1` that weights a lot's
-member-meeting vote and is rejected at zero, see ADR 0015, and nullable `retired_day`/`retired_at`
-added by ADR 0022 migration `0022`, read only by the ADR 0022 derived-authorization model
-(`src/server/authz/derive.ts`), never by legacy authorization — `owners`,
-`user_property_links`, `property_verifications`, `manual_approval_queue`), and Better Auth tables
-(`user`, `session`, `account`, `verification`).
+computed, because passage thresholds vary and quorum is not modelled), Lots (`lots`, including
+positive integer `vote_weight` and nullable `retired_day`/`retired_at`), and Better Auth tables
+(`users`, `sessions`, `accounts`, `verifications`). The party roster supplies verification
+and authorization; legacy owner, link, and verification tables were removed by `0037`.
 
 ## The party roster, audit ledger, and cutover tables
 
 [ADR 0022](../adr/0022-party-roster-derived-access.md) adds a durable party roster, an immutable
 audit ledger, and cutover-operational tables across `roster-schema.ts`, `audit-schema.ts`, and
-`cutover-schema.ts`. Migrations `0019`-`0022` create all 29 tables plus the two `properties`
+`cutover-schema.ts`. Migrations `0019`-`0022` create all 29 tables plus the two `lots`
 columns above; migration `0023` adds eight server-side views over them. What those tables mean,
 who writes them, and the invariants they must satisfy are in
 [`roster-and-access.md`](./roster-and-access.md).
@@ -154,7 +150,7 @@ across terms for a returning board member is now carried by the Party itself, no
 server-assigned `sequence` unique per election, a nullable `votes` (`NULL` = not yet recorded,
 `0` = recorded as zero — and always `NULL` while a conducted election is open), `won`, and
 `withdrawn`; it deliberately carries no `updated_at`. `ballots` references `elections` on
-delete-cascade and `properties` on delete-restrict, is unique per `(election_id, property_id)`
+delete-cascade and `lots` on delete-restrict, is unique per `(election_id, property_id)`
 (`ballots_election_property_unq`), and records only turnout: a `weight` snapshot, nullable
 actionless `proxy_id`, nullable `cast_by_person_id` referencing `people(party_id)` on
 delete-set-null (repointed from `owners` by #248 part 2), and `recorded_at`. `id` and `recorded_at`
@@ -181,9 +177,7 @@ one checked D1 batch, taking both weights from `election_eligibility`. The suppo
 returns only `hasCast`, so a conducted ballot is final; conducted close derives final candidate
 totals from the retained rows. The boundary is pinned by a three-legged enforcement suite that #206 says outlives the
 migration — see [`voting-and-ballots.md`](./voting-and-ballots.md).
-The legacy `board_terms` table still carries a nullable `election_id` referencing `elections` on
-delete-set-null, but as of phase 3b nothing writes it: certification's provenance now lands on
-`board_service_terms.election_id`, and the legacy board-roster routes are retired (#218).
+The permanent `board_terms.election_id` references the certifying election with `ON DELETE SET NULL`.
 
 ## Proxies
 
@@ -195,7 +189,7 @@ homeowner for a lot they control, per
 by #248 part 2) authorising one named holder
 (`holder_name`, required — a holder need not hold authority anywhere) to act for one lot
 (`property_id`,
-referencing `properties` on delete-restrict) at exactly one occasion, a nullable `meeting_id` or
+referencing `lots` on delete-restrict) at exactly one occasion, a nullable `meeting_id` or
 `election_id` (each referencing its table on delete-cascade), never both, never neither — enforced
 by a schema `CHECK` (`proxies_one_occasion`) rather than left to application code alone, so it holds
 even against a direct write that bypasses the route. A unique index per occasion kind
@@ -206,7 +200,7 @@ the holder is on the roster, plus `created_by`/`created_at`/`updated_at`. `membe
 `member_votes.proxy_id`, and `ballots.proxy_id` each reference `proxies.id` but carry no `ON DELETE`
 action at all. That began as the drizzle-kit trap — they were added by `ALTER TABLE` against tables
 that predate this feature, and drizzle-kit silently drops any `ON DELETE` action on an ALTER-added
-FK column, the same trap on record for `properties.vote_weight` and `board_terms.election_id`;
+FK column, the same trap on record for `lots.vote_weight` and `board_terms.election_id`;
 `proxy-schema.test.ts` pins that the generated `0014` SQL carries none. Since migration `0029`
 rebuilt all three tables it is a DECISION: NO ACTION is re-declared on purpose, because deletion is
 the whole revocation model (the route pre-checks instead) and because NO ACTION's
@@ -257,7 +251,7 @@ homeowner sees is board-entered until one ships. Both flags still gate the whole
 append-only and balance-forward:
 the balance is `SUM(amount_cents)` over a Lot's rows, never a stored column, so a positive balance
 is owed and a negative one is a credit, and there is nothing to drift. Columns: `lot_id` referencing
-`properties(id)` on delete-restrict; `kind` (CHECK-bounded to `DUES_LEDGER_KINDS` —
+`lots(id)` on delete-restrict; `kind` (CHECK-bounded to `DUES_LEDGER_KINDS` —
 `charge`/`payment`/`adjustment`/`reversal`); `amount_cents`, integer cents, signed, with its sign
 fixed per `kind` by CHECK (`charge` positive, `payment` negative, `adjustment`/`reversal`
 nonzero) so the sum is meaningful without interpreting `kind`; `effective_day` (`YYYY-MM-DD`,
@@ -298,7 +292,7 @@ a running figure is implemented — entries from before the reader's own period 
 collapsed into `openingBalanceCents` rather than dropped, so a caller with an earlier owner's
 history behind them still sees a whole balance rather than a partial one.
 
-`lot_violations` has `lot_id` referencing `properties(id)` on delete-restrict (the same
+`lot_violations` has `lot_id` referencing `lots(id)` on delete-restrict (the same
 outlive-an-editing-mistake action `ballots`/`proxies`/`member_votes` use), `category` (CHECK-bounded
 to the eight `LOT_VIOLATION_CATEGORIES` in `src/lib/types.ts`), `effective_day` (a `YYYY-MM-DD`
 Association Day, CHECK-shaped and indexed together with `lot_id` since every read is "this Lot,

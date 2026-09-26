@@ -11,10 +11,10 @@ let role: 'visitor' | 'homeowner' | 'board' | null = null;
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    role === null ? null : legacyAuthContext('u1', role, []),
+    role === null ? null : callerContext('u1', role, []),
 }));
 
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { onRequest } from '../../src/middleware';
 
 /**

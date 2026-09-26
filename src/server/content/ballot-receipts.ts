@@ -96,7 +96,7 @@ export async function fetchPaperBallotReceipts(
                 WHERE b.election_id = e.id AND b.property_id = p.id
               ) AS recorded
          FROM elections e
-         JOIN properties p ON p.id IN (${LOT_SQL})
+         JOIN lots p ON p.id IN (${LOT_SQL})
         WHERE e.id = ?3
           AND e.election_date = ?2
           AND e.source = 'recorded'

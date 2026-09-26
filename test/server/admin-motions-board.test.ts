@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { POST, PATCH, DELETE } from '../../src/pages/api/admin/motions';
@@ -12,11 +12,10 @@ import {
   meetings,
   motions,
   boardVotes,
-  boardPeople,
   resolutions,
 } from '../../src/server/db/schema';
 import { eq } from 'drizzle-orm';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { seedPeopleRows } from './fixtures';
 
 beforeAll(async () => {
@@ -29,7 +28,6 @@ beforeEach(async () => {
   await db.delete(resolutions);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(boardPeople);
 });
 
 const url = 'http://localhost/api/admin/motions';
