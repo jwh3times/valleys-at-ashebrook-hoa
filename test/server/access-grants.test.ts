@@ -8,7 +8,7 @@ import {
   people,
   personVerifications,
   personLinks,
-  boardServiceTerms,
+  boardTerms,
   accessGrants,
 } from '../../src/server/db/roster-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
@@ -26,9 +26,7 @@ import { GET, POST } from '../../src/pages/api/admin/access-grants';
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () =>
-    (
-      await importActual<typeof import('../../src/server/authz/context')>()
-    ).legacyAuthContext('board-1', 'board', []),
+    (await import('./caller-context')).callerContext('board-1', 'board', []),
 }));
 
 beforeAll(async () => {
@@ -47,7 +45,7 @@ const CLEAR = [
   'access_grants',
   'person_links',
   'person_verifications',
-  'board_service_terms',
+  'board_terms',
   'people',
   'parties',
 ];
@@ -123,7 +121,7 @@ async function seedTerm(
 ) {
   const now = new Date();
   await getDb(env)
-    .insert(boardServiceTerms)
+    .insert(boardTerms)
     .values({
       id,
       personId,

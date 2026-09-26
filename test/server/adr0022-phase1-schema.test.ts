@@ -38,7 +38,7 @@ beforeEach(async () => {
     'system_admin_bootstrap',
     'access_grants',
     'board_office_assignments',
-    'board_service_terms',
+    'board_terms',
     'person_links',
     'person_verifications',
     'representation_lots',
@@ -48,7 +48,6 @@ beforeEach(async () => {
     'organizations',
     'people',
     'parties',
-    'cutover_shadow_mismatches',
     'cutover_settings',
   ]) {
     await db.run(sql.raw(`DELETE FROM "${table}"`));
@@ -86,7 +85,7 @@ const PHASE_1_TABLES = [
   'representation_lots',
   'person_verifications',
   'person_links',
-  'board_service_terms',
+  'board_terms',
   'board_office_assignments',
   'access_grants',
   'system_admin_bootstrap',
@@ -105,7 +104,6 @@ const PHASE_1_TABLES = [
   'review_flags',
   'redaction_tasks',
   'cutover_settings',
-  'cutover_shadow_mismatches',
 ];
 
 // The four phase-1 files, named explicitly: the CREATE/ALTER discipline below
@@ -198,7 +196,7 @@ describe('ADR 0022 phase 1 migrations', () => {
     }
   });
 
-  it('does not create a table named board_terms, and leaves the legacy one intact', async () => {
+  it('reserves board_terms during expansion and gives it the permanent shape at contraction', async () => {
     // The trap this naming exists to avoid: CREATE TABLE IF NOT EXISTS
     // `board_terms` would silently do nothing, and the mismatch would surface
     // much later as confusing column errors.
@@ -207,17 +205,13 @@ describe('ADR 0022 phase 1 migrations', () => {
         expect(query).not.toMatch(/CREATE TABLE[^;]*`board_terms`/i);
       }
     }
-    const db = getDb(env);
-    const columns = await db.all<{ name: string }>(
+    const columns = await getDb(env).all<{ name: string }>(
       sql`SELECT name FROM pragma_table_info('board_terms')`,
     );
-    const names = new Set(columns.map((c) => c.name));
-    for (const legacy of ['title', 'term_start', 'term_end', 'person_id']) {
-      expect(names.has(legacy), `legacy board_terms lost ${legacy}`).toBe(true);
-    }
-    // And the new shape is definitively absent from the legacy table.
-    expect(names.has('qualifying_lot_id')).toBe(false);
-    expect(names.has('scheduled_end_day')).toBe(false);
+    const names = columns.map((column) => column.name);
+    expect(names).toContain('qualifying_lot_id');
+    expect(names).toContain('scheduled_end_day');
+    expect(names).not.toContain('term_start');
   });
 });
 
@@ -249,7 +243,7 @@ describe('ADR 0022 phase 1 CHECK constraints', () => {
   it('rejects a board term carrying two ending kinds at once', async () => {
     await expectRejectsWithReason(
       db().run(
-        sql`INSERT INTO board_service_terms (id, person_id, start_day, scheduled_end_day, actual_end_day, cancelled_day, cancelled_at, created_at, updated_at)
+        sql`INSERT INTO board_terms (id, person_id, start_day, scheduled_end_day, actual_end_day, cancelled_day, cancelled_at, created_at, updated_at)
             VALUES ('t-bad', 'x', '2026-01-01', '2027-01-01', '2026-06-01', '2025-12-01', 1, 1, 1)`,
       ),
       /CHECK constraint failed: board_service_terms_one_ending/i,
@@ -260,7 +254,7 @@ describe('ADR 0022 phase 1 CHECK constraints', () => {
     // A withdrawal after service began is an early end, not a cancellation.
     await expectRejectsWithReason(
       db().run(
-        sql`INSERT INTO board_service_terms (id, person_id, start_day, scheduled_end_day, cancelled_day, cancelled_at, created_at, updated_at)
+        sql`INSERT INTO board_terms (id, person_id, start_day, scheduled_end_day, cancelled_day, cancelled_at, created_at, updated_at)
             VALUES ('t-late', 'x', '2026-01-01', '2027-01-01', '2026-06-01', 1, 1, 1)`,
       ),
       /CHECK constraint failed: board_service_terms_cancelled_before_start/i,
@@ -466,7 +460,7 @@ describe('ADR 0022 phase 1 relational invariants', () => {
     ]) {
       await db().run(
         sql.raw(
-          `INSERT INTO board_service_terms (id, person_id, start_day, scheduled_end_day, created_at, updated_at) VALUES ('${id}', '${person}', '2026-01-01', '2027-01-01', 1, 1)`,
+          `INSERT INTO board_terms (id, person_id, start_day, scheduled_end_day, created_at, updated_at) VALUES ('${id}', '${person}', '2026-01-01', '2027-01-01', 1, 1)`,
         ),
       );
     }
@@ -493,7 +487,7 @@ describe('ADR 0022 phase 1 relational invariants', () => {
     await seedPerson('per-6');
     await seedPerson('per-7');
     await db().run(
-      sql`INSERT INTO board_service_terms (id, person_id, start_day, scheduled_end_day, created_at, updated_at)
+      sql`INSERT INTO board_terms (id, person_id, start_day, scheduled_end_day, created_at, updated_at)
           VALUES ('t-3', 'per-6', '2026-01-01', '2027-01-01', 1, 1)`,
     );
     await expectRejectsWithReason(

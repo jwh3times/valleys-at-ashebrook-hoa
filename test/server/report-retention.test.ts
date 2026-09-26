@@ -1,14 +1,14 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { GET } from '../../src/pages/api/admin/reports';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { getDb } from '../../src/server/db/client';
 import { reports } from '../../src/server/db/schema';
 import { runScheduledJobs } from '../../src/server/scheduled';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const boardLocals = {
-  authContext: legacyAuthContext('board-1', 'board', []),
+  authContext: callerContext('board-1', 'board', []),
 };
 
 beforeAll(async () => {

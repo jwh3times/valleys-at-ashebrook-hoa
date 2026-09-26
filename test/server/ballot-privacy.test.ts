@@ -1,3 +1,4 @@
+import { seedAccountLink } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
@@ -7,12 +8,11 @@ import {
   electionEligibility,
   motionEligibility,
   settings,
-  userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { associationDateIso } from '../../src/lib/format';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
   now,
@@ -60,8 +60,9 @@ const day = (offset: number): string =>
   associationDateIso(new Date(Date.now() + offset * 86_400_000));
 const TODAY = day(0);
 
-const VOTER: AuthContext = legacyAuthContext('voter-1', 'homeowner', ['lot-1']);
-const BOARD: AuthContext = legacyAuthContext('board-1', 'board', []);
+const VOTER: AuthContext = callerContext('voter-1', 'homeowner', ['lot-1']);
+VOTER.personId = 'per-1';
+const BOARD: AuthContext = callerContext('board-1', 'board', []);
 
 /** Candidate ids chosen to be distinctive: the ledger scans below are
  * substring searches over whole-table dumps, and a generic id would make an
@@ -105,7 +106,7 @@ const CLEAR = [
   'audit_events',
   'access_grants',
   'board_office_assignments',
-  'board_service_terms',
+  'board_terms',
   'person_links',
   'person_verifications',
   'representation_lots',
@@ -182,13 +183,7 @@ async function seedVotingLot() {
     createdAt: now,
     updatedAt: now,
   });
-  await db.insert(userPropertyLinks).values({
-    id: 'link-1',
-    userId: 'voter-1',
-    propertyId: 'lot-1',
-    verifiedAt: now,
-    method: 'board_manual',
-  });
+  await seedAccountLink('voter-1', 'per-1');
 }
 
 async function callVote(body: unknown): Promise<Response> {

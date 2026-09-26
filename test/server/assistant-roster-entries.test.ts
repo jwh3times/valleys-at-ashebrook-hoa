@@ -1,8 +1,9 @@
+import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
-import { owners, properties } from '../../src/server/db/schema';
+import { lots } from '../../src/server/db/schema';
 import {
   parties,
   people,
@@ -15,7 +16,7 @@ import { buildPseudonymizer } from '../../src/server/ai/pii';
 /**
  * #233: the pseudonymizer's roster feed must read the PARTY roster, which has
  * been the live one since the ADR 0022 phase 3f flip, and not only the legacy
- * `owners`/`properties` tables that no roster route writes any more. A Person
+ * `owners`/`lots` tables that no roster route writes any more. A Person
  * recorded through the admin Roster panel that this feed cannot see is a
  * resident whose name reaches Anthropic unmasked.
  */
@@ -25,12 +26,12 @@ beforeAll(async () => {
 });
 
 const CLEAR = [
+  'ownerships',
   'contact_methods',
   'organizations',
   'people',
   'parties',
-  'owners',
-  'properties',
+  'lots',
 ];
 
 beforeEach(async () => {
@@ -188,7 +189,7 @@ describe('loadRosterEntries reads the party roster', () => {
 
   it('still reads the legacy roster, and does not double-register a backfilled Person', async () => {
     const db = getDb(env);
-    await db.insert(properties).values({
+    await db.insert(lots).values({
       id: 'lot-1',
       address: '123 Ashebrook Lane',
       addressNormalized: '123 ashebrook lane',
@@ -196,7 +197,7 @@ describe('loadRosterEntries reads the party roster', () => {
       createdAt: now(),
       updatedAt: now(),
     });
-    await db.insert(owners).values({
+    await seedRosterOwner({
       id: 'o1',
       propertyId: 'lot-1',
       fullName: 'Dana Rivera',

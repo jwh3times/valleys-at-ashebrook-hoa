@@ -6,6 +6,20 @@ been bitten. Read this before writing a migration or running one against product
 Migrations are applied locally with `npm run db:migrate:local` via Wrangler, which tracks applied
 files in D1 independently of Drizzle's `meta/` snapshots.
 
+## Phase 4 contract (`0037`)
+
+The migration and matching Worker must ship under the operator write freeze. Confirm private
+legacy-note preservation first, export a recovery copy, and rehearse against an isolated local
+copy. Apply the migration only through `npm run db:migrate:remote`, then deploy the matching
+Worker and validate the 17 invariants, foreign keys, public reads, and authorized access before
+ending the freeze. Both production actions require explicit confirmation. There is no legacy
+mode rollback afterward. Any disaster recovery is a separate operator decision. Public reads
+need the matching table names during deployment even though the freeze permits those reads.
+
+`0037` drops obsolete roster/verification/link/shadow tables, renames Lots and Board Terms,
+removes the mode row, and neutralizes Better Auth's required role field. It preserves the
+`write_freeze` row, audit ledger/views, and surviving foreign keys through SQLite renames.
+
 ## The rules that bite
 
 **The directory is what runs.** `wrangler d1 migrations apply` reads every `.sql` file under

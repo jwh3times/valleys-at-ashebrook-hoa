@@ -21,7 +21,6 @@ import {
   insertedRowGuard,
   type SqlGuard,
 } from './audit';
-import { deriveAccess } from '../authz/derive';
 
 export type GrantType = 'board' | 'system_admin';
 
@@ -41,9 +40,6 @@ export interface GrantStatementBatch {
   grantId: string;
   /** `statements[0]` is the command's success marker. */
   statements: D1PreparedStatement[];
-  /** Marker proving THIS command's grant landed, for a caller appending
-   * write-behind mirrors to the same batch. */
-  granted: SqlGuard;
 }
 
 /**
@@ -73,7 +69,7 @@ export function grantStatements(
   const termGuardSql =
     grantType === 'board'
       ? `AND EXISTS (
-           SELECT 1 FROM board_service_terms t
+           SELECT 1 FROM board_terms t
            JOIN person_links pl ON pl.person_id = t.person_id
            WHERE t.id = ? AND pl.account_id = ? AND pl.ended_at IS NULL
              AND t.cancelled_at IS NULL AND t.voided_at IS NULL
@@ -133,7 +129,6 @@ export function grantStatements(
   return {
     grantId: id,
     statements: [primary, ...correlation.statements],
-    granted,
   };
 }
 
@@ -265,7 +260,7 @@ export async function grantableBoardTermFor(
 ): Promise<string | null> {
   const row = await database
     .prepare(
-      `SELECT id FROM board_service_terms
+      `SELECT id FROM board_terms
        WHERE person_id = ? AND cancelled_at IS NULL AND voided_at IS NULL
          AND ? < COALESCE(actual_end_day, scheduled_end_day)
        ORDER BY start_day DESC LIMIT 1`,
@@ -289,27 +284,4 @@ export async function liveGrantIdsFor(
     .bind(accountId, grantType)
     .all<{ id: string }>();
   return (rows.results ?? []).map((r) => r.id);
-}
-
-/**
- * The `users.role` a WRITE-BEHIND MIRROR should carry for an account once its
- * Board Access has ended — never read as an authorization fact, kept only so
- * the legacy read model stays coherent through the flip.
- *
- * Derived from the same `deriveAccess` the real model uses rather than from a
- * second hand-written query: `homeowner` exactly when the linked Person still
- * holds Lot Authority (a current Ownership, or a Representation over a lot
- * the represented Organization currently owns), else `visitor`. A live System
- * Administration grant still confers board capability, so it still mirrors as
- * `board` — ending someone's Board Access must not present them as demoted
- * from an administration they still hold.
- */
-export async function mirrorRoleAfterBoardEnd(
-  env: Env,
-  accountId: string,
-  associationDay: string,
-): Promise<'board' | 'homeowner' | 'visitor'> {
-  const derived = await deriveAccess(env, accountId, associationDay);
-  if (derived.capabilities.has('systemAdmin')) return 'board';
-  return derived.lotIds.length > 0 ? 'homeowner' : 'visitor';
 }

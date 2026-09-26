@@ -80,11 +80,11 @@ async function seedBoardGrant(opts: {
   // the start day — a withdrawal after service began is an early end instead.
   if (opts.cancelled)
     await getDb(env).run(
-      sql`UPDATE board_service_terms
+      sql`UPDATE board_terms
           SET cancelled_at = 1, cancelled_day = '2025-12-01'`,
     );
   if (opts.voided)
-    await getDb(env).run(sql`UPDATE board_service_terms SET voided_at = 1`);
+    await getDb(env).run(sql`UPDATE board_terms SET voided_at = 1`);
 }
 
 const grantId = async () =>
@@ -145,14 +145,6 @@ describe('recording the re-validation denial', () => {
     await getDb(env).delete(cutoverSettings);
   });
 
-  async function setMode(value: 'legacy' | 'derived') {
-    const db = getDb(env);
-    await db.delete(cutoverSettings);
-    await db
-      .insert(cutoverSettings)
-      .values({ key: 'cutover_mode', value, updatedAt: new Date() });
-  }
-
   const denialRows = async () =>
     getDb(env).all<{
       operation_key: string;
@@ -168,7 +160,6 @@ describe('recording the re-validation denial', () => {
 
   it('writes one event per grant per day when derived serves the denial', async () => {
     await seedBoardGrant({ scheduledEndDay: '2026-02-01' });
-    await setMode('derived');
     sessionUserId = 'acct-1';
 
     const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);
@@ -193,13 +184,5 @@ describe('recording the re-validation denial', () => {
     expect(
       await getDb(env).all(sql`SELECT * FROM audit_integrity_violations_v`),
     ).toEqual([]);
-  });
-
-  it('writes nothing while legacy serves, even with the same invalid grant', async () => {
-    await seedBoardGrant({ scheduledEndDay: '2026-02-01' });
-    await setMode('legacy');
-    sessionUserId = 'acct-1';
-    await getAuthContext(new Request('http://localhost'), env, DAY);
-    expect(await denialRows()).toHaveLength(0);
   });
 });

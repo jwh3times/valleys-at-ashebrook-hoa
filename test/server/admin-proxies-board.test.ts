@@ -3,14 +3,14 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { GET, POST, PATCH, DELETE } from '../../src/pages/api/admin/proxies';
 import { getDb } from '../../src/server/db/client';
 import {
   proxies,
-  properties,
+  lots,
   meetings,
   elections,
   memberAttendance,
@@ -18,7 +18,7 @@ import {
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -37,7 +37,7 @@ beforeEach(async () => {
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
 });
 
 function req(u: string, method: string, body?: unknown) {
@@ -55,7 +55,7 @@ async function createProperty(
   voteWeight = 1,
 ): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id,
     address,
     addressNormalized: address.toLowerCase(),

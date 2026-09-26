@@ -37,11 +37,11 @@ import {
   lotRecordEvents,
   settings,
 } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
 import { seedProperty, truncateAll } from './fixtures';
 
-const board = legacyAuthContext('board-1', 'board', []);
+const board = callerContext('board-1', 'board', []);
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

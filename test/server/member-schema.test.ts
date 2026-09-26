@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import {
-  properties,
+  lots,
   meetings,
   memberAttendance,
   memberVotes,
@@ -28,19 +28,13 @@ beforeEach(truncateAll);
 describe('member meeting schema', () => {
   it('defaults an existing property to vote weight 1', async () => {
     await seedProperty('p1');
-    const rows = await getDb(env)
-      .select()
-      .from(properties)
-      .where(eq(properties.id, 'p1'));
+    const rows = await getDb(env).select().from(lots).where(eq(lots.id, 'p1'));
     expect(rows[0].voteWeight).toBe(1);
   });
 
   it('stores a property with a heavier vote weight', async () => {
     await seedProperty('p2', { voteWeight: 3 });
-    const rows = await getDb(env)
-      .select()
-      .from(properties)
-      .where(eq(properties.id, 'p2'));
+    const rows = await getDb(env).select().from(lots).where(eq(lots.id, 'p2'));
     expect(rows[0].voteWeight).toBe(3);
   });
 
@@ -158,10 +152,8 @@ describe('member meeting schema', () => {
       weight: 1,
       choice: 'yes',
     });
-    await expect(
-      db.delete(properties).where(eq(properties.id, 'p1')),
-    ).rejects.toThrow();
-    expect((await db.select().from(properties)).length).toBe(1);
+    await expect(db.delete(lots).where(eq(lots.id, 'p1'))).rejects.toThrow();
+    expect((await db.select().from(lots)).length).toBe(1);
   });
 
   it('cascades member attendance and votes when the meeting is deleted', async () => {

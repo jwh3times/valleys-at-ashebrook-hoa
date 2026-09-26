@@ -1,6 +1,5 @@
 import { and, inArray, lt, or } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { manualApprovalQueue, propertyVerifications } from '../db/schema';
 import {
   verificationCodes,
   verificationReviewRequests,
@@ -18,34 +17,12 @@ export async function cleanupVerificationState(
   env: Env,
   now = new Date(),
 ): Promise<{
-  verificationRows: number;
-  manualApprovalRows: number;
   verificationCodeRows: number;
   reviewRequestRows: number;
 }> {
   const cutoff = new Date(now.getTime() - RETENTION_DAYS * MS_PER_DAY);
   const codeCutoff = new Date(now.getTime() - CODE_RETENTION_MS);
   const db = getDb(env);
-
-  const verificationRows = await db
-    .delete(propertyVerifications)
-    .where(
-      or(
-        lt(propertyVerifications.consumedAt, cutoff),
-        lt(propertyVerifications.expiresAt, cutoff),
-      ),
-    )
-    .returning({ id: propertyVerifications.id });
-
-  const manualApprovalRows = await db
-    .delete(manualApprovalQueue)
-    .where(
-      and(
-        inArray(manualApprovalQueue.status, ['approved', 'denied']),
-        lt(manualApprovalQueue.createdAt, cutoff),
-      ),
-    )
-    .returning({ id: manualApprovalQueue.id });
 
   // #219 D4: the pending-code twin of the propertyVerifications sweep above,
   // just on a much shorter retention window (see CODE_RETENTION_MS).
@@ -72,8 +49,6 @@ export async function cleanupVerificationState(
     .returning({ id: verificationReviewRequests.id });
 
   return {
-    verificationRows: verificationRows.length,
-    manualApprovalRows: manualApprovalRows.length,
     verificationCodeRows: verificationCodeRows.length,
     reviewRequestRows: reviewRequestRows.length,
   };

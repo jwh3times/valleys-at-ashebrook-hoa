@@ -14,10 +14,9 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  properties,
+  lots,
   proxies,
   settings,
-  userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
 import {
@@ -27,7 +26,7 @@ import {
   personLinks,
   personVerifications,
 } from '../../src/server/db/roster-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -35,10 +34,11 @@ beforeAll(async () => {
 
 const now = new Date('2026-08-05T12:00:00Z');
 const voteUrl = 'http://localhost/api/vote';
-const homeowner: AuthContext = legacyAuthContext('caller-user', 'homeowner', [
+const homeowner: AuthContext = callerContext('caller-user', 'homeowner', [
   'property-own',
   'property-no-snapshot',
 ]);
+homeowner.personId = 'owner-own';
 const derivedHomeowner: AuthContext = {
   userId: 'caller-user',
   personId: 'owner-own',
@@ -62,16 +62,15 @@ beforeEach(async () => {
   await db.delete(motionEligibility);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(userPropertyLinks);
   await db.delete(personLinks);
   await db.delete(personVerifications);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.update(parties).set({ consolidatedIntoPartyId: null });
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(settings);
   await db.delete(users);
 
@@ -85,7 +84,7 @@ beforeEach(async () => {
     updatedAt: now,
   });
   await db
-    .insert(properties)
+    .insert(lots)
     .values([
       property('property-own', '1 Ashebrook Lane', 70),
       property('property-proxy', '2 Ashebrook Lane', 30),
@@ -93,15 +92,6 @@ beforeEach(async () => {
       property('property-holder-unlinked', '4 Ashebrook Lane', 50),
       property('property-no-snapshot', '5 Ashebrook Lane', 60),
     ]);
-  await db
-    .insert(userPropertyLinks)
-    .values([
-      link('link-own', 'property-own'),
-      link('link-no-snapshot', 'property-no-snapshot'),
-    ]);
-  // #248 part 2: who may act for a lot is the roster's Lot Authority, so these
-  // are Persons with Ownerships. 'owner-inactive' is a FORMER holder — an ended
-  // interval, where the legacy shape used owners.status.
   await seedPersons([
     person('owner-own', 'property-own', 'Active Caller'),
     person('owner-inactive', 'property-own', 'Former Caller', 'inactive'),
@@ -114,6 +104,7 @@ beforeEach(async () => {
     ),
     person('owner-no-snapshot', 'property-no-snapshot', 'No Snapshot Owner'),
   ]);
+  await linkAccount('caller-user', 'owner-own');
   await db
     .insert(meetings)
     .values([
@@ -264,8 +255,6 @@ describe('POST /api/vote gate and parsing', () => {
 
 describe('POST /api/vote ballot casting', () => {
   it('casts for a linked Person with roster authority and no legacy mirror', async () => {
-    const db = getDb(env);
-    await db.delete(userPropertyLinks);
     await linkAccount('caller-user', 'owner-own');
 
     const response = await callVote(validBallot(), { ctx: derivedHomeowner });
@@ -275,7 +264,6 @@ describe('POST /api/vote ballot casting', () => {
 
   it('casts through the survivor of a consolidated linked Person', async () => {
     const db = getDb(env);
-    await db.delete(userPropertyLinks);
     await seedPersons([
       person('owner-duplicate', 'property-unheld', 'Duplicate Owner'),
     ]);
@@ -388,7 +376,6 @@ describe('POST /api/vote ballot casting', () => {
 
   it('casts through a proxy held via derived roster authority without a legacy mirror', async () => {
     const db = getDb(env);
-    await db.delete(userPropertyLinks);
     await seedPersons([
       person('owner-coholder', 'property-own', 'Co-holder Owner'),
       person('owner-duplicate', 'property-unheld', 'Duplicate Owner'),
@@ -564,8 +551,6 @@ describe('POST /api/vote ballot casting', () => {
 
 describe('POST /api/vote motion casting', () => {
   it('casts for a linked Person with roster authority and no legacy mirror', async () => {
-    const db = getDb(env);
-    await db.delete(userPropertyLinks);
     await linkAccount('caller-user', 'owner-own');
 
     const response = await callVote(validMotionVote(), {
@@ -615,8 +600,6 @@ describe('POST /api/vote motion casting', () => {
   });
 
   it('casts a proxy vote held via derived roster authority without a legacy mirror', async () => {
-    const db = getDb(env);
-    await db.delete(userPropertyLinks);
     await linkAccount('caller-user', 'owner-own');
 
     const response = await callVote(
@@ -741,18 +724,12 @@ function property(id: string, address: string, voteWeight: number) {
   };
 }
 
-function link(id: string, propertyId: string) {
-  return {
-    id,
-    userId: 'caller-user',
-    propertyId,
-    verifiedAt: now,
-    method: 'board_manual' as const,
-  };
-}
-
 async function linkAccount(accountId: string, personId: string) {
   const db = getDb(env);
+  await db.delete(personLinks).where(eq(personLinks.accountId, accountId));
+  await db
+    .delete(personVerifications)
+    .where(eq(personVerifications.accountId, accountId));
   await db.insert(personVerifications).values({
     id: `verification-${accountId}`,
     accountId,

@@ -9,7 +9,7 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { associationDateIso } from '../../../lib/format';
 import { isoDateOrError } from '../../../lib/types';
-import { properties } from '../../../server/db/schema';
+import { lots } from '../../../server/db/schema';
 import { parties, ownerships } from '../../../server/db/roster-schema';
 import {
   AuditCorrelation,
@@ -149,9 +149,9 @@ async function createOwnership(
   if (partyRows.length === 0)
     return new Response('Party not found', { status: 404 });
   const lotRows = await db
-    .select({ id: properties.id, retiredAt: properties.retiredAt })
-    .from(properties)
-    .where(eq(properties.id, lotId))
+    .select({ id: lots.id, retiredAt: lots.retiredAt })
+    .from(lots)
+    .where(eq(lots.id, lotId))
     .limit(1);
   if (lotRows.length === 0)
     return new Response('Lot not found', { status: 404 });
@@ -230,7 +230,7 @@ async function createOwnership(
     `INSERT INTO ownerships (id, owner_party_id, lot_id, start_day, created_at, updated_at)
      SELECT ?, ?, ?, ?, ?, ?
      WHERE EXISTS (SELECT 1 FROM parties WHERE id = ? AND consolidated_into_party_id IS NULL)
-       AND EXISTS (SELECT 1 FROM properties WHERE id = ? AND retired_at IS NULL)
+       AND EXISTS (SELECT 1 FROM lots WHERE id = ? AND retired_at IS NULL)
        AND NOT EXISTS (
          SELECT 1 FROM ownerships
          WHERE owner_party_id = ? AND lot_id = ? AND voided_at IS NULL

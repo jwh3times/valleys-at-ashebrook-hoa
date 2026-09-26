@@ -5,7 +5,7 @@ import { getDb } from '../../src/server/db/client';
 import { settings, settingChanges } from '../../src/server/db/schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 import { normalizeSiteSettings, type SiteGateKey } from '../../src/lib/types';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { POST } from '../../src/pages/api/admin/site';
 
 /**
@@ -14,7 +14,7 @@ import { POST } from '../../src/pages/api/admin/site';
  * `setting_changes` insert either both land or neither does.
  */
 
-const board = legacyAuthContext('board-1', 'board', []);
+const board = callerContext('board-1', 'board', []);
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -27,7 +27,7 @@ beforeEach(async () => {
   await db.run(sql.raw('DELETE FROM cutover_settings'));
 });
 
-function post(body: unknown, ctx: ReturnType<typeof legacyAuthContext> | null) {
+function post(body: unknown, ctx: ReturnType<typeof callerContext> | null) {
   return POST({
     request: new Request('http://localhost/api/admin/site', {
       method: 'POST',

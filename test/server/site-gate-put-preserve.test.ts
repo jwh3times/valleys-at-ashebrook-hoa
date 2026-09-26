@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import { normalizeSiteSettings, SITE_GATE_KEYS } from '../../src/lib/types';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { PUT } from '../../src/pages/api/admin/site';
 
 /**
@@ -23,7 +23,7 @@ import { PUT } from '../../src/pages/api/admin/site';
 const allGates = (value: boolean): Record<string, boolean> =>
   Object.fromEntries(SITE_GATE_KEYS.map((key) => [key, value]));
 
-const board = legacyAuthContext('board-1', 'board', []);
+const board = callerContext('board-1', 'board', []);
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

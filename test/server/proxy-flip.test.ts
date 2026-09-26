@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import {
@@ -28,7 +28,7 @@ import {
   memberVotes,
   ballots,
 } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

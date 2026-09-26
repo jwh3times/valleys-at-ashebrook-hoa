@@ -13,7 +13,7 @@ import { requireBoard } from '../../src/server/authz/api-guards';
 import { requireMemberApi } from '../../src/server/authz/member-guards';
 import { requireVotingApi } from '../../src/server/authz/voting-guards';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 /**
  * The operator write freeze — the ADR 0022 phase-3 mechanism that halts
@@ -58,8 +58,8 @@ async function setSiteSettings(official: boolean, live: boolean) {
   });
 }
 
-const board: AuthContext = legacyAuthContext('board-1', 'board', []);
-const homeowner: AuthContext = legacyAuthContext('homeowner-1', 'homeowner', [
+const board: AuthContext = callerContext('board-1', 'board', []);
+const homeowner: AuthContext = callerContext('homeowner-1', 'homeowner', [
   'property-1',
 ]);
 
@@ -257,7 +257,7 @@ describe('the admin API under a freeze', () => {
     );
     expect(anonymous?.status).toBe(401);
     const visitor = await requireBoard(
-      localsFor(legacyAuthContext('v', 'visitor', [])),
+      localsFor(callerContext('v', 'visitor', [])),
       req('/api/admin/announcements', 'POST'),
       env,
     );

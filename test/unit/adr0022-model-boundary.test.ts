@@ -2,48 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-// The ADR 0022 model boundary (issues #210, #217, #218).
-//
-// This began as a phase-1 inertness guard: nothing under `src/` could so much
-// as name the new tables. Each phase deliberately crosses part of that line —
-// phase 2 let derivation read them in shadow, phase 3a let `cutover_mode`
-// decide which model answers, and phase 3b (#218) built the routes that WRITE
-// the new roster — so the guard is narrowed each time to the boundary that
-// STILL matters, rather than deleted.
-//
-// What must remain true until phase 4 (#212):
-//
-//  1. AUTHORIZATION REACHES THE NEW MODEL ONLY THROUGH THE FLAG. The ONLY
-//     route from a request to the new model runs through `context.ts` and
-//     `cutover_mode`, whose default and failure mode are both `legacy`. No
-//     guard, page, or content read reaches past that seam into the roster
-//     tables itself. (`revalidation-event.ts` is the one authz module that
-//     WRITES the ledger — the #217-decided Access Event — and it is called
-//     only from the derived serving path.)
-//
-//  2. CONTENT READS REACH THE ROSTER ONLY WHERE DECLARED. This began as "no
-//     content read touches the new tables at all", which held while the legacy
-//     roster was authoritative. #248 part 2 ended that: the meeting, elections,
-//     and proxies records now name a party-roster Person as who acted, so the
-//     content layer must ask the roster who may act for a lot. What replaces
-//     the blanket rule is narrower and still load-bearing — a declared list of
-//     content modules, each limited to the IDENTITY AND AUTHORITY tables. A
-//     content read of access_grants, the audit ledger, or the cutover flags is
-//     as wrong today as it was in phase 1.
-//
-//  3. THE NEW-MODEL SURFACE IS A DECLARED INVENTORY. Phase 3b retired the
-//     phase-2 claim that nothing writes the new roster through a route — the
-//     roster, board-service, and access routes exist precisely to write it.
-//     What replaces the claim is an enumeration: every file under `src/pages`
-//     and every module under `src/server/roster` that references the new
-//     tables must be declared below, so a public page or a legacy verification
-//     module cannot quietly start reading roster rows. (Note for operators
-//     until the flip: the phase-2 backfill rehearsal clean-replaces these
-//     tables, so rows written through the 3b routes before the authoritative
-//     run are erased by a rehearsal — sequencing owned by #222.)
-//
-// Deleted in phase 4, when the legacy model is gone and the inventory is the
-// whole application.
+// Permanent module boundary: authorization resolves through context/derive;
+// content reads may access only declared identity/authority tables, never
+// grants or audit internals. The write freeze remains an independent switch.
 
 const SRC = join(process.cwd(), 'src');
 
@@ -53,15 +14,14 @@ const ALLOWED = new Set([
   'server/db/client.ts',
   // Derivation: the derived model's read side.
   'server/authz/derive.ts',
-  // The two operational flag readers. Both scoped to cutover_settings by their
-  // own test below.
+  // The operator freeze reader is scoped to cutover_settings below.
   'server/authz/write-freeze.ts',
-  'server/authz/cutover-mode.ts',
   // The failed-grant-re-validation Access Event writer (#217, option 1).
   'server/authz/revalidation-event.ts',
   // The read-only admin preview route. (Its phase-2 panel, RosterPreview.tsx,
   // was retired by phase 3e in favor of the five writable panels.)
   'pages/api/admin/roster-preview.ts',
+  'pages/api/admin/roles.ts',
 ]);
 
 /**
@@ -255,7 +215,7 @@ describe('the ADR 0022 model boundary', () => {
       'audit-schema',
     ];
     const offenders: string[] = [];
-    for (const file of ['write-freeze.ts', 'cutover-mode.ts']) {
+    for (const file of ['write-freeze.ts']) {
       const text = readFileSync(join(SRC, 'server', 'authz', file), 'utf8');
       for (const name of forbidden) {
         if (text.includes(name)) offenders.push(`${file} references ${name}`);

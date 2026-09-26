@@ -4,22 +4,17 @@ import { sql, eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/auth-schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
-import { properties, userPropertyLinks } from '../../src/server/db/schema';
+import { lots } from '../../src/server/db/schema';
 import {
   parties,
   people,
   organizations,
   personVerifications,
   personLinks,
-  boardServiceTerms,
+  boardTerms,
   accessGrants,
 } from '../../src/server/db/roster-schema';
 import { pauseNextBatch } from './fixtures';
-import { operationKey } from '../../src/server/roster/audit';
-import {
-  endLinkStatements,
-  endedLinkMirrorStatements,
-} from '../../src/server/roster/identity';
 import { GET, POST } from '../../src/pages/api/admin/person-links';
 
 /**
@@ -38,7 +33,11 @@ vi.mock('../../src/server/authz/context', async (importActual) => {
   return {
     ...actual,
     getAuthContext: async () => {
-      const ctx = actual.legacyAuthContext('board-1', 'board', []);
+      const ctx = (await import('./caller-context')).callerContext(
+        'board-1',
+        'board',
+        [],
+      );
       if (caller.systemAdmin) ctx.capabilities.add('systemAdmin');
       return ctx;
     },
@@ -63,7 +62,7 @@ const CLEAR = [
   'access_grants',
   'person_links',
   'person_verifications',
-  'board_service_terms',
+  'board_terms',
   'organizations',
   'people',
   'parties',
@@ -81,8 +80,7 @@ beforeEach(async () => {
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
   await db.delete(cutoverSettings);
-  await db.delete(userPropertyLinks);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.run(sql.raw('DELETE FROM users'));
   for (const id of ['board-1', 'acct-1', 'acct-2', 'sa-1']) {
     const now = new Date();
@@ -155,7 +153,7 @@ async function seedLink(accountId: string, personId: string) {
 
 async function seedTerm(id: string, personId: string) {
   const now = new Date();
-  await getDb(env).insert(boardServiceTerms).values({
+  await getDb(env).insert(boardTerms).values({
     id,
     personId,
     qualifyingLotId: null,
@@ -594,118 +592,3 @@ describe('GET', () => {
  * hand an unlinked account its access back. Under `legacy` those columns ARE
  * the authority, and ending a Person Link must not touch them.
  */
-describe('unlink and the legacy mirrors', () => {
-  async function setMode(value: 'legacy' | 'derived') {
-    await getDb(env)
-      .insert(cutoverSettings)
-      .values({ key: 'cutover_mode', value, updatedAt: new Date() });
-  }
-
-  async function seedLegacyAccess(accountId: string) {
-    const db = getDb(env);
-    const now = new Date();
-    await db
-      .update(users)
-      .set({ role: 'homeowner' })
-      .where(eq(users.id, accountId));
-    await db.insert(properties).values({
-      id: 'lot-1',
-      address: '1 Mirror Lane',
-      addressNormalized: '1 mirror lane',
-      createdAt: now,
-      updatedAt: now,
-    });
-    await db.insert(userPropertyLinks).values({
-      id: `upl-${accountId}`,
-      userId: accountId,
-      propertyId: 'lot-1',
-      verifiedAt: now,
-      method: 'otp_email',
-    });
-  }
-
-  const roleOf = async (id: string) =>
-    (await getDb(env).select().from(users).where(eq(users.id, id)))[0]?.role;
-  const legacyLinksOf = async (id: string) =>
-    getDb(env)
-      .select()
-      .from(userPropertyLinks)
-      .where(eq(userPropertyLinks.userId, id));
-
-  it('clears the stored role and property links under derived', async () => {
-    await setMode('derived');
-    await seedPerson('per-1');
-    await seedLink('acct-1', 'per-1');
-    await seedLegacyAccess('acct-1');
-
-    const res = await POST(
-      req({
-        action: 'unlink',
-        linkId: 'link-acct-1',
-        endReason: 'no_longer_qualifies',
-      }),
-    );
-    expect(res.status).toBe(204);
-    expect(await roleOf('acct-1')).toBe('visitor');
-    expect(await legacyLinksOf('acct-1')).toHaveLength(0);
-  });
-
-  it('leaves the stored role and property links alone under legacy', async () => {
-    await setMode('legacy');
-    await seedPerson('per-1');
-    await seedLink('acct-1', 'per-1');
-    await seedLegacyAccess('acct-1');
-
-    const res = await POST(
-      req({
-        action: 'unlink',
-        linkId: 'link-acct-1',
-        endReason: 'no_longer_qualifies',
-      }),
-    );
-    expect(res.status).toBe(204);
-    expect(await roleOf('acct-1')).toBe('homeowner');
-    expect(await legacyLinksOf('acct-1')).toHaveLength(1);
-  });
-
-  it('leaves the mirrors alone when the batch does not end the link', async () => {
-    // Drives the batch itself: the route's preflights would refuse before
-    // building it, so only this reaches the guard on the mirror statements.
-    // The link is already ended, so the primary UPDATE matches nothing and
-    // the mirrors must not fire either.
-    await setMode('derived');
-    await seedPerson('per-1');
-    await seedLink('acct-1', 'per-1');
-    await seedLegacyAccess('acct-1');
-    await getDb(env)
-      .update(personLinks)
-      .set({
-        endedAt: new Date(Date.now() + 1000),
-        endReason: 'recorded_in_error',
-        endedByAccountId: 'board-1',
-      })
-      .where(eq(personLinks.id, 'link-acct-1'));
-
-    const nowMs = Date.now();
-    const statements = await endLinkStatements({
-      database: env.DATABASE,
-      linkId: 'link-acct-1',
-      accountId: 'acct-1',
-      actorAccountId: 'board-1',
-      endReason: 'no_longer_qualifies',
-      nowMs,
-      operationKey: operationKey('person-links', 'unlink'),
-    });
-    const results = await env.DATABASE.batch([
-      ...statements,
-      ...endedLinkMirrorStatements(env.DATABASE, {
-        linkId: 'link-acct-1',
-        accountId: 'acct-1',
-        nowMs,
-      }),
-    ]);
-    expect(results[0].meta.changes).toBe(0);
-    expect(await roleOf('acct-1')).toBe('homeowner');
-    expect(await legacyLinksOf('acct-1')).toHaveLength(1);
-  });
-});

@@ -1,3 +1,4 @@
+import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
@@ -5,7 +6,7 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 // (vi.mock calls are hoisted above the imports below by Vitest.)
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('rluser', 'homeowner', []),
+  getAuthContext: async () => callerContext('rluser', 'homeowner', []),
 }));
 vi.mock('../../src/server/authz/turnstile', () => ({
   verifyTurnstile: async () => true,
@@ -21,13 +22,13 @@ import {
 } from '../../src/pages/api/verify/request';
 import { sendEmail } from '../../src/server/auth/senders';
 import { getDb } from '../../src/server/db/client';
-import { properties, owners, users } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { lots, users } from '../../src/server/db/schema';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
   const now = new Date();
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id: 'rl-prop',
     address: '5 Rate St',
     addressNormalized: '5 rate st',
@@ -46,7 +47,7 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  await getDb(env).insert(owners).values({
+  await seedRosterOwner({
     id: 'rl-own',
     propertyId: 'rl-prop',
     fullName: 'Rate Owner',
@@ -66,7 +67,7 @@ function req() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         address: '5 Rate St',
-        name: '',
+        name: 'Rate Owner',
         channel: 'email',
         turnstileToken: 't',
       }),

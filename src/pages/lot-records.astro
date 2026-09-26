@@ -63,8 +63,7 @@ const ctx = Astro.locals.authContext ?? null;
 // Authority (`member`), which a board member who owns no Lot does not have —
 // they read every Lot through the admin surface instead.
 const member = ctx !== null && ctx.capabilities.has('member');
-// Under `cutover_mode = legacy` there is no Person to scope by, so nobody
-// qualifies — the same deliberate refusal `/api/member/roster-self` gives.
+// A current Person Link is required to scope these reads.
 const scopable = member && ctx!.personId !== null;
 
 const today = associationDateIso();

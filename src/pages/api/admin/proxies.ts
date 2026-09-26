@@ -8,12 +8,7 @@ import {
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import type { Db } from '../../../server/db/client';
-import {
-  proxies,
-  properties,
-  meetings,
-  elections,
-} from '../../../server/db/schema';
+import { proxies, lots, meetings, elections } from '../../../server/db/schema';
 import { people } from '../../../server/db/roster-schema';
 import { hasEverHeldLotAuthority } from '../../../server/roster/authority';
 import { normalizeProxyInput } from '../../../lib/types';
@@ -28,7 +23,7 @@ export const prerender = false;
 /** 404 Response if the referenced row is missing, else null. */
 async function checkExists(
   db: Db,
-  table: typeof properties | typeof elections,
+  table: typeof lots | typeof elections,
   id: string | null | undefined,
   label: string,
 ): Promise<Response | null> {
@@ -152,7 +147,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // masking its neighbour.
   const propertyMissing = await checkExists(
     db,
-    properties,
+    lots,
     input.propertyId,
     'Property',
   );

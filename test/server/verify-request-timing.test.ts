@@ -1,3 +1,4 @@
+import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 
@@ -43,7 +44,7 @@ const senderGate = vi.hoisted(() => {
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('tmuser', 'homeowner', []),
+  getAuthContext: async () => callerContext('tmuser', 'homeowner', []),
 }));
 vi.mock('../../src/server/authz/turnstile', () => ({
   verifyTurnstile: async () => true,
@@ -61,14 +62,14 @@ import {
   UNIFORM_REQUEST_RESPONSE,
 } from '../../src/pages/api/verify/request';
 import { getDb } from '../../src/server/db/client';
-import { properties, owners, users } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { lots, users } from '../../src/server/db/schema';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
   const now = new Date();
   const db = getDb(env);
-  await db.insert(properties).values({
+  await db.insert(lots).values({
     id: 'tm-prop',
     address: '9 Timing Way',
     addressNormalized: '9 timing way',
@@ -87,7 +88,7 @@ beforeAll(async () => {
     createdAt: now,
     updatedAt: now,
   });
-  await db.insert(owners).values({
+  await seedRosterOwner({
     id: 'tm-own',
     propertyId: 'tm-prop',
     fullName: 'Timing Owner',

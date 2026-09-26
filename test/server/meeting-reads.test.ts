@@ -9,7 +9,7 @@ import {
   motionEligibility,
   boardVotes,
   boardAttendance,
-  properties,
+  lots,
 } from '../../src/server/db/schema';
 import {
   fetchMeetingsFor,
@@ -173,7 +173,7 @@ describe('meeting read helpers', () => {
 
   it('uses frozen motion eligibility while never-opened motions use the current roster', async () => {
     const db = getDb(env);
-    await db.insert(properties).values([
+    await db.insert(lots).values([
       {
         id: 'property-a',
         address: '1 Ashebrook Lane',
@@ -248,13 +248,13 @@ describe('meeting read helpers', () => {
 
     // The current roster now totals one active lot and weight 11.
     await db
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 11 })
-      .where(eq(properties.id, 'property-a'));
+      .where(eq(lots.id, 'property-a'));
     await db
-      .update(properties)
+      .update(lots)
       .set({ voteWeight: 22, status: 'inactive' })
-      .where(eq(properties.id, 'property-b'));
+      .where(eq(lots.id, 'property-b'));
 
     const detail = await fetchMeetingFor(env, 'visitor', 'member-meeting');
     expect(detail).not.toBeNull();

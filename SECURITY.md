@@ -49,20 +49,12 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   a holder in the later voting flow without exposing a browsable roster, but a verified homeowner
   can still repeat address queries to collect those names and IDs. That accepted tradeoff and a
   possible future rate limiter are recorded in ADR 0019.
-- **`board` is never self-grantable, and board handoff is a supported workflow.** `POST
-/api/admin/roles` (`promote`/`demote`, the admin panel's **Board access (legacy)** section — the
-  last remaining board admin can't be demoted, and a board admin can't escalate their own access
-  beyond `board`) was re-pointed by ADR 0022 phase 3e (#221) onto the same `cutover_mode` branch as
-  `/api/verify/*`: under `legacy` it still writes the `users.role` column directly (the demote race
-  is now closed by folding the live-board-count check into the update's own `WHERE` instead of a
-  separate count-then-update); under `derived` it instead grants or ends a `board` Access Grant
-  against the account's Person Link and current-or-scheduled Board Term
-  (`src/server/roster/access.ts`, shared with `/api/admin/access-grants` so the two surfaces can
-  never write different grants), carrying `users.role` along only as a write-behind mirror. Both
-  branches preserve the last-board-member refusal and the no-self-escalation rule exactly. These are
-  direct database writes either way: the Better Auth admin plugin's impersonation, ban, and set-role
-  endpoints are deliberately not granted to board sessions. The first System Administrator account
-  is bootstrapped through a
+- **Board handoff uses Access Grants.** `POST /api/admin/roles` promotes or demotes Board
+  Access through the same guarded builders as `/api/admin/access-grants`, validating the
+  account's Person Link and qualifying Board Term. It preserves the last-administrator
+  protections and cannot grant System Administration Access. Better Auth's impersonation,
+  ban, and set-role endpoints are not granted to board sessions. The first System Administrator
+  account is bootstrapped through a
   permanent, fail-closed `POST /api/bootstrap/board` endpoint (rewritten by #219) that self-disables
   (`410`) the moment its one-time `system_admin_bootstrap` record is written — not merely "once a
   board account exists," since an account can also be promoted board by ordinary means. It requires,
@@ -84,12 +76,7 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   durable trace even though nothing changes. Manual board verification (`POST
 /api/admin/person-links` `manualVerify`, and its `POST /api/admin/verification-requests` `accept`
   counterpart) only ever links an EXISTING Person to an account — it never creates a Person and
-  never grants access on its own — keeping identity and authority as separate decisions. Under
-  `derived`, both unlink paths also write the legacy `users.role`/`user_property_links` mirrors in
-  the same batch (`endedLinkMirrorStatements`, #212), each guarded on the link having just ended
-  AND on the mode being `derived` evaluated inside the SQL, so a flag written back to `legacy`
-  cannot hand the account its access back; under `legacy` those columns are the authority and are
-  left untouched.
+  never grants access on its own — keeping identity and authority as separate decisions.
 - **A public member meeting publishes each represented property's address alongside its vote,
   gated only by the meeting's own visibility tier.** The meeting record's public pages
   (`/meetings`, `/meetings/[id]`, rendered server-side via `fetchMeetingsFor`/`fetchMeetingFor` —
@@ -260,17 +247,14 @@ the information matches our records, a code has been sent.' }` for success, an u
   route throwing a `500`.
   `POST /api/verify/confirm` is equally non-committal: every internal failure collapses to
   `{ ok: false, reason: 'mismatch' }` except `expired`/`locked`, which keep their own reason. Which
-  backend answers is decided by `cutover_mode` (see below), which since the phase 3f flip reads
-  `derived` in production. Under the retained `legacy` backend, sign-up matches by address only and
-  fans the code out to every active owner contact on file for the chosen channel, matching no name.
-  Under `derived`, which is what production runs, sign-up additionally matches the claimed name
+  Person is verified depends on the claimed name matched
   against the Lot's current Person owners
   (an exact normalized match, or a first-and-last-token match if none matched exactly) and sends a
   single code to that one matched Person's own contact — never a fan-out — and only if that contact
   is uniquely attributable to one Party roster-wide. Codes are stored only as keyed HMAC-SHA-256
   hashes and compared in constant time, so a leaked database backup can't be reversed with a
   precomputed table. Requests are rate-limited in KV: a short per-account cooldown, a daily cap per
-  account, a daily cap per Lot (both modes), a daily cap per matched Person (`derived` only, so a
+  account, a daily cap per Lot, a daily cap per matched Person (so a
   Person owning several Lots isn't re-sendable once per Lot), and a cap on the number of distinct
   names one account may try against one Lot per day — the roster-walking control. Nothing
   auto-queues for board review anymore: an applicant who can't complete the code flow must take the
@@ -294,27 +278,16 @@ EMAIL_NOT_VERIFIED` for an existing-but-unverified account versus `401` for anyt
   visitor can learn by using the site's forms; it does not change what Better Auth answers on the
   wire, so someone inspecting raw HTTP responses (rather than the rendered page) can still tell the
   cases apart.
-- **`cutover_mode` decides which authorization model answers, and fails safe to the model already
-  serving production.** The ADR 0022 phase-3 flip switch (`src/server/authz/cutover-mode.ts`,
-  reading the uncached `cutover_settings.cutover_mode` singleton) sits inside the single seam every
-  guard resolves its caller through (`src/server/authz/context.ts`). It fails closed to
-  **`legacy`** — the opposite polarity from the operator write freeze below, because refusing is
-  not the safe answer on this axis; the safe answer is whichever model has already been serving
-  production. **The phase 3f flip executed on 2026-08-18, so the singleton now reads `derived` and
-  the party roster decides every request**: capabilities and content tier are recomputed per
-  request from the caller's Person Link, Ownerships, Representations, Board Terms, and Access
-  Grants, with every stored grant re-validated against current facts. Legacy
-  `users.role`/`user_property_links` are written behind as mirrors and read for authorization only
-  if the flag is written back to `legacy`, which remains possible and is what an absent row means.
+- **Authorization always derives from the party roster.** Every request recomputes the
+  caller's capabilities and content tier from Person Links, Ownerships, Representations,
+  Board Terms, and Access Grants. The obsolete mode switch and role/link mirrors are gone.
+  `users.role` remains a neutral Better Auth compatibility field; it grants no site access.
 - **ADR 0022 derived authorization re-validates every stored Board grant on every request.**
   `src/server/authz/derive.ts` computes the authorization context from the party-roster
   tables, re-validating every stored Board grant against its qualifying term on every call — a live
   grant whose term has lapsed, been cancelled, or been voided is refused, independent of whether
-  the write path already ended it. `cutover_mode` decides which model — `derived` or `legacy` —
-  answers a given request; there is no request-path comparison of the two any more (the phase-2
-  shadow layer that ran one alongside the served answer was deleted in phase 4, #212). The board-only
-  `GET /api/admin/roster-preview` panel is read-only by design — the phase-2 backfill
-  clean-replaces the underlying tables, so a write here would be silently erased — and exposes only
+  the write path already ended it. The board-only
+  `GET /api/admin/roster-preview` panel is read-only by design — roster maintenance belongs to the dedicated write routes — and exposes only
   structural counts, never resident names, addresses, or contact data.
 - **An operator-only write freeze can halt mutations site-wide without a deploy.** The
   `cutover_settings.write_freeze` singleton (built for the ADR 0022 phase-3 flip and retained
@@ -398,15 +371,13 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   whether or not it matches the roster. Document titles are pseudonymized the same way and sent as
   part of each excerpt label; citations
   reference retrieved excerpts by index label and are resolved back to real documents server-side.
-  The dictionary is built from **both roster models** — Person names and Contact Methods from the
-  live party roster (`people`, `contact_methods`) and owner names, phones, and emails from the
-  legacy `owners` table, unioned with Lot addresses — so a resident recorded through the admin
-  Roster panel after the ADR 0022 flip is masked exactly like one carried over by the backfill. It
+  The dictionary uses Person names and Contact Methods from the permanent party roster
+  (`people`, `contact_methods`), plus Lot addresses. It
   is deliberately not filtered by status, interval, void, or consolidation: a former owner or an
   ended contact value still appears in old documents and must still be masked. A redacted name or
   contact value arrives as a NULL and contributes nothing, so redaction is never undone by the
   dictionary. A Lot address is the one exception to that "still appears, still masked" rule: it is
-  read from the current `properties.address` row only, so editing a Lot's address on the admin
+  read from the current `lots.address` row only, so editing a Lot's address on the admin
   Roster panel (`update`, #212) overwrites the prior value in place, and any document text carrying
   the address as it read before the edit is no longer matched by the dictionary and goes
   unmasked. A Lot's unit carries no PII and is never in the dictionary.

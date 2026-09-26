@@ -23,12 +23,8 @@ import type {
 } from '../../lib/roster-admin';
 import { useAdminResource } from './useAdminResource';
 
-// The Compliance panel is the working surface for the four
-// System-Administrator-only technical capabilities (#205, #217). Every read it
-// makes answers 403 for every caller under `cutover_mode = legacy`, because
-// System Administration is a new-model concept with no legacy equivalent — so
-// the dark panel has to explain itself rather than look broken. That is the
-// capability-required card below, not an error state.
+// Technical capabilities require System Administration Access. A refusal
+// renders the capability-required card rather than a generic error state.
 
 interface ComplianceView {
   redactions: RedactionsView;
@@ -303,7 +299,7 @@ export default function CompliancePanel() {
     );
 
   // The expected answer before the cutover, not a failure: nobody holds the
-  // four technical capabilities while `cutover_mode` reads `legacy`.
+  // four technical capabilities without System Administration Access.
   if (isCapabilityRefusal(loadError))
     return (
       <div className="admin-panel">

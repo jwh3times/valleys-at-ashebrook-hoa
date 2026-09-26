@@ -11,71 +11,26 @@ state, the invariants that hold it together, and the work that remains.
 
 ## Current state
 
-**Production runs `cutover_mode = derived`.** The flip was executed 2026-08-18 UTC under a
-27-minute operator write freeze (#222, closed). Derived authorization answers every request:
-capabilities and content tier are recomputed per request from the party roster — Person Link,
-Ownerships and Representations, Board Terms, and Access Grants — with nothing cached.
+The code implements ADR 0022 phase 4 (#212). Migration `0037` and this version of the
+Worker form one contract: `properties` becomes `lots`, `board_service_terms` becomes
+`board_terms`, and the legacy roster, verification, link, and shadow tables are removed.
+The old `board_terms` is dropped before the permanent term table takes its name.
+`users.role` remains structurally required by Better Auth, but is neutralized to `visitor`;
+site code neither derives authority from it nor maintains role/link mirrors.
 
-`users.role` and `user_property_links` survive only as **legacy compatibility state**, with
-derived writes mirrored into them so the rollback model and Better Auth sessions stay coherent.
-`users.role` is read for authorization nowhere outside `context.ts`'s `legacy` branch, which
-`test/unit/authz-legacy-role.test.ts` pins by import-scanning the rest of `authz/`.
-`user_property_links` also remains behind the shared casting-authority resolver's `legacy` arm;
-derived casting does not consult it.
-
-`POST /api/bootstrap/board` is permanently self-disabled: its `system_admin_bootstrap` singleton
-is consumed and a re-run answers `410`.
-
-**Phase 4 (#212) is under way.** Wave 1 deleted the shadow layer (`shadow.ts`, `shadow-compare.ts`,
-the `CUTOVER_SHADOW` env var, and the offline `scripts/shadow-sweep.ts` sweep) and the legacy
-Members panel (`MembersManager`, `GET`/`POST /api/admin/members`, and their `fetchMembers`/
-`memberAction` client helpers): revocation now happens only through `/api/admin/person-links`
-`unlink` and the homeowner's own `POST /api/verify/unlink`, both of which now also write the
-legacy `users.role`/`user_property_links` mirrors under `derived` (`endedLinkMirrorStatements`,
-below). The Lots section of the roster panel gained its own `create`/`update` actions on
-`/api/admin/roster-lots` (recording a new Lot and correcting its address, unit, or vote weight;
-see [`http-endpoints.md`](./http-endpoints.md)), which removed the last capability the legacy
-**Homes & owners (legacy)** panel (`RosterManager`, backed by `properties`/`owners` reads and
-writes outside the roster) held alone, and wave 1 has since deleted that panel too, along with
-`/api/admin/properties` and `/api/admin/owners` and their client helpers (`fetchProperties`,
-`saveProperty`, `saveOwner`). The Dues ledger, Elections, Lot violations, Meetings, and Proxies
-admin panels now read the Lot list from the board-gated `GET /api/admin/roster-lots`
-(`fetchLots`/`LotSummary`) instead. `properties.notes`/`owners.notes` remain in D1 but are shown
-nowhere; exporting them before the tables are dropped is #212's migration step 1, a human step.
-The admin `useAuth` hook now decides the board view from `GET /api/me` (the caller's own derived
-capabilities) instead of the session's `role` mirror. Both phase-3 compatibility aliases are gone:
-`propertyIds` is `lotIds` and `role` is `contentTier` everywhere. Wave 1's final behavioral
-repoint is complete: live voting's shared casting-authority module resolves a derived caller's
-current Person Link, canonicalizes a consolidated Person one hop to the survivor, and derives that
-Person's current Lot Authority. The cast SQL re-checks the current Person Link and canonical Lot
-Authority inside the `INSERT`; proxy holding intersects those canonical caller Lots with the raw
-historical holder Person's Lot Authority. Frozen eligibility still decides whether a Lot counts
-after an occasion opens, and the predicates never inspect `ballot_choices`. Only the resolver's
-`legacy` arm still reads `user_property_links` (live voting is off in production). Wave 2's one-way
-step — the `legacy` branch, `users.role`, and the `properties` → `lots` and
-`board_service_terms` → `board_terms` renames — is tracked on #212.
-The write freeze, the permission matrix, and the ballot-privacy suites are retained permanently per
-#206/#212, not retired with the migration.
+The production rollout requires the coordinated migration/deploy procedure in
+[`migrations.md`](./migrations.md); code completion does not imply it has run.
+The one-time import/backfill commands are retired. Ongoing roster maintenance uses the
+Roster, Board, and Access panels. Legacy-note preservation is an operator prerequisite.
+The write freeze, permission matrix, invariant checks, and ballot-privacy suites remain.
 
 ## The seam
 
-`getAuthContext(request, env, associationDay)` in `src/server/authz/context.ts` is the single seam
-every guard, page, and route resolves its caller through. It reads the uncached
-`cutover_settings.cutover_mode` singleton and branches:
-
-- **`derived`** — `derivedContext(deriveAccess(...))`, recomputed from current D1 facts.
-- **`legacy`** — `legacyAuthContext`, which synthesizes a context from stored
-  `users.role`/`user_property_links` and deliberately reproduces the old rank ladder (a board
-  caller gets `member` too), so writing the flag back is bit-for-bit what the site was.
-
-`getCutoverMode` **fails closed to `legacy`** — the opposite polarity from the write freeze,
-deliberately. The freeze falls back to _frozen_ because refusing is the restrictive answer; the
-safe answer here is whichever model is already serving production. Since the flip the row exists
-and reads `derived`, so an absent row now means the singleton was never written.
-
-`test/server/adr0022-parity.test.ts` runs every caller class through `getAuthContext` with
-`cutover_mode` in both positions — including a board caller who owns no Lot, and a revocation that
-must take effect on the very next request.
+`getAuthContext(request, env, associationDay)` in `src/server/authz/context.ts` resolves
+an authenticated account through `deriveAccess` on every request. There is no mode switch
+or stored-role fallback. Missing links or authority confer no capabilities, and ending a
+link or grant affects the next request. The API regression suite
+`test/server/derived-only-access.test.ts` covers this boundary.
 
 **Capabilities are a set, not a ladder.** `AuthContext.capabilities` holds
 `member`/`board`/`systemAdmin`: `systemAdmin` implies `board`, but neither implies `member`, which
@@ -234,7 +189,7 @@ the strength of it, independent of whether the write path already ended the gran
 day-idempotent by `operation_key = grant-revalidation:<grant>:<day>`, written only when `derived`
 is the **serving** model, with errors swallowed so evaluation cannot 500 on a ledger failure.
 
-Board sign-in access has its own admin panel — **Board access (legacy)** (`BoardAccessManager`) —
+Board sign-in access has its own admin panel — **Board access** (`BoardAccessManager`) —
 distinct from the **Board** panel (`BoardServicePanel`) that records who serves. Neither sense
 ever writes the other's data.
 
@@ -301,66 +256,14 @@ Two constraints worth knowing before adding a check:
 `test/unit/invariants-single-source.test.ts` is the anti-drift guard, asserting neither caller
 contains a `SELECT`/`PRAGMA` of its own.
 
-## Phase 4's remaining preconditions
+## Contract safeguards
 
-**`test/unit/legacy-roster-consumers.test.ts`** declares every `src/` module reading one of the
-six tables phase 4 drops (`owners`, `user_property_links`, `property_verifications`,
-`manual_approval_queue`, `board_people`, and the legacy `board_terms`), together with what phase 4
-must do about it.
+`test/unit/legacy-roster-consumers.test.ts` scans imported Drizzle symbols and raw SQL
+for references to removed tables; its consumer list must stay empty. Historical migrations
+retain their original names and statements. The migration test checks populated ownership
+and board history, surviving foreign keys, neutral roles, and the retained write freeze.
 
-It exists because of **#233**: the AI pseudonymizer kept reading `owners` after the flip made the
-party roster authoritative, and nothing detected it — the flip's checklist verified that
-_authorization_ stopped reading the legacy model and never enumerated the non-authorization
-consumers. The scan checks both imported Drizzle symbols **and** raw SQL, because an import-only
-scan would miss `server/roster/verification.ts`, whose `user_property_links` write-behind mirror
-is a raw `INSERT` with no Drizzle symbol imported. A declared entry whose module no longer reads a
-dropped table fails the suite as stale, so the list cannot rot into a misleading audit.
-
-Each declared module carries one of five dispositions:
-
-| Disposition                    | Meaning                                                                               |
-| ------------------------------ | ------------------------------------------------------------------------------------- |
-| `deleted-with-the-table`       | Remaining legacy surfaces #212 deletes, including `context.ts`'s `legacy` branch.     |
-| `write-behind-mirror`          | Two modules whose write nothing reads for behavior.                                   |
-| `already-dual-read`            | The AI pseudonymizer and casting-authority resolver — wave 2 drops their legacy arms. |
-| `needs-repointing`             | Now **empty**: no derived-mode behavior depends on a table phase 4 drops.             |
-| `blocked-on-person-repointing` | Now **empty**, kept as a heading.                                                     |
-
-The `needs-repointing` list is empty. Derived casting now answers an **account's** claim on a Lot
-from its current Person Link plus the canonical Person's current Lot Authority, including the same
-facts re-checked inside the cast `INSERT`. `content/voting.ts` no longer names
-`user_property_links`; `content/casting-authority.ts` is `already-dual-read` only because its
-legacy rollback arm retains that mirror until wave 2 removes the model and table together.
-
-**#248 closed the FK precondition.** Migrations `0028` and `0029` repointed every FK column off
-`board_people` and `owners` onto `people(party_id)`, so **no table phase 4 keeps references either
-legacy table any more**, unblocking #212's steps 3 and 4. Four of the five `owners` columns were
-`ON DELETE SET NULL` — the dangerous half, where dropping the parent would have _succeeded_ and
-silently erased who acted from historical records rather than failing loudly. All five measured 0
-non-null values in production on 2026-08-20, so it was a pure schema change; the migrations'
-mapping branches exist for a database where that is not true. See
-[`migrations.md`](./migrations.md).
-
-## The backfill, post-flip
-
-`scripts/migrate-roster.ts` (`npm run roster:backfill`, planning in `scripts/backfill-plan.ts`) is
-dry-run by default. `--write --operator=<accountId>` applies it, writing exception queues for
-ambiguous cases and an audit baseline (one correlation per migrated root entity,
-`actor_kind = 'migration'`). The repeatable `--classify=<accountId>=technical` flag resolves an
-account's `board_account_unclassified` blocking exception on the record and plans no rows, since
-System Administration Access arrives only via `POST /api/bootstrap/board`; an unmatched account id
-is itself a new blocking exception (`classification_unmatched`), and any other classification
-value exits 2.
-
-`src/server/roster/normalize.ts` (`normalizeEmail`, `normalizePhone`, `normalizeName`) is what
-lets the backfill detect cross-Party contact ambiguity that legacy data never normalized
-consistently enough to catch on its own. A legacy identity that cannot be mapped to a
-`people.party_id` — the backfill's `derivedId` mapping is a JS digest SQL cannot compute — is
-dropped rather than invented; see [`migrations.md`](./migrations.md).
-
-> **Caution.** The default (non-`--authoritative`) `--write` mode is a **clean replace**. It was
-> safe only while the new model was inert. The flip's authoritative backfill has since seeded the
-> roster production runs on, so `--write` against remote D1 without `--authoritative` would delete
-> live roster rows and their audit baseline. **Any future run against production must pass
-> `--authoritative`** — the insert-once mode (`ON CONFLICT DO NOTHING`) that deletes nothing and
-> refuses to run while a flip-blocking exception is outstanding.
+Migrations `0028` and `0029` already repointed historical Person references away from the
+dropped tables. Migration `0037` uses SQLite renames, which update surviving foreign keys
+and stored view definitions without rebuilding their data. The 17 shared invariants and
+`PRAGMA foreign_key_check` remain required after application.

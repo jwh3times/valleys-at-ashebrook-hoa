@@ -32,7 +32,7 @@ beforeEach(async () => {
     'person_links',
     'person_verifications',
     'access_grants',
-    'board_service_terms',
+    'board_terms',
     'ownerships',
   ])
     await db.run(sql.raw(`DELETE FROM "${table}"`));

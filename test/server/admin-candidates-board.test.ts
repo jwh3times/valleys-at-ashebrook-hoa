@@ -3,20 +3,15 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { POST, PATCH, DELETE } from '../../src/pages/api/admin/candidates';
 import { getDb } from '../../src/server/db/client';
-import {
-  elections,
-  candidates,
-  boardPeople,
-  boardTerms,
-} from '../../src/server/db/schema';
+import { elections, candidates } from '../../src/server/db/schema';
 import { parties, people } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -24,10 +19,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   const db = getDb(env);
-  await db.delete(boardTerms);
   await db.delete(candidates);
   await db.delete(elections);
-  await db.delete(boardPeople);
   await db.delete(people);
   await db.delete(parties);
 });

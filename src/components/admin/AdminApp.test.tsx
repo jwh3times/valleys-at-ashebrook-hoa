@@ -156,7 +156,7 @@ describe('AdminApp', () => {
     });
     render(<AdminApp />);
     expect(
-      screen.getByRole('button', { name: 'Board access (legacy)' }),
+      screen.getByRole('button', { name: 'Board access' }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'The Board' }),

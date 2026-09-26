@@ -19,10 +19,8 @@ import {
   meetings,
   motions,
   boardVotes,
-  boardPeople,
   boardAttendance,
-  properties,
-  owners,
+  lots,
   memberAttendance,
   memberVotes,
 } from '../../src/server/db/schema';
@@ -30,7 +28,7 @@ import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import MeetingsPage from '../../src/pages/meetings.astro';
 import MeetingDetailPage from '../../src/pages/meetings/[id].astro';
 import NotFoundPage from '../../src/pages/404.astro';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { seedPeopleRows } from './fixtures';
 
 beforeAll(async () => {
@@ -47,14 +45,12 @@ beforeEach(async () => {
   await db.delete(boardAttendance);
   await db.delete(motions);
   await db.delete(meetings);
-  await db.delete(boardPeople);
-  await db.delete(owners);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
 });
 
 /**
@@ -156,7 +152,7 @@ describe('/meetings/[id]', () => {
     const res = await container.renderToResponse(MeetingDetailPage, {
       params: { id: 'draft1' },
       locals: {
-        authContext: legacyAuthContext('b', 'board', []),
+        authContext: callerContext('b', 'board', []),
       } as unknown as App.Locals,
       request: new Request('http://localhost/meetings/draft1'),
     });
@@ -178,7 +174,7 @@ describe('/meetings/[id]', () => {
     const res = await container.renderToResponse(MeetingDetailPage, {
       params: { id: 'boardonly1' },
       locals: {
-        authContext: legacyAuthContext('h', 'homeowner', ['p1']),
+        authContext: callerContext('h', 'homeowner', ['p1']),
       } as unknown as App.Locals,
       request: new Request('http://localhost/meetings/boardonly1'),
     });
@@ -448,7 +444,7 @@ describe('/meetings/[id]', () => {
       request: new Request('http://localhost/meetings/member-quorum-met'),
     });
     // Present weight (2, from p1 only) of totalActiveWeight (5, both active
-    // properties) — "votes", never "properties", because weights make the
+    // lots) — "votes", never "lots", because weights make the
     // two counts differ.
     expect(metHtml).toContain('2 of 5 votes represented');
     expect(metHtml).toContain('quorum of 2 met');

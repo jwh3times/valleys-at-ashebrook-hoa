@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { sql, eq } from 'drizzle-orm';
@@ -12,7 +12,7 @@ import { getDb } from '../../src/server/db/client';
 import {
   elections,
   candidates,
-  properties,
+  lots,
   ballots,
 } from '../../src/server/db/schema';
 import { users } from '../../src/server/db/auth-schema';
@@ -20,16 +20,16 @@ import {
   parties,
   people,
   ownerships,
-  boardServiceTerms,
+  boardTerms,
   boardOfficeAssignments,
   accessGrants,
 } from '../../src/server/db/roster-schema';
 import { pauseNextBatch } from './fixtures';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 /**
  * #218's certification rework (#203): certify creates PARTY-ROSTER facts —
- * board_service_terms with election provenance, optional office assignments —
+ * board_terms with election provenance, optional office assignments —
  * under the qualification and non-overlap gates, all-or-nothing; and
  * uncertify VOIDS the terms it created rather than deleting them, so the
  * round-trip leaves the reversed certification visible as voided rows.
@@ -50,7 +50,7 @@ const CLEAR = [
   'audit_events',
   'access_grants',
   'board_office_assignments',
-  'board_service_terms',
+  'board_terms',
   'ownerships',
   'people',
   'parties',
@@ -69,7 +69,7 @@ beforeEach(async () => {
     }
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw('DELETE FROM properties'));
+  await db.run(sql.raw('DELETE FROM lots'));
   await db.run(sql.raw('DELETE FROM users'));
   const now = new Date();
   await db.insert(users).values({
@@ -136,11 +136,11 @@ async function createCandidate(
 async function seedQualifiedPerson(personId: string, lotId: string) {
   const db = getDb(env);
   const existing = await db
-    .select({ id: properties.id })
-    .from(properties)
-    .where(eq(properties.id, lotId));
+    .select({ id: lots.id })
+    .from(lots)
+    .where(eq(lots.id, lotId));
   if (existing.length === 0)
-    await db.insert(properties).values({
+    await db.insert(lots).values({
       id: lotId,
       address: `${lotId} Ashebrook Lane`,
       addressNormalized: `${lotId} ashebrook lane`,
@@ -210,7 +210,7 @@ describe('certify', () => {
       .where(eq(elections.id, electionId));
     expect(election.status).toBe('certified');
 
-    const terms = await db.select().from(boardServiceTerms);
+    const terms = await db.select().from(boardTerms);
     expect(terms).toHaveLength(2);
     for (const t of terms) {
       expect(t.electionId).toBe(electionId);
@@ -260,7 +260,7 @@ describe('certify', () => {
     expect(await res.text()).toContain('Casey Unqualified');
 
     const db = getDb(env);
-    expect(await db.select().from(boardServiceTerms)).toEqual([]);
+    expect(await db.select().from(boardTerms)).toEqual([]);
     const [election] = await db
       .select()
       .from(elections)
@@ -299,7 +299,7 @@ describe('certify', () => {
     await seedQualifiedPerson('per-1', 'lot-1');
     await seedQualifiedPerson('per-2', 'lot-1');
     const db = getDb(env);
-    await db.insert(boardServiceTerms).values({
+    await db.insert(boardTerms).values({
       id: 'term-existing',
       personId: 'per-2',
       qualifyingLotId: 'lot-1',
@@ -328,7 +328,7 @@ describe('certify', () => {
     await seedQualifiedPerson('per-1', 'lot-1');
     await seedQualifiedPerson('per-2', 'lot-2');
     const db = getDb(env);
-    await db.insert(boardServiceTerms).values({
+    await db.insert(boardTerms).values({
       id: 'term-2',
       personId: 'per-2',
       qualifyingLotId: 'lot-2',
@@ -356,7 +356,7 @@ describe('certify', () => {
     );
     expect(res.status).toBe(409);
     expect(await res.text()).toBe('That office already has a current holder');
-    expect(await db.select().from(boardServiceTerms)).toHaveLength(1);
+    expect(await db.select().from(boardTerms)).toHaveLength(1);
     const [election] = await db
       .select()
       .from(elections)
@@ -450,7 +450,7 @@ describe('certify', () => {
       pause.restore();
     }
     const db = getDb(env);
-    expect(await db.select().from(boardServiceTerms)).toEqual([]);
+    expect(await db.select().from(boardTerms)).toEqual([]);
     const [election] = await db
       .select()
       .from(elections)
@@ -475,7 +475,7 @@ describe('uncertify', () => {
 
     // A grant qualified by the created term, to prove uncertify ends it.
     const db = getDb(env);
-    const [term] = await db.select().from(boardServiceTerms);
+    const [term] = await db.select().from(boardTerms);
     await db.insert(accessGrants).values({
       id: 'grant-1',
       accountId: 'b',
@@ -492,8 +492,8 @@ describe('uncertify', () => {
 
     const [after] = await db
       .select()
-      .from(boardServiceTerms)
-      .where(eq(boardServiceTerms.id, term.id));
+      .from(boardTerms)
+      .where(eq(boardTerms.id, term.id));
     expect(after).toBeDefined();
     expect(after.voidedAt).not.toBeNull();
     const [office] = await db.select().from(boardOfficeAssignments);
@@ -569,7 +569,7 @@ describe('uncertify', () => {
       ).status,
     ).toBe(204);
 
-    const [term] = await db.select().from(boardServiceTerms);
+    const [term] = await db.select().from(boardTerms);
     await db.insert(accessGrants).values({
       id: 'grant-1',
       accountId: 'b',

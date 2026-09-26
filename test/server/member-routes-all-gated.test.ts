@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 /**
  * Structural guard for the homeowner-write surface, sibling of
@@ -83,7 +83,7 @@ describe('every member and voting route is feature- and auth-gated', () => {
           },
         }),
         locals: {
-          authContext: legacyAuthContext('u1', 'homeowner', []),
+          authContext: callerContext('u1', 'homeowner', []),
         },
       });
       expect(res.status, `${name} ${verb} must hide behind the mode`).toBe(404);
@@ -133,7 +133,7 @@ describe('every member and voting route is feature- and auth-gated', () => {
           },
         }),
         locals: {
-          authContext: legacyAuthContext('u2', 'visitor', []),
+          authContext: callerContext('u2', 'visitor', []),
         },
       });
       expect(res.status, `${name} ${verb} must not succeed`).toBe(403);

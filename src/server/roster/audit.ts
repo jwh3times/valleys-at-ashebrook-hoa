@@ -46,22 +46,22 @@ export const ALWAYS: SqlGuard = { sql: '1', binds: [] };
  * transaction nothing can interleave, so the marker is unambiguous. */
 export function updatedRowGuard(
   table:
-    | 'properties'
+    | 'lots'
     | 'parties'
     | 'people'
     | 'organizations'
     | 'contact_methods'
     | 'ownerships'
     | 'representations'
-    | 'board_service_terms'
+    | 'board_terms'
     | 'board_office_assignments',
   id: string,
   nowMs: number,
-  // `properties` is the one legacy table here; its timestamps are SECONDS.
+  // `lots` is the one legacy table here; its timestamps are SECONDS.
   extraSql = '',
   extraBinds: unknown[] = [],
 ): SqlGuard {
-  const stamp = table === 'properties' ? Math.floor(nowMs / 1000) : nowMs;
+  const stamp = table === 'lots' ? Math.floor(nowMs / 1000) : nowMs;
   // The subtype tables key on their party.
   const idColumn =
     table === 'people' || table === 'organizations' ? 'party_id' : 'id';
@@ -78,7 +78,7 @@ export function insertedRowGuard(
     | 'contact_methods'
     | 'ownerships'
     | 'representations'
-    | 'board_service_terms'
+    | 'board_terms'
     | 'board_office_assignments'
     | 'access_grants'
     | 'person_verifications'

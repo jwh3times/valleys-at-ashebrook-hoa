@@ -18,7 +18,7 @@ import type { AuthContext, Capability } from '../../src/server/authz/guards';
  * the invariant the flip exists to preserve, so phase 4 keeps it.
  *
  * Callers are built as capability sets directly rather than through
- * `legacyAuthContext`, because the matrix is a statement about capabilities.
+ * `callerContext`, because the matrix is a statement about capabilities.
  * Which model produced them is `cutover_mode`'s business, and the gates cannot
  * tell the difference — which is precisely the property that makes the flip a
  * flag change.

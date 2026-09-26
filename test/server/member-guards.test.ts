@@ -5,7 +5,7 @@ import { requireMemberApi } from '../../src/server/authz/member-guards';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -31,7 +31,7 @@ function localsFor(ctx: AuthContext | null) {
 }
 
 const req = new Request('http://localhost/api/member/proxies');
-const homeowner: AuthContext = legacyAuthContext('u1', 'homeowner', ['p1']);
+const homeowner: AuthContext = callerContext('u1', 'homeowner', ['p1']);
 
 describe('requireMemberApi', () => {
   it('returns 404 when officialMode is off, even for a signed-in homeowner', async () => {
@@ -57,7 +57,7 @@ describe('requireMemberApi', () => {
   it('returns 403 for a visitor-role caller with officialMode on', async () => {
     await setOfficialMode(true);
     const gate = await requireMemberApi(
-      localsFor(legacyAuthContext('u2', 'visitor', [])),
+      localsFor(callerContext('u2', 'visitor', [])),
       req,
       env,
     );
@@ -65,17 +65,18 @@ describe('requireMemberApi', () => {
     if (!gate.ok) expect(gate.res.status).toBe(403);
   });
 
-  it('passes a homeowner and a board caller with officialMode on', async () => {
+  it('passes members and refuses a board caller without Lot Authority', async () => {
     await setOfficialMode(true);
     const h = await requireMemberApi(localsFor(homeowner), req, env);
     expect(h.ok).toBe(true);
     if (h.ok) expect(h.ctx.userId).toBe('u1');
     const b = await requireMemberApi(
-      localsFor(legacyAuthContext('b1', 'board', [])),
+      localsFor(callerContext('b1', 'board', [])),
       req,
       env,
     );
-    expect(b.ok).toBe(true);
+    expect(b.ok).toBe(false);
+    if (!b.ok) expect(b.res.status).toBe(403);
   });
 
   it('the officialMode check runs before auth: anonymous + mode off is 404, not 401', async () => {

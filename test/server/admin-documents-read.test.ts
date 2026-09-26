@@ -4,7 +4,7 @@ import { GET } from '../../src/pages/api/admin/documents';
 import { getDb } from '../../src/server/db/client';
 import { documents } from '../../src/server/db/schema';
 import { fetchDocumentsFor } from '../../src/server/content/reads';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -31,7 +31,7 @@ describe('GET /api/admin/documents', () => {
   it('returns documents including rag_status for a board caller', async () => {
     const res = await GET({
       request: req(),
-      locals: { authContext: legacyAuthContext('b', 'board', []) },
+      locals: { authContext: callerContext('b', 'board', []) },
     } as never);
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -46,7 +46,7 @@ describe('GET /api/admin/documents', () => {
     const res = await GET({
       request: req(),
       locals: {
-        authContext: legacyAuthContext('h', 'homeowner', []),
+        authContext: callerContext('h', 'homeowner', []),
       },
     } as never);
     expect(res.status).toBe(403);
@@ -60,7 +60,7 @@ describe('GET /api/admin/documents', () => {
   it('includes filename for each document', async () => {
     const res = await GET({
       request: req(),
-      locals: { authContext: legacyAuthContext('b', 'board', []) },
+      locals: { authContext: callerContext('b', 'board', []) },
     } as never);
     const body = (await res.json()) as { id: string; filename: string }[];
     const row = body.find((d) => d.id === 'doc-unsupported');

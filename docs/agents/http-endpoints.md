@@ -42,7 +42,7 @@ API routes live under `src/pages/api/`:
   `AuthContext` every route gate reads (`401` when anonymous, `no-store`). It sits outside the
   gated prefixes on purpose — any signed-in account may ask about itself — and answers about the
   caller alone. The admin `useAuth` hook shows the board panels only when `capabilities` includes
-  `board`, never from the Better Auth session's `role` mirror, and re-reads on every sign-in (#212).
+  `board`, never from the Better Auth session's compatibility `role`, and re-reads on every sign-in (#212).
 - Default-off live homeowner voting: `POST /api/vote` accepts `castBallot` and `castMotionVote`
   only; there is no GET voting endpoint. Middleware is the namespace backstop and the handler calls
   `requireVotingApi` independently. Its fixed guard order is: literal-boolean `officialMode` plus
@@ -53,7 +53,7 @@ API routes live under `src/pages/api/`:
   resolved. Out-of-tier or unknown occasions are masked as `404`. In derived mode, own-lot and
   occasion-scoped held-proxy authority resolve the Account's current Person Link, canonicalize a
   consolidated Person one hop to its survivor, and read Lot Authority from the party roster; only
-  the legacy rollback mode reads `user_property_links`. The mutation SQL repeats the current-link
+  there is no legacy account-to-Lot fallback. The mutation SQL repeats the current-link
   and canonical Lot Authority predicates, and a held-proxy cast intersects those caller Lots with
   the uncanonicalized historical holder Person's Lot Authority. It also re-checks that the proxy's
   grantor holds Lot Authority over the proxy Lot (the ADR 0022 phase 3d grantor re-validation,
@@ -69,7 +69,7 @@ API routes live under `src/pages/api/`:
   rather than a write-only module: it carries the board's `GET` for the dues blob as well as the
   `PUT` (#364). `/api/admin/board-people` and
   `/api/admin/board-terms` were **retired by phase 3b (#218), not ported**: the identity layer
-  moved to the party roster and `board_service_terms` (see the ADR 0022 roster routes below), and
+  moved to the party roster and `board_terms` (see the ADR 0022 roster routes below), and
   porting the legacy routes would have kept two identity layers alive. The legacy `board_people`
   table itself survives — `board_terms.person_id` still references it — but #248 (part 1 of 2, an
   ADR 0022 phase 4 precondition) repointed the meeting and elections records off it onto the party
@@ -78,7 +78,7 @@ API routes live under `src/pages/api/`:
   flat `{id, fullName}` list of `people` — excluding consolidated parties, names rendered through
   `personDisplayLabel` — from `GET /api/admin/meetings?roster=people` instead. The legacy "The
   Board" editor stayed retired; the writable board-service surface is now the phase-3e (#221)
-  **Board** panel (`BoardServicePanel`), which writes `board_service_terms`/
+  **Board** panel (`BoardServicePanel`), which writes `board_terms`/
   `board_office_assignments` through `/api/admin/board-service` (see the ADR 0022 roster routes
   below), not the legacy `board_people`/`board_terms` tables.
   `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
@@ -167,7 +167,7 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   `400 "Unknown lots in entries: <ids>"` naming every offending id (its own lot-existence check,
   since — unlike its siblings — it stamps no weight, so nothing else resolves the lot); and
   `setMemberVotes` also returns `400`
-  for an unknown `propertyId`, since it stamps `memberVotes.weight` from `properties.vote_weight` at
+  for an unknown `propertyId`, since it stamps `memberVotes.weight` from `lots.vote_weight` at
   recording time and must resolve that weight to build a legal row. `setMemberAttendance`,
   `setMemberVotes`, and (on `/api/admin/elections`) `setBallots` each take a per-entry `proxyId`
   instead of the old `viaProxy` boolean; every referenced proxy is checked by the shared
@@ -238,13 +238,13 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   ballot's real `recorded_at` (re-stamping every row on one amendment would falsely flag the whole
   election). A newly-entered lot's `recorded_at` is the amendment instant, which is the honest
   "entered on" answer for it. `setBallots` stamps `weight` from
-  `properties.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
+  `lots.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
   same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
 meetingId: election.meetingId, associationDay: election.electionDate }` so a proxy signed for the
   election's own meeting also covers it while grantor authority is evaluated on the election day.
   `certify` (reworked by phase 3b, #218, per #203) takes per-winner
   `{candidateId, personId?, qualifyingLotId, startDay, scheduledEndDay, office?}` and, in one
-  reserved `db.batch()`, creates PARTY-ROSTER facts: a `board_service_terms` row per winner
+  reserved `db.batch()`, creates PARTY-ROSTER facts: a `board_terms` row per winner
   carrying `election_id`, validated in conditional SQL against the winner's qualifying basis
   (`qualifiesGuard` — the person currently owns or represents the lot) and both non-overlap
   directions, plus an optional `board_office_assignments` row; `candidates.won` is set and the
@@ -399,7 +399,7 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   `changes() = 1` exactly as `/api/admin/lot-violations` does, answering `409` "Lot not found, or lot
   records are not enabled" when the insert applies to zero rows.
 
-  `postBulkAssessment` posts one `charge` to every `properties.retired_at IS NULL` lot in a single
+  `postBulkAssessment` posts one `charge` to every `lots.retired_at IS NULL` lot in a single
   `INSERT … SELECT … ON CONFLICT (operation_key, lot_id) DO NOTHING` under ONE shared operation key,
   so a re-post reaches only a lot created since the first run and silently skips the rest rather than
   raising — raising would refuse the whole statement and leave that new lot without the assessment,
@@ -420,22 +420,13 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   `deleteIds` document (D1 row + R2 object), and marks the surviving `keepIds` as kept-verified;
   `keepIds` must be non-empty and disjoint from `deleteIds`, while `deleteIds` may be empty for a
   keep-all/mark-reviewed resolution.
-- Board handoff, re-pointed by ADR 0022 phase 3e (#221) onto the same `cutover_mode` branch
-  `/api/verify/*` established: `GET /api/admin/roles` lists current board; `POST /api/admin/roles`
-  accepts `{ action: 'promote', email }` or `{ action: 'demote', userId }`. Under `legacy` both
-  actions write `users.role` exactly as before — `demote`'s last-board-member count-then-update race
-  is now closed by folding the live-board-count check into the update's own `WHERE` (a lost race
-  answers `409` rather than emptying the board), and the historical `409` for demoting anyone while
-  only one board member remains is preserved bit-for-bit. Under `derived`, `promote` instead walks
-  account → Person Link → a current-or-scheduled Board Term and creates a `board` Access Grant plus
-  a `users.role` write-behind mirror in one batch (readable `404`/`409` naming whichever link is
-  missing or already granted), and `demote` ends every live Board grant the account holds, refusing
-  (`409`) if that would leave no other account holding Board Access, then mirrors the role the
-  account derives to afterward — `homeowner` if Lot Authority survives, `visitor` otherwise, `board`
-  if a live `system_admin` grant remains. The shared builders (`grantStatements`,
-  `endBoardGrantsStatements`, and the chain/mirror reads) live in the new
-  `src/server/roster/access.ts`, called by both this route and `/api/admin/access-grants` so the two
-  surfaces can never write different grants.
+- Board handoff: `GET /api/admin/roles` lists accounts with live Access Grants, independently
+  of `users.role`; `POST` accepts `{ action: 'promote', email }` or `{ action: 'demote', userId }`.
+  Promotion validates a Person Link and current-or-scheduled Board Term before creating a
+  `board` grant. Demotion ends live Board grants, preserving the last-Board-Access guard.
+  Both use `roster/access.ts`'s atomic builders, shared with `/api/admin/access-grants`, and
+  return readable `404`/`409` responses for missing or conflicting facts. Member access remains
+  independently derived from Lot Authority; no stored-role mirror is written.
 - ADR 0022 phase 2 roster preview, `requireBoard`-gated and read-only:
   `GET /api/admin/roster-preview` returns structural counts (IDs and non-personal fields only, not
   a roster browser) across five sections — Roster, Board, Access, Review, Compliance — including
@@ -473,7 +464,7 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
     advisory; single-record reads never write the ledger) plus per-entity `POST` action buses —
     `/api/admin/roster-lots` (`GET`, `requireBoard`-gated, returns every Lot as `{id, address,
 unit, status, voteWeight}` ordered by address — `status` rather than a derived "retired" flag,
-    because the election/motion SQL still decides live Lots from `properties.status` and every
+    because the election/motion SQL still decides live Lots from `lots.status` and every
     writer keeps the two in step; this is the Lot list (`fetchLots`/`LotSummary` in
     `src/lib/admin.ts`/`src/lib/types.ts`) the Dues ledger, Elections, Lot violations, Meetings, and
     Proxies admin panels pick lots from, replacing the deleted `GET /api/admin/properties`, which
@@ -488,7 +479,7 @@ unit, status, voteWeight}` ordered by address — `status` rather than a derived
     did not happen — a weight change ledgers as `board_recorded` effective today, an address/unit
     -only change as `recorded_in_error` effective `not_applicable`, either way tagged
     `lot_address` sensitive whenever address or unit changed; `retire` — ends current Ownerships
-    as caused Roster Changes, dual-writes legacy `properties.status`, refuses over a live
+    as caused Roster Changes, keeps `lots.status` consistent with retirement, refuses over a live
     qualifying term or an open frozen snapshot; `correctRetirement` restores the Lot but never the
     ownerships), `/api/admin/
 roster-parties` (`createPerson`/`createOrganization` — party+subtype in one batch, org name
@@ -517,24 +508,16 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     one `redaction_tasks` row always created so the integrity view holds; `recordCleanup` under
     `redactionCleanup`, operational only), `GET /api/admin/access-denials`
     (`accessDenialDetail`), and `GET /api/admin/audit-integrity` (`auditIntegrityViews`). These
-    capabilities come only with a live `system_admin` grant, so under `derived` they answer only
-    the System Administrator (one exists since the phase 3f bootstrap) and 403 everyone else; if
-    the flag were ever written back to `legacy`, nobody holds them and all three answer 403 for
-    every caller — by design.
+    capabilities come only with a live `system_admin` grant; everyone else receives `403`.
   - Member correction requests: `GET /api/member/roster-self` (own Person, Contact Methods,
     Ownerships, Representations, open requests — never the ledger, never another party's data)
     and `GET`/`POST`/`DELETE /api/member/correction-requests` (own name and own Contact Methods
     only; requests are operational rows whose free text NEVER enters the ledger; withdrawal and
     out-of-scope ids mask as `404`). Both use `requireMemberApi` and then answer the deliberate
-    no-Person-Link `403` pointing at verification — under `derived` that is any caller whose
-    account has not been linked to a Person; under `legacy`, which has no Person concept, it is
-    every caller.
+    no-Person-Link `403` pointing at verification when the account is unlinked.
 - ADR 0022 phase 3c Person Verification / Person Link routes (#219; decided by #201, amended by
-  #202). `/api/verify/{request,confirm}` are now ONE route contract answered by TWO backends
-  branched on `getCutoverMode`: `legacy` keeps the existing property flow (address match,
-  owner-contact fan-out, `property_verifications`, confirm writes `user_property_links` and
-  promotes role); `derived` runs the new Person flow entirely in `src/server/roster/verification.ts`.
-  `POST /api/verify/request` takes `{ address, name, channel, turnstileToken }` in both modes;
+  #202). `/api/verify/{request,confirm}` use the Person flow in `src/server/roster/verification.ts`.
+  `POST /api/verify/request` takes `{ address, name, channel, turnstileToken }`;
   after the write freeze, session, malformed-body, channel, and Turnstile gates — none of which
   touch the roster — EVERY remaining outcome (success, unknown address, unmatched or ambiguous
   name, an organization-owned lot, a shared/unattributable contact, both already-linked
@@ -546,8 +529,7 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   letting the exception surface, and requires `data.success === true` rather than returning the
   field verbatim, so a Cloudflare-side outage or a malformed/non-boolean upstream response answers
   the route's ordinary bad-captcha `400` instead of a `500`. The convergence
-  is timing-uniform as well as byte-uniform: the rate-limit check, the roster match (either
-  backend), and the send are done inside a closure handed to `locals.cfContext.waitUntil(...)`
+  is timing-uniform as well as byte-uniform: the rate-limit check, the roster match, and the send are done inside a closure handed to `locals.cfContext.waitUntil(...)`
   rather than awaited, so the response is built and returned before any of that work runs and
   every path costs the same regardless of what it goes on to do — see
   `test/server/verify-request-timing.test.ts`, which proves this with a sender that never
@@ -555,8 +537,7 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   removed `locals.runtime.ctx` (its getter now throws), so reach for `cfContext`, not `runtime.ctx`,
   anywhere a route needs to defer work past the response. A handler invoked directly, as the
   Workers test pool does, has no `cfContext`, so the closure is awaited inline instead — existing
-  tests still observe the effects synchronously. Under `derived`,
-  the matcher (`matchPersonForVerification`) resolves the claimed Lot, filters current Person
+  tests still observe the effects synchronously. The matcher (`matchPersonForVerification`) resolves the claimed Lot, filters current Person
   owners (never Organizations — the join through `people` excludes them structurally), applies a
   two-tier name match (exact normalized full match; if zero, a first-and-last-token match; either
   tier requires exactly one candidate), then picks the matched Person's current contact on the
@@ -567,36 +548,24 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   being linked sends nothing and creates nothing. `POST /api/verify/confirm` collapses every
   internal failure (wrong code, expired, locked, or a batch race) into
   `{ ok: false, reason: 'mismatch' }` except `expired`/`locked`, which keep their own reason; on a
-  `derived` success it writes, in one D1 batch, `person_verifications`
+  success it writes, in one D1 batch, `person_verifications`
   (`method='otp_email'|'otp_sms'`), `person_links`, a root `identity`-family ledger event
-  (`person_verified`, reason `automatic_contact_proof`), and two write-behind mirrors (never read
-  for authorization) that insert `user_property_links` and promote `users.role` from `visitor` to
-  `homeowner` — kept only so the legacy read model and Better Auth session stay coherent through
-  the flip. Neither backend auto-queues to `manual_approval_queue` anymore — the three legacy
-  auto-enqueue paths (address not found, no contact on file, every send failed) were removed;
+  (`person_verified`, reason `automatic_contact_proof`). No legacy role or link mirrors are written.
   `POST /api/verify/review` is the one explicit applicant action that queues review (session-gated,
   no Turnstile — the one-open-request-per-account partial unique index is the flooding control),
-  writing `verification_review_requests` identically in both modes and always answering the
+  writing `verification_review_requests` and always answering the
   uniform `200 { ok: true, message: 'Your request was sent to the board.' }`.
   `POST /api/verify/unlink` is the applicant's always-available self-unlink — deliberately outside
   `/api/member/*` and `officialMode`, gated only by the write freeze and an authenticated session —
   ending the caller's own Person Link and every Access Grant it currently supports in one batch,
   refusing (`409`) to strip the last System Administrator and permanently recording that refusal
-  as a denied Access Event. Under `derived`, this batch (and `/api/admin/person-links`' `unlink`
-  below) also appends `endedLinkMirrorStatements` (#212): a `users.role='visitor'` update and a
-  `user_property_links` delete, each guarded on the link having just ended in that batch AND on
-  the mode being `derived` evaluated inside the SQL, so a flag written back to `legacy` can never
-  hand the account its access back. Under `legacy` those columns are the authority and unlink
-  leaves them untouched — there is no longer a board surface that clears a homeowner's
-  `users.role`/`user_property_links` under `legacy`, since `/api/admin/members` is gone; that is
-  acceptable only while `legacy` is a rollback target rather than the serving model. The board's
-  mirror surfaces are flat, `requireBoard`-gated, and
-  new-model-always (no mode branch): `/api/admin/person-links` (`GET` the full link register with
+  as a denied Access Event. The board's corresponding surfaces are flat and `requireBoard`-gated:
+  `/api/admin/person-links` (`GET` the full link register with
   verification provenance; `POST` `manualVerify { accountId, personId, reason:
 'manual_board_decision'|'migration_reverification', evidence }` links an EXISTING Person — never
   creates one — with readable `404`/`409` pre-checks for an unknown/organization/consolidated
   Person or either side already linked, and `unlink { linkId, endReason }` for every admin-facing
-  end reason except `self_unlink`, sharing the same grant-ending batch, mirror write, and
+  end reason except `self_unlink`, sharing the same grant-ending batch and
   last-System-Administrator guard as `/api/verify/unlink`; #212 deleted the standalone
   `/api/admin/members` revoke surface, so `unlink` is now the only board-initiated way to end a
   homeowner's access, and a Board Access holder may unlink an account holding only Board grants,
@@ -690,16 +659,13 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   `system_admin_bootstrap` singleton is unconsumed (`410` once used — this, not "does a board
   account exist," is the primary guard, since an account can also be promoted board by other
   means), a timing-safe `x-bootstrap-secret` match against `env.BOOTSTRAP_SECRET` (missing binding
-  = closed, `403`), an authenticated session (`401`, resolved directly off Better Auth rather than
-  through `getAuthContext`/`cutover_mode`, since bootstrap runs at flip step 4 while `cutover_mode`
-  may still read `legacy`), then a body `{ personId }` naming an already-recorded roster Person
+  = closed, `403`), an authenticated session (`401`, resolved directly from Better Auth), then
+  a body `{ personId }` naming an already-recorded roster Person
   (readable `404`/`409` for unknown/organization/consolidated or either side already linked). One
   atomic batch then creates `person_verifications` (`method='bootstrap'`,
   `reason='bootstrap_first_administrator'`), `person_links`, a `system_admin` row in
   `access_grants` (`grant_reason='bootstrap'`), the `system_admin_bootstrap` singleton row itself,
-  a root `identity` ledger event plus its caused `access` event, and a `users.role='board'`
-  write-behind mirror (fresh-deploy admin access under `legacy`; a no-op if the account is already
-  board at the flip). The legacy BOARD_EMAIL/BOARD_PASSWORD/BOARD_NAME signup path and its
+  a root `identity` ledger event plus its caused `access` event. The old credential-based signup and
   board-count guard are retired — `src/server/auth/seed-board.ts` and `scripts/seed-board.ts` are
   deleted. The route stays at its unchanged path and remains one of the write freeze's two
   permanent exemptions; it never calls `writeFreezeError`.

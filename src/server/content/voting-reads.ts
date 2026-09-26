@@ -12,7 +12,7 @@ import {
   memberVotes,
   motionEligibility,
   motions,
-  properties,
+  lots as lotsTable,
   proxies,
 } from '../db/schema';
 import { fetchLotAuthority } from '../roster/authority';
@@ -148,9 +148,9 @@ export async function fetchOpenVotingFor(
     ...new Set([...callerLotIds, ...proxyRows.map((row) => row.propertyId)]),
   ];
   const propertyRows = await db
-    .select({ id: properties.id, address: properties.address })
-    .from(properties)
-    .where(inArray(properties.id, targetPropertyIds));
+    .select({ id: lotsTable.id, address: lotsTable.address })
+    .from(lotsTable)
+    .where(inArray(lotsTable.id, targetPropertyIds));
   const addressByProperty = new Map(
     propertyRows.map((row) => [row.id, row.address]),
   );

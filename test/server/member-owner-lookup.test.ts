@@ -3,10 +3,10 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { POST } from '../../src/pages/api/member/owner-lookup';
 import { getDb } from '../../src/server/db/client';
-import { settings, properties } from '../../src/server/db/schema';
+import { settings, lots } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -16,19 +16,19 @@ const now = new Date();
 
 beforeEach(async () => {
   const db = getDb(env);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(settings).where(eq(settings.key, 'site'));
   await db.insert(settings).values({
     key: 'site',
     value: JSON.stringify({ officialMode: true }),
     updatedAt: now,
   });
-  await db.insert(properties).values({
+  await db.insert(lots).values({
     id: 'p2',
     address: '2 Oak St.',
     addressNormalized: '2 oak st',
@@ -82,11 +82,11 @@ beforeEach(async () => {
   ]);
 });
 
-const jane: AuthContext = legacyAuthContext('u1', 'homeowner', ['p1']);
+const jane: AuthContext = callerContext('u1', 'homeowner', ['p1']);
 
-const staleJane: AuthContext = legacyAuthContext('u1', 'homeowner', []);
+const staleJane: AuthContext = callerContext('u1', 'homeowner', []);
 
-const board: AuthContext = legacyAuthContext('b1', 'board', []);
+const board: AuthContext = callerContext('b1', 'board', []);
 
 function call(ctx: AuthContext | null, body?: unknown) {
   return POST({
@@ -106,9 +106,9 @@ describe('POST /api/member/owner-lookup', () => {
     expect(await res.text()).toBe('Forbidden');
   });
 
-  it('retains rank-based board access when the board caller has no lots', async () => {
+  it('refuses a board caller without member authority', async () => {
     const res = await call(board, { address: '2 Oak St' });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   it('returns the Persons who may act for the matched lot, names and ids only — no phone, no email', async () => {
@@ -138,7 +138,7 @@ describe('POST /api/member/owner-lookup', () => {
 
   it('404s an inactive property identically to an unknown one, even with an active owner attached', async () => {
     const db = getDb(env);
-    await db.insert(properties).values({
+    await db.insert(lots).values({
       id: 'p3',
       address: '3 Oak St.',
       addressNormalized: '3 oak st',

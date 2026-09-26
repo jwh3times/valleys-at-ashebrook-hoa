@@ -9,7 +9,7 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { associationDateIso } from '../../../lib/format';
 import { isoDateOrError } from '../../../lib/types';
-import { properties } from '../../../server/db/schema';
+import { lots as lotsTable } from '../../../server/db/schema';
 import {
   parties,
   people,
@@ -250,9 +250,9 @@ async function validateScope(
   const db = getDb(env);
   for (const lotId of lotIds) {
     const lotRows = await db
-      .select({ id: properties.id })
-      .from(properties)
-      .where(eq(properties.id, lotId))
+      .select({ id: lotsTable.id })
+      .from(lotsTable)
+      .where(eq(lotsTable.id, lotId))
       .limit(1);
     if (lotRows.length === 0)
       return {

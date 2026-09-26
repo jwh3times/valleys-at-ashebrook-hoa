@@ -26,10 +26,10 @@ interface CountRow {
  * become a second way to read resident contact details. */
 const SECTIONS = {
   roster: [
-    ['Lots', 'SELECT COUNT(*) AS n FROM properties WHERE retired_at IS NULL'],
+    ['Lots', 'SELECT COUNT(*) AS n FROM lots WHERE retired_at IS NULL'],
     [
       'Retired Lots',
-      'SELECT COUNT(*) AS n FROM properties WHERE retired_at IS NOT NULL',
+      'SELECT COUNT(*) AS n FROM lots WHERE retired_at IS NOT NULL',
     ],
     ['Parties', 'SELECT COUNT(*) AS n FROM parties'],
     [
@@ -56,7 +56,7 @@ const SECTIONS = {
   board: [
     [
       'Board Terms',
-      'SELECT COUNT(*) AS n FROM board_service_terms WHERE voided_at IS NULL',
+      'SELECT COUNT(*) AS n FROM board_terms WHERE voided_at IS NULL',
     ],
     [
       'Office Assignments',

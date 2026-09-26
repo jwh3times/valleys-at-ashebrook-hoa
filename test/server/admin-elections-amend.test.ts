@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import { POST } from '../../src/pages/api/admin/elections';
@@ -11,7 +11,7 @@ import { getDb } from '../../src/server/db/client';
 import { ballots } from '../../src/server/db/schema';
 import { auditEvents, reviewFlags } from '../../src/server/db/audit-schema';
 import { eq } from 'drizzle-orm';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import {
   req,
   truncateAll,

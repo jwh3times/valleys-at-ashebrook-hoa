@@ -9,7 +9,7 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { associationDateIso } from '../../../lib/format';
 import { isoDateOrError, normalizePropertyInput } from '../../../lib/types';
-import { properties } from '../../../server/db/schema';
+import { lots } from '../../../server/db/schema';
 import { normalizeAddress } from '../../../server/roster/normalize';
 import {
   AuditCorrelation,
@@ -35,7 +35,7 @@ import {
 // snapshots are never touched, so a retired Lot keeps counting in occasions
 // already open when it retired.
 //
-// `properties.status` is dual-written to 'inactive': legacy authorization and
+// `lots.status` is dual-written to 'inactive': legacy authorization and
 // the legacy denominators still key off status until the flip, and the two
 // models must not diverge on which Lots are live. `retired_day`/`retired_at`
 // are the new model's answer (derive.ts reads only `retired_at`).
@@ -97,7 +97,7 @@ function parseEvidence(
 function retirementGuards(lotId: string, associationDay: string): SqlGuard {
   return {
     sql: `NOT EXISTS (
-        SELECT 1 FROM board_service_terms t
+        SELECT 1 FROM board_terms t
         WHERE t.qualifying_lot_id = ?
           AND t.cancelled_at IS NULL AND t.voided_at IS NULL
           AND t.actual_end_day IS NULL AND ? < t.scheduled_end_day
@@ -127,9 +127,9 @@ async function retireLot(
 
   const db = getDb(env);
   const lotRows = await db
-    .select({ id: properties.id, retiredAt: properties.retiredAt })
-    .from(properties)
-    .where(eq(properties.id, lotId))
+    .select({ id: lots.id, retiredAt: lots.retiredAt })
+    .from(lots)
+    .where(eq(lots.id, lotId))
     .limit(1);
   if (lotRows.length === 0)
     return new Response('Lot not found', { status: 404 });
@@ -162,7 +162,7 @@ async function retireLot(
     .first<{ n: number }>();
   if (blocked?.n === 1) {
     const term = await env.DATABASE.prepare(
-      `SELECT 1 AS one FROM board_service_terms t
+      `SELECT 1 AS one FROM board_terms t
        WHERE t.qualifying_lot_id = ?
          AND t.cancelled_at IS NULL AND t.voided_at IS NULL
          AND t.actual_end_day IS NULL AND ? < t.scheduled_end_day
@@ -178,10 +178,10 @@ async function retireLot(
   const nowMs = Date.now();
   const nowSeconds = Math.floor(nowMs / 1000);
   const primary = env.DATABASE.prepare(
-    `UPDATE properties SET status = 'inactive', retired_day = ?, retired_at = ?, updated_at = ?
+    `UPDATE lots SET status = 'inactive', retired_day = ?, retired_at = ?, updated_at = ?
      WHERE id = ? AND retired_at IS NULL AND (${guards.sql})`,
   ).bind(effectiveDay, nowMs, nowSeconds, lotId, ...guards.binds);
-  const rootGuard = updatedRowGuard('properties', lotId, nowMs);
+  const rootGuard = updatedRowGuard('lots', lotId, nowMs);
 
   // The ownerships the retirement will end, enumerated for their caused
   // events; each statement re-checks its own row inside the batch.
@@ -270,9 +270,9 @@ async function correctRetirement(
 
   const db = getDb(env);
   const lotRows = await db
-    .select({ id: properties.id, retiredAt: properties.retiredAt })
-    .from(properties)
-    .where(eq(properties.id, lotId))
+    .select({ id: lots.id, retiredAt: lots.retiredAt })
+    .from(lots)
+    .where(eq(lots.id, lotId))
     .limit(1);
   if (lotRows.length === 0)
     return new Response('Lot not found', { status: 404 });
@@ -282,7 +282,7 @@ async function correctRetirement(
   const nowMs = Date.now();
   const nowSeconds = Math.floor(nowMs / 1000);
   const primary = env.DATABASE.prepare(
-    `UPDATE properties SET status = 'active', retired_day = NULL, retired_at = NULL, updated_at = ?
+    `UPDATE lots SET status = 'active', retired_day = NULL, retired_at = NULL, updated_at = ?
      WHERE id = ? AND retired_at IS NOT NULL`,
   ).bind(nowSeconds, lotId);
 
@@ -298,7 +298,7 @@ async function correctRetirement(
       // `updatedRowGuard` would also demand `retired_at IS NULL` implicitly
       // via updated_at alone; state it explicitly so the marker cannot match
       // an unrelated same-second write.
-      sql: `EXISTS (SELECT 1 FROM properties WHERE id = ? AND updated_at = ? AND retired_at IS NULL)`,
+      sql: `EXISTS (SELECT 1 FROM lots WHERE id = ? AND updated_at = ? AND retired_at IS NULL)`,
       binds: [lotId, nowSeconds],
     },
     detail: {
@@ -388,7 +388,7 @@ async function createLot(
   correlation.event({
     kind: 'lot_recorded',
     guard: {
-      sql: 'EXISTS (SELECT 1 FROM properties WHERE id = ?)',
+      sql: 'EXISTS (SELECT 1 FROM lots WHERE id = ?)',
       binds: [lotId],
     },
     sensitive: ['lot_address'],
@@ -412,7 +412,7 @@ async function createLot(
   try {
     await env.DATABASE.batch([
       env.DATABASE.prepare(
-        `INSERT INTO properties (id, address, address_normalized, unit, status, vote_weight, created_at, updated_at)
+        `INSERT INTO lots (id, address, address_normalized, unit, status, vote_weight, created_at, updated_at)
          VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
       ).bind(
         lotId,
@@ -468,13 +468,13 @@ async function updateLot(
 
   const [lot] = await getDb(env)
     .select({
-      address: properties.address,
-      unit: properties.unit,
-      voteWeight: properties.voteWeight,
-      retiredAt: properties.retiredAt,
+      address: lots.address,
+      unit: lots.unit,
+      voteWeight: lots.voteWeight,
+      retiredAt: lots.retiredAt,
     })
-    .from(properties)
-    .where(eq(properties.id, lotId))
+    .from(lots)
+    .where(eq(lots.id, lotId))
     .limit(1);
   if (!lot) return new Response('Lot not found', { status: 404 });
   if (lot.retiredAt !== null)
@@ -512,7 +512,7 @@ async function updateLot(
     // The post-state itself, not the seconds-resolution `updated_at` alone,
     // so an unrelated write in the same second cannot satisfy the marker.
     guard: {
-      sql: `EXISTS (SELECT 1 FROM properties WHERE id = ? AND updated_at = ?
+      sql: `EXISTS (SELECT 1 FROM lots WHERE id = ? AND updated_at = ?
               AND address = ? AND unit IS ? AND vote_weight = ?)`,
       binds: [lotId, nowSeconds, next.address, next.unit, next.voteWeight],
     },
@@ -549,7 +549,7 @@ async function updateLot(
       // concurrent edit or retirement loses the command rather than leaving
       // an event whose old weight never existed.
       env.DATABASE.prepare(
-        `UPDATE properties
+        `UPDATE lots
          SET address = ?, address_normalized = ?, unit = ?, vote_weight = ?, updated_at = ?
          WHERE id = ? AND retired_at IS NULL
            AND address = ? AND unit IS ? AND vote_weight = ?`,
@@ -593,14 +593,14 @@ export const GET: APIRoute = async ({ request, locals }) => {
   if (denied) return denied;
   const rows = await getDb(env)
     .select({
-      id: properties.id,
-      address: properties.address,
-      unit: properties.unit,
-      status: properties.status,
-      voteWeight: properties.voteWeight,
+      id: lots.id,
+      address: lots.address,
+      unit: lots.unit,
+      status: lots.status,
+      voteWeight: lots.voteWeight,
     })
-    .from(properties)
-    .orderBy(asc(properties.address));
+    .from(lots)
+    .orderBy(asc(lots.address));
   return Response.json(rows);
 };
 

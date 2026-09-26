@@ -21,7 +21,7 @@ export async function runScheduledJobs(env: Env): Promise<void> {
   try {
     const result = await cleanupVerificationState(env);
     console.log(
-      `[cleanup] verification=${result.verificationRows} manual_approval=${result.manualApprovalRows} verification_codes=${result.verificationCodeRows} review_requests=${result.reviewRequestRows}`,
+      `[cleanup] verification_codes=${result.verificationCodeRows} review_requests=${result.reviewRequestRows}`,
     );
   } catch (err) {
     console.error('[cleanup] failed', err);

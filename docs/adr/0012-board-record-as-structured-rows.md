@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-08-01
 
+**Phase 4 implementation note (#212):** Board service now lives in `board_terms` and `board_office_assignments`; the old `board_people` and legacy `board_terms` tables are removed. See [ADR 0022](./0022-party-roster-derived-access.md).
+
 ## Context
 
 The board's meeting record — meetings, motions, roll-call votes, and standing resolutions — could

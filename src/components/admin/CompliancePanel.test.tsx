@@ -89,7 +89,7 @@ function authorized() {
 }
 
 function forbidden() {
-  // What every caller gets while `cutover_mode` reads `legacy`: the shared
+  // A caller without the technical capability gets the shared
   // capability gate's bare plain-text 403.
   h.fetchRedactions.mockRejectedValue(new Error('Forbidden'));
   h.fetchAccessDenials.mockRejectedValue(new Error('Forbidden'));

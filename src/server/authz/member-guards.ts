@@ -12,13 +12,8 @@ import { writeFreezeError } from './write-freeze';
  * without the `member` capability. Per-lot scoping is still the caller's job,
  * via ctx.lotIds / requirePropertyAccess.
  *
- * `member` rather than a rank check is the one behavior change derived
- * authorization deliberately makes here. Under `cutover_mode = legacy` a board
- * caller still passes, because legacy synthesis reproduces the old ladder. Under
- * `derived`, a board member who owns no Lot does not — they have no association
- * basis for acting on a Lot, and the free pass was an artifact of ordering the
- * levels. That divergence is one of exactly two entries on #206's
- * explained-mismatch allow-list, and it appears at the flip, not before.
+ * Board Access does not imply membership: a caller needs current Lot Authority
+ * for the member capability, independently of their access to board content.
  *
  * The freeze sits AFTER the mode check so a frozen site does not advertise a
  * surface that officialMode-off is meant to hide, and BEFORE authentication

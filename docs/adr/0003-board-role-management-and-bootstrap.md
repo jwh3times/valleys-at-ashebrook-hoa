@@ -3,6 +3,8 @@
 **Status:** Accepted
 **Date:** 2026-07-08
 
+**Phase 4 implementation note (#212):** Bootstrap links an authenticated account to an existing Person and grants System Administration Access once. Board handoff writes Access Grants; stored roles no longer confer authority. See [ADR 0022](./0022-party-roster-derived-access.md).
+
 ## Context
 
 The site needs a way to create the first board account and later hand off board

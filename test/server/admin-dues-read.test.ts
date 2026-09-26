@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 /**
  * The board's read of the dues blob (#364).
@@ -17,8 +17,8 @@ import { legacyAuthContext } from '../../src/server/authz/context';
  * against the guarded route.
  */
 
-const board = legacyAuthContext('board-1', 'board', []);
-const homeowner = legacyAuthContext('owner-1', 'homeowner', ['lot-a']);
+const board = callerContext('board-1', 'board', []);
+const homeowner = callerContext('owner-1', 'homeowner', ['lot-a']);
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -37,7 +37,7 @@ beforeEach(async () => {
   await db.delete(cutoverSettings);
 });
 
-function get(ctx: ReturnType<typeof legacyAuthContext> | null = board) {
+function get(ctx: ReturnType<typeof callerContext> | null = board) {
   return GET({
     request: new Request('http://localhost/api/admin/dues'),
     locals: { authContext: ctx },

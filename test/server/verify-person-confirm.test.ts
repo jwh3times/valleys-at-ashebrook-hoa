@@ -24,7 +24,7 @@ import {
   contactMethods,
 } from '../../src/server/db/roster-schema';
 import { auditEvents } from '../../src/server/db/audit-schema';
-import { userPropertyLinks, users } from '../../src/server/db/schema';
+import { users } from '../../src/server/db/schema';
 import { cutoverSettings } from '../../src/server/db/cutover-schema';
 import { hashCode, MAX_ATTEMPTS } from '../../src/server/verification/codes';
 import { confirmPersonVerification } from '../../src/server/roster/verification';
@@ -56,11 +56,7 @@ async function clearAll() {
   await db.run(sql.raw('DELETE FROM "people"'));
   await db.run(sql.raw('DELETE FROM "organizations"'));
   await db.run(sql.raw('DELETE FROM "parties"'));
-  await db.run(sql.raw('DELETE FROM "property_verifications"'));
-  await db.run(sql.raw('DELETE FROM "user_property_links"'));
-  await db.run(sql.raw('DELETE FROM "manual_approval_queue"'));
-  await db.run(sql.raw('DELETE FROM "owners"'));
-  await db.run(sql.raw('DELETE FROM "properties"'));
+  await db.run(sql.raw('DELETE FROM "lots"'));
   await db.run(sql.raw('DELETE FROM "users"'));
   await db.delete(cutoverSettings);
 }
@@ -192,19 +188,6 @@ describe('confirmPersonVerification — happy path', () => {
     expect(rootEvent.operationKey).toMatch(
       /^verify-confirm:person_verified:[0-9a-f-]{36}$/,
     );
-
-    // Write-behind mirrors.
-    const [mirrorLink] = await db
-      .select()
-      .from(userPropertyLinks)
-      .where(eq(userPropertyLinks.userId, 'acct-happy'));
-    expect(mirrorLink.propertyId).toBe('lot-happy');
-    expect(mirrorLink.method).toBe('otp_email');
-    const [account] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, 'acct-happy'));
-    expect(account.role).toBe('homeowner');
 
     expect(
       await db.all(sql`SELECT * FROM audit_integrity_violations_v`),
@@ -422,9 +405,6 @@ describe('a later-acquired Lot needs no re-verification', () => {
           VALUES ('own-later-second', 'own-later', 'lot-second', NULL, 1, 1)`,
     );
 
-    await getDb(env)
-      .insert(cutoverSettings)
-      .values({ key: 'cutover_mode', value: 'derived', updatedAt: new Date() });
     sessionUserId = 'acct-later';
 
     const ctx = await getAuthContext(new Request('http://localhost'), env, DAY);

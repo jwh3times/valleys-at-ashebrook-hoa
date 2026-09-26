@@ -32,7 +32,7 @@ const NEW_TABLES = [
   'roster_changes',
   'audit_events',
   'board_office_assignments',
-  'board_service_terms',
+  'board_terms',
   'representation_lots',
   'representations',
   'ownerships',
@@ -46,7 +46,7 @@ beforeEach(async () => {
   for (const table of NEW_TABLES) {
     await db.run(sql.raw(`DELETE FROM "${table}"`));
   }
-  await db.run(sql.raw(`DELETE FROM properties`));
+  await db.run(sql.raw(`DELETE FROM lots`));
 });
 
 const db = () => getDb(env);
@@ -85,7 +85,7 @@ async function seedPerson(id: string) {
 async function seedLot(id: string) {
   await db().run(
     sql.raw(
-      `INSERT INTO properties (id, address, address_normalized, status, vote_weight, created_at, updated_at)
+      `INSERT INTO lots (id, address, address_normalized, status, vote_weight, created_at, updated_at)
        VALUES ('${id}', '${id} Road', '${id} road', 'active', 1, 1, 1)`,
     ),
   );
@@ -94,7 +94,7 @@ async function seedLot(id: string) {
 async function seedTerm(id: string, personId: string, lotId: string | null) {
   await db().run(
     sql.raw(
-      `INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, created_at, updated_at)
+      `INSERT INTO board_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, created_at, updated_at)
        VALUES ('${id}', '${personId}', ${lotId === null ? 'NULL' : `'${lotId}'`}, '2026-01-01', '2027-01-01', 1, 1)`,
     ),
   );
@@ -231,7 +231,7 @@ describe('ADR 0022 phase 2 audit views', () => {
   it('ignores a voided term entirely', async () => {
     await seedPerson('per-4');
     await db().run(
-      sql`INSERT INTO board_service_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, voided_at, created_at, updated_at)
+      sql`INSERT INTO board_terms (id, person_id, qualifying_lot_id, start_day, scheduled_end_day, voided_at, created_at, updated_at)
           VALUES ('term-5', 'per-4', NULL, '2026-01-01', '2027-01-01', 99, 1, 1)`,
     );
     const rows = await db().all(

@@ -3,13 +3,13 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('u', 'homeowner', []),
+  getAuthContext: async () => callerContext('u', 'homeowner', []),
 }));
 
 import { GET as documentsGet } from '../../src/pages/api/content/documents';
 import { getDb } from '../../src/server/db/client';
 import { documents } from '../../src/server/db/schema';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);

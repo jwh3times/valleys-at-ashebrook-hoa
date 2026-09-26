@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('b', 'board', []),
+  getAuthContext: async () => callerContext('b', 'board', []),
 }));
 
 import {
@@ -17,13 +17,12 @@ import {
   memberAttendance,
   motionEligibility,
   motions,
-  properties,
+  lots,
   settings,
-  boardPeople,
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { eq } from 'drizzle-orm';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { seedPeopleRows } from './fixtures';
 
 beforeAll(async () => {
@@ -35,14 +34,13 @@ beforeEach(async () => {
   await db.delete(memberAttendance);
   await db.delete(motionEligibility);
   await db.delete(motions);
-  await db.delete(boardPeople);
   await db.delete(meetings);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
   await db.delete(settings);
 });
 
@@ -75,7 +73,7 @@ async function createMeeting(overrides: Record<string, unknown> = {}) {
 
 async function createProperty(address: string): Promise<string> {
   const id = crypto.randomUUID();
-  await getDb(env).insert(properties).values({
+  await getDb(env).insert(lots).values({
     id,
     address,
     addressNormalized: address.toLowerCase(),
@@ -241,7 +239,7 @@ describe('meetings admin route — member attendance', () => {
     expect(rows.length).toBe(0);
   });
 
-  // #234: property_id is a NOT NULL FK to properties, and unlike its two
+  // #234: property_id is a NOT NULL FK to lots, and unlike its two
   // siblings this action stamps no weight, so nothing else resolved the lot
   // and an unknown id reached D1 as an unhandled 500. The inactive-lot check
   // below it does not cover this — that one is scoped to lots marked present
@@ -414,9 +412,9 @@ describe('ADR 0015 server backstops for the member record', () => {
 
   async function deactivate(propertyId: string) {
     await getDb(env)
-      .update(properties)
+      .update(lots)
       .set({ status: 'inactive' })
-      .where(eq(properties.id, propertyId));
+      .where(eq(lots.id, propertyId));
   }
 
   it('refuses to record an inactive lot as present', async () => {

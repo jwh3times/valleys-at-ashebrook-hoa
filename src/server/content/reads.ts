@@ -22,7 +22,7 @@ import {
   motions,
   motionEligibility,
   boardVotes,
-  properties,
+  lots,
   memberAttendance,
   memberVotes,
   resolutions,
@@ -279,11 +279,11 @@ async function assembleMeetingDetail(
   // only name map this function needs.
   const propertyRows = await db
     .select({
-      id: properties.id,
-      address: properties.address,
-      voteWeight: properties.voteWeight,
+      id: lots.id,
+      address: lots.address,
+      voteWeight: lots.voteWeight,
     })
-    .from(properties);
+    .from(lots);
   const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
   const weightOf = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
 
@@ -334,15 +334,15 @@ async function assembleMeetingDetail(
     memberVotesByMotion.set(v.motionId, list);
   }
 
-  // SUM(vote_weight) over ACTIVE properties only — the member quorum
+  // SUM(vote_weight) over ACTIVE lots only — the member quorum
   // denominator. A single SQL aggregate, not a row scan totalled in JS.
   // SQLite's SUM returns NULL over zero rows, hence the coalesce.
   const [{ totalActiveWeight }] = await db
     .select({
-      totalActiveWeight: sql<number>`coalesce(sum(${properties.voteWeight}), 0)`,
+      totalActiveWeight: sql<number>`coalesce(sum(${lots.voteWeight}), 0)`,
     })
-    .from(properties)
-    .where(eq(properties.status, 'active'));
+    .from(lots)
+    .where(eq(lots.status, 'active'));
 
   return {
     id: m.id,
@@ -698,7 +698,7 @@ export async function fetchAdminResolutions(
 type ElectionRow = typeof elections.$inferSelect;
 
 /**
- * COUNT(*) and SUM(vote_weight) over ACTIVE properties, from the same query —
+ * COUNT(*) and SUM(vote_weight) over ACTIVE lots, from the same query —
  * the current-roster fallback for a motion with no eligibility snapshot.
  * Reuses the aggregate shape assembleMeetingDetail uses for totalActiveWeight.
  */
@@ -706,10 +706,10 @@ async function fetchEligibleTotals(db: Db): Promise<EligibilityTotals> {
   const [row] = await db
     .select({
       eligibleCount: count(),
-      eligibleWeight: sql<number>`coalesce(sum(${properties.voteWeight}), 0)`,
+      eligibleWeight: sql<number>`coalesce(sum(${lots.voteWeight}), 0)`,
     })
-    .from(properties)
-    .where(eq(properties.status, 'active'));
+    .from(lots)
+    .where(eq(lots.status, 'active'));
   return { ...row, eligibilityFrozen: false };
 }
 
@@ -739,11 +739,11 @@ async function electionEligibilityById(
       .select({
         electionId: electionEligibility.electionId,
         propertyId: electionEligibility.propertyId,
-        address: properties.address,
+        address: lots.address,
         weight: electionEligibility.weight,
       })
       .from(electionEligibility)
-      .innerJoin(properties, eq(electionEligibility.propertyId, properties.id))
+      .innerJoin(lots, eq(electionEligibility.propertyId, lots.id))
       .where(inArray(electionEligibility.electionId, ids))
       .orderBy(
         asc(electionEligibility.electionId),
@@ -763,13 +763,13 @@ async function electionEligibilityById(
   const currentRows = needsFallback
     ? await db
         .select({
-          propertyId: properties.id,
-          address: properties.address,
-          weight: properties.voteWeight,
+          propertyId: lots.id,
+          address: lots.address,
+          weight: lots.voteWeight,
         })
-        .from(properties)
-        .where(eq(properties.status, 'active'))
-        .orderBy(asc(properties.id))
+        .from(lots)
+        .where(eq(lots.status, 'active'))
+        .orderBy(asc(lots.id))
     : null;
   const fallback: ElectionEligibilityResult | null = currentRows
     ? {
@@ -907,9 +907,9 @@ async function fetchBallotRowsFor(
     rows.map((r) => r.propertyId),
     (propertyIds) =>
       db
-        .select({ id: properties.id, address: properties.address })
-        .from(properties)
-        .where(inArray(properties.id, propertyIds)),
+        .select({ id: lots.id, address: lots.address })
+        .from(lots)
+        .where(inArray(lots.id, propertyIds)),
   );
   const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
   return rows.map((r) => ({
@@ -1055,8 +1055,8 @@ export async function fetchAdminProxies(env: Env): Promise<ProxyDetail[]> {
   const rows = await db.select().from(proxies).orderBy(desc(proxies.createdAt));
   if (rows.length === 0) return [];
   const propertyRows = await db
-    .select({ id: properties.id, address: properties.address })
-    .from(properties);
+    .select({ id: lots.id, address: lots.address })
+    .from(lots);
   const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
   const nameOf = await personNameMap(db);
   return rows.map((r) => ({
@@ -1148,22 +1148,20 @@ export async function fetchMemberLots(
 ): Promise<MemberLot[]> {
   if (propertyIds.length === 0) return [];
   const db = getDb(env);
-  const lots = await db
+  const lotRows = await db
     .select({
-      id: properties.id,
-      address: properties.address,
-      unit: properties.unit,
+      id: lots.id,
+      address: lots.address,
+      unit: lots.unit,
     })
-    .from(properties)
-    .where(
-      and(inArray(properties.id, propertyIds), eq(properties.status, 'active')),
-    );
+    .from(lots)
+    .where(and(inArray(lots.id, propertyIds), eq(lots.status, 'active')));
   const holders = await fetchLotAuthority(
     db,
     propertyIds,
     associationDateIso(),
   );
-  return lots.map((l) => ({
+  return lotRows.map((l) => ({
     ...l,
     persons: holders
       .filter((h) => h.lotId === l.id)
@@ -1212,8 +1210,8 @@ export async function fetchMemberProxies(
     .orderBy(desc(proxies.createdAt));
   if (rows.length === 0) return { granted: [], held: [] };
   const propRows = await db
-    .select({ id: properties.id, address: properties.address })
-    .from(properties);
+    .select({ id: lots.id, address: lots.address })
+    .from(lots);
   const addressOf = new Map(propRows.map((p) => [p.id, p.address]));
   const nameOf = await personNameMap(db);
   const meetingRows = await db

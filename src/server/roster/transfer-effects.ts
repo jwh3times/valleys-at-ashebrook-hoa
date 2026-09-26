@@ -510,7 +510,7 @@ export async function transferEffects(
       const accounts = await input.database
         .prepare(
           `SELECT DISTINCT pl.account_id
-           FROM board_service_terms t
+           FROM board_terms t
            JOIN person_links pl ON pl.person_id = t.person_id AND pl.ended_at IS NULL
            WHERE t.id IN (${placeholders(termIds)})`,
         )

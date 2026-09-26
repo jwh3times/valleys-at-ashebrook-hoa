@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/schema';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import { GET, POST } from '../../src/pages/api/admin/review-flags';
 import type { ReviewFlagRow } from '../../src/pages/api/admin/review-flags';
 
@@ -163,7 +163,7 @@ async function seedMotion(motionId: string) {
     .run();
 }
 
-const board: AuthContext = legacyAuthContext('board-1', 'board', []);
+const board: AuthContext = callerContext('board-1', 'board', []);
 
 function get(ctx: AuthContext | null) {
   return GET({

@@ -1,10 +1,11 @@
+import { seedAccountLink } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
-  getAuthContext: async () => legacyAuthContext('board-user', 'board', []),
+  getAuthContext: async () => callerContext('board-user', 'board', []),
 }));
 
 import { POST as meetingsPost } from '../../src/pages/api/admin/meetings';
@@ -12,7 +13,7 @@ import { POST as motionsPost } from '../../src/pages/api/admin/motions';
 import { POST as electionsPost } from '../../src/pages/api/admin/elections';
 
 import { POST as votePost } from '../../src/pages/api/vote';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 import type { AuthContext } from '../../src/server/authz/guards';
 import { getDb } from '../../src/server/db/client';
 import {
@@ -24,7 +25,6 @@ import {
   motionEligibility,
   proxies,
   settings,
-  userPropertyLinks,
   users,
 } from '../../src/server/db/schema';
 import { ownerships } from '../../src/server/db/roster-schema';
@@ -56,12 +56,10 @@ function associationDayPlus(days: number): string {
   return associationDateIso(base);
 }
 
-const holderCaller: AuthContext = legacyAuthContext(
-  'holder-user',
-  'homeowner',
-  ['property-own'],
-);
-const buyerCaller: AuthContext = legacyAuthContext('buyer-user', 'homeowner', [
+const holderCaller: AuthContext = callerContext('holder-user', 'homeowner', [
+  'property-own',
+]);
+const buyerCaller: AuthContext = callerContext('buyer-user', 'homeowner', [
   'property-buyer',
 ]);
 
@@ -153,22 +151,6 @@ beforeEach(async () => {
   await fx.seedProperty('property-own');
   await fx.seedProperty('property-proxy');
   await fx.seedProperty('property-buyer');
-  await db.insert(userPropertyLinks).values([
-    {
-      id: 'link-holder',
-      userId: 'holder-user',
-      propertyId: 'property-own',
-      verifiedAt: now,
-      method: 'board_manual',
-    },
-    {
-      id: 'link-buyer',
-      userId: 'buyer-user',
-      propertyId: 'property-buyer',
-      verifiedAt: now,
-      method: 'board_manual',
-    },
-  ]);
   await fx.seedLotAuthority('owner-holder', 'property-own');
   await fx.seedLotAuthority('owner-grantor', 'property-proxy');
   // The seller held property-buyer when the election opened; the buyer owns it
@@ -178,6 +160,10 @@ beforeEach(async () => {
     endDay: '2020-01-01',
   });
   await fx.seedLotAuthority('owner-buyer', 'property-buyer');
+  holderCaller.personId = 'owner-holder';
+  buyerCaller.personId = 'owner-buyer';
+  await seedAccountLink('holder-user', 'owner-holder');
+  await seedAccountLink('buyer-user', 'owner-buyer');
 
   // Live-voting occasion: an open conducted election held at a draft member
   // meeting that also carries an open motion.

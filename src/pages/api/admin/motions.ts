@@ -13,7 +13,7 @@ import {
   motions,
   motionEligibility,
   boardVotes,
-  properties,
+  lots,
   resolutions,
 } from '../../../server/db/schema';
 import {
@@ -122,11 +122,9 @@ async function inactiveLots(db: Db, propertyIds: string[]): Promise<string[]> {
     ids,
     (batch) =>
       db
-        .select({ id: properties.id })
-        .from(properties)
-        .where(
-          and(inArray(properties.id, batch), ne(properties.status, 'active')),
-        ),
+        .select({ id: lots.id })
+        .from(lots)
+        .where(and(inArray(lots.id, batch), ne(lots.status, 'active'))),
     // One less than the limit: the status predicate binds a parameter too,
     // which is the caveat chunkedIn documents.
     D1_MAX_BOUND_PARAMS - 1,
@@ -321,11 +319,11 @@ async function setMemberVotes(
             ? (
                 await database
                   .prepare(
-                    `SELECT properties.id, properties.vote_weight AS voteWeight
-                     FROM properties
+                    `SELECT lots.id, lots.vote_weight AS voteWeight
+                     FROM lots
                      JOIN json_each(?) AS requested
                        ON requested.type = 'text'
-                      AND requested.value = properties.id`,
+                      AND requested.value = lots.id`,
                   )
                   .bind(JSON.stringify(propertyIds))
                   .all<{ id: string; voteWeight: number }>()
@@ -495,8 +493,8 @@ async function openVoting(
                  WHERE motion_eligibility.motion_id = motions.id
                )
                AND EXISTS (
-                 SELECT 1 FROM properties
-                 WHERE properties.status = 'active'
+                 SELECT 1 FROM lots
+                 WHERE lots.status = 'active'
                )
              )
              OR (
@@ -513,9 +511,9 @@ async function openVoting(
     database
       .prepare(
         `INSERT INTO motion_eligibility (motion_id, property_id, weight)
-         SELECT ?, properties.id, properties.vote_weight
-         FROM properties
-         WHERE properties.status = 'active'
+         SELECT ?, lots.id, lots.vote_weight
+         FROM lots
+         WHERE lots.status = 'active'
            AND changes() = 1
            AND NOT EXISTS (
              SELECT 1 FROM motion_eligibility

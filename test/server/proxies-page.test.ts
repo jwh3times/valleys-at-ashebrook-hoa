@@ -1,19 +1,15 @@
+import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
 import { getDb } from '../../src/server/db/client';
-import {
-  properties,
-  owners,
-  meetings,
-  proxies,
-} from '../../src/server/db/schema';
+import { lots, meetings, proxies } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
 import ProxiesPage from '../../src/pages/proxies.astro';
 import NotFoundPage from '../../src/pages/404.astro';
-import { legacyAuthContext } from '../../src/server/authz/context';
+import { callerContext } from './caller-context';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -25,13 +21,12 @@ beforeEach(async () => {
   const db = getDb(env);
   await db.delete(proxies);
   await db.delete(meetings);
-  await db.delete(owners);
-  // #248 part 2: ownerships reference both parties and properties with
+  // #248 part 2: ownerships reference both parties and lots with
   // RESTRICT, so the roster goes before the lots it points at.
   await db.delete(ownerships);
   await db.delete(people);
   await db.delete(parties);
-  await db.delete(properties);
+  await db.delete(lots);
 });
 
 async function makeContainer() {
@@ -56,7 +51,7 @@ describe('/proxies', () => {
     const container = await makeContainer();
     const res = await container.renderToResponse(ProxiesPage, {
       request: new Request('http://localhost/proxies'),
-      locals: localsWith(false, legacyAuthContext('u1', 'homeowner', ['p1'])),
+      locals: localsWith(false, callerContext('u1', 'homeowner', ['p1'])),
     });
     const html = await res.text();
     expect(html).toContain('Page not found');
@@ -74,7 +69,7 @@ describe('/proxies', () => {
 
   it('renders the manager with the caller lots and upcoming occasions for a verified homeowner (positive control for the 404 test)', async () => {
     const db = getDb(env);
-    await db.insert(properties).values({
+    await db.insert(lots).values({
       id: 'p1',
       address: '1 Oak St',
       addressNormalized: '1 oak st',
@@ -82,7 +77,7 @@ describe('/proxies', () => {
       createdAt: now,
       updatedAt: now,
     });
-    await db.insert(owners).values({
+    await seedRosterOwner({
       id: 'o1',
       propertyId: 'p1',
       fullName: 'Jane Doe',
@@ -104,7 +99,7 @@ describe('/proxies', () => {
     const container = await makeContainer();
     const html = await container.renderToString(ProxiesPage, {
       request: new Request('http://localhost/proxies'),
-      locals: localsWith(true, legacyAuthContext('u1', 'homeowner', ['p1'])),
+      locals: localsWith(true, callerContext('u1', 'homeowner', ['p1'])),
     });
     expect(html).toContain('Grant a proxy');
     expect(html).toContain('1 Oak St');

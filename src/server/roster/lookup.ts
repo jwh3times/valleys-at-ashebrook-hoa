@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { properties } from '../db/schema';
+import { lots } from '../db/schema';
 import { normalizeAddress } from './normalize';
 
 export { normalizeAddress };
@@ -9,12 +9,7 @@ export async function findActivePropertyByAddress(db: Db, address: string) {
   const norm = normalizeAddress(address);
   const [property] = await db
     .select()
-    .from(properties)
-    .where(
-      and(
-        eq(properties.addressNormalized, norm),
-        eq(properties.status, 'active'),
-      ),
-    );
+    .from(lots)
+    .where(and(eq(lots.addressNormalized, norm), eq(lots.status, 'active')));
   return property ?? null;
 }

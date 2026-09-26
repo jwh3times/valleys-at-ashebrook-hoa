@@ -8,7 +8,7 @@ import {
   candidates,
   elections,
   motions,
-  properties,
+  lots,
 } from '../../src/server/db/schema';
 
 beforeAll(async () => {
@@ -141,11 +141,11 @@ describe('live voting schema', () => {
     ]);
     expect(foreignKeys(electionSnapshot)).toEqual([
       { from: 'election_id', table: 'elections', onDelete: 'CASCADE' },
-      { from: 'property_id', table: 'properties', onDelete: 'RESTRICT' },
+      { from: 'property_id', table: 'lots', onDelete: 'RESTRICT' },
     ]);
     expect(foreignKeys(motionSnapshot)).toEqual([
       { from: 'motion_id', table: 'motions', onDelete: 'CASCADE' },
-      { from: 'property_id', table: 'properties', onDelete: 'RESTRICT' },
+      { from: 'property_id', table: 'lots', onDelete: 'RESTRICT' },
     ]);
   });
 
@@ -307,9 +307,7 @@ describe('live voting schema', () => {
       .run();
 
     await expect(
-      getDb(env)
-        .delete(properties)
-        .where(eq(properties.id, 'restrict-property')),
+      getDb(env).delete(lots).where(eq(lots.id, 'restrict-property')),
     ).rejects.toThrow();
     await expect(
       getDb(env)

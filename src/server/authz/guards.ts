@@ -31,8 +31,7 @@ export type Capability =
 
 export interface AuthContext {
   userId: string;
-  /** The linked Person, or null. Null under `cutover_mode = legacy`, which has
-   * no Person concept, and under `derived` when no current Person Link exists. */
+  /** The linked Person, or null when no current Person Link exists. */
   personId: string | null;
   capabilities: Set<Capability>;
   /** Lots this caller may act for. */

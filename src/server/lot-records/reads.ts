@@ -160,8 +160,7 @@ function memberViolationScope(associationDay: string) {
 /**
  * Every violation the caller's own Lots carry, newest first.
  *
- * An unlinked Account — `personId` null, which is every caller under
- * `cutover_mode = legacy` and any Account with no Person Link — reads nothing.
+ * An unlinked Account (`personId` null) reads nothing.
  * There is no Person to scope by, which is the same deliberate refusal
  * `/api/member/roster-self` gives.
  */
@@ -230,15 +229,15 @@ export async function fetchMemberLotAddresses(
   // ownership has a known start.
   const authority = lotAuthorityExists(
     CALLER_PERSON,
-    { column: 'properties.id' },
+    { column: 'lots.id' },
     associationDay,
   );
   const { results } = await env.DATABASE.prepare(
     `${CALLER_PERSON_CTE}
-     SELECT properties.id AS id, properties.address AS address
-       FROM properties
+     SELECT lots.id AS id, lots.address AS address
+       FROM lots
       WHERE ${authority.sql}
-      ORDER BY properties.address`,
+      ORDER BY lots.address`,
   )
     .bind(personId, ...authority.binds)
     .all<{ id: string; address: string }>();
