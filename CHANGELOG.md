@@ -7,6 +7,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-26
+
+### Changed
+
+- Marked ADR 0022 as implemented following completion of the permanent roster
+  contract in v2.0.0.
+
 ## [2.0.0] - 2026-09-26
 
 ### Changed
@@ -3718,7 +3725,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.33...v2.0.0
 [1.2.33]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.32...v1.2.33
 [1.2.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.31...v1.2.32
