@@ -8,7 +8,7 @@ The legacy authorization and verification branches, link/role mirrors, shadow ta
 one-time import/backfill tools are removed. Better Auth still requires `users.role`, so migration
 `0037` neutralizes it instead of dropping it. The write freeze and invariant/permission/privacy
 checks remain permanent. Phase 4 completed in v2.0.0; the coordinated upgrade requirements remain
-see [the migration contract](../agents/migrations.md#phase-4-contract-0037).
+documented in [the migration contract](../agents/migrations.md#phase-4-contract-0037).
 
 ## Context
 
