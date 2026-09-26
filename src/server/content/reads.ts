@@ -226,123 +226,149 @@ async function assembleMeetingDetail(
 ): Promise<MeetingDetail> {
   const id = m.id;
 
-  const nameOf = await personNameMap(db);
-
-  const attendanceRows = await db
-    .select({
-      personId: boardAttendance.personId,
-      present: boardAttendance.present,
-    })
-    .from(boardAttendance)
-    .where(eq(boardAttendance.meetingId, id));
-
-  const motionRows = await db
-    .select()
+  // Subqueries keep the batch independent of motion count (and D1's bind
+  // limit), including meetings with no motions. The caller already selected
+  // this meeting through its status/tier gate before any detail is read.
+  const meetingMotionIds = db
+    .select({ id: motions.id })
     .from(motions)
-    .where(eq(motions.meetingId, id))
-    .orderBy(asc(motions.sequence));
-  const eligibilityByMotion = await motionEligibilityById(
-    db,
-    motionRows.map((motion) => motion.id),
+    .where(eq(motions.meetingId, id));
+  const [
+    personRows,
+    attendanceRows,
+    motionRows,
+    eligibilityRows,
+    voteRows,
+    propertyRows,
+    memberAttendanceRows,
+    memberVoteRows,
+    [currentTotals],
+  ] = await db.batch([
+    // Historical participants need not hold current authority. Select every
+    // Person referenced by this record, without loading the entire roster or
+    // canonicalizing away the identity on the historical row.
+    db
+      .select({ partyId: people.partyId, fullName: people.fullName })
+      .from(people).where(sql`${people.partyId} IN (
+        SELECT ${boardAttendance.personId} FROM ${boardAttendance}
+          WHERE ${boardAttendance.meetingId} = ${id}
+        ) OR ${people.partyId} IN (SELECT ${motions.moverPersonId} FROM ${motions}
+          WHERE ${motions.meetingId} = ${id}
+        ) OR ${people.partyId} IN (SELECT ${motions.secondPersonId} FROM ${motions}
+          WHERE ${motions.meetingId} = ${id}
+        ) OR ${people.partyId} IN (SELECT ${boardVotes.personId} FROM ${boardVotes}
+          WHERE ${boardVotes.motionId} IN (${meetingMotionIds})
+        ) OR ${people.partyId} IN (SELECT ${memberAttendance.representedByPersonId} FROM ${memberAttendance}
+          WHERE ${memberAttendance.meetingId} = ${id}
+        ) OR ${people.partyId} IN (SELECT ${memberVotes.castByPersonId} FROM ${memberVotes}
+          WHERE ${memberVotes.motionId} IN (${meetingMotionIds})
+      )`),
+    db
+      .select({
+        personId: boardAttendance.personId,
+        present: boardAttendance.present,
+      })
+      .from(boardAttendance)
+      .where(eq(boardAttendance.meetingId, id)),
+    db
+      .select()
+      .from(motions)
+      .where(eq(motions.meetingId, id))
+      .orderBy(asc(motions.sequence)),
+    db
+      .select({
+        motionId: motionEligibility.motionId,
+        eligibleCount: count(),
+        eligibleWeight: sql<number>`sum(${motionEligibility.weight})`,
+      })
+      .from(motionEligibility)
+      .where(inArray(motionEligibility.motionId, meetingMotionIds))
+      .groupBy(motionEligibility.motionId),
+    db
+      .select({
+        motionId: boardVotes.motionId,
+        personId: boardVotes.personId,
+        choice: boardVotes.choice,
+      })
+      .from(boardVotes)
+      .where(inArray(boardVotes.motionId, meetingMotionIds)),
+    // Include inactive/retired Lots when referenced by historical records.
+    db
+      .select({
+        id: lots.id,
+        address: lots.address,
+        voteWeight: lots.voteWeight,
+      })
+      .from(lots).where(sql`${lots.id} IN (
+        SELECT ${memberAttendance.propertyId} FROM ${memberAttendance}
+          WHERE ${memberAttendance.meetingId} = ${id}
+        UNION SELECT ${memberVotes.propertyId} FROM ${memberVotes}
+          WHERE ${memberVotes.motionId} IN (${meetingMotionIds})
+      )`),
+    db
+      .select({
+        propertyId: memberAttendance.propertyId,
+        present: memberAttendance.present,
+        representedByPersonId: memberAttendance.representedByPersonId,
+        proxyId: memberAttendance.proxyId,
+      })
+      .from(memberAttendance)
+      .where(eq(memberAttendance.meetingId, id)),
+    db
+      .select({
+        motionId: memberVotes.motionId,
+        propertyId: memberVotes.propertyId,
+        castByPersonId: memberVotes.castByPersonId,
+        proxyId: memberVotes.proxyId,
+        weight: memberVotes.weight,
+        choice: memberVotes.choice,
+      })
+      .from(memberVotes)
+      .where(inArray(memberVotes.motionId, meetingMotionIds)),
+    // One aggregate supplies both the quorum denominator and the current
+    // roster fallback for motions without a snapshot. SUM over no rows is 0.
+    db
+      .select({
+        eligibleCount: count(),
+        eligibleWeight: sql<number>`coalesce(sum(${lots.voteWeight}), 0)`,
+      })
+      .from(lots)
+      .where(eq(lots.status, 'active')),
+  ]);
+
+  const nameOf = new Map(
+    personRows.map((p) => [
+      p.partyId,
+      personDisplayLabel(p.fullName, p.partyId),
+    ]),
   );
-
-  // Scoped to this meeting's own motions — an unscoped read would pull every
-  // roll call in the archive, including ones cast at draft or board-tier
-  // meetings this caller has no access to.
-  const voteRows =
-    motionRows.length === 0
-      ? []
-      : await db
-          .select({
-            motionId: boardVotes.motionId,
-            personId: boardVotes.personId,
-            choice: boardVotes.choice,
-          })
-          .from(boardVotes)
-          .where(
-            inArray(
-              boardVotes.motionId,
-              motionRows.map((mo) => mo.id),
-            ),
-          );
-  const votesByMotion = new Map<string, typeof voteRows>();
-  for (const v of voteRows) {
-    const list = votesByMotion.get(v.motionId) ?? [];
-    list.push(v);
-    votesByMotion.set(v.motionId, list);
-  }
-
-  // Property addresses, resolved the same way Person names are resolved above:
-  // one unscoped lookup, then a map. Both member attendance and every motion's
-  // member votes need it, so it is built once and shared. Who acted on the
-  // member side is a Person too since #248 part 2, so `nameOf` above is the
-  // only name map this function needs.
-  const propertyRows = await db
-    .select({
-      id: lots.id,
-      address: lots.address,
-      voteWeight: lots.voteWeight,
-    })
-    .from(lots);
   const addressOf = new Map(propertyRows.map((p) => [p.id, p.address]));
   const weightOf = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
+  const eligibilityByMotion = new Map<string, EligibilityTotals>(
+    eligibilityRows.map(({ motionId, ...totals }) => [
+      motionId,
+      { ...totals, eligibilityFrozen: true },
+    ]),
+  );
+  const fallback: EligibilityTotals = {
+    ...currentTotals,
+    eligibilityFrozen: false,
+  };
+  const totalActiveWeight = currentTotals.eligibleWeight;
 
-  const memberAttendanceRows = await db
-    .select({
-      propertyId: memberAttendance.propertyId,
-      present: memberAttendance.present,
-      representedByPersonId: memberAttendance.representedByPersonId,
-      proxyId: memberAttendance.proxyId,
-    })
-    .from(memberAttendance)
-    .where(eq(memberAttendance.meetingId, id));
-
-  // Scoped to this meeting's own motions, same reasoning and the same
-  // empty-list guard as the board votes query above — inArray(col, []) is a
-  // runtime error in Drizzle, and a meeting with no motions is ordinary.
-  const memberVoteRows =
-    motionRows.length === 0
-      ? []
-      : await db
-          .select({
-            motionId: memberVotes.motionId,
-            propertyId: memberVotes.propertyId,
-            castByPersonId: memberVotes.castByPersonId,
-            proxyId: memberVotes.proxyId,
-            weight: memberVotes.weight,
-            choice: memberVotes.choice,
-          })
-          .from(memberVotes)
-          .where(
-            inArray(
-              memberVotes.motionId,
-              motionRows.map((mo) => mo.id),
-            ),
-          );
-  // This grouping, not the `where` above, is what actually prevents another
-  // meeting's votes from leaking into this meeting's motions: motion ids are
-  // unique across the whole table, so grouping by motionId and then reading
-  // only `motionRows`' own ids back out of the map is isolation on its own.
-  // The `where inArray(...)` is an overfetch guard (skip the round trip when
-  // there are no motions to match) layered on top of that, not the thing
-  // doing the scoping — do not remove this grouping believing the `where`
-  // alone covers it.
-  const memberVotesByMotion = new Map<string, typeof memberVoteRows>();
-  for (const v of memberVoteRows) {
-    const list = memberVotesByMotion.get(v.motionId) ?? [];
-    list.push(v);
-    memberVotesByMotion.set(v.motionId, list);
+  // Keep each roll call grouped by its motion as well as scoped in SQL.
+  const votesByMotion = new Map<string, typeof voteRows>();
+  for (const vote of voteRows) {
+    const list = votesByMotion.get(vote.motionId) ?? [];
+    list.push(vote);
+    votesByMotion.set(vote.motionId, list);
   }
-
-  // SUM(vote_weight) over ACTIVE lots only — the member quorum
-  // denominator. A single SQL aggregate, not a row scan totalled in JS.
-  // SQLite's SUM returns NULL over zero rows, hence the coalesce.
-  const [{ totalActiveWeight }] = await db
-    .select({
-      totalActiveWeight: sql<number>`coalesce(sum(${lots.voteWeight}), 0)`,
-    })
-    .from(lots)
-    .where(eq(lots.status, 'active'));
+  const memberVotesByMotion = new Map<string, typeof memberVoteRows>();
+  for (const vote of memberVoteRows) {
+    const list = memberVotesByMotion.get(vote.motionId) ?? [];
+    list.push(vote);
+    memberVotesByMotion.set(vote.motionId, list);
+  }
 
   return {
     id: m.id,
@@ -378,8 +404,7 @@ async function assembleMeetingDetail(
     motions: motionRows.map((mo) => {
       const votes = votesByMotion.get(mo.id) ?? [];
       const mVotes = memberVotesByMotion.get(mo.id) ?? [];
-      const eligibility = eligibilityByMotion.get(mo.id);
-      if (!eligibility) throw new Error('Missing motion eligibility totals');
+      const eligibility = eligibilityByMotion.get(mo.id) ?? fallback;
       return {
         id: mo.id,
         sequence: mo.sequence,
@@ -697,22 +722,6 @@ export async function fetchAdminResolutions(
 
 type ElectionRow = typeof elections.$inferSelect;
 
-/**
- * COUNT(*) and SUM(vote_weight) over ACTIVE lots, from the same query —
- * the current-roster fallback for a motion with no eligibility snapshot.
- * Reuses the aggregate shape assembleMeetingDetail uses for totalActiveWeight.
- */
-async function fetchEligibleTotals(db: Db): Promise<EligibilityTotals> {
-  const [row] = await db
-    .select({
-      eligibleCount: count(),
-      eligibleWeight: sql<number>`coalesce(sum(${lots.voteWeight}), 0)`,
-    })
-    .from(lots)
-    .where(eq(lots.status, 'active'));
-  return { ...row, eligibilityFrozen: false };
-}
-
 interface ElectionEligibilityResult {
   totals: EligibilityTotals;
   rows: ElectionEligibleProperty[];
@@ -797,46 +806,6 @@ async function electionEligibilityById(
     } else {
       if (!fallback) throw new Error('Missing election eligibility fallback');
       result.set(electionId, fallback);
-    }
-  }
-  return result;
-}
-
-async function motionEligibilityById(
-  db: Db,
-  motionIds: string[],
-): Promise<Map<string, EligibilityTotals>> {
-  if (motionIds.length === 0) return new Map();
-
-  const snapshotRows = await db
-    .select({
-      motionId: motionEligibility.motionId,
-      weight: motionEligibility.weight,
-    })
-    .from(motionEligibility)
-    .where(inArray(motionEligibility.motionId, motionIds));
-  const snapshots = new Map<string, EligibilityTotals>();
-  for (const row of snapshotRows) {
-    const totals = snapshots.get(row.motionId) ?? {
-      eligibleCount: 0,
-      eligibleWeight: 0,
-      eligibilityFrozen: true,
-    };
-    totals.eligibleCount += 1;
-    totals.eligibleWeight += row.weight;
-    snapshots.set(row.motionId, totals);
-  }
-
-  const result = new Map<string, EligibilityTotals>();
-  const needsFallback = motionIds.some((motionId) => !snapshots.has(motionId));
-  const fallback = needsFallback ? await fetchEligibleTotals(db) : null;
-  for (const motionId of motionIds) {
-    const snapshot = snapshots.get(motionId);
-    if (snapshot) {
-      result.set(motionId, snapshot);
-    } else {
-      if (!fallback) throw new Error('Missing eligibility fallback');
-      result.set(motionId, fallback);
     }
   }
   return result;
