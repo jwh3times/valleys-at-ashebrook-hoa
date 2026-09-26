@@ -70,10 +70,8 @@ API routes live under `src/pages/api/`:
   `PUT` (#364). `/api/admin/board-people` and
   `/api/admin/board-terms` were **retired by phase 3b (#218), not ported**: the identity layer
   moved to the party roster and `board_terms` (see the ADR 0022 roster routes below), and
-  porting the legacy routes would have kept two identity layers alive. The legacy `board_people`
-  table itself survives — `board_terms.person_id` still references it — but #248 (part 1 of 2, an
-  ADR 0022 phase 4 precondition) repointed the meeting and elections records off it onto the party
-  roster (migration `0028`), so
+  porting the legacy routes would have kept two identity layers alive. The legacy tables are removed by `0037`;
+  #248 had already repointed meeting and election records onto the party roster (`0028`), so
   the record-keeping pickers (attendance, mover/second, roll call, the candidate link) now read a
   flat `{id, fullName}` list of `people` — excluding consolidated parties, names rendered through
   `personDisplayLabel` — from `GET /api/admin/meetings?roster=people` instead. The legacy "The

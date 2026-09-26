@@ -11,7 +11,7 @@ Schema lives in `src/server/db/schema.ts`, with the ADR 0022 roster, audit, and 
 [`roster-and-access.md`](./roster-and-access.md).
 
 **Permanent names:** Lots live in `lots`, and board service in `board_terms`.
-Migration `0037` renames the former `lots` and `board_service_terms` tables after
+Migration `0037` renames the former `properties` and `board_service_terms` tables after
 dropping the unrelated legacy `board_terms`. Existing `property_id` column names remain
 for compatibility; their foreign keys now reference `lots.id`.
 
@@ -44,12 +44,12 @@ de-anonymized markdown), `sources_json` (a `{id, title, category}` snapshot), in
 completed generation is saved, so a failed or client-disconnected generation leaves no row;
 after 90 days or any authorized roster name/contact redaction, `topic`, `content_md`, and
 `sources_json` are replaced with a fixed non-PII removal state while the other metadata remains),
-`board_people` and `board_terms` (the board roster's identity layer, per
-[ADR 0012](../adr/0012-board-record-as-structured-rows.md): `board_people` records a person,
-with a nullable `user_id` link to a Better Auth `user` row kept for display only and never for
-authorization; `board_terms` records a term of service — `person_id`, nullable `title`,
-`term_start`, nullable `term_end` — so a member who serves, leaves, and returns keeps one identity
-across terms; deleting a person with a term on record is refused with `409`), `meetings`,
+`board_terms` and `board_office_assignments` (the party roster's service history, per
+[ADR 0022](../adr/0022-party-roster-derived-access.md): a term references `people.party_id`,
+a qualifying Lot, and optional election, with `start_day`, `scheduled_end_day`, and separate
+actual-end, cancellation, and void state. Offices are assignments within a term, not a `title`
+column on the term). `board_people` and the old term shape were dropped by migration `0037`.
+Meeting records live in `meetings`,
 `board_attendance`, `motions`, `board_votes`, `member_attendance`, and `member_votes` (the meeting
 record — board and member meetings; proxies may be board-recorded or granted online by homeowners,
 with the default-off live-voting lifecycle foundation described in ADR 0020 — per

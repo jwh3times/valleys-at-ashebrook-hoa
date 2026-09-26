@@ -464,7 +464,6 @@ export const personLinks = sqliteTable(
 // Board service
 // ---------------------------------------------------------------------------
 
-// NOTE THE TABLE NAME. See rule 2 in the header comment: this becomes
 // `board_terms` is the permanent name after migration 0037.
 //
 // Three disjoint ending kinds, which behave differently and must not be

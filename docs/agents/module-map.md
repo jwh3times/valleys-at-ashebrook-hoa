@@ -176,10 +176,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   been voided (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on
   the strength of it, independent of whether the write path already ended the grant. `context.ts`
   records that finding as a day-idempotent Access Event through `revalidation-event.ts`'s
-  `recordGrantRevalidationDenial`, only when `derived` is the serving model (#217, option 1). The
+  `recordGrantRevalidationDenial` (#217, option 1). The
   phase-2 shadow layer (`shadow.ts`, `shadow-compare.ts`, the `CUTOVER_SHADOW` env var, and the
-  offline `scripts/shadow-sweep.ts` sweep) was deleted in phase 4 (#212). Legacy `getAuthContext`/`resolveAuthContext` remain the entry
-  point for every request regardless of which model answers it.
+  offline `scripts/shadow-sweep.ts` sweep) was deleted in phase 4 (#212). `getAuthContext`/`resolveAuthContext` remain the entry
+  point for every request.
 - `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
