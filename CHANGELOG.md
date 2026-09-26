@@ -7,6 +7,24 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-26
+
+### Changed
+
+- **The permanent roster is now the sole source of site access.** Verification,
+  board administration, voting authority, and resident-name masking use the party
+  roster throughout. The legacy access mode and compatibility mirrors are removed.
+- **Migration 0037 requires a coordinated schema and Worker upgrade.** It renames
+  Lots and Board Terms and removes obsolete roster tables while preserving the
+  audit history and write freeze. Operators must preserve legacy notes and apply
+  the migration with the matching Worker under the freeze; legacy rollback is no
+  longer supported.
+
+### Removed
+
+- Retired roster backfill tools and legacy verification cleanup, schema, and
+  compatibility code.
+
 ## [1.2.33] - 2026-09-25
 
 ### Changed
@@ -18,6 +36,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   command is now `npm run sync:agents:check`. Generated Codex agents carry
   their instructions as a readable multi-line string, and the read-only
   `code-reviewer` agent now runs in Codex's read-only sandbox.
+
+## [1.2.32] - 2026-09-25
+
+### Changed
+
+- Updated Astro to 7.3.3, its Cloudflare adapter to 14.3.2 and React integration
+  to 6.0.6, the Anthropic SDK to 0.127.0, and Drizzle ORM to 0.45.3.
+- Updated Wrangler to 4.136.2, Workers types to 5.20260922.1, Node types to
+  26.6.2, Drizzle Kit to 0.31.11, jsdom to 30.1.1, Prettier to 3.9.8, and
+  its Astro plugin to 1.0.1; regenerated Worker types.
+
+## [1.2.31] - 2026-09-25
+
+### Changed
+
+- Updated Oxlint from 1.83.0 to 1.85.0.
 
 ## [1.2.30] - 2026-09-24
 
@@ -3684,7 +3718,11 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.30...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.33...v2.0.0
+[1.2.33]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.32...v1.2.33
+[1.2.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.31...v1.2.32
+[1.2.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.30...v1.2.31
 [1.2.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.29...v1.2.30
 [1.2.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.28...v1.2.29
 [1.2.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.27...v1.2.28

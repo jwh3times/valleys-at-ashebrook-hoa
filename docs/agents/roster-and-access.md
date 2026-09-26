@@ -186,8 +186,8 @@ check, and unlike the invariant, the `403` is not recorded as a denied Access Ev
 been voided (`test/server/access-revalidation.test.ts`); evaluation refuses the caller `board` on
 the strength of it, independent of whether the write path already ended the grant.
 `src/server/authz/revalidation-event.ts` records that as an account-attributed root Access Event,
-day-idempotent by `operation_key = grant-revalidation:<grant>:<day>`, written only when `derived`
-is the **serving** model, with errors swallowed so evaluation cannot 500 on a ledger failure.
+day-idempotent by `operation_key = grant-revalidation:<grant>:<day>`, with errors swallowed so
+evaluation cannot 500 on a ledger failure.
 
 Board sign-in access has its own admin panel — **Board access** (`BoardAccessManager`) —
 distinct from the **Board** panel (`BoardServicePanel`) that records who serves. Neither sense

@@ -215,7 +215,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   that fifth field name without letting `parseProvenance` itself be asked for it), `voting-state.ts`
   (the shared SQL predicate requiring both official mode and live voting to be literal JSON
   booleans `true` for database-conditioned open and cast transitions), `casting-authority.ts`
-  (`resolveCastingAuthority`, the shared read/preflight resolver: derived mode resolves the
+  (`resolveCastingAuthority`, the shared read/preflight resolver: resolves the
   Account's current Person Link, canonicalizes a consolidated Person one hop to the survivor, and
   reads that Person's current Lot Authority; there is no account-to-Lot fallback. Its raw-SQL `castingAuthorityExists` counterpart repeats the current
   Person Link plus canonical Lot Authority check inside the cast `INSERT`, while
@@ -349,8 +349,8 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   documents, drops orphan/empty chunks, and builds the pseudonymized, per-document
   `[Source N]`-numbered excerpt text), `anthropic.ts` (`getAnthropic`, Anthropic client + config
   guard), `assistant.ts` (`answer`, `loadRosterEntries` — the pseudonymization dictionary source,
-  unioning Person names and Contact Methods from the live party roster (`people`, `contact_methods`)
-  with Person names/contacts from the party roster and `lots.address`, deduped
+  combining Person names and Contact Methods from the party roster (`people`, `contact_methods`)
+  with `lots.address`, deduped
   by `(type, value)`; unfiltered by status/interval/void/consolidation so a former owner or an
   ended contact value already used in a document stays masked, redacted rows arrive `NULL` and are
   skipped, and Organization names are deliberately excluded from tokenized name matching (their
