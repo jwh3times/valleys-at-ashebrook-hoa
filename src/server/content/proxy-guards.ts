@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { proxies, memberAttendance, memberVotes, ballots } from '../db/schema';
 import { people } from '../db/roster-schema';
@@ -142,7 +142,9 @@ export async function personExistenceError(
   const rows = await db
     .select({ id: people.partyId })
     .from(people)
-    .where(inArray(people.partyId, ids));
+    .where(
+      sql`${people.partyId} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`,
+    );
   if (rows.length === ids.length) return null;
   return { status: 400, message: `Unknown ${personKey} in entries` };
 }
@@ -182,7 +184,9 @@ export async function proxyUseError(
       grantorPersonId: proxies.grantorPersonId,
     })
     .from(proxies)
-    .where(inArray(proxies.id, ids));
+    .where(
+      sql`${proxies.id} IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`,
+    );
   const byId = new Map(rows.map((r) => [r.id, r]));
   // One roster read for every lot named by a proxy under write, rather than
   // one per proxy: a full-replace payload carries an entry per lot.

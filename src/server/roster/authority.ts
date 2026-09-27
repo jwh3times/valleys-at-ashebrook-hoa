@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { ownerships, people, representations } from '../db/roster-schema';
 import { personDisplayLabel } from '../../lib/format';
@@ -66,8 +66,12 @@ async function queryAuthority(
 ): Promise<LotAuthorityHolder[]> {
   const lotIds = filter.lotIds;
   if (lotIds !== undefined && lotIds.length === 0) return [];
+  // Full-register proxy validation can name every Lot. Bind the set once so
+  // the interval predicates do not push this read over D1's parameter limit.
   const lotFilter =
-    lotIds === undefined ? undefined : inArray(ownerships.lotId, lotIds);
+    lotIds === undefined
+      ? undefined
+      : sql`${ownerships.lotId} IN (SELECT value FROM json_each(${JSON.stringify(lotIds)}))`;
   // `day === null` asks "did this authority EVER exist", dropping the interval
   // comparison while keeping the voided filter — a voided row was recorded in
   // error and never granted anything. Used by the board's record-keeping

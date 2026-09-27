@@ -235,7 +235,10 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   `roster/transfer-effects.ts`'s retrospective discovery keys backdated-transfer detection off a
   ballot's real `recorded_at` (re-stamping every row on one amendment would falsely flag the whole
   election). A newly-entered lot's `recorded_at` is the amendment instant, which is the honest
-  "entered on" answer for it. `setBallots` stamps `weight` from
+  "entered on" answer for it. The submitted Lot set is bound as one JSON array for both the
+  weight lookup and omitted-ballot deletion (`json_each`), keeping their parameter counts
+  independent of register size; an empty set still clears the register under the same reservation
+  (#370). `setBallots` stamps `weight` from
   `lots.vote_weight` unless explicitly supplied, and each entry's `proxyId` goes through the
   same `proxyUseError` guard described in the meetings bullet above, scoped to `{ electionId,
 meetingId: election.meetingId, associationDay: election.electionDate }` so a proxy signed for the
