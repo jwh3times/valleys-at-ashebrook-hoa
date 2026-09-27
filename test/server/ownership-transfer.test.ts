@@ -85,6 +85,7 @@ beforeEach(async () => {
       ).run();
     await env.DATABASE.prepare(`DELETE FROM "${table}"`).run();
   }
+  await getDb(env).update(parties).set({ consolidatedIntoPartyId: null });
   await truncateAll();
   await getDb(env)
     .insert(users)
@@ -538,4 +539,58 @@ it('rejects retired Lots and consolidated incoming parties', async () => {
   );
   expect(response.status).toBe(409);
   expect(await response.text()).toContain('consolidated');
+});
+
+it('rolls back ownerships, service, access, votes, and audit when a late audit write fails', async () => {
+  await service();
+  await seedMeeting('meeting');
+  await seedMotion('open', 'meeting', { votingState: 'open', sequence: 1 });
+  await getDb(env).insert(memberVotes).values({
+    id: 'vote',
+    motionId: 'open',
+    propertyId: 'lot',
+    weight: 1,
+    choice: 'yes',
+  });
+  const beforeRoster = await fetchAdminRoster(env, today);
+  const beforeGrants = await getDb(env).select().from(accessGrants);
+  const beforeVotes = await getDb(env).select().from(memberVotes);
+  const review = await preview();
+  // Fail only after ownership, service, access, and voting changes have run.
+  // Earlier audit statements in the same correlation must roll back too.
+  await env.DATABASE.prepare(
+    `CREATE TRIGGER fail_transfer_audit
+    BEFORE INSERT ON audit_events
+    WHEN NEW.event_kind = 'ownership_created'
+      AND EXISTS (SELECT 1 FROM ownerships WHERE owner_party_id = 'buyer')
+      AND EXISTS (SELECT 1 FROM board_terms WHERE id = 'term' AND actual_end_day IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM access_grants WHERE id = 'grant' AND ended_at IS NOT NULL)
+      AND NOT EXISTS (SELECT 1 FROM member_votes WHERE id = 'vote')
+    BEGIN SELECT RAISE(ABORT, 'forced late transfer failure'); END`,
+  ).run();
+  try {
+    await expect(commit(input, review.token)).rejects.toThrow(
+      'forced late transfer failure',
+    );
+    expect(await fetchAdminRoster(env, today)).toEqual(beforeRoster);
+    expect(await getDb(env).select().from(accessGrants)).toEqual(beforeGrants);
+    expect(await getDb(env).select().from(memberVotes)).toEqual(beforeVotes);
+    expect(await getDb(env).select().from(auditEvents)).toEqual([]);
+    for (const table of [
+      'roster_changes',
+      'board_service_changes',
+      'access_events',
+      'review_flags',
+    ]) {
+      expect(
+        (
+          await env.DATABASE.prepare(
+            `SELECT COUNT(*) AS count FROM ${table}`,
+          ).first<{ count: number }>()
+        )?.count,
+      ).toBe(0);
+    }
+  } finally {
+    await env.DATABASE.prepare('DROP TRIGGER fail_transfer_audit').run();
+  }
 });
