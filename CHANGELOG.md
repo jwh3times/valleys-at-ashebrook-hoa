@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-09-27
+
+### Fixed
+
+- **Large voting registers no longer exceed the SQL parameter limit.** Ballot
+  replacements and shared Person, proxy, and Lot Authority checks bind ID lists
+  as JSON, supporting 150-entry registers while preserving retained ballot
+  identities, validation errors, and atomic replacement behavior.
+
 ## [2.0.2] - 2026-09-26
 
 ### Changed
@@ -3734,7 +3743,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.2...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.3...HEAD
+[2.0.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.33...v2.0.0

@@ -215,7 +215,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `ballots.cast_by_person_id`), plus the two NOT NULL board roll-call columns
   `board_attendance.person_id`/`board_votes.person_id` that `setAttendance`/`setVotes` check
   directly by a plain `personId` field — `PersonFieldName` widens `ProvenancePersonKey` to admit
-  that fifth field name without letting `parseProvenance` itself be asked for it), `voting-state.ts`
+  that fifth field name without letting `parseProvenance` itself be asked for it). The Person and
+  proxy preflights bind each ID set as one JSON array through `json_each`; their dependent
+  `roster/authority.ts` Lot filter does the same, so a full register cannot exhaust D1 parameters
+  during validation (#370). `voting-state.ts`
   (the shared SQL predicate requiring both official mode and live voting to be literal JSON
   booleans `true` for database-conditioned open and cast transitions), `casting-authority.ts`
   (`resolveCastingAuthority`, the shared read/preflight resolver: resolves the
