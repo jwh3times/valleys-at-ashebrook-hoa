@@ -496,6 +496,21 @@ roster-parties` (`createPerson`/`createOrganization` — party+subtype in one ba
     run the phase 3d transfer-effects engine, discovery-only), and `/api/admin/
 roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on write and
     reach the ledger as sensitive-field CATEGORIES only).
+  - `POST /api/admin/roster-ownerships` also accepts `previewTransfer` and `transfer` (#411),
+    after the same `requireBoard` and JSON-body guards. Both take `lotId`, non-empty unique
+    `departingOwnershipIds` and `incomingPartyIds`, `effectiveDay`, optional evidence, and optional
+    per-term `substitutions`. The date cannot be future or on/before a departing Ownership's known
+    start day. Unknown Lots/Parties/departing rows return `404`; malformed input returns `400`;
+    retired Lots, consolidated arrivals, overlaps, invalid substitute qualification, and stale
+    state return `409`. `previewTransfer` returns `200` with a read-only consequence preview and
+    token (`Cache-Control: no-store`). `transfer` additionally requires that token as
+    `previewToken`; a missing or stale token returns `409`. In one D1 batch it rechecks current
+    board authority, the write freeze, and the preview snapshot; ends only selected Ownerships;
+    inserts arrivals; and applies service/voting consequences and one audit correlation. Failed
+    assertions roll everything back with `409`; success returns `200` with new `ownershipIds`.
+    Unselected co-owners remain unchanged. The Roster panel requires another review after changing
+    any input or qualifying-Lot substitution. See
+    [`roster-and-access.md`](./roster-and-access.md#reviewed-ownership-transfers).
   - `POST /api/admin/roster-export` — the bulk export, deliberately a mutating verb: it is the one
     read that is also a recorded act, writing an `access` ledger event (`roster_export`) BEFORE
     any data leaves and failing closed (500, no export) if the record cannot be written. Nothing
@@ -582,8 +597,8 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   different names one account can try against one Lot regardless of whether any of them matched.
 - ADR 0022 phase 3d transfer effects and the review-flag queue (#220; decided by #204).
   `src/server/roster/transfer-effects.ts` is the mutation-boundary engine wired into
-  `/api/admin/roster-ownerships` `end` (resets every open member-motion vote for the departing
-  Lot, then runs retrospective discovery and the forward pass) and `void` (no vote reset — a void
+  `/api/admin/roster-ownerships` `end` and `transfer` (resets every open member-motion vote
+  for the departing Lot, then runs retrospective discovery and the forward pass) and `void` (no vote reset — a void
   is not a transfer — plus supersede-on-void of that Ownership's own open flags) and into
   `/api/admin/roster-representations` `end`/`void`/`correctScope` (discovery and the forward pass
   only; a Representation change never resets a vote). Per #204, a transfer changes who may act for

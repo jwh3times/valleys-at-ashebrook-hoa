@@ -36,6 +36,12 @@ Per #204, a Lot transfer changes who may act for a Lot, never whether it counts 
 weight, turnout row, or quorum denominator is touched. See
 [`roster-and-access.md`](./roster-and-access.md).
 
+The reviewed ownership-transfer command (#411) previews and applies the same transfer effects
+once per Lot, including when only some co-owners depart. It resets the Lot's open member-motion
+votes and advances their revisions once; closed outcomes remain unchanged. The preview reports
+potential Review Flags without reading ballot choices, and confirmation records consequences
+atomically with the Ownership changes.
+
 ## What "secret by construction" means here
 
 `ballot_choices` is the identity-unlinked retained ballot box. It carries only `id`,

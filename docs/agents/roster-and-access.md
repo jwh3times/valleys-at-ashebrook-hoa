@@ -193,10 +193,34 @@ Board sign-in access has its own admin panel — **Board access** (`BoardAccessM
 distinct from the **Board** panel (`BoardServicePanel`) that records who serves. Neither sense
 ever writes the other's data.
 
+## Reviewed ownership transfers
+
+The Roster panel's **Transfer ownership** action (#411) ends selected current Ownerships and
+starts Ownerships for selected existing Parties on one non-future effective day. Unselected
+co-owners keep their rows. The day must follow every departing Ownership's known start day;
+arrivals must be unconsolidated Parties with no overlapping Ownership of the Lot.
+
+The board reviews departing, arriving, and unchanged owners; Lot Authority and linked-account
+Member Access changes; affected Board Terms, offices, and Board Access grants; open member-motion
+vote resets; and an upper bound on Review Flags. Member Access is retained when the account still
+holds Lot Authority elsewhere. For a term that loses its qualifying Lot,
+the board may explicitly choose an eligible substitute Lot; otherwise the term ends or is
+cancelled. Arrivals receive no implicit Board Access. Person Links and System Administration
+Access are unchanged.
+
+`roster/ownership-transfer.ts` projects the final Ownership relation in read-only SQL and reuses
+the existing authority predicates. Preview writes no roster, ledger, or Review Flag rows. Its
+token binds the inputs, Association Day, and a conservative database snapshot; unrelated roster
+or voting changes may also require another preview. Input edits invalidate the UI's preview.
+Commit rechecks the caller's Board Access, the write freeze, and the snapshot inside one D1 batch.
+The selected ends, arrivals, service consequences, transfer effects, and one audit correlation
+succeed together or roll back; stale-state assertions return `409`. See the API contract in
+[`http-endpoints.md`](./http-endpoints.md).
+
 ## Transfer effects
 
 `src/server/roster/transfer-effects.ts` runs at the mutation boundary of
-`/api/admin/roster-ownerships` (`end`, `void`) and `/api/admin/roster-representations`
+`/api/admin/roster-ownerships` (`end`, `void`, `transfer`) and `/api/admin/roster-representations`
 (`end`, `void`, `correctScope`).
 
 Per #204, a transfer changes **who may act** for a Lot, never **whether the Lot counts**: no
