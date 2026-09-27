@@ -136,6 +136,8 @@ const NEW_MODEL_SURFACE = new Set([
   'server/roster/identity.ts',
   'server/roster/bootstrap.ts',
   'server/roster/transfer-effects.ts',
+  // #411: reviewed, atomic Ownership transfers through the existing roster API.
+  'server/roster/ownership-transfer.ts',
   // #248 part 2: the single definition of "this Person holds Lot Authority
   // over this Lot", shared by the content guards and the casting SQL.
   'server/roster/authority.ts',

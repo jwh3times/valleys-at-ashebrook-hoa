@@ -65,7 +65,9 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   every System-Administrator-only helper returns to a caller holding no live `system_admin` grant
   . The five admin
   panels (`RosterAdminPanel`, `BoardServicePanel`, `AccessPanel`, `ReviewPanel`, `CompliancePanel`)
-  call only these helpers, never the routes directly.
+  call these helpers rather than the routes directly. `RosterAdminPanel` also uses
+  `src/lib/ownership-transfer.ts` through `OwnershipTransferForm` for the preview/commit contract;
+  `RosterEvidenceFields` shares evidence inputs with the other roster forms.
 - `src/lib/voting.ts` handles the exact-204 browser writes to `POST /api/vote` for one-time
   homeowner election-ballot and member-motion submissions; failed responses surface their server
   message and never create a receipt.
@@ -301,6 +303,11 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   Authority itself does not; see the `lot-records/` entry below.
   `verification/rate-limit.ts` holds the KV verification throttles, including per-Person and
   distinct-claimed-name limits. Person verification lives in `roster/verification.ts`.
+- `roster/ownership-transfer.ts` (#411) owns the read-only projected Ownership preview and
+  atomic transfer command behind the existing roster-ownerships API. It reuses authority SQL,
+  `board-consequences.ts`, `transfer-effects.ts`, and `AuditCorrelation`; it does not define a
+  second access model. `roster/ownership-input.ts` shares evidence and substitution parsing with
+  that route's existing actions. The browser contract lives in `src/lib/ownership-transfer.ts`.
 - `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3, and
   slice 4 completed the feature with the homeowner-facing `/lot-records` page): `gate.ts` exports
   `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment),

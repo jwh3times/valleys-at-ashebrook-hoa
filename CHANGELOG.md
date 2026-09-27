@@ -7,6 +7,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-27
+
+### Added
+
+- **Review and record an ownership transfer in one operation.** Board admins can
+  select departing and incoming owners, retain other co-owners, and preview
+  access, board-service, and voting consequences before confirming. The transfer
+  records both sides and their consequences atomically, rejects stale previews,
+  and preserves historical records and evidence in a shared audit correlation.
+
 ## [2.0.3] - 2026-09-27
 
 ### Fixed
@@ -3743,7 +3753,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.3...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.3...v2.1.0
 [2.0.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.0...v2.0.1
