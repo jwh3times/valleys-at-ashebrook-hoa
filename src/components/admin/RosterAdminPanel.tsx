@@ -91,18 +91,29 @@ const EXPORT_CONFIRM =
 // Each route accepts its own subset of kinds, so the offered set is passed in
 // rather than shared: a panel must never offer a kind its route would 400.
 
-const EMPTY_LOT_FORM = { address: '', unit: '', voteWeight: '' };
+const EMPTY_LOT_FORM = {
+  address: '',
+  unit: '',
+  voteWeight: '',
+  platLotNumber: '',
+};
 
 /** The inline Lot editor's text state; the weight stays a string until the
  * blank-first parse on save. */
 interface LotEditState {
   lotId: string;
+  platLotNumber: string;
   address: string;
   unit: string;
   voteWeight: string;
   /** What the editor loaded, sent so a stale save refuses instead of
    * restoring a value someone else changed meanwhile. */
-  loaded: { address: string; unit: string | null; voteWeight: number };
+  loaded: {
+    address: string;
+    unit: string | null;
+    voteWeight: number;
+    platLotNumber: string | null;
+  };
   evidence: EvidenceState;
 }
 
@@ -349,7 +360,7 @@ export default function RosterAdminPanel() {
 
   const lotOptions = roster.lots.map((lot) => ({
     id: lot.id,
-    label: lot.unit ? `${lot.address} ${lot.unit}` : lot.address,
+    label: `${lot.unit ? `${lot.address} ${lot.unit}` : lot.address}${lot.platLotNumber ? ` - Lot ${lot.platLotNumber}` : ''}`,
   }));
   const lotLabels = new Map(lotOptions.map((lot) => [lot.id, lot.label]));
   function lotLabel(id: string | null): string {
@@ -391,6 +402,7 @@ export default function RosterAdminPanel() {
     void run(async () => {
       await createLot({
         address: lotForm.address.trim(),
+        platLotNumber: lotForm.platLotNumber.trim() || null,
         unit: unit === '' ? undefined : unit,
         voteWeight: rawWeight === '' ? undefined : Number(rawWeight),
         evidence: buildBasicEvidence(lotEvidence),
@@ -415,6 +427,7 @@ export default function RosterAdminPanel() {
       await updateLot({
         lotId: lotEdit.lotId,
         address: lotEdit.address.trim(),
+        platLotNumber: lotEdit.platLotNumber.trim() || null,
         unit: unit === '' ? null : unit,
         voteWeight: Number(rawWeight),
         evidence: buildBasicEvidence(lotEdit.evidence),
@@ -820,6 +833,24 @@ export default function RosterAdminPanel() {
                 <div className="panel-editor__title">Add a lot</div>
                 <div className="field-grid" style={{ marginBottom: '16px' }}>
                   <div className="field" style={{ margin: 0 }}>
+                    <label htmlFor="add-lot-plat-number">Plat lot number</label>
+                    <input
+                      id="add-lot-plat-number"
+                      value={lotForm.platLotNumber}
+                      maxLength={7}
+                      onChange={(e) =>
+                        setLotForm({
+                          ...lotForm,
+                          platLotNumber: e.target.value,
+                        })
+                      }
+                      disabled={busy}
+                    />
+                    <small className="muted">
+                      Use the recorded plat number; leave blank if unverified.
+                    </small>
+                  </div>
+                  <div className="field" style={{ margin: 0 }}>
                     <label htmlFor="add-lot-address">Address</label>
                     <input
                       id="add-lot-address"
@@ -1009,10 +1040,12 @@ export default function RosterAdminPanel() {
                                   setLotEdit({
                                     lotId: lot.id,
                                     address: lot.address,
+                                    platLotNumber: lot.platLotNumber ?? '',
                                     unit: lot.unit ?? '',
                                     voteWeight: String(lot.voteWeight),
                                     loaded: {
                                       address: lot.address,
+                                      platLotNumber: lot.platLotNumber,
                                       unit: lot.unit,
                                       voteWeight: lot.voteWeight,
                                     },
@@ -1035,6 +1068,27 @@ export default function RosterAdminPanel() {
                             className="field-grid"
                             style={{ marginBottom: '16px' }}
                           >
+                            <div className="field" style={{ margin: 0 }}>
+                              <label htmlFor="edit-lot-plat-number">
+                                Plat lot number
+                              </label>
+                              <input
+                                id="edit-lot-plat-number"
+                                value={lotEdit.platLotNumber}
+                                maxLength={7}
+                                onChange={(e) =>
+                                  setLotEdit({
+                                    ...lotEdit,
+                                    platLotNumber: e.target.value,
+                                  })
+                                }
+                                disabled={busy}
+                              />
+                              <small className="muted">
+                                Correct only against the recorded plat.
+                                Ownership changes keep this number.
+                              </small>
+                            </div>
                             <div className="field" style={{ margin: 0 }}>
                               <label htmlFor="edit-lot-address">Address</label>
                               <input

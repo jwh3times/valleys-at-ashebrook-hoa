@@ -63,6 +63,15 @@ The only tell was npm's own banner printing `@0.15.0` when the merge had minted 
 checkout behind `origin/main`, naming the migrations it lacks, so the silent no-op becomes a loud
 refusal; `MIGRATE_ALLOW_BEHIND=1` is the documented override.
 
+## Plat Lot numbers (`0038`)
+
+Apply `0038` **before** merging/deploying #413's dependent code. It adds nullable
+`lots.plat_lot_number`, a canonical-label CHECK, and a unique index. Old code remains
+compatible and may create Lots without a number; new roster reads require the column.
+No actual plat labels are inferred or populated by the migration. Source-verified
+assignments are separate, evidenced roster writes after deployment. Rollback may
+restore the previous Worker while retaining this additive schema and recorded labels.
+
 ## Deployment ordering
 
 Migration `0030` adds Better Auth's `rate_limits` table, and had to be applied **before**

@@ -56,6 +56,7 @@ const dayCurrent = (
 
 export interface RosterLotRow {
   id: string;
+  platLotNumber: string | null;
   address: string;
   unit: string | null;
   voteWeight: number;
@@ -182,6 +183,7 @@ export async function fetchAdminRoster(
 
   const lots: RosterLotRow[] = lotRows.map((p) => ({
     id: p.id,
+    platLotNumber: p.platLotNumber,
     address: p.address,
     unit: p.unit,
     voteWeight: p.voteWeight,

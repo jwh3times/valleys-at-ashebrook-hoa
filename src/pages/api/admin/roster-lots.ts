@@ -338,8 +338,22 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 const ADDRESS_TAKEN = 'A lot with this address is already on the roster';
+const PLAT_NUMBER_TAKEN =
+  'A lot with this plat lot number is already on the roster';
+function uniqueMessage(err: unknown): string {
+  for (let cause: unknown = err; cause instanceof Error; cause = cause.cause) {
+    if (cause.message.includes('lots.plat_lot_number'))
+      return PLAT_NUMBER_TAKEN;
+  }
+  return ADDRESS_TAKEN;
+}
 
-type LotInput = { address?: string; unit?: string | null; voteWeight?: number };
+type LotInput = {
+  address?: string;
+  unit?: string | null;
+  voteWeight?: number;
+  platLotNumber?: string | null;
+};
 
 function parseLotInput(
   body: unknown,
@@ -353,7 +367,25 @@ function parseLotInput(
   const result = normalizePropertyInput(body, mode);
   if (!result.ok) return result;
   const { address, unit, voteWeight } = result.value;
-  return { ok: true, value: { address, unit, voteWeight } };
+  let platLotNumber: string | null | undefined;
+  if ('platLotNumber' in r) {
+    if (r.platLotNumber !== null && typeof r.platLotNumber !== 'string')
+      return { ok: false, error: 'platLotNumber must be text or null' };
+    platLotNumber =
+      typeof r.platLotNumber === 'string'
+        ? r.platLotNumber.trim().toUpperCase() || null
+        : null;
+    if (
+      platLotNumber !== null &&
+      !/^[1-9][0-9]{0,5}[A-Z]?$/.test(platLotNumber)
+    )
+      return {
+        ok: false,
+        error:
+          'Plat lot number must be 1-6 digits with an optional letter suffix',
+      };
+  }
+  return { ok: true, value: { address, unit, voteWeight, platLotNumber } };
 }
 
 async function actorOf(
@@ -412,14 +444,15 @@ async function createLot(
   try {
     await env.DATABASE.batch([
       env.DATABASE.prepare(
-        `INSERT INTO lots (id, address, address_normalized, unit, status, vote_weight, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
+        `INSERT INTO lots (id, address, address_normalized, unit, status, vote_weight, plat_lot_number, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
       ).bind(
         lotId,
         address,
         normalizeAddress(address),
         input.value.unit ?? null,
         voteWeight,
+        input.value.platLotNumber ?? null,
         nowSeconds,
         nowSeconds,
       ),
@@ -427,7 +460,7 @@ async function createLot(
     ]);
   } catch (err) {
     if (isUniqueViolation(err))
-      return new Response(ADDRESS_TAKEN, { status: 409 });
+      return new Response(uniqueMessage(err), { status: 409 });
     throw err;
   }
   return Response.json({ id: lotId }, { status: 201 });
@@ -435,9 +468,12 @@ async function createLot(
 
 /** What the editor loaded, when it says. Lets a save made from a stale form
  * refuse instead of silently restoring a value someone else just changed. */
-function parseExpected(
-  body: unknown,
-): { address: string; unit: string | null; voteWeight: number } | null {
+function parseExpected(body: unknown): {
+  address: string;
+  unit: string | null;
+  voteWeight: number;
+  platLotNumber?: string | null;
+} | null {
   const raw = (body as Record<string, unknown> | null | undefined)?.expected;
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -447,7 +483,20 @@ function parseExpected(
     typeof r.voteWeight !== 'number'
   )
     return null;
-  return { address: r.address, unit: r.unit, voteWeight: r.voteWeight };
+  if (
+    'platLotNumber' in r &&
+    r.platLotNumber !== null &&
+    typeof r.platLotNumber !== 'string'
+  )
+    return null;
+  return {
+    address: r.address,
+    unit: r.unit,
+    voteWeight: r.voteWeight,
+    ...('platLotNumber' in r
+      ? { platLotNumber: r.platLotNumber as string | null }
+      : {}),
+  };
 }
 
 const LOT_CHANGED = 'The lot changed or was retired — reload and retry';
@@ -472,6 +521,7 @@ async function updateLot(
       unit: lots.unit,
       voteWeight: lots.voteWeight,
       retiredAt: lots.retiredAt,
+      platLotNumber: lots.platLotNumber,
     })
     .from(lots)
     .where(eq(lots.id, lotId))
@@ -480,11 +530,17 @@ async function updateLot(
   if (lot.retiredAt !== null)
     return new Response('A retired lot cannot be edited', { status: 409 });
   const expected = parseExpected(body);
+  if ((body as Record<string, unknown>).expected !== undefined && !expected)
+    return new Response('expected must contain the loaded Lot values', {
+      status: 400,
+    });
   if (
     expected &&
     (expected.address !== lot.address ||
       expected.unit !== lot.unit ||
-      expected.voteWeight !== lot.voteWeight)
+      expected.voteWeight !== lot.voteWeight ||
+      (expected.platLotNumber !== undefined &&
+        expected.platLotNumber !== lot.platLotNumber))
   )
     return new Response(LOT_CHANGED, { status: 409 });
 
@@ -492,12 +548,17 @@ async function updateLot(
     address: input.value.address ?? lot.address,
     unit: input.value.unit !== undefined ? input.value.unit : lot.unit,
     voteWeight: input.value.voteWeight ?? lot.voteWeight,
+    platLotNumber:
+      input.value.platLotNumber !== undefined
+        ? input.value.platLotNumber
+        : lot.platLotNumber,
   };
   const addressChanged = next.address !== lot.address || next.unit !== lot.unit;
   const weightChanged = next.voteWeight !== lot.voteWeight;
+  const numberChanged = next.platLotNumber !== lot.platLotNumber;
   // Idempotent no-op without a ledger row, as `setPreferred` does: a ledger
   // event for a non-change is noise the correction views must then explain.
-  if (!addressChanged && !weightChanged)
+  if (!addressChanged && !weightChanged && !numberChanged)
     return new Response(null, { status: 204 });
 
   const nowMs = Date.now();
@@ -513,10 +574,17 @@ async function updateLot(
     // so an unrelated write in the same second cannot satisfy the marker.
     guard: {
       sql: `EXISTS (SELECT 1 FROM lots WHERE id = ? AND updated_at = ?
-              AND address = ? AND unit IS ? AND vote_weight = ?)`,
-      binds: [lotId, nowSeconds, next.address, next.unit, next.voteWeight],
+              AND address = ? AND unit IS ? AND vote_weight = ? AND plat_lot_number IS ?)`,
+      binds: [
+        lotId,
+        nowSeconds,
+        next.address,
+        next.unit,
+        next.voteWeight,
+        next.platLotNumber,
+      ],
     },
-    sensitive: addressChanged ? ['lot_address'] : [],
+    sensitive: addressChanged || numberChanged ? ['lot_address'] : [],
     scalars: weightChanged
       ? [
           {
@@ -550,19 +618,21 @@ async function updateLot(
       // an event whose old weight never existed.
       env.DATABASE.prepare(
         `UPDATE lots
-         SET address = ?, address_normalized = ?, unit = ?, vote_weight = ?, updated_at = ?
+         SET address = ?, address_normalized = ?, unit = ?, vote_weight = ?, plat_lot_number = ?, updated_at = ?
          WHERE id = ? AND retired_at IS NULL
-           AND address = ? AND unit IS ? AND vote_weight = ?`,
+           AND address = ? AND unit IS ? AND vote_weight = ? AND plat_lot_number IS ?`,
       ).bind(
         next.address,
         normalizeAddress(next.address),
         next.unit,
         next.voteWeight,
+        next.platLotNumber,
         nowSeconds,
         lotId,
         lot.address,
         lot.unit,
         lot.voteWeight,
+        lot.platLotNumber,
       ),
       // The post-state guard below cannot tell this command's write from an
       // identical one committed first in the same second, so the UPDATE's own
@@ -573,7 +643,7 @@ async function updateLot(
     ]);
   } catch (err) {
     if (isUniqueViolation(err))
-      return new Response(ADDRESS_TAKEN, { status: 409 });
+      return new Response(uniqueMessage(err), { status: 409 });
     if (isBatchAssertionError(err))
       return new Response(LOT_CHANGED, { status: 409 });
     throw err;

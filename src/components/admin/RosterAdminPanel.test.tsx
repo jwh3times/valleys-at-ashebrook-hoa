@@ -31,6 +31,7 @@ function lot(overrides: Partial<AdminRoster['lots'][number]> = {}) {
     retiredDay: null,
     retiredAt: null,
     ownerless: false,
+    platLotNumber: null,
     ...overrides,
   };
 }
@@ -262,7 +263,12 @@ describe('RosterAdminPanel lot records', () => {
           address: '100 Main St',
           unit: null,
           voteWeight: 3,
-          expected: { address: '100 Main St', unit: null, voteWeight: 1 },
+          expected: {
+            address: '100 Main St',
+            unit: null,
+            voteWeight: 1,
+            platLotNumber: null,
+          },
         }),
       ),
     );
@@ -303,4 +309,45 @@ describe('RosterAdminPanel lot records', () => {
       screen.queryByRole('button', { name: 'Edit lot: 100 Main St' }),
     ).not.toBeInTheDocument();
   });
+});
+
+it('shows the recorded plat label beside the address and sends corrections with the loaded label', async () => {
+  const user = userEvent.setup();
+  mocked.fetchRoster.mockResolvedValue(
+    roster({ lots: [lot({ platLotNumber: '12A' })] }),
+  );
+  mocked.updateLot.mockResolvedValue(undefined);
+  render(<RosterAdminPanel />);
+  await user.click(
+    await screen.findByRole('button', {
+      name: 'Edit lot: 100 Main St - Lot 12A',
+    }),
+  );
+  const input = screen.getByDisplayValue('12A');
+  await user.clear(input);
+  await user.type(input, '12B');
+  await user.click(screen.getByRole('button', { name: 'Save lot' }));
+  await waitFor(() =>
+    expect(mocked.updateLot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platLotNumber: '12B',
+        expected: expect.objectContaining({ platLotNumber: '12A' }),
+      }),
+    ),
+  );
+});
+it('allows a supplied plat number on creation without inventing one for a blank field', async () => {
+  const user = userEvent.setup();
+  mocked.createLot.mockResolvedValue(undefined);
+  render(<RosterAdminPanel />);
+  const number = await screen.findByLabelText('Plat lot number');
+  expect(number).toHaveValue('');
+  await user.type(number, '12A');
+  await user.type(screen.getByLabelText('Address'), '5 Example Way');
+  await user.click(screen.getByRole('button', { name: 'Add lot' }));
+  await waitFor(() =>
+    expect(mocked.createLot).toHaveBeenCalledWith(
+      expect.objectContaining({ platLotNumber: '12A' }),
+    ),
+  );
 });

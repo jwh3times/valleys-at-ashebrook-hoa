@@ -12,6 +12,10 @@ _Avoid_: Property, home
 The Lot's current, unique address used for display and lookup. It is mutable, is not the Lot's identity, and every change is captured by a Roster Change.
 _Avoid_: Lot identity, property ID
 
+**Plat Lot Number**:
+The optional, source-verified label printed on the recorded plat for a Lot. It is unique within the roster, including retired Lots, and stays with the Lot through address and ownership changes. An unverified label remains blank; assignment or correction is an audited board action. It supplements the permanent internal Lot ID and is neither a sign-in Account nor a credential.
+_Avoid_: Account number, generated Lot number
+
 **Ownerless Lot**:
 A non-retired Lot with no Current Ownership. It remains an association unit but is flagged for Board review and supplies no Member Access or Lot Authority until a Current Ownership is recorded.
 _Avoid_: Retired Lot, inactive property

@@ -132,6 +132,10 @@ async function preview(
 }
 it('previews without writing then transfers both sides while preserving another co-owner', async () => {
   await seedLotAuthority('co-owner', 'lot');
+  await getDb(env)
+    .update(lots)
+    .set({ platLotNumber: '12' })
+    .where(eq(lots.id, 'lot'));
   const before = await fetchAdminRoster(env, today);
   const review = await preview();
   expect(review.departing).toEqual([
@@ -154,6 +158,7 @@ it('previews without writing then transfers both sides while preserving another 
   expect(await result.text()).toContain('ownershipIds');
   expect(result.status).toBe(200);
   const after = await fetchAdminRoster(env, today);
+  expect(after.lots.find((lot) => lot.id === 'lot')?.platLotNumber).toBe('12');
   expect(
     after.ownerships.find((row) => row.ownerPartyId === 'seller')?.endDay,
   ).toBe(today);

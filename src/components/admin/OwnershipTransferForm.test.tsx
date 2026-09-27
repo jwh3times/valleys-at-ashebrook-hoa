@@ -20,6 +20,7 @@ const data: AdminRoster = {
       retiredAt: null,
       retiredDay: null,
       ownerless: false,
+      platLotNumber: null,
     },
   ],
   people: ['Seller', 'Buyer', 'Co-owner'].map((name) => ({

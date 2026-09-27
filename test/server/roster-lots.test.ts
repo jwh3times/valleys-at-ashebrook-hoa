@@ -624,3 +624,160 @@ describe('GET', () => {
     ]);
   });
 });
+
+describe('recorded plat lot numbers', () => {
+  async function stored(id = 'lot-1') {
+    return (await getDb(env).select().from(lots).where(eq(lots.id, id)))[0];
+  }
+  it('records a supplied label, normalizes a suffix, and leaves unknown numbers blank', async () => {
+    const response = await POST(
+      req({
+        action: 'create',
+        address: '7 Example Way',
+        platLotNumber: ' 7a ',
+      }),
+    );
+    expect(response.status).toBe(201);
+    const { id } = (await response.json()) as { id: string };
+    expect((await stored(id)).platLotNumber).toBe('7A');
+    await seedLot('lot-1');
+    expect((await stored()).platLotNumber).toBeNull();
+    expect(
+      (
+        await POST(
+          req({ action: 'update', lotId: 'lot-1', platLotNumber: '12' }),
+        )
+      ).status,
+    ).toBe(204);
+    expect((await stored()).platLotNumber).toBe('12');
+    const categories = await env.DATABASE.prepare(
+      'SELECT field_category FROM audit_sensitive_field_changes',
+    ).all();
+    expect(categories.results).toEqual([
+      { field_category: 'lot_address' },
+      { field_category: 'lot_address' },
+    ]);
+    expect(
+      (
+        await env.DATABASE.prepare(
+          "SELECT * FROM audit_scalar_changes WHERE field_key LIKE '%plat%'",
+        ).all()
+      ).results,
+    ).toEqual([]);
+    expect(
+      (
+        await env.DATABASE.prepare(
+          'SELECT * FROM audit_integrity_violations_v',
+        ).all()
+      ).results,
+    ).toEqual([]);
+  });
+  it.each([0, '0', '01', 'LOT-12', '12AB', '1234567', false, {}, '3.5'])(
+    'rejects invalid plat label %j without writes',
+    async (platLotNumber) => {
+      await seedLot('lot-1');
+      expect(
+        (await POST(req({ action: 'update', lotId: 'lot-1', platLotNumber })))
+          .status,
+      ).toBe(400);
+      expect((await stored()).platLotNumber).toBeNull();
+      expect(await eventsOfKind('lot_updated')).toEqual([]);
+    },
+  );
+  it('preserves the number through address edits, retirement, and retirement correction', async () => {
+    await seedLot('lot-1');
+    await POST(req({ action: 'update', lotId: 'lot-1', platLotNumber: '12' }));
+    expect(
+      (
+        await POST(
+          req({ action: 'update', lotId: 'lot-1', address: '8 Example Way' }),
+        )
+      ).status,
+    ).toBe(204);
+    expect((await POST(req({ action: 'retire', lotId: 'lot-1' }))).status).toBe(
+      204,
+    );
+    expect((await stored()).platLotNumber).toBe('12');
+    expect(
+      (await POST(req({ action: 'correctRetirement', lotId: 'lot-1' }))).status,
+    ).toBe(204);
+    expect((await stored()).platLotNumber).toBe('12');
+  });
+  it('refuses a duplicate even on a retired Lot and rolls back the accompanying address edit', async () => {
+    await seedLot('lot-1');
+    await seedLot('lot-2');
+    await POST(req({ action: 'update', lotId: 'lot-1', platLotNumber: '12' }));
+    await POST(req({ action: 'retire', lotId: 'lot-1' }));
+    const response = await POST(
+      req({
+        action: 'update',
+        lotId: 'lot-2',
+        platLotNumber: '12',
+        address: '8 Example Way',
+      }),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.text()).toContain('plat lot number');
+    expect((await stored('lot-2')).address).toBe('lot-2 Ashebrook Lane');
+    expect((await stored('lot-2')).platLotNumber).toBeNull();
+    expect(await eventsOfKind('lot_updated')).toHaveLength(1);
+    expect(
+      (
+        await POST(
+          req({
+            action: 'create',
+            address: '9 Example Way',
+            platLotNumber: '12',
+          }),
+        )
+      ).status,
+    ).toBe(409);
+  });
+  it('permits a deliberate correction or clear, with no audit event for a repeated value', async () => {
+    await seedLot('lot-1');
+    for (const platLotNumber of ['12', '12', '13', '']) {
+      expect(
+        (await POST(req({ action: 'update', lotId: 'lot-1', platLotNumber })))
+          .status,
+      ).toBe(204);
+    }
+    expect(await eventsOfKind('lot_updated')).toHaveLength(3);
+    expect((await stored()).platLotNumber).toBeNull();
+  });
+  it('rejects an old form after another admin assigns a number', async () => {
+    await seedLot('lot-1');
+    const before = await stored();
+    await POST(req({ action: 'update', lotId: 'lot-1', platLotNumber: '12' }));
+    const response = await POST(
+      req({
+        action: 'update',
+        lotId: 'lot-1',
+        platLotNumber: '13',
+        expected: {
+          address: before.address,
+          unit: before.unit,
+          voteWeight: before.voteWeight,
+          platLotNumber: null,
+        },
+      }),
+    );
+    expect(response.status).toBe(409);
+    expect((await stored()).platLotNumber).toBe('12');
+  });
+  it('rechecks the number inside the batch when a competing assignment wins', async () => {
+    await seedLot('lot-1');
+    const pause = pauseNextBatch();
+    const response = POST(
+      req({ action: 'update', lotId: 'lot-1', platLotNumber: '13' }),
+    );
+    await pause.reached;
+    await getDb(env)
+      .update(lots)
+      .set({ platLotNumber: '12' })
+      .where(eq(lots.id, 'lot-1'));
+    pause.release();
+    expect((await response).status).toBe(409);
+    expect((await stored()).platLotNumber).toBe('12');
+    expect(await eventsOfKind('lot_updated')).toEqual([]);
+  });
+});
