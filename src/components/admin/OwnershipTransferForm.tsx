@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AdminRoster } from '../../lib/roster-admin';
-import { associationDateIso } from '../../lib/format';
+import { associationDateIso, formatLotLabel } from '../../lib/format';
 import {
   previewOwnershipTransfer,
   commitOwnershipTransfer,
@@ -27,6 +27,9 @@ export default function OwnershipTransferForm({
   onComplete: () => Promise<void>;
 }) {
   const lot = roster.lots.find((row) => row.id === lotId)!;
+  const lotLabels = new Map(
+    roster.lots.map((row) => [row.id, formatLotLabel(row)]),
+  );
   const owners = roster.ownerships.filter(
     (row) => row.lotId === lotId && row.current,
   );
@@ -127,10 +130,10 @@ export default function OwnershipTransferForm({
   return (
     <section
       className="panel-card"
-      aria-label={`Transfer ownership: ${lot.address}`}
+      aria-label={`Transfer ownership: ${formatLotLabel(lot)}`}
       style={{ marginBottom: '26px' }}
     >
-      <h2>Transfer ownership: {lot.address}</h2>
+      <h2>Transfer ownership: {formatLotLabel(lot)}</h2>
       <p>
         Select the owners leaving and arriving. Other co-owners keep their
         existing Ownerships.
@@ -227,7 +230,7 @@ export default function OwnershipTransferForm({
               <option value="">End or cancel this Board Term</option>
               {term.availableLots.map((option) => (
                 <option value={option.id} key={option.id}>
-                  {option.address}
+                  {lotLabels.get(option.id) ?? option.address}
                 </option>
               ))}
             </select>

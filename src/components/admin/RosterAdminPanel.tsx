@@ -42,7 +42,11 @@ import type {
   RosterExport,
   TermSubstitution,
 } from '../../lib/roster-admin';
-import { associationDateIso, formatDate } from '../../lib/format';
+import {
+  associationDateIso,
+  formatDate,
+  formatLotLabel,
+} from '../../lib/format';
 import { useAdminResource } from './useAdminResource';
 
 // ADR 0022 phase 3e (#221): the writable Roster surface — Lots, Parties,
@@ -360,7 +364,7 @@ export default function RosterAdminPanel() {
 
   const lotOptions = roster.lots.map((lot) => ({
     id: lot.id,
-    label: `${lot.unit ? `${lot.address} ${lot.unit}` : lot.address}${lot.platLotNumber ? ` - Lot ${lot.platLotNumber}` : ''}`,
+    label: formatLotLabel(lot),
   }));
   const lotLabels = new Map(lotOptions.map((lot) => [lot.id, lot.label]));
   function lotLabel(id: string | null): string {

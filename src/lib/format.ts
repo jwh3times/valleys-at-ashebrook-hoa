@@ -62,3 +62,13 @@ export function maskEmail(email: string): string {
   if (!domain) return '***';
   return `${email[0]}***@${domain}`;
 }
+
+/** Human-readable Lot reference; the caller continues to use its internal ID. */
+export function formatLotLabel(lot: {
+  address: string;
+  unit?: string | null;
+  platLotNumber?: string | null;
+}): string {
+  const address = lot.unit ? `${lot.address} ${lot.unit}` : lot.address;
+  return lot.platLotNumber ? `${address} - Lot ${lot.platLotNumber}` : address;
+}
