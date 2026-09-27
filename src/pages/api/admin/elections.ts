@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { and, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -306,7 +306,9 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
       ? await db
           .select({ id: lots.id, voteWeight: lots.voteWeight })
           .from(lots)
-          .where(inArray(lots.id, propertyIds))
+          .where(
+            sql`${lots.id} IN (SELECT value FROM json_each(${JSON.stringify(propertyIds)}))`,
+          )
       : [];
   const weightById = new Map(propertyRows.map((p) => [p.id, p.voteWeight]));
 
@@ -379,21 +381,14 @@ async function setBallots(db: Db, body: unknown): Promise<Response> {
   //
   // The external contract is unchanged: still a full replace, same codes, same
   // reservation. Only the statements differ.
-  const deleteOmitted =
-    rows.length === 0
-      ? env.DATABASE.prepare(
-          `DELETE FROM ballots WHERE election_id = ? AND ${guard.sql}`,
-        ).bind(electionId, ...guard.binds)
-      : env.DATABASE.prepare(
-          `DELETE FROM ballots
-             WHERE election_id = ?
-               AND property_id NOT IN (${rows.map(() => '?').join(', ')})
-               AND ${guard.sql}`,
-        ).bind(
-          electionId,
-          ...rows.map((row) => row.propertyId),
-          ...guard.binds,
-        );
+  // One JSON bind keeps full-register replacement below D1's parameter
+  // ceiling; an empty array also naturally removes the entire register.
+  const deleteOmitted = env.DATABASE.prepare(
+    `DELETE FROM ballots
+       WHERE election_id = ?
+         AND property_id NOT IN (SELECT value FROM json_each(?))
+         AND ${guard.sql}`,
+  ).bind(electionId, JSON.stringify(propertyIds), ...guard.binds);
   const children: D1PreparedStatement[] = [deleteOmitted];
   for (const row of rows) {
     children.push(
