@@ -7,6 +7,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-09-26
+
+### Changed
+
+- **Meeting details use fewer database round trips.** A gated meeting lookup and
+  one batch now load attendance, motions, and roll calls, with Person and Lot
+  lookups limited to the selected meeting. Historical participants, frozen voting
+  weights, and public proxy privacy remain intact.
+
 ## [2.0.1] - 2026-09-26
 
 ### Changed
@@ -3725,7 +3734,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.33...v2.0.0
 [1.2.33]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v1.2.32...v1.2.33

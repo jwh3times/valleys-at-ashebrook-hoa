@@ -186,10 +186,13 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   reachable only through the board-only `fetchAdminMeetings`/`fetchAdminMeeting`; a shared
   `assembleMeetingDetail` builds the attendance/motions/roll-call body for both pairs and carries no
   status or tier logic itself — see [ADR 0014](../adr/0014-meeting-record-status-gate.md).
-  Its board-side name map is built from `people` (the party roster) rather than the retired
-  `board_people` identity as of #248 (ADR 0022 phase 4 precondition, part 1 of 2), with every label
-  routed through `personDisplayLabel` so a redacted Person renders its durable-ID fallback the same
-  way every other Person read does.
+  After the caller selects the meeting, the assembler uses one D1 batch, making a single-meeting
+  read two D1 calls regardless of motion count (#237). Person labels and Lot addresses/weights are
+  scoped to references in that meeting; historical participants and inactive/retired Lots remain
+  included, and Person identities are not canonicalized to consolidation survivors. Labels use
+  `personDisplayLabel`, preserving the durable-ID fallback for redacted Persons. Frozen motion
+  eligibility is aggregated in SQL; one active-Lot aggregate supplies both current eligibility
+  fallback and the member quorum denominator.
   `assembleMeetingDetail` also assembles the member side — `MeetingDetail.memberAttendance`,
   per-motion `MotionDetail.memberVotes`/`memberTally`, and `totalActiveWeight`, a `SUM(vote_weight)`
   aggregate over ACTIVE properties that is the member quorum denominator, computed unconditionally
@@ -248,8 +251,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   [ADR 0017](../adr/0017-elections-secret-by-construction.md) and
   [ADR 0020](../adr/0020-digital-ballot-box.md). `reads.ts` also has
   `fetchAdminProxies(env)`, the board-only complete-register read: it returns every `ProxyDetail`
-  with its property address and grantor/holder Person names resolved (through `personNameMap`, the
-  shared `personDisplayLabel` map this file also builds the meeting record's names from), the same
+  with its property address and grantor/holder Person names resolved (through `personNameMap`,
+  using the same `personDisplayLabel` fallback as the meeting record), the same
   full-detail-on-list shape as `fetchAdminResolutions`/`fetchAdminElections`. Homeowner proxy reads
   use `fetchUpcomingOccasionsFor` (minimal tier-filtered scheduled-event metadata regardless of
   draft status), `fetchMemberLots` (the caller's active lots and the Persons who may act for them),
