@@ -166,6 +166,11 @@ through a permanent, fail-closed `POST /api/bootstrap/board` endpoint that links
 already-signed-in account to an existing roster Person and self-disables once its one-time
 bootstrap record is written — see SETUP.md §6.
 
+The **Roster** panel also records optional Lot numbers from the recorded plat, shown
+beside addresses and included in roster exports. Board admins assign or correct them
+with evidence; unverified numbers stay blank. These labels remain with the Lot through
+address and ownership changes and supplement its permanent internal ID.
+
 ## Live voting workflow
 
 Live voting remains disabled by default and should stay disabled until the association formally
