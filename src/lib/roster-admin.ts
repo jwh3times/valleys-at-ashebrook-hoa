@@ -112,6 +112,7 @@ export type IdentityEvidence =
 
 export interface RosterLotRow {
   id: string;
+  platLotNumber: string | null;
   address: string;
   unit: string | null;
   voteWeight: number;
@@ -218,6 +219,7 @@ export async function retireLot(input: RetireLotInput): Promise<void> {
 
 export interface CreateLotInput {
   address: string;
+  platLotNumber?: string | null;
   unit?: string;
   /** Absent means the server default of 1 — never a coerced blank. */
   voteWeight?: number;
@@ -235,6 +237,7 @@ export async function createLot(input: CreateLotInput): Promise<void> {
 
 export interface UpdateLotInput {
   lotId: string;
+  platLotNumber?: string | null;
   address: string;
   /** Null clears the unit. */
   unit: string | null;
@@ -242,7 +245,12 @@ export interface UpdateLotInput {
   evidence?: BasicEvidence;
   /** The values the editor loaded; the server refuses a save made from a
    * stale form. */
-  expected?: { address: string; unit: string | null; voteWeight: number };
+  expected?: {
+    address: string;
+    unit: string | null;
+    voteWeight: number;
+    platLotNumber?: string | null;
+  };
 }
 
 export async function updateLot(input: UpdateLotInput): Promise<void> {

@@ -5,7 +5,8 @@ import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/schema';
 import { auditEvents, accessEvents } from '../../src/server/db/audit-schema';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { req } from './fixtures';
+import { req, seedProperty } from './fixtures';
+import { lots } from '../../src/server/db/schema';
 
 // Board caller via the vi.mock idiom used throughout test/server/*-board.test.ts.
 // getAuthContext is wrapped in vi.fn() (rather than a plain arrow function) so
@@ -58,14 +59,18 @@ beforeEach(async () => {
 describe('roster-export admin route', () => {
   it('returns the roster and writes exactly one Access Event for the export', async () => {
     await seedAccount('b');
+    await seedProperty('export-lot');
+    await getDb(env).update(lots).set({ platLotNumber: '12' });
     const res = await POST(req(url, 'POST'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       generatedAt: number;
-      roster: unknown;
+      roster: { lots: { id: string; platLotNumber: string | null }[] };
     };
     expect(typeof body.generatedAt).toBe('number');
-    expect(body.roster).toBeDefined();
+    expect(body.roster.lots).toContainEqual(
+      expect.objectContaining({ id: 'export-lot', platLotNumber: '12' }),
+    );
 
     const events = await getDb(env).select().from(auditEvents);
     expect(events).toHaveLength(1);

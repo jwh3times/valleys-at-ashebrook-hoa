@@ -496,6 +496,13 @@ roster-parties` (`createPerson`/`createOrganization` — party+subtype in one ba
     run the phase 3d transfer-effects engine, discovery-only), and `/api/admin/
 roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on write and
     reach the ledger as sensitive-field CATEGORIES only).
+  - Lot `create` / `update` also accept optional `platLotNumber` (#413): trimmed text,
+    1-6 digits starting nonzero with an optional letter suffix, normalized uppercase.
+    Blank or null clears the number; omission preserves it on update. Malformed
+    labels return `400`; duplicates (including retired Lots) and stale expected
+    values return `409`. The roster read and export include this nullable field.
+    Its audit uses the `lot_address` sensitive category. The existing internal ID
+    remains the key used for every mutation and authorization check.
   - `POST /api/admin/roster-ownerships` also accepts `previewTransfer` and `transfer` (#411),
     after the same `requireBoard` and JSON-body guards. Both take `lotId`, non-empty unique
     `departingOwnershipIds` and `incomingPartyIds`, `effectiveDay`, optional evidence, and optional

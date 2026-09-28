@@ -144,6 +144,13 @@ can run with the added table; rolling back the application can leave the table i
 Password-reset links issued into KV before this upgrade must be requested again because new
 reset tokens are stored and consumed in D1. Existing sessions are unchanged.
 
+**Migration `0038` must run before deploying plat Lot numbers.** Apply it with
+`npm run db:migrate:remote` from the current release branch before merging. It adds
+the nullable column required by roster reads; the previous Worker remains compatible.
+The migration assigns no numbers. Record source-verified labels afterward through
+the Roster panel with evidence, leaving unverified numbers blank. Rolling back the
+Worker can leave this additive schema and recorded labels in place.
+
 **Use a current checkout before you apply.** For already-merged migrations, pull `main` first.
 For a required pre-merge migration such as `0030`, stay on the release branch, fetch `origin/main`,
 and ensure the branch contains its latest changes as well as the pending migration.

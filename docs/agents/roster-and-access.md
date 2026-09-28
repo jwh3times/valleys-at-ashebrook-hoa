@@ -193,6 +193,17 @@ Board sign-in access has its own admin panel — **Board access** (`BoardAccessM
 distinct from the **Board** panel (`BoardServicePanel`) that records who serves. Neither sense
 ever writes the other's data.
 
+## Recorded plat Lot numbers
+
+The Roster panel displays a verified `platLotNumber` beside the address in Lot rows
+and selectors, and roster exports include it. Board admins may assign or correct
+it through the existing Lot create/edit forms with evidence. Leave an unverified
+number blank; never infer it from an address or generate a sequence. Duplicate
+numbers are refused even if the other Lot is retired. Edits compare the loaded
+number and recheck it in the mutation batch, so stale saves cannot overwrite an
+intervening assignment. Address corrections, retirement, and ownership transfers
+preserve it. This is a display/reference label, not an authorization identifier.
+
 ## Reviewed ownership transfers
 
 The Roster panel's **Transfer ownership** action (#411) ends selected current Ownerships and

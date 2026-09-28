@@ -4,7 +4,10 @@ import { runScheduledJobs } from '../../src/server/scheduled';
 
 beforeAll(async () => {
   const migrations = env.MIGRATIONS!;
-  await applyD1Migrations(env.DATABASE, migrations.slice(0, -1));
+  await applyD1Migrations(
+    env.DATABASE,
+    migrations.filter((m) => Number.parseInt(m.name, 10) < 37),
+  );
   await env.DATABASE.batch([
     env.DATABASE.prepare(
       "INSERT INTO users (id,name,email,email_verified,role,created_at,updated_at) VALUES ('account','Synthetic Resident','resident@example.test',0,'board',1,1)",

@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RosterAdminPanel from './RosterAdminPanel';
 import * as rosterApi from '../../lib/roster-admin';
@@ -20,6 +20,7 @@ const data: AdminRoster = {
       retiredAt: null,
       retiredDay: null,
       ownerless: false,
+      platLotNumber: null,
     },
   ],
   people: ['Seller', 'Buyer', 'Co-owner'].map((name) => ({
@@ -137,6 +138,19 @@ it('shows a stale-preview error and requires another review before retrying', as
   expect(screen.getByRole('button', { name: 'Review transfer' })).toBeEnabled();
 });
 it('requires a new preview after choosing a Board Term substitute', async () => {
+  vi.mocked(rosterApi.fetchRoster).mockResolvedValue({
+    ...data,
+    lots: [
+      ...data.lots,
+      {
+        ...data.lots[0],
+        id: 'other',
+        address: '200 Example Lane',
+        unit: 'B',
+        platLotNumber: '12A',
+      },
+    ],
+  });
   vi.mocked(transferApi.previewOwnershipTransfer).mockResolvedValue({
     ...review,
     boardTerms: [
@@ -154,12 +168,15 @@ it('requires a new preview after choosing a Board Term substitute', async () => 
   });
   const user = await start();
   await user.click(screen.getByRole('button', { name: 'Review transfer' }));
-  await user.selectOptions(
-    await screen.findByRole('combobox', {
-      name: 'Board-qualifying Lot for Seller Example',
+  const substitute = await screen.findByRole('combobox', {
+    name: 'Board-qualifying Lot for Seller Example',
+  });
+  expect(
+    within(substitute).getByRole('option', {
+      name: '200 Example Lane B - Lot 12A',
     }),
-    'other',
-  );
+  ).toHaveValue('other');
+  await user.selectOptions(substitute, 'other');
   expect(
     screen.queryByRole('button', { name: 'Confirm ownership transfer' }),
   ).not.toBeInTheDocument();

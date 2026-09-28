@@ -7,6 +7,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-27
+
+### Added
+
+- **Use recorded plat numbers to recognize Lots.** Board admins can record or
+  correct a verified plat Lot number alongside its address, with evidence and
+  audit history. Numbers appear throughout the roster and in exports, remain
+  with the Lot through ownership and address changes, and cannot duplicate a
+  number on another Lot, including a retired one. Unverified numbers stay blank.
+
+### Changed
+
+- Apply additive migration `0038` before deploying this release. It adds the
+  optional plat-number field and its constraints; source-verified assignments
+  are separate audited roster changes.
+
 ## [2.1.0] - 2026-09-27
 
 ### Added
@@ -3753,7 +3769,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.3...v2.1.0
 [2.0.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.1...v2.0.2

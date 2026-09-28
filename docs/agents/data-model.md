@@ -15,6 +15,15 @@ Migration `0037` renames the former `properties` and `board_service_terms` table
 dropping the unrelated legacy `board_terms`. Existing `property_id` column names remain
 for compatibility; their foreign keys now reference `lots.id`.
 
+## Plat Lot numbers
+
+`lots.plat_lot_number` (#413, migration `0038`) is optional text: 1-6 digits starting
+with a nonzero digit, optionally followed by one uppercase letter. The unique index
+covers retired Lots too; multiple NULLs represent unverified labels. No numbering is
+generated and migration `0038` leaves existing rows NULL. The internal `lots.id`
+remains every relationship's key. The field is identifying Lot metadata; its audit
+records use the `lot_address` sensitive category, never raw scalar values.
+
 ## Core tables
 
 Auth throttling uses `rate_limits`: a unique request key, request count, and
