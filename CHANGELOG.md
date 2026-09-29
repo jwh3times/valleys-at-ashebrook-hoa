@@ -7,6 +7,58 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-29
+
+### Added
+
+- **Sign in with Google, optionally.** Residents and board admins can sign in
+  or register with their own Google account alongside email and password, and
+  connect or disconnect Google from a new Account page. Google sign-in grants
+  no homeowner or board access by itself: property verification and the roster
+  still decide access, exactly as for a password account. The button appears
+  only once the operator sets the `GOOGLE_CLIENT_ID` and
+  `GOOGLE_CLIENT_SECRET` Worker secrets; without them nothing changes (#415).
+- Signing in with Google asks for name and email only, never Drive access, and
+  the site keeps none of Google's tokens. A Google account whose email matches
+  an existing account is never merged into it silently: the person signs in
+  with their password and connects Google from the Account page, which needs a
+  recent sign-in and the same verified email. A Google identity already
+  connected to another account cannot be moved, and the last way to sign in
+  cannot be removed; a Google-only account can email itself a link to set a
+  password first.
+
+### Security
+
+- Google identities whose email Google has not verified are refused before any
+  account lookup, so they create no account and cannot reveal whether an
+  address has one. Provider-token routes (`/api/auth/get-access-token`,
+  `/refresh-token`, `/account-info`) now answer 404.
+
+## [2.2.3] - 2026-09-28
+
+### Changed
+
+- Bumped the npm minor-and-patch group (#418): `@anthropic-ai/sdk` 0.127.0 →
+  0.128.0, `@astrojs/cloudflare` 14.3.2 → 14.3.3, `astro` 7.3.3 → 7.3.5,
+  `better-auth`, `@better-auth/core` and `@better-auth/drizzle-adapter` 1.7.5 →
+  1.7.6, `@cloudflare/workers-types` 5.20260922.1 → 5.20260925.1, `prettier`
+  3.9.8 → 3.9.9, `prettier-plugin-astro` 1.0.1 → 1.1.0, and `wrangler` 4.136.2
+  → 4.140.0, with the generated Worker types regenerated to match.
+
+## [2.2.2] - 2026-09-28
+
+### Changed
+
+- Bumped `@astrojs/react` from 6.0.6 to 7.0.0 in the astro-ecosystem group
+  (#416).
+
+## [2.2.1] - 2026-09-28
+
+### Changed
+
+- Bumped `oxlint-tsgolint` from 7.0.2002 to 7.0.2003 in the oxlint group
+  (#417).
+
 ## [2.2.0] - 2026-09-27
 
 ### Added
@@ -3769,7 +3821,11 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.3...v2.3.0
+[2.2.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.2...v2.2.3
+[2.2.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.1...v2.2.2
+[2.2.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.3...v2.1.0
 [2.0.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.0.2...v2.0.3

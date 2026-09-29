@@ -25,6 +25,18 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   Limits apply per client IP and endpoint, including stricter sign-in and email
   request limits; server-side `auth.api` calls bypass the HTTP rate limiter.
 
+- **Google sign-in is an optional identity method and grants no authority.** It is enabled only
+  when both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set; otherwise the social routes
+  answer 404. Only identity scopes (`openid`, `email`, `profile`) are requested, and requests
+  carrying `scopes` or `additionalParams` are refused. An identity whose email Google has not
+  verified is refused before any lookup, with a uniform error, so it cannot pre-create an account
+  or reveal whether one exists. Accounts are never linked implicitly by matching email; linking
+  happens only from a fresh session (under one day) with a matching verified email. Provider
+  tokens are never stored, and the token-returning routes (`/get-access-token`, `/refresh-token`,
+  `/account-info`) and bare ID-token sign-in are disabled. Access still derives per request from
+  the roster via Person Verification. `/api/auth` is exempt from the write freeze, so Google
+  sign-up, link, and unlink stay available during a freeze, as email sign-up does; unlinking
+  Google does not revoke sessions already started through it.
 - **Access is enforced server-side and fail-closed.** Roles are `visitor | homeowner | board`;
   content visibility tiers are `public | homeowner | board`. Anonymous users resolve to `visitor`
   and unknown states resolve to the most restrictive tier. Document downloads are tier-checked on

@@ -11,7 +11,7 @@ Cloudflare:
 - **D1** — relational data: content metadata, accounts, roles, roster, verification state
 - **R2** — document files
 - **KV** — session/rate-limit storage required by the Cloudflare adapter and verification flow
-- **Better Auth** — email/password accounts and roles
+- **Better Auth** — email/password accounts, optional Google sign-in, and roles
 
 Better Auth HTTP throttles and single-use password-reset tokens use D1. KV still supports
 auth sessions and the separate homeowner-verification rate limits.
@@ -80,6 +80,14 @@ and the operator token from 1Password. Both report variable names only.
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | SMS homeowner-verification codes                     |
 | `TURNSTILE_SECRET_KEY`                                   | Server-side Turnstile verification                   |
 | `BOOTSTRAP_SECRET`                                       | One-time first-System-Administrator bootstrap secret |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional)    | Individual Google sign-in; set both or neither       |
+
+Google sign-in is off unless **both** Google secrets are set; without them `/sign-in/social`
+answers 404 and email/password is unchanged. To enable it, create an OAuth 2.0 Web client in Google
+Cloud with authorized redirect URI `https://<site>/api/auth/callback/google`, and configure the
+consent screen with the `openid`, `email`, and `profile` scopes only. A Google identity grants no
+site access by itself; homeowner and board authority still derive from the roster. Keep the
+step-by-step in the private wiki.
 
 Public build-time values are safe to expose and are inlined by Astro:
 
