@@ -66,7 +66,7 @@ public, homeowner, and board.
 | Database           | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite, Drizzle ORM)                                                                                        | Free tier   |
 | File storage       | [Cloudflare R2](https://developers.cloudflare.com/r2/)                                                                                                              | Free tier   |
 | Sessions           | [Cloudflare KV](https://developers.cloudflare.com/kv/)                                                                                                              | Free tier   |
-| Auth               | [Better Auth](https://www.better-auth.com) (email/password)                                                                                                         | Free        |
+| Auth               | [Better Auth](https://www.better-auth.com) (email/password, optional Google)                                                                                        | Free        |
 | Verification email | [Resend](https://resend.com)                                                                                                                                        | Free tier   |
 | Verification SMS   | [Twilio](https://twilio.com)                                                                                                                                        | ~1¢/text    |
 | Bot protection     | [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/)                                                                                                | Free        |

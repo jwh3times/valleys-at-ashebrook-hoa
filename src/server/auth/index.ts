@@ -1,5 +1,8 @@
 import { betterAuth } from 'better-auth';
+import { createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin } from 'better-auth/plugins';
+import { APIError, BASE_ERROR_CODES } from '@better-auth/core/error';
+import type { GoogleProfile } from '@better-auth/core/social-providers';
 import { withCloudflare } from 'better-auth-cloudflare';
 import type {
   CloudflareGeolocation,
@@ -25,6 +28,115 @@ function trustedOriginsFor(baseURL: string | undefined): string[] {
   }
   return origins;
 }
+
+/**
+ * Google sign-in is optional: without both credentials the provider is absent,
+ * `/sign-in/social` answers 404 `PROVIDER_NOT_FOUND`, and email/password is
+ * untouched. Pages ask this before offering a Google button.
+ */
+export function isGoogleSignInConfigured(env?: Env): boolean {
+  return Boolean(env?.GOOGLE_CLIENT_ID && env?.GOOGLE_CLIENT_SECRET);
+}
+
+function decodeIdTokenClaims(idToken: string): Partial<GoogleProfile> | null {
+  try {
+    const payload = idToken.split('.')[1];
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    return JSON.parse(
+      new TextDecoder().decode(bytes),
+    ) as Partial<GoogleProfile>;
+  } catch {
+    return null;
+  }
+}
+
+// Only an identity whose email Google has verified exists at all. Better Auth's
+// own `requireEmailVerification` withholds the session but still CREATES the
+// user and links the Google identity to it first — a pre-account-takeover
+// seed for someone else's address — and its unverified-email outcomes differ
+// by whether an Account already uses the address. Refusing here, before any
+// lookup, answers every unverified identity the same `unable_to_get_user_info`.
+// The claims come from the token response Better Auth fetched from Google
+// over TLS, exactly as its default implementation trusts them.
+async function verifiedGoogleUserInfo(token: { idToken?: string }) {
+  const claims = token.idToken ? decodeIdTokenClaims(token.idToken) : null;
+  if (!claims?.sub || claims.email_verified !== true) return null;
+  // The account ID is Google's `sub`, which Better Auth reads from `data`.
+  return {
+    user: {
+      name: claims.name ?? '',
+      email: claims.email,
+      image: claims.picture,
+      emailVerified: true,
+    },
+    data: claims as GoogleProfile,
+  };
+}
+
+// A personal identity login (#415), never a Drive connection: the default
+// openid/email/profile scopes only, and `includeGrantedScopes: false` so Google
+// cannot fold other scopes this client was ever granted into the token. The
+// redirect flow is the only entry — a bare ID token posted to /sign-in/social
+// is refused.
+function socialProvidersFor(env?: Env) {
+  if (!env || !isGoogleSignInConfigured(env)) return {};
+  return {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID!,
+      clientSecret: env.GOOGLE_CLIENT_SECRET!,
+      prompt: 'select_account' as const,
+      includeGrantedScopes: false,
+      disableIdTokenSignIn: true,
+      getUserInfo: verifiedGoogleUserInfo,
+    },
+  };
+}
+
+// Sign-in needs only the provider identity (`accounts.account_id`), so the
+// provider tokens are never stored: an identity-scoped token has no use here,
+// and a row that holds none cannot leak one. A before-hook's `data` is MERGED
+// over the write, so the fields are nulled rather than omitted. Credential
+// rows never carry them, so this touches only social rows in effect.
+const NO_PROVIDER_TOKENS = {
+  data: {
+    accessToken: null,
+    refreshToken: null,
+    idToken: null,
+    accessTokenExpiresAt: null,
+    refreshTokenExpiresAt: null,
+  },
+};
+
+const SOCIAL_FLOW_PATHS = new Set(['/sign-in/social', '/link-social']);
+
+// Two guards on the paths that start a Google redirect:
+//  - The request cannot widen the login. Both routes accept caller-supplied
+//    `scopes` and `additionalParams` (which could re-enable
+//    include_granted_scopes); the site sends neither, so a body carrying one
+//    is refused rather than trusted to be harmless.
+//  - Linking a provider changes how the Account can be entered, so it demands
+//    the same fresh session Better Auth already requires to unlink one.
+//    `/link-social` itself only checks for a session.
+const guardSocialFlows = createAuthMiddleware(async (ctx) => {
+  if (!SOCIAL_FLOW_PATHS.has(ctx.path)) return;
+  const body = (ctx.body ?? {}) as Record<string, unknown>;
+  if (body.scopes !== undefined || body.additionalParams !== undefined) {
+    throw new APIError('BAD_REQUEST', {
+      code: 'IDENTITY_SCOPES_ONLY',
+      message: 'Sign-in requests identity scopes only.',
+    });
+  }
+  if (ctx.path !== '/link-social') return;
+  const session = await getSessionFromCtx(ctx);
+  // No session: the endpoint's own session check answers 401.
+  if (!session) return;
+  const freshAge = ctx.context.sessionConfig.freshAge;
+  const age = Date.now() - new Date(session.session.createdAt).getTime();
+  if (freshAge !== 0 && age >= freshAge * 1000) {
+    throw APIError.from('FORBIDDEN', BASE_ERROR_CODES.SESSION_NOT_FRESH);
+  }
+});
 
 function createAuthUncached(
   env?: Env,
@@ -117,6 +229,35 @@ function createAuthUncached(
         // D1 provides atomic guarded increments across Worker instances. The KV
         // adapter has no increment primitive required by Better Auth 1.7.
         rateLimit: { enabled: true, window: 60, max: 100, storage: 'database' },
+        socialProviders: socialProvidersFor(env),
+        account: {
+          accountLinking: {
+            enabled: true,
+            // A Google identity whose email matches an existing Account is
+            // refused (`account_not_linked`), never merged: linking happens
+            // only from that Account's own signed-in session, via /link-social,
+            // where the provider email must be verified and must equal the
+            // Account email. No provider is trusted to skip those checks.
+            disableImplicitLinking: true,
+            allowDifferentEmails: false,
+            trustedProviders: [],
+            updateUserInfoOnLink: false,
+          },
+        },
+        databaseHooks: {
+          account: {
+            create: { before: async () => NO_PROVIDER_TOKENS },
+            update: { before: async () => NO_PROVIDER_TOKENS },
+          },
+        },
+        hooks: { before: guardSocialFlows },
+        // Provider-token retrieval is not a feature of this site. These routes
+        // are mounted whether or not a provider is configured; disabling them
+        // answers 404 over HTTP.
+        disabledPaths: ['/get-access-token', '/refresh-token', '/account-info'],
+        // OAuth failures with no flow-specific error URL (a forged or replayed
+        // state) land on the site's login page, not Better Auth's own.
+        onAPIError: { errorURL: '/login' },
       },
     ),
     // Fallback database for the no-arg `auth` export (used by the auth CLI only).

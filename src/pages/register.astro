@@ -2,6 +2,10 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { RegisterForm } from '../components/react/AuthForms';
 import { NEIGHBORHOOD } from '../lib/site';
+import { env } from 'cloudflare:workers';
+import { isGoogleSignInConfigured } from '../server/auth';
+
+const googleEnabled = isGoogleSignInConfigured(env);
 ---
 
 <BaseLayout
@@ -17,6 +21,6 @@ import { NEIGHBORHOOD } from '../lib/site';
       <a href="/verify-property">verify property page</a> to unlock homeowner
       access.
     </p>
-    <RegisterForm client:only="react" />
+    <RegisterForm client:only="react" googleEnabled={googleEnabled} />
   </div>
 </BaseLayout>

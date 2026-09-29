@@ -57,6 +57,11 @@ const isCurrent = (href: string) =>
           {l.label}
         </a>
       ))}
+      {account.signedIn && (
+        <a class="nav-login" href="/account">
+          Account
+        </a>
+      )}
       {account.signedIn && <SignOutButton client:idle />}
     </div>
   </div>

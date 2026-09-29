@@ -118,13 +118,16 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   render cents back for display, sign-first. `MAX_ENTRY_CENTS` (the $1,000,000 single-entry cap)
   lives here rather than in `src/pages/api/admin/dues-ledger.ts`, which imports it, so the form and
   the route agree on one number. The only caller is `DuesLedgerManager`.
-- `src/lib/auth-client.ts` contains the Better Auth browser client.
+- `src/lib/auth-client.ts` contains the Better Auth browser client. `/account` (`SignInMethods` in
+  `src/components/react/GoogleAuth.tsx`) connects/disconnects Google and refuses removing the last
+  sign-in method.
 
 ## Server code (`src/server/`)
 
 `src/server/` contains:
 
-- `auth/`: Better Auth 1.7.3 config, Resend and Twilio senders. Auth rate limits use
+- `auth/`: Better Auth 1.7.6 config (including the optional identity-only Google provider,
+  active only when both Google secrets are set, `isGoogleSignInConfigured`), Resend and Twilio senders. Auth rate limits use
   D1 database storage (`rate_limits`, migration `0030`) with guarded atomic increments;
   KV remains the secondary storage for auth data. The global limit is 100 requests
   per 60 seconds, with Better Auth's stricter endpoint rules (3 per 10 seconds for

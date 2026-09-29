@@ -14,6 +14,13 @@ declare namespace Cloudflare {
     TWILIO_AUTH_TOKEN: string;
     TWILIO_FROM: string;
     TURNSTILE_SECRET_KEY: string;
+    /**
+     * Google OAuth client for individual Google sign-in (#415). Optional: with
+     * either unset, Google sign-in is not offered and email/password is
+     * unaffected. Identity scopes only — never the association's Drive.
+     */
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
     /** Anthropic API key for the admin document assistant (Claude generation). */
     ANTHROPIC_API_KEY: string;
     /**
