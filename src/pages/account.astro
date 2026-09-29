@@ -1,0 +1,47 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SignInMethods } from '../components/react/GoogleAuth';
+import { env } from 'cloudflare:workers';
+import { createAuth, isGoogleSignInConfigured } from '../server/auth';
+
+// The signed-in Account's own sign-in methods. Nothing here reads or changes
+// roster data or access: a sign-in method is how someone enters their
+// Account, never what the Account may see.
+if (!Astro.locals.authContext) {
+  return Astro.redirect('/login');
+}
+
+const auth = createAuth(env);
+// Session first: listing accounts throws 401 without one, and a session that
+// lapsed since middleware resolved it should reach sign-in, not an error.
+const session = await auth.api.getSession({ headers: Astro.request.headers });
+if (!session) {
+  return Astro.redirect('/login');
+}
+const accounts = await auth.api.listUserAccounts({
+  headers: Astro.request.headers,
+});
+const methods = accounts.map((a) => ({ id: a.id, providerId: a.providerId }));
+const googleEnabled = isGoogleSignInConfigured(env);
+---
+
+<BaseLayout
+  title="Account"
+  description="Manage how you sign in to your resident account."
+>
+  <div class="page-section">
+    <p class="eyebrow">Member access</p>
+    <h1 class="page-title">Account</h1>
+    <p class="page-lead">
+      Signed in as {session.user.email}. Choose how you sign in. Homeowner
+      access comes from <a href="/verify-property">verifying your property</a>,
+      not from the way you sign in.
+    </p>
+    <SignInMethods
+      client:only="react"
+      googleEnabled={googleEnabled}
+      email={session.user.email}
+      methods={methods}
+    />
+  </div>
+</BaseLayout>

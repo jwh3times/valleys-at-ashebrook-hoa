@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
 import { useLoginForm } from './useLoginForm';
+import {
+  GoogleSignInButton,
+  googleSignInError,
+  readErrorParam,
+} from './GoogleAuth';
 
 /**
  * One answer for every sign-up outcome. Better Auth returns
@@ -9,7 +14,9 @@ import { useLoginForm } from './useLoginForm';
  */
 const SIGN_UP_RESULT = 'Check your email to verify your account, then sign in.';
 
-export function RegisterForm() {
+export function RegisterForm({
+  googleEnabled = false,
+}: { googleEnabled?: boolean } = {}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -56,11 +63,19 @@ export function RegisterForm() {
       />
       <button type="submit">Create account</button>
       {msg && <p>{msg}</p>}
+      {googleEnabled && <GoogleSignInButton label="Sign up with Google" />}
     </form>
   );
 }
 
-export function LoginForm() {
+export function LoginForm({
+  googleEnabled = false,
+}: { googleEnabled?: boolean } = {}) {
+  // A failed Google redirect comes back here as `?error=<code>`.
+  const [googleError] = useState(() => {
+    const code = readErrorParam();
+    return code ? googleSignInError(code) : '';
+  });
   const {
     email,
     setEmail,
@@ -74,6 +89,7 @@ export function LoginForm() {
   const msg = error || info;
   return (
     <form onSubmit={handleSubmit}>
+      {googleEnabled && googleError && <p role="alert">{googleError}</p>}
       <input
         type="email"
         value={email}
@@ -93,6 +109,7 @@ export function LoginForm() {
         Forgot password?
       </button>
       {msg && <p>{msg}</p>}
+      {googleEnabled && <GoogleSignInButton label="Sign in with Google" />}
     </form>
   );
 }

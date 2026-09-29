@@ -13,3 +13,7 @@ TURNSTILE_SECRET_KEY=
 BOOTSTRAP_SECRET=
 # Board-only AI document assistant (admin panel); leave blank to disable it locally.
 ANTHROPIC_API_KEY=
+# Optional individual Google sign-in (identity scopes only). Leave both blank to
+# offer email/password alone; the Google button appears only when both are set.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

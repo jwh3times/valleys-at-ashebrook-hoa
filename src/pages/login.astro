@@ -2,6 +2,10 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { LoginForm } from '../components/react/AuthForms';
 import { NEIGHBORHOOD } from '../lib/site';
+import { env } from 'cloudflare:workers';
+import { isGoogleSignInConfigured } from '../server/auth';
+
+const googleEnabled = isGoogleSignInConfigured(env);
 ---
 
 <BaseLayout
@@ -15,6 +19,6 @@ import { NEIGHBORHOOD } from '../lib/site';
       Sign in to access homeowner resources. New here?{' '}
       <a href="/register">Create an account</a>.
     </p>
-    <LoginForm client:only="react" />
+    <LoginForm client:only="react" googleEnabled={googleEnabled} />
   </div>
 </BaseLayout>
