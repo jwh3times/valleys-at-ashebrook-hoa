@@ -63,11 +63,12 @@ async function verifiedGoogleUserInfo(token: { idToken?: string }) {
   const claims = token.idToken ? decodeIdTokenClaims(token.idToken) : null;
   if (!claims?.sub || claims.email_verified !== true) return null;
   // The account ID is Google's `sub`, which Better Auth reads from `data`.
+  // No `image`: the site never shows a profile photo, so it does not keep
+  // Google's (the privacy policy at /privacy says so).
   return {
     user: {
       name: claims.name ?? '',
       email: claims.email,
-      image: claims.picture,
       emailVerified: true,
     },
     data: claims as GoogleProfile,

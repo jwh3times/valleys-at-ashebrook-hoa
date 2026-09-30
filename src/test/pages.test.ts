@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import CalendarPage from '../pages/calendar.astro';
+import PrivacyPage from '../pages/privacy.astro';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 
 // A page-level (integration) test: render a real Astro page through the
@@ -42,5 +43,36 @@ describe('calendar page', () => {
     const container = await AstroContainer.create();
     const html = await container.renderToString(CalendarPage);
     expect(html).toContain('Setup needed');
+  });
+});
+
+describe('privacy page', () => {
+  it('names the resident operator and states the Google Limited Use terms', async () => {
+    const container = await AstroContainer.create();
+    const html = await container.renderToString(PrivacyPage);
+
+    expect(html).toContain('Privacy Policy');
+    expect(html).toContain('not operated by the HOA');
+    expect(html).toContain('Limited Use requirements');
+    expect(html).toContain(
+      'https://developers.google.com/terms/api-services-user-data-policy',
+    );
+    // Association-business features exist only in official mode.
+    expect(html).not.toContain('Voting, proxies, and lot records');
+    // Every page's footer links the policy.
+    expect(html).toContain('href="/privacy"');
+  });
+
+  it('names the board and describes the voting features in official mode', async () => {
+    const container = await AstroContainer.create();
+    const html = await container.renderToString(PrivacyPage, {
+      locals: {
+        site: { ...DEFAULT_SITE_SETTINGS, officialMode: true },
+      } as App.Locals,
+    });
+
+    expect(html).toContain('is operated by the Valleys at Ashebrook HOA board');
+    expect(html).toContain('Voting, proxies, and lot records');
+    expect(html).not.toContain('not operated by the HOA');
   });
 });

@@ -17,6 +17,7 @@ const PUBLIC_PATHS = [
   '/contact',
   '/documents',
   '/meetings',
+  '/privacy',
 ];
 
 export const GET: APIRoute = ({ site, url }) => {

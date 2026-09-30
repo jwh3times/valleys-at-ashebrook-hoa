@@ -2285,3 +2285,27 @@ body.body--bare {
     transition: none;
   }
 }
+
+/* Long-form policy text (/privacy). */
+.policy {
+  max-width: 72ch;
+}
+
+.policy h2 {
+  margin: 2rem 0 0.5rem;
+  font-size: 1.35rem;
+}
+
+.policy h3 {
+  margin: 1.25rem 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.policy p,
+.policy li {
+  line-height: 1.6;
+}
+
+.policy ul {
+  padding-left: 1.25rem;
+}

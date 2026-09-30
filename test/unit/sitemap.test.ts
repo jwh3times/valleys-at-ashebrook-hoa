@@ -21,6 +21,7 @@ describe('GET /sitemap.xml', () => {
     expect(body).toContain(
       '<loc>https://ashebrookresidents.com/documents</loc>',
     );
+    expect(body).toContain('<loc>https://ashebrookresidents.com/privacy</loc>');
   });
 
   it('excludes admin, api, and auth-utility routes', async () => {
