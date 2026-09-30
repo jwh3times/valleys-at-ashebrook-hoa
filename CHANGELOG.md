@@ -7,6 +7,37 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-09-30
+
+### Added
+
+- **A privacy policy at `/privacy`, linked from every page's footer.** In plain
+  language it covers:
+  - what the site collects and why: accounts and sessions, optional Google
+    sign-in, property verification, the association roster, the contact form,
+    the board's AI tools and the administrative change log;
+  - the cookies it sets, the service providers it uses and how long it keeps
+    each kind of record;
+  - the choices residents have, and Google's required Limited Use statement.
+
+  The operator line and the voting, proxy and lot-record section follow
+  official mode, as the contact page does. The page is also in the sitemap and
+  gives Google's consent screen the privacy-policy link it asks for.
+
+### Changed
+
+- Google sign-in no longer stores the Google profile photo link, which the site
+  never displays. It now keeps only name, email and Google's account ID.
+
+## [2.3.1] - 2026-09-29
+
+### Changed
+
+- Bumped `@cloudflare/workers-types` from 5.20260925.1 to 5.20260926.1,
+  `@types/node` from 26.6.2 to 26.6.3, and `wrangler` from 4.140.0 to 4.141.0
+  in the npm minor-and-patch group, with the generated Worker types regenerated
+  to match (#419).
+
 ## [2.3.0] - 2026-09-29
 
 ### Added
@@ -3821,7 +3852,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.2...HEAD
+[2.3.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.1...v2.3.2
+[2.3.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.3...v2.3.0
 [2.2.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.2...v2.2.3
 [2.2.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.1...v2.2.2
