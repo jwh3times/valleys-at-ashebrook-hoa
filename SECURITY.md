@@ -36,7 +36,10 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   `/account-info`) and bare ID-token sign-in are disabled. Access still derives per request from
   the roster via Person Verification. `/api/auth` is exempt from the write freeze, so Google
   sign-up, link, and unlink stay available during a freeze, as email sign-up does; unlinking
-  Google does not revoke sessions already started through it.
+  Google does not revoke sessions already started through it. The Google profile photo URL is not
+  stored (`users.image` stays empty). The public `/privacy` page is the residents' statement of
+  data handling, including the Google Limited Use statement; keep it in sync whenever data
+  collection, retention, or third-party providers change.
 - **Access is enforced server-side and fail-closed.** Roles are `visitor | homeowner | board`;
   content visibility tiers are `public | homeowner | board`. Anonymous users resolve to `visitor`
   and unknown states resolve to the most restrictive tier. Document downloads are tier-checked on

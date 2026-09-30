@@ -367,6 +367,8 @@ Do not commit real roster data, secrets, or production credentials. Test fixture
 examples use reserved synthetic contact values only; `npm run lint:fixtures` enforces the phone and
 email half of that rule (see
 [Fixtures and examples use reserved synthetic contact values](#fixtures-and-examples-use-reserved-synthetic-contact-values)).
+When a change alters what the site collects, how long it keeps it, or which third-party provider
+receives it, update the public `/privacy` page (`src/pages/privacy.astro`) in the same change.
 Keep environment examples in `.env.example` and `.dev.vars.example`. Schema changes go through
 Drizzle migrations, and access control must stay server-side and fail closed.
 

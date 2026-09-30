@@ -40,6 +40,7 @@ type Claims = {
   email?: string;
   email_verified?: boolean;
   name?: string;
+  picture?: string;
 };
 
 const b64url = (value: unknown) =>
@@ -406,6 +407,24 @@ describe('signing in with Google', () => {
     expect(tokenRequests[0].get('redirect_uri')).toBe(
       `${BASE}/api/auth/callback/google`,
     );
+  });
+
+  it('keeps the Google name and email but not the profile photo', async () => {
+    const email = 'photo-free@example.com';
+    await googleSignIn({
+      sub: 'google-sub-photo',
+      email,
+      email_verified: true,
+      name: 'Photo Free',
+      picture: 'https://lh3.googleusercontent.com/a/example-photo',
+    });
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT name, email, image FROM users WHERE email = ?',
+      )
+        .bind(email)
+        .first(),
+    ).toEqual({ name: 'Photo Free', email, image: null });
   });
 
   it('does not keep Google tokens after sign-in', async () => {
