@@ -42,7 +42,8 @@
     "test:watch": "vitest",
     "types:worker": "wrangler types --env-file .env.example",
     "types:worker:check": "wrangler types --env-file .env.example --check",
-    "verify:invariants": "node --experimental-strip-types scripts/verify-invariants.ts"
+    "verify:invariants": "node --experimental-strip-types scripts/verify-invariants.ts",
+    "prototype:drive": "op run --env-file prototypes/290-drive-import/prototype.env -- node prototypes/290-drive-import/server.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
