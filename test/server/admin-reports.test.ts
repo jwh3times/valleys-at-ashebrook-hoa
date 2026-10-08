@@ -212,11 +212,15 @@ describe('POST /api/admin/reports', () => {
     expect(body).toContain('event: done');
     expect(tokensText(body)).toContain('Rentals are restricted.');
 
-    const idMatch = body.match(/event: done\ndata: \{"id":"([^"]+)"\}/);
+    const idMatch = body.match(
+      /event: done\ndata: \{"id":"([^"]+)","createdAt":"([^"]+)"\}/,
+    );
     expect(idMatch).not.toBeNull();
     const rows = await getDb(env).select().from(reports);
     const row = rows.find((r) => r.id === idMatch![1]);
     expect(row).toBeDefined();
+    // The done frame's timestamp is the stored one, as a later read returns it.
+    expect(idMatch![2]).toBe(row!.createdAt.toISOString());
     expect(row!.topic).toBe('Rentals & leasing');
     expect(row!.templateKey).toBe('rentals');
     expect(row!.contentMd).toContain('Rentals are restricted.');

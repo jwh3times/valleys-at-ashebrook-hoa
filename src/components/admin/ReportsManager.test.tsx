@@ -107,7 +107,7 @@ describe('ReportsManager', () => {
             ],
           ],
           ['token', { text: '## Summary\nRestricted.' }],
-          ['done', { id: 'new-id' }],
+          ['done', { id: 'new-id', createdAt: '2026-07-30T12:00:00.000Z' }],
         ]);
       }
       return Response.json(listPage([]));
@@ -127,6 +127,13 @@ describe('ReportsManager', () => {
     expect(link).toHaveAttribute('href', '/api/files/doc-1');
     expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
     expect(screen.queryByText(/generating…/i)).not.toBeInTheDocument();
+    // The saved report shows the server's stored timestamp, not the browser
+    // clock at the moment the stream ended.
+    expect(
+      screen.getByText(
+        `Generated ${new Date('2026-07-30T12:00:00.000Z').toLocaleString()}`,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('deletes a report from the history list without opening it', async () => {
