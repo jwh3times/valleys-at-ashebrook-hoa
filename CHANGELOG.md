@@ -7,6 +7,28 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.3.4] - 2026-10-07
+
+### Added
+
+- **Research notes for the Google Drive import (#290).**
+  `docs/specs/2026-09-30-google-drive-import-research.md` records what Google's
+  own documentation says, as read on 2026-09-30, about:
+  - Drive permission levels and app review;
+  - the file picker;
+  - export size limits;
+  - how long a connection's access lasts and how revoking it works.
+
+  It backs the design decisions recorded on #290. Drive import itself is not
+  built yet.
+
+## [2.3.3] - 2026-09-30
+
+### Changed
+
+- Bumped `@cloudflare/workers-types` from 5.20260926.1 to 5.20260927.1 in the
+  npm minor-and-patch group (#422).
+
 ## [2.3.2] - 2026-09-30
 
 ### Added
@@ -3852,7 +3874,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.2...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.4...HEAD
+[2.3.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.3...v2.3.4
+[2.3.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.2...v2.3.3
 [2.3.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.2.3...v2.3.0
