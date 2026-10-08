@@ -130,6 +130,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         if (clientGone) return;
         // Save BEFORE emitting done — a failed insert must not report success.
         const id = crypto.randomUUID();
+        // The column stores whole seconds; truncate here so the done frame
+        // carries exactly the timestamp a later read of this row returns.
+        const createdAt = new Date(Math.floor(Date.now() / 1000) * 1000);
         await getDb(env)
           .insert(reports)
           .values({
@@ -144,10 +147,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
                 category: s.category,
               })),
             ),
-            createdAt: new Date(),
+            createdAt,
             createdBy: ctx?.userId ?? 'unknown',
           });
-        controller.enqueue(sseFrame('done', { id }));
+        controller.enqueue(
+          sseFrame('done', { id, createdAt: createdAt.toISOString() }),
+        );
       } catch {
         if (!clientGone) {
           controller.enqueue(
