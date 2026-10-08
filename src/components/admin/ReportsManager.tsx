@@ -124,14 +124,17 @@ export default function ReportsManager() {
             setView({ kind: 'new' });
             return;
           } else if (evLine[1] === 'done') {
-            const id = (data as { id: string }).id;
+            const { id, createdAt } = data as {
+              id: string;
+              createdAt: string;
+            };
             setView({
               kind: 'report',
               report: {
                 id,
                 topic,
                 templateKey: 'template' in body ? body.template : null,
-                createdAt: new Date().toISOString(),
+                createdAt,
                 createdBy: '',
                 contentMd: content,
                 sources,
