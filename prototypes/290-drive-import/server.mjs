@@ -11,13 +11,19 @@ import crypto from 'node:crypto';
 const PORT = 8790;
 const ORIGIN = `http://localhost:${PORT}`;
 const REDIRECT_URI = `${ORIGIN}/oauth/callback`;
-const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/drive.file'];
+const SCOPES = [
+  'openid',
+  'email',
+  'https://www.googleapis.com/auth/drive.file',
+];
 const DRIVE = 'https://www.googleapis.com/drive/v3';
 
 function need(name) {
   const value = process.env[name];
   if (!value) {
-    console.error(`Missing ${name}. Start with: npm run prototype:drive (see prototypes/290-drive-import/README.md)`);
+    console.error(
+      `Missing ${name}. Start with: npm run prototype:drive (see prototypes/290-drive-import/README.md)`,
+    );
     process.exit(1);
   }
   return value;
@@ -28,8 +34,14 @@ const API_KEY = need('DRIVE_PICKER_API_KEY');
 const PROJECT_NUMBER = need('DRIVE_PROJECT_NUMBER');
 
 const EXPORTS = {
-  'application/vnd.google-apps.document': { mime: 'application/pdf', ext: 'pdf' },
-  'application/vnd.google-apps.presentation': { mime: 'application/pdf', ext: 'pdf' },
+  'application/vnd.google-apps.document': {
+    mime: 'application/pdf',
+    ext: 'pdf',
+  },
+  'application/vnd.google-apps.presentation': {
+    mime: 'application/pdf',
+    ext: 'pdf',
+  },
   'application/vnd.google-apps.spreadsheet': {
     mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ext: 'xlsx',
@@ -72,50 +84,89 @@ async function mintAccessToken(purpose) {
   });
   const json = await res.json();
   if (!res.ok) {
-    log(`mint token (${purpose})`, false, `${res.status} ${json.error ?? ''} ${json.error_description ?? ''}`);
+    log(
+      `mint token (${purpose})`,
+      false,
+      `${res.status} ${json.error ?? ''} ${json.error_description ?? ''}`,
+    );
     throw new Error(`token refresh failed: ${json.error}`);
   }
   state.tokensMinted += 1;
-  log(`mint token #${state.tokensMinted} (${purpose})`, true, `scope=${json.scope}`);
+  log(
+    `mint token #${state.tokensMinted} (${purpose})`,
+    true,
+    `scope=${json.scope}`,
+  );
   return json.access_token;
 }
 
 async function drive(token, path) {
   const started = Date.now();
-  const res = await fetch(`${DRIVE}/${path}`, { headers: { authorization: `Bearer ${token}` } });
+  const res = await fetch(`${DRIVE}/${path}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
   const buf = Buffer.from(await res.arrayBuffer());
   let error = null;
   if (!res.ok) {
     try {
       const j = JSON.parse(buf.toString('utf8'));
-      error = { reason: j.error?.errors?.[0]?.reason ?? j.error?.status, message: j.error?.message };
+      error = {
+        reason: j.error?.errors?.[0]?.reason ?? j.error?.status,
+        message: j.error?.message,
+      };
     } catch {
-      error = { reason: 'non-json', message: buf.subarray(0, 200).toString('utf8') };
+      error = {
+        reason: 'non-json',
+        message: buf.subarray(0, 200).toString('utf8'),
+      };
     }
   }
-  return { status: res.status, ok: res.ok, buf, error, ms: Date.now() - started, type: res.headers.get('content-type') };
+  return {
+    status: res.status,
+    ok: res.ok,
+    buf,
+    error,
+    ms: Date.now() - started,
+    type: res.headers.get('content-type'),
+  };
 }
 
-const META = 'id,name,mimeType,modifiedTime,size,md5Checksum,headRevisionId,shortcutDetails,capabilities/canDownload';
+const META =
+  'id,name,mimeType,modifiedTime,size,md5Checksum,headRevisionId,shortcutDetails,capabilities/canDownload';
 async function getMeta(token, id) {
-  const r = await drive(token, `files/${encodeURIComponent(id)}?fields=${META}&supportsAllDrives=true`);
+  const r = await drive(
+    token,
+    `files/${encodeURIComponent(id)}?fields=${META}&supportsAllDrives=true`,
+  );
   return { ...r, meta: r.ok ? JSON.parse(r.buf.toString('utf8')) : null };
 }
 
 function planFor(meta) {
-  if (EXPORTS[meta.mimeType]) return { kind: 'export', ...EXPORTS[meta.mimeType] };
-  if (meta.mimeType === 'application/vnd.google-apps.shortcut') return { kind: 'shortcut' };
-  if (meta.mimeType.startsWith('application/vnd.google-apps.')) return { kind: 'refuse', why: 'unsupported Google type' };
+  if (EXPORTS[meta.mimeType])
+    return { kind: 'export', ...EXPORTS[meta.mimeType] };
+  if (meta.mimeType === 'application/vnd.google-apps.shortcut')
+    return { kind: 'shortcut' };
+  if (meta.mimeType.startsWith('application/vnd.google-apps.'))
+    return { kind: 'refuse', why: 'unsupported Google type' };
   const ext = (meta.name.split('.').pop() ?? '').toLowerCase();
   if (DOWNLOAD_EXTS.includes(ext)) return { kind: 'download', ext };
-  return { kind: 'refuse', why: `extension .${ext} not in the upload allowlist` };
+  return {
+    kind: 'refuse',
+    why: `extension .${ext} not in the upload allowlist`,
+  };
 }
 
 async function fetchContent(token, meta, plan) {
   if (plan.kind === 'export') {
-    return drive(token, `files/${encodeURIComponent(meta.id)}/export?mimeType=${encodeURIComponent(plan.mime)}`);
+    return drive(
+      token,
+      `files/${encodeURIComponent(meta.id)}/export?mimeType=${encodeURIComponent(plan.mime)}`,
+    );
   }
-  return drive(token, `files/${encodeURIComponent(meta.id)}?alt=media&supportsAllDrives=true`);
+  return drive(
+    token,
+    `files/${encodeURIComponent(meta.id)}?alt=media&supportsAllDrives=true`,
+  );
 }
 
 function latestPicked() {
@@ -128,7 +179,13 @@ async function runExports() {
   const token = await mintAccessToken('server export — NOT the Picker token');
   const results = [];
   for (const p of latestPicked()) {
-    const r = { at: now(), run: p.run, name: p.name, pickerMime: p.mimeType, connection: state.connections };
+    const r = {
+      at: now(),
+      run: p.run,
+      name: p.name,
+      pickerMime: p.mimeType,
+      connection: state.connections,
+    };
     const m = await getMeta(token, p.id);
     r.metaStatus = m.status;
     if (!m.ok) {
@@ -142,28 +199,49 @@ async function runExports() {
     const plan = planFor(m.meta);
     r.plan = plan.kind === 'export' ? `export → ${plan.ext}` : plan.kind;
     if (plan.kind === 'refuse') {
-      Object.assign(r, { outcome: 'refused (by design)', error: { reason: plan.why } });
+      Object.assign(r, {
+        outcome: 'refused (by design)',
+        error: { reason: plan.why },
+      });
     } else if (plan.kind === 'shortcut') {
       const target = m.meta.shortcutDetails?.targetId;
       const t = target ? await getMeta(token, target) : null;
       Object.assign(r, {
-        outcome: t?.ok ? 'shortcut target readable' : 'shortcut target NOT readable',
+        outcome: t?.ok
+          ? 'shortcut target readable'
+          : 'shortcut target NOT readable',
         targetStatus: t?.status ?? null,
         error: t?.error ?? null,
       });
     } else {
       const c = await fetchContent(token, m.meta, plan);
-      Object.assign(r, { contentStatus: c.status, ms: c.ms, bytes: c.buf.length });
+      Object.assign(r, {
+        contentStatus: c.status,
+        ms: c.ms,
+        bytes: c.buf.length,
+      });
       if (c.ok) {
         const key = `x${state.bytes.size + 1}`;
-        state.bytes.set(key, { buf: c.buf, type: c.type, name: `${p.name}.${plan.ext}` });
-        Object.assign(r, { outcome: 'OK', sha256: sha256(c.buf).slice(0, 16), view: `/file/${key}` });
+        state.bytes.set(key, {
+          buf: c.buf,
+          type: c.type,
+          name: `${p.name}.${plan.ext}`,
+        });
+        Object.assign(r, {
+          outcome: 'OK',
+          sha256: sha256(c.buf).slice(0, 16),
+          view: `/file/${key}`,
+        });
       } else {
         Object.assign(r, { outcome: 'content failed', error: c.error });
       }
     }
     results.push(r);
-    log(`export ${p.name}`, r.outcome === 'OK' || r.outcome.startsWith('refused'), r.outcome);
+    log(
+      `export ${p.name}`,
+      r.outcome === 'OK' || r.outcome.startsWith('refused'),
+      r.outcome,
+    );
   }
   state.exports.push(...results);
   return results;
@@ -184,11 +262,19 @@ function diffDetail(a, b) {
   }
   const lo = Math.max(0, first - 60);
   const markers = {};
-  for (const key of ['/CreationDate', '/ModDate', '/ID', 'dcterms:created', 'dcterms:modified']) {
+  for (const key of [
+    '/CreationDate',
+    '/ModDate',
+    '/ID',
+    'dcterms:created',
+    'dcterms:modified',
+  ]) {
     const grab = (buf) => {
       const s = buf.toString('latin1');
       const i = s.indexOf(key);
-      return i < 0 ? null : printable(Buffer.from(s.slice(i, i + 90), 'latin1'));
+      return i < 0
+        ? null
+        : printable(Buffer.from(s.slice(i, i + 90), 'latin1'));
     };
     const va = grab(a);
     const vb = grab(b);
@@ -220,7 +306,9 @@ async function runDeterminism(repeat, gapMs) {
       runs.push(c);
     }
     const after = await getMeta(token, p.id);
-    const hashes = runs.map((c) => (c.ok ? sha256(c.buf).slice(0, 16) : `ERR ${c.status}`));
+    const hashes = runs.map((c) =>
+      c.ok ? sha256(c.buf).slice(0, 16) : `ERR ${c.status}`,
+    );
     const identical = runs.every((c) => c.ok) && new Set(hashes).size === 1;
     const r = {
       at: now(),
@@ -230,9 +318,14 @@ async function runDeterminism(repeat, gapMs) {
       hashes,
       identical,
     };
-    if (!identical && runs[0].ok && runs[1]?.ok) r.diff = diffDetail(runs[0].buf, runs[1].buf);
+    if (!identical && runs[0].ok && runs[1]?.ok)
+      r.diff = diffDetail(runs[0].buf, runs[1].buf);
     results.push(r);
-    log(`determinism ${p.name} (${plan.ext} ×${repeat})`, true, identical ? 'byte-identical' : 'DIFFERENT');
+    log(
+      `determinism ${p.name} (${plan.ext} ×${repeat})`,
+      true,
+      identical ? 'byte-identical' : 'DIFFERENT',
+    );
   }
   state.determinism.push(...results);
   return results;
@@ -252,7 +345,10 @@ function publicState() {
       : null,
     connections: state.connections,
     tokensMinted: state.tokensMinted,
-    picked: latestPicked().map(({ id, ...rest }) => ({ ...rest, id: `${id.slice(0, 6)}…` })),
+    picked: latestPicked().map(({ id, ...rest }) => ({
+      ...rest,
+      id: `${id.slice(0, 6)}…`,
+    })),
     pickerEvents: state.pickerEvents,
     probes: state.probes,
     exports: state.exports,
@@ -265,28 +361,56 @@ function report() {
   const label = (() => {
     const seen = new Map();
     return (name, mime) => {
-      if (!seen.has(name)) seen.set(name, `${(mime ?? 'file').split('.').pop().split('/').pop()} #${seen.size + 1}`);
+      if (!seen.has(name))
+        seen.set(
+          name,
+          `${(mime ?? 'file').split('.').pop().split('/').pop()} #${seen.size + 1}`,
+        );
       return seen.get(name);
     };
   })();
-  const lines = ['# #290 Drive import prototype — results', '', `Generated ${now()}. File names and IDs are replaced with labels.`, ''];
-  lines.push('## Q1 — server export of Picker-selected files with a stored refresh token', '');
-  for (const p of state.probes) lines.push(`- Negative control (file ID not picked): files.get → ${p.status} ${p.error?.reason ?? ''}`);
+  const lines = [
+    '# #290 Drive import prototype — results',
+    '',
+    `Generated ${now()}. File names and IDs are replaced with labels.`,
+    '',
+  ];
+  lines.push(
+    '## Q1 — server export of Picker-selected files with a stored refresh token',
+    '',
+  );
+  for (const p of state.probes)
+    lines.push(
+      `- Negative control (file ID not picked): files.get → ${p.status} ${p.error?.reason ?? ''}`,
+    );
   for (const e of state.exports) {
-    lines.push(`- [conn ${e.connection}, run ${e.run}] ${label(e.name, e.mimeType ?? e.pickerMime)} (${e.plan ?? '-'}): **${e.outcome}**` +
-      `${e.bytes != null ? `, ${e.bytes} bytes` : ''}${e.error ? `, ${e.error.reason ?? ''} ${e.error.message ?? ''}` : ''}`);
+    lines.push(
+      `- [conn ${e.connection}, run ${e.run}] ${label(e.name, e.mimeType ?? e.pickerMime)} (${e.plan ?? '-'}): **${e.outcome}**` +
+        `${e.bytes != null ? `, ${e.bytes} bytes` : ''}${e.error ? `, ${e.error.reason ?? ''} ${e.error.message ?? ''}` : ''}`,
+    );
   }
   lines.push('', '## Q2 — Picker with another Google account signed in', '');
-  for (const ev of state.pickerEvents) lines.push(`- run ${ev.run}: ${ev.event}${ev.detail ? ` — ${ev.detail}` : ''}`);
+  for (const ev of state.pickerEvents)
+    lines.push(
+      `- run ${ev.run}: ${ev.event}${ev.detail ? ` — ${ev.detail}` : ''}`,
+    );
   lines.push('', '## Q3 — repeat exports of unchanged files', '');
   for (const d of state.determinism) {
-    lines.push(`- ${label(d.name)} as ${d.as}: **${d.identical ? 'byte-identical' : 'different'}** across ${d.hashes.length} exports; modifiedTime unchanged: ${d.modifiedTimeUnchanged}`);
+    lines.push(
+      `- ${label(d.name)} as ${d.as}: **${d.identical ? 'byte-identical' : 'different'}** across ${d.hashes.length} exports; modifiedTime unchanged: ${d.modifiedTimeUnchanged}`,
+    );
     if (d.diff) {
-      lines.push(`  - sizes ${d.diff.sizeA} / ${d.diff.sizeB}; first difference at byte ${d.diff.firstDiffAt}; ${d.diff.differingBytesInOverlap} differing bytes in overlap`);
-      for (const [k, v] of Object.entries(d.diff.markers)) lines.push(`  - ${k}: ${v.same ? 'same' : 'differs'}`);
+      lines.push(
+        `  - sizes ${d.diff.sizeA} / ${d.diff.sizeB}; first difference at byte ${d.diff.firstDiffAt}; ${d.diff.differingBytesInOverlap} differing bytes in overlap`,
+      );
+      for (const [k, v] of Object.entries(d.diff.markers))
+        lines.push(`  - ${k}: ${v.same ? 'same' : 'differs'}`);
     }
   }
-  lines.push('', `Connections made: ${state.connections}. Access tokens minted: ${state.tokensMinted}.`);
+  lines.push(
+    '',
+    `Connections made: ${state.connections}. Access tokens minted: ${state.tokensMinted}.`,
+  );
   return lines.join('\n');
 }
 
@@ -303,9 +427,12 @@ function send(res, status, body, type = 'application/json') {
 async function handle(req, res) {
   const url = new URL(req.url, ORIGIN);
   try {
-    if (req.method === 'GET' && url.pathname === '/') return send(res, 200, PAGE, 'text/html; charset=utf-8');
-    if (req.method === 'GET' && url.pathname === '/state') return send(res, 200, publicState());
-    if (req.method === 'GET' && url.pathname === '/report') return send(res, 200, report(), 'text/markdown; charset=utf-8');
+    if (req.method === 'GET' && url.pathname === '/')
+      return send(res, 200, PAGE, 'text/html; charset=utf-8');
+    if (req.method === 'GET' && url.pathname === '/state')
+      return send(res, 200, publicState());
+    if (req.method === 'GET' && url.pathname === '/report')
+      return send(res, 200, report(), 'text/markdown; charset=utf-8');
 
     if (req.method === 'GET' && url.pathname === '/connect') {
       state.oauthState = crypto.randomUUID();
@@ -326,9 +453,17 @@ async function handle(req, res) {
     if (req.method === 'GET' && url.pathname === '/oauth/callback') {
       if (url.searchParams.get('error')) {
         log('consent', false, url.searchParams.get('error'));
-        return send(res, 400, `Consent failed: ${url.searchParams.get('error')}`, 'text/plain');
+        return send(
+          res,
+          400,
+          `Consent failed: ${url.searchParams.get('error')}`,
+          'text/plain',
+        );
       }
-      if (!state.oauthState || url.searchParams.get('state') !== state.oauthState) {
+      if (
+        !state.oauthState ||
+        url.searchParams.get('state') !== state.oauthState
+      ) {
         return send(res, 400, 'state mismatch', 'text/plain');
       }
       state.oauthState = null;
@@ -346,13 +481,29 @@ async function handle(req, res) {
       const tj = await tr.json();
       if (!tr.ok) {
         log('code exchange', false, `${tr.status} ${tj.error}`);
-        return send(res, 400, `Code exchange failed: ${tj.error}`, 'text/plain');
+        return send(
+          res,
+          400,
+          `Code exchange failed: ${tj.error}`,
+          'text/plain',
+        );
       }
       // The id_token came straight from Google's token endpoint over TLS; a prototype may read it unverified.
-      const claims = JSON.parse(Buffer.from(tj.id_token.split('.')[1], 'base64url').toString('utf8'));
+      const claims = JSON.parse(
+        Buffer.from(tj.id_token.split('.')[1], 'base64url').toString('utf8'),
+      );
       if (state.connection && state.connection.sub !== claims.sub) {
-        log('connect', false, 'different Google account than the current connection — refused (same-account rule)');
-        return send(res, 409, 'Refused: a different Google account. Disconnect first. <a href="/">back</a>', 'text/html');
+        log(
+          'connect',
+          false,
+          'different Google account than the current connection — refused (same-account rule)',
+        );
+        return send(
+          res,
+          409,
+          'Refused: a different Google account. Disconnect first. <a href="/">back</a>',
+          'text/html',
+        );
       }
       if (!tj.refresh_token) log('connect', false, 'no refresh_token returned');
       state.connection = {
@@ -363,23 +514,39 @@ async function handle(req, res) {
         connectedAt: now(),
       };
       state.connections += 1;
-      log(`connect #${state.connections}`, Boolean(tj.refresh_token), `scope=${tj.scope}`);
+      log(
+        `connect #${state.connections}`,
+        Boolean(tj.refresh_token),
+        `scope=${tj.scope}`,
+      );
       res.writeHead(302, { location: '/' });
       return res.end();
     }
 
     if (req.method === 'POST' && url.pathname === '/picker-token') {
-      const accessToken = await mintAccessToken('Picker session in the browser');
-      return send(res, 200, { accessToken, apiKey: API_KEY, appId: PROJECT_NUMBER });
+      const accessToken = await mintAccessToken(
+        'Picker session in the browser',
+      );
+      return send(res, 200, {
+        accessToken,
+        apiKey: API_KEY,
+        appId: PROJECT_NUMBER,
+      });
     }
     if (req.method === 'POST' && url.pathname === '/picker-event') {
       const b = await readJson(req);
-      state.pickerEvents.push({ at: now(), run: b.run, event: b.event, detail: b.detail ?? '' });
+      state.pickerEvents.push({
+        at: now(),
+        run: b.run,
+        event: b.event,
+        detail: b.detail ?? '',
+      });
       return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/picked') {
       const b = await readJson(req);
-      for (const d of b.docs) state.picked.push({ ...d, run: b.run, at: now() });
+      for (const d of b.docs)
+        state.picked.push({ ...d, run: b.run, at: now() });
       log(`picked ${b.docs.length} file(s)`, true, `run ${b.run}`);
       return send(res, 200, { ok: true });
     }
@@ -388,13 +555,25 @@ async function handle(req, res) {
       const token = await mintAccessToken('negative control');
       const m = await getMeta(token, String(b.fileId).trim());
       state.probes.push({ at: now(), status: m.status, error: m.error });
-      log('negative control (unpicked file ID)', !m.ok, `${m.status} ${m.error?.reason ?? 'READABLE'}`);
+      log(
+        'negative control (unpicked file ID)',
+        !m.ok,
+        `${m.status} ${m.error?.reason ?? 'READABLE'}`,
+      );
       return send(res, 200, { status: m.status, error: m.error });
     }
-    if (req.method === 'POST' && url.pathname === '/export') return send(res, 200, await runExports());
+    if (req.method === 'POST' && url.pathname === '/export')
+      return send(res, 200, await runExports());
     if (req.method === 'POST' && url.pathname === '/determinism') {
       const b = await readJson(req);
-      return send(res, 200, await runDeterminism(Math.max(2, Number(b.repeat ?? 3)), Number(b.gapMs ?? 5000))); // coercion-ok: prototype
+      return send(
+        res,
+        200,
+        await runDeterminism(
+          Math.max(2, Number(b.repeat ?? 3)),
+          Number(b.gapMs ?? 5000),
+        ),
+      ); // coercion-ok: prototype
     }
     if (req.method === 'POST' && url.pathname === '/disconnect') {
       if (state.connection) {
@@ -411,7 +590,10 @@ async function handle(req, res) {
     if (req.method === 'GET' && url.pathname.startsWith('/file/')) {
       const f = state.bytes.get(url.pathname.slice(6));
       if (!f) return send(res, 404, 'gone', 'text/plain');
-      res.writeHead(200, { 'content-type': f.type ?? 'application/octet-stream', 'content-disposition': `inline; filename="${encodeURIComponent(f.name)}"` });
+      res.writeHead(200, {
+        'content-type': f.type ?? 'application/octet-stream',
+        'content-disposition': `inline; filename="${encodeURIComponent(f.name)}"`,
+      });
       return res.end(f.buf);
     }
     return send(res, 404, { error: 'not found' });
@@ -532,4 +714,6 @@ for (const host of ['127.0.0.1', '::1']) {
     .on('error', (e) => console.error(`listen ${host}: ${e.code}`))
     .listen(PORT, host);
 }
-console.log(`PROTOTYPE #290 — open ${ORIGIN}  (Ctrl+C to stop; all state is lost on exit)`);
+console.log(
+  `PROTOTYPE #290 — open ${ORIGIN}  (Ctrl+C to stop; all state is lost on exit)`,
+);
