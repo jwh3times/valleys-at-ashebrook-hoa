@@ -7,6 +7,117 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.3.16] - 2026-10-15
+
+### Security
+
+- **Closed all 23 open Dependabot alerts** (7 high, 10 moderate, 6 low) in
+  `undici`, `sharp` and `http-cache-semantics`. None of them ships in the
+  deployed Worker: they are build, local-development and test tooling (Astro's
+  image build, Miniflare, jsdom). `npm audit` now reports no vulnerabilities.
+  - `sharp` 0.35.4 → 0.35.5 and `undici` 7.29.0 → 7.30.0 under Miniflare. The
+    miniflare override that forced patched versions in 0.18.22 pinned them
+    exactly, so once newer advisories landed it held the vulnerable versions in
+    place. It now uses caret ranges from the patched floors, so later patch
+    releases come through without another override edit.
+  - The `undici` 8.x copies under jsdom and unifont go to 8.12.1, and
+    `http-cache-semantics` goes from 4.2.0 to 4.3.0.
+
+## [2.3.15] - 2026-10-15
+
+### Changed
+
+- Bumped `better-auth-cloudflare` from 0.3.1 to 0.4.0 and
+  `@cloudflare/workers-types` from 5.20261011.1 to 5.20261012.1 in the npm
+  minor-and-patch group (#439).
+
+## [2.3.14] - 2026-10-14
+
+### Changed
+
+- Bumped `oxlint-tsgolint` from 7.0.2003 to 7.0.2004 (#437).
+
+## [2.3.13] - 2026-10-14
+
+### Changed
+
+- Bumped `@cloudflare/workers-types` from 5.20261010.1 to 5.20261011.1,
+  `@napi-rs/canvas` from 1.0.10 to 1.0.11, and `prettier` from 3.9.9 to 3.9.10
+  in the npm minor-and-patch group (#438).
+
+## [2.3.12] - 2026-10-13
+
+### Changed
+
+- Bumped ten packages in the npm minor-and-patch group, with the generated
+  Worker types regenerated to match (#436):
+  - `@anthropic-ai/sdk` 0.131.0 → 0.133.0;
+  - `@astrojs/cloudflare` 14.3.3 → 14.3.4 and `@astrojs/react` 7.0.0 → 7.0.1;
+  - `astro` 7.3.5 → 7.3.8 and `prettier-plugin-astro` 1.1.0 → 1.1.1;
+  - `drizzle-orm` 0.45.3 → 0.45.4;
+  - `@cloudflare/vitest-pool-workers` 0.22.0 → 0.23.0,
+    `@cloudflare/workers-types` 5.20261006.1 → 5.20261010.1 and `wrangler`
+    4.147.0 → 4.149.0;
+  - `@types/node` 26.6.4 → 26.6.5.
+
+## [2.3.11] - 2026-10-13
+
+### Changed
+
+- Bumped `actions/setup-node` from 7.0.0 to 7.1.0 in CI (#435).
+
+## [2.3.10] - 2026-10-10
+
+### Changed
+
+- Bumped `oxlint` from 1.86.0 to 1.87.0 (#433).
+
+## [2.3.9] - 2026-10-10
+
+### Changed
+
+- Bumped `@cloudflare/workers-types` from 5.20261004.1 to 5.20261006.1,
+  `@vitejs/plugin-react` from 6.1.1 to 6.1.2, and `jsdom` from 30.1.1 to 30.1.2
+  in the npm minor-and-patch group (#434).
+
+## [2.3.8] - 2026-10-07
+
+### Changed
+
+- Bumped `smol-toml` from 1.8.0 to 1.9.0 (#429).
+
+## [2.3.7] - 2026-10-07
+
+### Changed
+
+- Bumped `source-map-js` from 1.2.1 to 1.2.2 (#430).
+
+## [2.3.6] - 2026-10-07
+
+### Changed
+
+- Bumped `oxlint` from 1.85.0 to 1.86.0 (#424).
+
+### Fixed
+
+- A newly generated board report showed the browser's clock as its
+  "Generated" time. It now shows the time the server stored, so it matches what
+  the report history shows on a later visit.
+
+## [2.3.5] - 2026-10-07
+
+### Changed
+
+- Bumped nine packages in the npm minor-and-patch group, with the generated
+  Worker types regenerated to match (#427):
+  - `@anthropic-ai/sdk` 0.128.0 → 0.131.0;
+  - `better-auth`, `@better-auth/core` and `@better-auth/drizzle-adapter`
+    1.7.6 → 1.7.7;
+  - `@cloudflare/workers-types` 5.20260927.1 → 5.20261004.1 and `wrangler`
+    4.141.0 → 4.147.0;
+  - `@napi-rs/canvas` 1.0.9 → 1.0.10 and `pdfjs-dist` 6.3.289 → 6.4.299;
+  - `@types/node` 26.6.3 → 26.6.4.
+
 ## [2.3.4] - 2026-10-07
 
 ### Added
@@ -3874,7 +3985,19 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.4...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.16...HEAD
+[2.3.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.15...v2.3.16
+[2.3.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.14...v2.3.15
+[2.3.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.13...v2.3.14
+[2.3.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.12...v2.3.13
+[2.3.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.11...v2.3.12
+[2.3.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.10...v2.3.11
+[2.3.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.9...v2.3.10
+[2.3.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.8...v2.3.9
+[2.3.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.7...v2.3.8
+[2.3.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.6...v2.3.7
+[2.3.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.5...v2.3.6
+[2.3.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.4...v2.3.5
 [2.3.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.3...v2.3.4
 [2.3.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.2...v2.3.3
 [2.3.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.1...v2.3.2
