@@ -532,10 +532,11 @@ The admin HTML response needs these two directives widened. Public pages keep to
 - `frame-src`: add `https://docs.google.com`. When the connected account isn't signed in, the
   Picker frame navigates to Google sign-in (P2), so `https://accounts.google.com` is also expected.
 
-The exact set is **measured, not assumed**. Slice 3 first ships the additions in a report-only
-header beside the enforced one, records which origins the Picker actually loads, then enforces the
-smallest set. `src/middleware.ts` gains a per-path policy, so only `/admin` responses carry the
-Google origins.
+**Shipped enforced, then checked (changed 2026-10-18).** The report-only measurement needs a live
+connection in production, which nobody can open before the operator setup (ops #43). So slice 3
+enforces the expected set on `/admin` responses only (`src/middleware.ts`), and the operator setup
+page adds a step: open the Picker, read the browser console for CSP errors, and extend or tighten
+the set from what it reports. Public pages keep today's policy.
 
 ### 10. Privacy page
 

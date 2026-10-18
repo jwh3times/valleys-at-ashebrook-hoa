@@ -74,18 +74,15 @@ async function r2Keys(): Promise<string[]> {
  * table that does not exist. */
 function failDocumentWrites(verb: 'insert' | 'delete') {
   const originalPrepare = env.DATABASE.prepare.bind(env.DATABASE);
+  // Drizzle quotes the table name; the store's raw batch does not.
   const pattern = new RegExp(
-    `^\\s*${verb}\\s+(into\\s+|from\\s+)?"documents"`,
+    `^(\\s*${verb}\\s+(?:into|from)\\s+)"?documents"?(?=[\\s(])`,
     'i',
   );
   return vi
     .spyOn(env.DATABASE, 'prepare')
     .mockImplementation((query) =>
-      originalPrepare(
-        pattern.test(query)
-          ? query.replace('"documents"', '"documents_unavailable"')
-          : query,
-      ),
+      originalPrepare(query.replace(pattern, '$1documents_unavailable')),
     );
 }
 

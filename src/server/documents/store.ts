@@ -30,6 +30,12 @@ export interface StoreInput {
   uploadedBy: string | null;
   /** Store despite near-duplicates, and reopen their duplicate group. */
   confirmDuplicate: boolean;
+  /**
+   * Statements written in the same D1 batch as the new `documents` row, given
+   * its id: the Drive import's provenance row (spec decision 4). If any of
+   * them is refused, nothing is written and the R2 objects are removed.
+   */
+  alsoInBatch?: (documentId: string) => D1PreparedStatement[];
 }
 
 interface DocumentRef {
@@ -50,7 +56,7 @@ export type StoreResult =
     };
 
 /** The existing documents `candidate` is a near-duplicate of (ADR 0007). */
-async function nearMatches(env: Env, candidate: DocLike) {
+export async function nearMatches(env: Env, candidate: DocLike) {
   const existing = await getDb(env)
     .select({
       id: documents.id,
@@ -136,23 +142,31 @@ export async function storeDocument(
     ragStatus = 'unsupported';
   }
 
-  const now = new Date();
+  // uploaded_at/updated_at are unix seconds, the columns' drizzle
+  // `timestamp` mode.
+  const nowSeconds = Math.floor(Date.now() / 1000);
   try {
-    await db.insert(documents).values({
-      id,
-      title,
-      category,
-      visibility,
-      r2Key,
-      filename,
-      sizeBytes,
-      contentType,
-      contentHash,
-      ragStatus,
-      uploadedBy: input.uploadedBy,
-      uploadedAt: now,
-      updatedAt: now,
-    });
+    await env.DATABASE.batch([
+      env.DATABASE.prepare(
+        `INSERT INTO documents (id, title, category, visibility, r2_key, filename, size_bytes, content_type, content_hash, rag_status, uploaded_by, uploaded_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        title,
+        category,
+        visibility,
+        r2Key,
+        filename,
+        sizeBytes,
+        contentType,
+        contentHash,
+        ragStatus,
+        input.uploadedBy,
+        nowSeconds,
+        nowSeconds,
+      ),
+      ...(input.alsoInBatch?.(id) ?? []),
+    ]);
   } catch (err) {
     // R2 was written first, so a refused insert would otherwise leave objects
     // no row points at (#442). Remove them, then let the caller see the error.

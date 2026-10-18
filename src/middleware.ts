@@ -25,18 +25,42 @@ import { DEFAULT_SITE_SETTINGS } from './lib/types';
 // style attributes that a nonce cannot authorize. To temporarily revert if a
 // new third-party resource is added, swap the header name back to
 // `Content-Security-Policy-Report-Only` while updating the list.
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "img-src 'self' data:",
-  "font-src 'self' https://fonts.gstatic.com",
-  "connect-src 'self' https://api.web3forms.com https://cloudflareinsights.com",
-  'frame-src https://calendar.google.com https://challenges.cloudflare.com',
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ');
+const SCRIPT_SRC =
+  "script-src 'self' https://challenges.cloudflare.com https://static.cloudflareinsights.com";
+const FRAME_SRC =
+  'frame-src https://calendar.google.com https://challenges.cloudflare.com';
+
+const cspWith = (scriptSrc: string, frameSrc: string) =>
+  [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data:",
+    "font-src 'self' https://fonts.gstatic.com",
+    "connect-src 'self' https://api.web3forms.com https://cloudflareinsights.com",
+    frameSrc,
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
+
+const CSP = cspWith(SCRIPT_SRC, FRAME_SRC);
+
+// #290 slice 3: the admin panel opens Google Picker, which loads its script
+// from apis.google.com and renders in a docs.google.com frame that may navigate
+// to Google sign-in. Only /admin responses carry these origins; public pages
+// keep the audited policy above. The set is Google's documented one, not yet
+// measured in production: the operator checks the browser console for CSP
+// errors when first opening the Picker (spec decision 9).
+const ADMIN_CSP = cspWith(
+  `${SCRIPT_SRC} https://apis.google.com`,
+  `${FRAME_SRC} https://docs.google.com https://accounts.google.com`,
+);
+
+/** The admin panel's pages, matched by whole segment (not /administrators). */
+function isAdminPage(path: string): boolean {
+  return path === '/admin' || path.startsWith('/admin/');
+}
 
 /**
  * True for the board-only API surface. Matched exactly rather than by bare
@@ -64,7 +88,7 @@ function isVotingApi(path: string): boolean {
   return path === '/api/vote' || path.startsWith('/api/vote/');
 }
 
-function applySecurityHeaders(headers: Headers): void {
+function applySecurityHeaders(headers: Headers, path: string): void {
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('X-Frame-Options', 'DENY');
@@ -74,7 +98,7 @@ function applySecurityHeaders(headers: Headers): void {
   );
   // One audited policy owns every route. A route-local header must not be able
   // to omit a baseline directive or reintroduce script 'unsafe-inline'.
-  headers.set('Content-Security-Policy', CSP);
+  headers.set('Content-Security-Policy', isAdminPage(path) ? ADMIN_CSP : CSP);
 }
 
 function generateCspNonce(): string {
@@ -132,8 +156,8 @@ function authorizePageScripts(response: Response): Response {
     .transform(response);
 }
 
-function finalizeResponse(response: Response): Response {
-  applySecurityHeaders(response.headers);
+function finalizeResponse(response: Response, path: string): Response {
+  applySecurityHeaders(response.headers, path);
   return authorizePageScripts(response);
 }
 
@@ -177,7 +201,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
         }
       }
     }
-    return finalizeResponse(response);
+    return finalizeResponse(response, path);
   }
 
   const ctx = await getAuthContext(context.request, env, associationDay);
@@ -254,5 +278,5 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     // otherwise. freezePolicyFor decides; the three genuine exemptions live there.
     response = (await writeFreezeError(env, context.request)) ?? (await next());
   }
-  return finalizeResponse(response);
+  return finalizeResponse(response, path);
 };

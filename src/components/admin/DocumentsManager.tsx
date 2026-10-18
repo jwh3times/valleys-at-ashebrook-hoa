@@ -13,6 +13,7 @@ import {
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
 import { DOCUMENT_EXTENSIONS } from '../../lib/document-types';
+import { DriveImportButton } from './DriveImport';
 
 type EditForm = {
   title: string;
@@ -361,6 +362,9 @@ export default function DocumentsManager() {
           )}
         </form>
       )}
+
+      {/* #290 slice 3: imports go through the same store as uploads. */}
+      <DriveImportButton onImported={() => void reload()} />
 
       {!loading && items.length > 0 && (
         <div className="field" style={{ marginBottom: '14px' }}>

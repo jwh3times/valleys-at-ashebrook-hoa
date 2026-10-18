@@ -60,3 +60,115 @@ export const DRIVE_OUTCOME_MESSAGES: Record<string, string> = {
   conflict:
     'The connection changed while Google was asked. Check its status below and try again if needed.',
 };
+
+// ---------------------------------------------------------------------------
+// Import (#290 slice 3).
+
+export interface PickerSession {
+  accessToken: string;
+  expiresAt: number;
+  developerKey: string;
+  appId: string;
+}
+
+export async function startPickerSession(): Promise<PickerSession> {
+  const res = await fetch('/api/admin/drive/picker-session', {
+    method: 'POST',
+  });
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Opening Google Drive failed: ${res.status}`,
+    );
+  return (await res.json()) as PickerSession;
+}
+
+export interface DocumentRef {
+  id: string;
+  title: string;
+}
+
+export interface PreviewFile {
+  fileId: string;
+  name: string;
+  plan: 'export' | 'download' | 'refused';
+  refusal?: string;
+  storedAs?: string;
+  filename?: string;
+  title?: string;
+  modifiedTime?: string;
+  newerVersionOf?: DocumentRef[];
+  nearDuplicates?: DocumentRef[];
+}
+
+export async function previewDriveFiles(
+  fileIds: string[],
+): Promise<PreviewFile[]> {
+  const res = await fetch('/api/admin/drive/preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fileIds }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Preview failed: ${res.status}`);
+  return ((await res.json()) as { files: PreviewFile[] }).files;
+}
+
+export interface ImportRequest {
+  fileId: string;
+  expectedModifiedTime: string;
+  title: string;
+  category: string;
+  visibility: string;
+  confirmDuplicate: boolean;
+}
+
+export type ImportResult =
+  | { kind: 'imported'; id: string }
+  | { kind: 'near-duplicate'; similar: DocumentRef[] }
+  | { kind: 'failed'; message: string };
+
+const IMPORT_REFUSALS: Record<string, string> = {
+  'changed-since-preview':
+    'This file changed in Drive after the preview. Preview it again.',
+  'not-picked':
+    'The site no longer has access to this file. Pick it again in Google Drive.',
+  'drive-duplicate': 'This version of the file was already imported.',
+};
+
+/** Import one picked file, turning each refusal into a sentence. */
+export async function importDriveFile(
+  request: ImportRequest,
+): Promise<ImportResult> {
+  const res = await fetch('/api/admin/drive/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  const text = await res.text();
+  if (res.status === 201)
+    return { kind: 'imported', id: (JSON.parse(text) as { id: string }).id };
+  let body: {
+    error?: string;
+    warning?: string;
+    refusal?: string;
+    existing?: DocumentRef;
+    similar?: DocumentRef[];
+  } = {};
+  try {
+    body = JSON.parse(text) as typeof body;
+  } catch {
+    // Plain text: the message below.
+  }
+  if (body.warning === 'near-duplicate')
+    return { kind: 'near-duplicate', similar: body.similar ?? [] };
+  if (body.error === 'exact-duplicate')
+    return {
+      kind: 'failed',
+      message: `An identical file is already in the library${body.existing ? `: "${body.existing.title}"` : ''}.`,
+    };
+  if (body.error === 'refused' && body.refusal)
+    return { kind: 'failed', message: body.refusal };
+  if (body.error && IMPORT_REFUSALS[body.error])
+    return { kind: 'failed', message: IMPORT_REFUSALS[body.error] };
+  return { kind: 'failed', message: text || `Import failed: ${res.status}` };
+}
