@@ -37,7 +37,12 @@ const API = join(process.cwd(), 'src', 'pages', 'api');
  *
  * Anything else that wants to be here is almost certainly a mistake.
  */
-const DELIBERATELY_LIVE = new Set(['/api/auth/all', '/api/bootstrap/board']);
+const DELIBERATELY_LIVE = new Set([
+  '/api/auth/all',
+  '/api/bootstrap/board',
+  // ADR 0027: cutting off the stored Google Drive credential never waits.
+  '/api/admin/drive/disconnect',
+]);
 
 const VERBS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ALL'] as const;
 
@@ -113,11 +118,12 @@ describe('write-freeze coverage', () => {
     expect(granted).toEqual([...DELIBERATELY_LIVE].sort());
   });
 
-  it('keeps the exemption list to the two paths that need it', () => {
+  it('keeps the exemption list to the three paths that need it', () => {
     // Not a style rule. Every entry is a mutating surface that stays open
     // while the site is meant to be still, so growth here is the thing most
     // worth noticing in review.
     expect(alwaysLivePaths().sort()).toEqual([
+      '/api/admin/drive/disconnect',
       '/api/auth',
       '/api/bootstrap/board',
     ]);

@@ -21,6 +21,17 @@ declare namespace Cloudflare {
      */
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
+    /**
+     * The association's Google Drive connection (#290, ADR 0027). Optional:
+     * the Drive import appears only when all five are set and DRIVE_TOKEN_KEY
+     * is 32 bytes of base64. Its own OAuth client in the sign-in Cloud project,
+     * requesting `openid email drive.file` only.
+     */
+    DRIVE_CLIENT_ID?: string;
+    DRIVE_CLIENT_SECRET?: string;
+    DRIVE_PICKER_API_KEY?: string;
+    DRIVE_PROJECT_NUMBER?: string;
+    DRIVE_TOKEN_KEY?: string;
     /** Anthropic API key for the admin document assistant (Claude generation). */
     ANTHROPIC_API_KEY: string;
     /**

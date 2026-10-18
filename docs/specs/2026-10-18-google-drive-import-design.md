@@ -192,7 +192,7 @@ CREATE TABLE drive_connection (
 2. A connect is refused with `409` if a `connected` row exists.
 3. A reconnect is allowed when the row is `broken`, or `connected` with an explicit `reconnect=1`.
 4. It sets a short-lived `__Host-drive_oauth` cookie (HttpOnly, Secure, SameSite=Lax, 10 minutes).
-   The cookie holds an HMAC-signed `{ state, codeVerifier, accountId, intent, exp }`, signed with a
+   The cookie holds an HMAC-signed `{ state, codeVerifier, accountId, intent, revision, exp }`, signed with a
    subkey derived from `DRIVE_TOKEN_KEY` by HKDF. This avoids KV's cross-location staleness for a
    value that must be read back seconds later.
 5. It redirects to Google with:
@@ -219,6 +219,13 @@ CREATE TABLE drive_connection (
    different Google account."
 6. It writes the row and a `setting_changes` row in one compare-and-swap batch, then clears the
    cookie and redirects to the card.
+
+**A refused grant is revoked only when it isn't the stored connection's own account.** Google's
+revocation removes everything that account granted the project, so revoking a refused token from
+the connected account itself — a reconnect with Drive left unticked, say — would also kill the
+working connection. The write is a compare-and-swap against the `revision` the cookie carries: a
+connect inserts and fails if a row appeared meanwhile, and a reconnect updates only the revision
+it started from. The loser of either race gets the `conflict` outcome and writes nothing.
 
 #### Disconnect
 
@@ -251,6 +258,8 @@ configured and a `connected` row exists.
   same compare-and-swap batch.
 - **Any other failure** (network, 5xx) logs and fails the job, so the run shows red, without
   touching the row. A transient error must not break a working connection.
+- **A broken result is logged, not a failure.** Google has decided it and a System Administrator
+  fixes it by reconnecting, so the run stays green and the log says so.
 - **The freeze.** The job runs regardless of the write freeze, like the other scheduled jobs. It
   records a fact Google has already decided and creates no content.
 

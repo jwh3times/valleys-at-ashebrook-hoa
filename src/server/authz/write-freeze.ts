@@ -47,7 +47,7 @@ function isUnder(path: string, base: string): boolean {
 }
 
 /**
- * The only two surfaces that keep mutating while the site is frozen. Each is
+ * The only three surfaces that keep mutating while the site is frozen. Each is
  * here because freezing it would break the freeze's own purpose, not for
  * convenience — adding a third entry is a decision, which is why the coverage
  * test requires this list to be declared there too.
@@ -60,6 +60,10 @@ const ALWAYS_LIVE: ReadonlyArray<{ base: string; why: string }> = [
   {
     base: '/api/bootstrap/board',
     why: 'Flip step 4 bootstraps the first System Administrator while the freeze is still on. Freezing this deadlocks the procedure.',
+  },
+  {
+    base: '/api/admin/drive/disconnect',
+    why: "Stops the site's stored access to the association's Google Drive (ADR 0027). Cutting off a third-party credential must never wait for a freeze to lift.",
   },
 ];
 
