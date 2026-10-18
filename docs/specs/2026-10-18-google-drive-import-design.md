@@ -1,7 +1,7 @@
 # Google Drive Import — Design
 
 - **Date:** 2026-10-18
-- **Status:** Draft, for maintainer review
+- **Status:** Accepted 2026-10-18, after maintainer review ([decisions](#review-decisions-2026-10-18))
 - **Issue:** [#290](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/290)
 - **ADR:** [0027](../adr/0027-association-drive-connection.md)
 - **Research:** [2026-09-30-google-drive-import-research.md](./2026-09-30-google-drive-import-research.md)
@@ -270,7 +270,8 @@ token or the scope string.
 | disconnect | `connected` or `broken` → `none`      | the System Administrator              |
 | broken     | `connected` → `broken`                | `scheduled-job` or the acting Account |
 
-`scheduled-job` is a literal sentinel, because the column is NOT NULL.
+`scheduled-job` is a literal sentinel, because the column is NOT NULL. It is the convention for any
+automatic `setting_changes` row, not only this one.
 
 ### 2. Picking files
 
@@ -362,11 +363,15 @@ The browser imports the batch **one file at a time**. Each file is a
      specific reason for the export limit.
 4. Compute SHA-256.
    - A byte-identical document answers `409 exact-duplicate`, never overridable.
-   - A Drive duplicate answers `409 drive-duplicate`, never overridable.
+   - A Drive duplicate answers `409 drive-duplicate`, never overridable. This is the friendly early
+     answer; step 5's unique index is what guarantees it.
    - A newer Drive version or a near-duplicate answers `409 near-duplicate` unless
      `confirmDuplicate` is set. Confirming clears `keep_verified_*` on the matches, as for uploads.
 5. Hand the bytes to the shared store (decision 5). It writes the `documents` row, with
-   `uploaded_by` set to the caller, and the `drive_imports` row in **one D1 batch**.
+   `uploaded_by` set to the caller, and the `drive_imports` row in **one D1 batch**. If the
+   `drive_imports` unique index rejects the row, because another board admin imported the same
+   Drive version in the meantime, the whole batch fails, the store removes its R2 objects, and the
+   caller gets the same `409 drive-duplicate`.
 6. Update `last_used_at` on a best-effort basis, and answer `201` with the new document's `id`.
 
 Each file succeeds or fails on its own, and the preview table shows each result in its row. A
@@ -391,6 +396,17 @@ cascades its `drive_imports` row away, so the same version can then be imported 
 
 **R2 cleanup on failure.** Writes stay in the order R2 original → twin → D1 batch. A failed batch
 now deletes the R2 objects it wrote before rethrowing, which closes the upload half of #442.
+
+**Delete removes the row first.** The store also owns deletion, for both the documents route and
+the duplicates panel. It deletes the `documents` row first, then the R2 original and twin, which
+closes the delete half of #442.
+
+- **A delete D1 refuses touches nothing.** When an `evidence_document_id` reference blocks the row
+  delete, the store answers `409 document-cited`, naming the kind of record that cites the
+  document, and both R2 objects stay.
+- **A failed R2 delete is retried once inline.** If it still fails, the row is already gone, so the
+  object is unreachable. It is logged by key and left for the orphan sweep, which is a separate PR
+  under #442 (see [Out of scope](#out-of-scope)).
 
 **One result type.** Its result is a discriminated union: `stored`, `exact-duplicate`,
 `near-duplicate` or `too-large`. The upload route's existing status codes and JSON bodies stay
@@ -425,7 +441,7 @@ CREATE TABLE drive_imports (
   google_sub           TEXT NOT NULL,
   imported_at          INTEGER NOT NULL
 );
-CREATE INDEX drive_imports_file_version ON drive_imports (drive_file_id, drive_modified_time);
+CREATE UNIQUE INDEX drive_imports_file_version ON drive_imports (drive_file_id, drive_modified_time);
 ```
 
 - `export_format` is `NULL` for a blob that was downloaded unchanged.
@@ -433,6 +449,9 @@ CREATE INDEX drive_imports_file_version ON drive_imports (drive_file_id, drive_m
   change stays legible.
 - This is a new table, so the FK action lives in the hand-authored `CREATE TABLE` and isn't exposed
   to the drizzle-kit `ALTER TABLE` trap.
+- **The unique index enforces the Drive-duplicate rule inside the write**, so two board admins
+  importing the same unchanged version at once get one import and one `409 drive-duplicate`.
+  Deleting the document cascades its row away, which frees that version for a fresh import.
 
 #### Visibility of the records
 
@@ -487,6 +506,9 @@ companion's `.dev.vars.tpl` and to `src/ambient.d.ts`.
   It shows the status, the Association Google Account's address, and who connected it and when. It
   also shows the last use and last refresh, plus **Connect**, **Reconnect** and **Disconnect**.
   Disconnect asks for confirmation and states what it does and doesn't do (P5).
+- **Status line in the Documents panel.** System Administrators also see a one-line connection
+  status there, linking to the card. Board admins without System Administration Access see only the
+  disabled-button reason above.
 
 ### 9. Content Security Policy
 
@@ -519,8 +541,8 @@ Google origins.
 
 ## Changes from the 2026-10-01 decisions
 
-These need the maintainer's sign-off. Everything else follows the decisions comment as amended on
-2026-10-17.
+The maintainer signed off all three on 2026-10-18. Everything else follows the decisions comment as
+amended on 2026-10-17.
 
 1. **The connection record is a single-row D1 table, not one KV entry.**
    - **The problem.** KV reads can be stale across locations for up to about a minute, and KV has
@@ -551,19 +573,20 @@ These need the maintainer's sign-off. Everything else follows the decisions comm
 
 ## Failure and edge behavior
 
-| Situation                                         | Result                                                                                                                |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Feature not configured                            | Drive routes `404`; no button, no card                                                                                |
-| No connection, or broken                          | Import disabled with the reason; Drive routes `409 no-connection`                                                     |
-| Token refresh gets `invalid_grant` during any use | Row marked broken (compare-and-swap); that request `409 no-connection`                                                |
-| Token refresh fails transiently                   | That request `503`; row untouched                                                                                     |
-| A file was edited between preview and commit      | `409 changed-since-preview` for that file                                                                             |
-| Picked file no longer authorized or deleted       | That file refused: pick it again                                                                                      |
-| Export over 10 MB, or download over 25 MiB        | `413` with the "export and upload it manually" message                                                                |
-| D1 batch fails after R2 writes                    | R2 objects deleted, `500`                                                                                             |
-| Write freeze on                                   | Connect, callback, picker session, preview and import frozen; disconnect works                                        |
-| Board admin loses Board Access mid-batch          | Remaining files `403`; finished files stay imported                                                                   |
-| Two admins import the same Drive version at once  | Possible double import. The Drive-duplicate check is not in the batch, as the hash check isn't for uploads. Accepted. |
+| Situation                                         | Result                                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Feature not configured                            | Drive routes `404`; no button, no card                                                                 |
+| No connection, or broken                          | Import disabled with the reason; Drive routes `409 no-connection`                                      |
+| Token refresh gets `invalid_grant` during any use | Row marked broken (compare-and-swap); that request `409 no-connection`                                 |
+| Token refresh fails transiently                   | That request `503`; row untouched                                                                      |
+| A file was edited between preview and commit      | `409 changed-since-preview` for that file                                                              |
+| Picked file no longer authorized or deleted       | That file refused: pick it again                                                                       |
+| Export over 10 MB, or download over 25 MiB        | `413` with the "export and upload it manually" message                                                 |
+| D1 batch fails after R2 writes                    | R2 objects deleted, `500`                                                                              |
+| Write freeze on                                   | Connect, callback, picker session, preview and import frozen; disconnect works                         |
+| Board admin loses Board Access mid-batch          | Remaining files `403`; finished files stay imported                                                    |
+| Two admins import the same Drive version at once  | One import; the other gets `409 drive-duplicate` from the unique index, and its R2 objects are removed |
+| A delete is blocked by an evidence reference      | `409 document-cited`; the row and both R2 objects stay                                                 |
 
 ## Tests
 
@@ -602,6 +625,8 @@ New `test/server/drive-import.test.ts`:
 - `documents` and `drive_imports` are written in one batch, and `uploaded_by` is the caller.
 - Deleting a document cascades its `drive_imports` row away, and the version can then be imported
   again.
+- Two imports of the same Drive version racing past the preflight: one `201`, one
+  `409 drive-duplicate`, and no R2 objects left from the loser.
 
 ### Indistinguishable downstream
 
@@ -610,8 +635,15 @@ document and an uploaded one, and never `uploaded_by` or `drive_*`.
 
 ### Store refactor
 
-The four `test/server/admin-documents*.test.ts` suites and `documents-twin.test.ts` pass unchanged, which pins the upload route's status codes
-and bodies. A new case covers a failed D1 batch deleting its R2 objects. `DocumentsManager.tsx` and
+The four `test/server/admin-documents*.test.ts` suites and `documents-twin.test.ts` pass
+unchanged, which pins the upload route's status codes and bodies. New cases cover:
+
+- a failed D1 batch deleting its R2 objects;
+- a delete blocked by an evidence reference answering `409 document-cited` with both R2 objects
+  still present;
+- a delete whose R2 removal fails twice still removing the row and logging the key.
+
+`DocumentsManager.tsx` and
 `twin.ts` import the allowlist rather than copying it, and a unit test asserts there's one source.
 
 ### Static and structural suites
@@ -634,9 +666,10 @@ Each slice is one PR, reviewed and merged on its own.
    - `src/server/documents/store.ts`, with the upload route moved onto it;
    - R2 cleanup on failure;
    - one allowlist source;
-   - the `uploaded_by` migration, with the panel showing the uploader.
+   - the `uploaded_by` migration, with the panel showing the uploader;
+   - deletes that remove the row first, with `409 document-cited` and one inline R2 retry.
 
-   No Drive code. It also closes the upload half of #442.
+   No Drive code. It closes both halves of #442. The orphan sweep is a separate PR under #442.
 
 2. **The connection.**
    - the `drive_connection` migration, the seal helper and the config gate;
@@ -672,15 +705,27 @@ Slices 2 and 3 each leave human steps, filed as `ready-for-human` follow-ups by 
 - Google's Cross-Account Protection (RISC) notifications. The daily keepalive finds a dead token
   within a day, which is enough here.
 - An audit-ledger family for document writes (Non-goals).
-- The delete half of #442.
+- **The R2 orphan sweep**, the `docs:dedupe` twin fix and the import scripts' write-freeze preflight.
+  They are designed on #442 and ship as their own PR. This spec relies only on the store's write
+  order and its cleanup on failure.
 
-## Open questions for review
+## Review decisions (2026-10-18)
 
-1. **Sign-off on the three changes** in
-   [Changes from the 2026-10-01 decisions](#changes-from-the-2026-10-01-decisions).
-2. **Card placement.** This spec puts the connection card in the site-settings area. Should it
-   instead sit in the Documents panel, shown only to System Administrators?
-3. **Concurrent double import.** Two board admins importing the same Drive version within the same
-   seconds could both succeed (Failure and edge behavior). Moving the Drive-duplicate check into the
-   D1 batch with a partial unique index would close it, at the cost of a less specific error. Is
-   the accepted risk right at this scale?
+The maintainer reviewed this spec in a grilling session on 2026-10-18. The answers are folded into
+the sections above.
+
+| #   | Decision                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | The connection record is a single-row D1 table, with every write a compare-and-swap.                                                 |
+| 2   | `uploaded_by` is plain text with no FK.                                                                                              |
+| 3   | `409 drive-duplicate` stays separate from `409 exact-duplicate`.                                                                     |
+| 4   | The card goes in site settings, plus a status line with a link in the Documents panel for System Administrators.                     |
+| 5   | A unique index on Drive file plus `modifiedTime` closes the concurrent double import.                                                |
+| 6   | The shared Cloud project stays, with its three rules: never Testing, never shut down, the Association Google Account never signs in. |
+| 7   | Reconnect is allowed on a healthy connection, always to the same account.                                                            |
+| 8   | Rotating `DRIVE_TOKEN_KEY` means reconnecting; `key_version` stays reserved.                                                         |
+| 9   | The Picker session token in a board admin's browser, valid for up to an hour, is accepted.                                           |
+| 10  | The keepalive runs during a write freeze.                                                                                            |
+| 11  | Disconnect deletes the credential even when Google's revoke fails, and shows the manual removal step.                                |
+| 12  | `scheduled-job` is the actor for automatic `setting_changes` rows.                                                                   |
+| 13  | Slice 1 fixes both halves of #442; the orphan sweep and its rules are a separate PR under #442.                                      |

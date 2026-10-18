@@ -11,16 +11,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ### Added
 
-- **A design spec and a proposed ADR for importing from Google Drive (#290).**
+- **An accepted design spec and ADR for importing from Google Drive (#290).**
   - **The spec.** `docs/specs/2026-10-18-google-drive-import-design.md` turns the settled
     decisions and the 2026-10-17 prototype results into routes, tables, tests and three delivery
     slices.
-  - **What needs review.** The spec lists three places where it departs from the earlier
-    decisions:
+  - **Reviewed.** The maintainer reviewed it on 2026-10-18 and signed off three changes to the
+    earlier decisions:
     - the connection is kept in a one-row D1 table rather than in KV;
     - the new uploader column is plain text rather than a foreign key;
-    - a re-import of the same Drive version gets its own refusal.
-  - **ADR 0027**, proposed, records the association's Drive connection. It is the site's first
+    - a re-import of the same Drive version gets its own refusal, now enforced by a unique index.
+  - **Document deletes.** The first slice also fixes the document delete order tracked in #442.
+  - **ADR 0027**, accepted, records the association's Drive connection. It is the site's first
     stored third-party credential.
   - **`CONTEXT.md`** gains three terms: Association Google Account, Drive Connection and Drive
     Import.

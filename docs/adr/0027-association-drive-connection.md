@@ -1,6 +1,6 @@
 # ADR 0027: The Association's Google Drive Connection Is One Sealed Server-Held Credential
 
-**Status:** Proposed
+**Status:** Accepted 2026-10-18
 **Date:** 2026-10-18
 
 ## Context
