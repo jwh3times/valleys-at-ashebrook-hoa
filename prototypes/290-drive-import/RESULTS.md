@@ -34,7 +34,8 @@ that produced it.
   invalid." It still refused it after the restriction had been in place for five minutes, so
   propagation wasn't the cause. With no restriction, it worked. With `http://localhost:8790/*` **and**
   `https://docs.google.com/*` allowed, it also worked. The Picker runs in a `docs.google.com` frame,
-  so the cause is the frame, not Firefox. Google's docs don't state this requirement.
+  so the cause is the frame, not Firefox. Google's web-Picker guide does state this requirement; the operator setup page had
+  left it out.
 - **Private windows.** A Firefox private window needed the connected account signed in before the
   Picker would load.
 
