@@ -33,6 +33,7 @@ import {
   proxies,
 } from '../db/schema';
 import { people } from '../db/roster-schema';
+import { users } from '../db/auth-schema';
 import { fetchLotAuthority } from '../roster/authority';
 import { associationDateIso, personDisplayLabel } from '../../lib/format';
 import { visibleTiers } from './visibility';
@@ -87,8 +88,13 @@ export async function fetchAdminDocuments(env: Env) {
       updatedAt: documents.updatedAt,
       ragStatus: documents.ragStatus,
       filename: documents.filename,
+      // Who uploaded or imported it (#290): board-only, like rag_status. The
+      // name is null when the Account no longer exists or was never recorded.
+      uploadedBy: documents.uploadedBy,
+      uploadedByName: users.name,
     })
     .from(documents)
+    .leftJoin(users, eq(users.id, documents.uploadedBy))
     .orderBy(desc(documents.updatedAt));
 }
 

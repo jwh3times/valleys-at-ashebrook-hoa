@@ -12,9 +12,9 @@ const MIN_TWIN_CHARS = 16;
 const TEXT_NATIVE = new Set(['md', 'txt', 'csv']);
 // Binary formats Workers AI can convert to Markdown.
 const CONVERTIBLE = new Set(['pdf', 'docx', 'xls', 'xlsx', 'doc']);
-// Must stay in sync with the upload allowlist EXT_TO_TYPE in
-// src/pages/api/admin/documents.ts — adding an extension there without adding
-// it to one of these sets silently marks that upload's twin "unsupported".
+// Between them these must cover every extension in DOCUMENT_TYPES
+// (src/lib/document-types.ts): an allowed type missing from both would mark
+// every such upload "unsupported". twin.test.ts checks each one.
 
 export interface TwinInput {
   filename: string;

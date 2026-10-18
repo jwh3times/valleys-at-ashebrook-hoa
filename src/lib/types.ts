@@ -26,6 +26,10 @@ export interface DocumentItem {
 export interface AdminDocumentItem extends DocumentItem {
   ragStatus: 'ok' | 'unsupported' | null;
   filename: string;
+  /** The Account that uploaded or imported it; null when not recorded. */
+  uploadedBy: string | null;
+  /** That Account's name; null when the Account no longer exists. */
+  uploadedByName: string | null;
 }
 
 export interface DupeMember {

@@ -410,15 +410,59 @@ export async function fetchDuplicates(): Promise<DuplicatesView> {
   );
 }
 
+// A delete the server refused because a recorded change cites the document as
+// evidence (#442). The route answers 409 { error: 'document-cited', citedBy }.
+const CITING_RECORD: Record<string, string> = {
+  roster_change: 'roster change',
+  board_service_change: 'board service change',
+  identity_event: 'identity record',
+};
+
+function citingRecords(citedBy: unknown): string {
+  const kinds = Array.isArray(citedBy) ? citedBy : [];
+  const names = kinds.map((k) => CITING_RECORD[String(k)] ?? 'record');
+  return names.length === 0 ? 'record' : names.join(' and ');
+}
+
+/** Send an admin delete, turning a document-cited 409 into a sentence. */
+async function deleteRequest(
+  url: string,
+  method: 'DELETE' | 'POST',
+  body: unknown,
+  fallback: string,
+  cited: (records: string, plural: boolean) => string,
+): Promise<void> {
+  const res = await fetch(url, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 409) {
+    const refusal = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      citedBy?: unknown;
+    };
+    if (refusal.error === 'document-cited') {
+      const kinds = Array.isArray(refusal.citedBy) ? refusal.citedBy : [];
+      throw new Error(cited(citingRecords(kinds), kinds.length > 1));
+    }
+  }
+  // Same contract as adminRequest for every other failure.
+  if (!res.ok)
+    throw new Error((await res.text()) || `${fallback}: ${res.status}`);
+}
+
 export async function resolveDuplicates(
   keepIds: string[],
   deleteIds: string[],
 ): Promise<void> {
-  await adminRequest(
+  await deleteRequest(
     '/api/admin/duplicates',
     'POST',
     { action: 'resolve', keepIds, deleteIds },
     'Resolve failed',
+    (records) =>
+      `Nothing was deleted or kept: a document marked for deletion is cited as evidence by a recorded ${records}.`,
   );
 }
 
@@ -435,7 +479,14 @@ export async function editDocument(
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  await adminRequest('/api/admin/documents', 'DELETE', { id }, 'Delete failed');
+  await deleteRequest(
+    '/api/admin/documents',
+    'DELETE',
+    { id },
+    'Delete failed',
+    (records, plural) =>
+      `This document can't be deleted: a recorded ${records} ${plural ? 'cite' : 'cites'} it as evidence.`,
+  );
 }
 
 // ---------- Settings (singletons) ----------

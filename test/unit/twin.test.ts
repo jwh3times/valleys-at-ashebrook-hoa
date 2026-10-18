@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateTwin } from '../../src/server/ai/twin';
+import { DOCUMENT_TYPES } from '../../src/lib/document-types';
 
 function fakeEnv(toMarkdown: (files: unknown) => Promise<unknown>): Env {
   return { AI: { toMarkdown } } as unknown as Env;
@@ -265,4 +266,29 @@ describe('generateTwin', () => {
     });
     expect(out).toEqual({ markdown: null, status: 'unsupported' });
   });
+});
+
+describe('generateTwin covers the whole upload allowlist', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each(Object.entries(DOCUMENT_TYPES))(
+    'builds a searchable twin for an allowed .%s upload',
+    async (ext, contentType) => {
+      const env = fakeEnv(async () => [
+        {
+          name: `file.${ext}`,
+          format: 'markdown',
+          data: 'Extracted prose from the converted document.',
+        },
+      ]);
+      const out = await generateTwin(env, {
+        filename: `file.${ext}`,
+        contentType,
+        bytes: enc('Plain text content long enough to search.'),
+      });
+      expect(out.status).toBe('ok');
+    },
+  );
 });
