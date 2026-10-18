@@ -354,3 +354,12 @@ reconnect rule but holds no credential. The token is stored only AES-256-GCM sea
 account and `key_version`. `connected_by` is plain text with no FK, like every actor column.
 Every write is a compare-and-swap on `revision` (and the sealed value). Transitions are recorded in
 `setting_changes` under key `drive_connection`.
+
+`drive_imports` (migration `0041`, #290 slice 3) is the provenance of a document imported from
+Drive: `document_id` is the primary key and an FK to `documents` with `ON DELETE CASCADE`, so
+deleting the document deletes its row and frees that Drive version to be imported again.
+`UNIQUE(drive_file_id, drive_modified_time)` is the Drive-duplicate rule enforced inside the write.
+`export_format` is `pdf`, `xlsx`, or `NULL` (CHECK) for a file downloaded as stored; `google_sub` is
+the account the token was minted for (plain text, no FK). A document therefore **may or may not**
+have a `drive_imports` row; uploaded documents never do. The row is inserted in the same batch as
+the document.

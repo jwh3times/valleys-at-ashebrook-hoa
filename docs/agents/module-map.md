@@ -361,10 +361,12 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   a reader who owes nothing and has no violations.
 - `documents/store.ts`: the one place a document is stored or deleted. `storeDocument` enforces the
   allowlist and 25 MiB cap, exact/near-duplicate checks, then R2 original, search twin, D1 insert
-  (R2 objects removed if the insert fails). `deleteDocuments` deletes D1 rows first in one batch
+  through a batch (R2 objects removed if it fails); a caller's `alsoInBatch(documentId)` returns
+  extra statements that commit or fail with the document, which is how the Drive import writes its
+  `drive_imports` row. `nearMatches` is exported for the Drive preview. `deleteDocuments` deletes D1 rows first in one batch
   (optionally with a caller's extra statements), then R2 with one inline retry, and refuses with
   `document-cited` when evidence records cite a document. Used by `/api/admin/documents` and
-  `/api/admin/duplicates`; the Drive import (#290) will reuse it. Wide IN-lists go through
+  `/api/admin/duplicates`; the Drive import (#290 slice 3) also uses it. Wide IN-lists go through
   `db/chunked.ts` (`chunkedIn`, D1's 100-bound-parameter limit).
 - `drive/`: the association's Google Drive connection (#290 slice 2, ADR 0027) — the site's first
   stored third-party credential. `config.ts` (`driveConfig`) returns null unless all five `DRIVE_*`
@@ -376,7 +378,15 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   access token and writes by compare-and-swap on `revision` plus the sealed value.
   `history.ts` records transitions in `setting_changes` (key `drive_connection`, with a
   `scheduled-job` actor sentinel). `keepalive.ts` is the daily cron job. Client side,
-  `src/lib/drive.ts` reads `/api/admin/drive/status`.
+  `src/lib/drive.ts` reads `/api/admin/drive/status` and is the import client (picker-session,
+  preview, import). Slice 3 adds `connection.ts` helpers (`touchLastUsed`, `noConnection`,
+  `googleUnavailable`; `mintAccessToken` also returns `googleSub`) and `files.ts`: `getDriveFile`
+  (metadata), `planFor` (export vs. download vs. refused, and the stored filename/title),
+  `fetchDriveContent` (streaming, enforces the 10 MiB export / 25 MiB download caps),
+  `DRIVE_FILE_ID` (shape check applied before any ID reaches a URL) and `MAX_FILES_PER_BATCH`.
+  `src/lib/drive-picker.ts` is the browser adapter that loads Google's Picker script and opens it
+  with the minted token; `src/components/admin/DriveImport.tsx` (beside Upload in
+  `DocumentsManager`) drives pick, preview table, per-file import results, and "Import anyway".
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible
