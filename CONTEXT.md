@@ -219,3 +219,17 @@ _Avoid_: Starting balance, previous balance, balance before the earliest entry
 **Reversal**:
 The correction path for a Dues Ledger Entry: an appended entry negating exactly one earlier one. An entry may be reversed at most once, and a Reversal may not itself be reversed. Unlike a Voided Lot Record it hides nothing — both entries stay visible to the Lot and to the Board.
 _Avoid_: Void, deletion, edit, un-payment
+
+## Documents
+
+**Association Google Account**:
+The Google account that belongs to the association rather than to any person. It holds the association's working files and is the only account a Drive Connection may reach. No one uses it as a personal login, and it never signs in to the site.
+_Avoid_: Board Gmail, shared login, a Board Member's Google account
+
+**Drive Connection**:
+The association's single standing authorization for the site to read the files in the Association Google Account that an Account with Board Access picks. Only a System Administrator connects, reconnects, or disconnects it, and a reconnect keeps the same Association Google Account unless the connection was disconnected first. A broken Drive Connection is one Google no longer honors; it stays recorded until a System Administrator reconnects or disconnects it.
+_Avoid_: Google sign-in, linked account, Drive login
+
+**Drive Import**:
+A one-time snapshot of a picked Drive file taken into the document library as an ordinary document, attributed to the Account that imported it. It is never refreshed from Drive; a newer version of the file is a new Drive Import.
+_Avoid_: Sync, linked document, Drive mirror
