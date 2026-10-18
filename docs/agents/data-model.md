@@ -343,3 +343,14 @@ board-only document assistant above). `docIdFromFolder` (`src/server/ai/sources.
 document's uuid from either key shape so citations always point back to the real, tier-checked
 download. The document library (444 human documents, 429 Markdown twins) is (re)built by the
 operator-run `scripts/import-corpus.ts` as a clean replace; see SETUP.md §7.
+
+## Google Drive connection
+
+`drive_connection` (migration `0040`, #290 slice 2, ADR 0027) is a single-row table
+(`CHECK (id = 1)`; no row means disconnected). `status` is `connected` or `broken`;
+`refresh_token_sealed` is non-null exactly when connected and `broken_at` non-null exactly when
+broken (both CHECKs), so a broken row keeps its `google_sub`/`google_email` for the same-account
+reconnect rule but holds no credential. The token is stored only AES-256-GCM sealed, bound to the
+account and `key_version`. `connected_by` is plain text with no FK, like every actor column.
+Every write is a compare-and-swap on `revision` (and the sealed value). Transitions are recorded in
+`setting_changes` under key `drive_connection`.

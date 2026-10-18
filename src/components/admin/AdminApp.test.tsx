@@ -19,6 +19,11 @@ vi.mock('../../lib/content', async (orig) => ({
   fetchDocuments: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('../../lib/drive', async (orig) => ({
+  ...(await orig<typeof import('../../lib/drive')>()),
+  fetchDriveStatus: vi.fn().mockResolvedValue(null),
+}));
+
 import AdminApp from './AdminApp';
 import { useAuth } from './useAuth';
 
@@ -183,4 +188,21 @@ describe('AdminApp', () => {
       screen.queryByRole('button', { name: 'New roster (preview)' }),
     ).not.toBeInTheDocument();
   });
+
+  it.each(['/admin?drive=connected', '/admin?section=site'])(
+    'opens Site Settings for %s, where the Google Drive card lives',
+    (url) => {
+      window.history.replaceState(null, '', url);
+      vi.mocked(useAuth).mockReturnValue({
+        loading: false,
+        user: fakeUser,
+        isAdmin: true,
+      });
+      render(<AdminApp />);
+      expect(screen.getByRole('button', { name: 'Site Settings' })).toHaveClass(
+        'active',
+      );
+      window.history.replaceState(null, '', '/');
+    },
+  );
 });

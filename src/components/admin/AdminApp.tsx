@@ -21,6 +21,7 @@ import LotViolationsManager from './LotViolationsManager';
 import DuesLedgerManager from './DuesLedgerManager';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
+import DriveConnectionCard, { DriveStatusLine } from './DriveConnectionCard';
 
 const SECTIONS = [
   {
@@ -28,7 +29,16 @@ const SECTIONS = [
     label: 'Announcements',
     render: () => <AnnouncementsManager />,
   },
-  { key: 'documents', label: 'Documents', render: () => <DocumentsManager /> },
+  {
+    key: 'documents',
+    label: 'Documents',
+    render: () => (
+      <>
+        <DriveStatusLine />
+        <DocumentsManager />
+      </>
+    ),
+  },
   { key: 'assistant', label: 'Assistant', render: () => <AssistantChat /> },
   { key: 'reports', label: 'Reports', render: () => <ReportsManager /> },
   {
@@ -100,8 +110,33 @@ const SECTIONS = [
     render: () => <DuesLedgerManager />,
   },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
-  { key: 'site', label: 'Site Settings', render: () => <SiteManager /> },
+  {
+    key: 'site',
+    label: 'Site Settings',
+    render: () => (
+      <>
+        <SiteManager />
+        <DriveConnectionCard />
+      </>
+    ),
+  },
 ] as const;
+
+type SectionKey = (typeof SECTIONS)[number]['key'];
+
+/**
+ * The section to open first. Google's redirect back from connecting Drive
+ * (`?drive=<outcome>`) and the Documents panel's "Manage" link
+ * (`?section=site`) both land on Site Settings, where the Drive card lives.
+ */
+function initialSection(): SectionKey {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('drive')) return 'site';
+  const asked = params.get('section');
+  return SECTIONS.some((s) => s.key === asked)
+    ? (asked as SectionKey)
+    : 'announcements';
+}
 
 /** A centered card on the full-screen navy field (login / status screens). */
 function AuthShell({ children }: { children: React.ReactNode }) {
@@ -123,7 +158,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
 export default function AdminApp() {
   const { loading, user, isAdmin } = useAuth();
   const [section, setSection] =
-    useState<(typeof SECTIONS)[number]['key']>('announcements');
+    useState<(typeof SECTIONS)[number]['key']>(initialSection);
 
   if (loading) {
     return (

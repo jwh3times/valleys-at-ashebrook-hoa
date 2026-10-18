@@ -977,3 +977,42 @@ export const proxies = sqliteTable(
     index('proxies_election_id_idx').on(t.electionId),
   ],
 );
+
+// #290 slice 2 (ADR 0027): the association's one Google Drive connection,
+// migration 0040. A single row (`id` = 1) so every write is a compare-and-swap
+// on `revision`; no row = disconnected. Times are epoch milliseconds. The
+// refresh token is stored only sealed (src/server/drive/seal.ts).
+export const driveConnection = sqliteTable(
+  'drive_connection',
+  {
+    id: integer('id').primaryKey(),
+    status: text('status', { enum: ['connected', 'broken'] }).notNull(),
+    googleSub: text('google_sub').notNull(),
+    googleEmail: text('google_email').notNull(),
+    refreshTokenSealed: text('refresh_token_sealed'),
+    keyVersion: integer('key_version').notNull().default(1),
+    grantedScope: text('granted_scope').notNull(),
+    connectedBy: text('connected_by').notNull(),
+    connectedAt: integer('connected_at').notNull(),
+    lastUsedAt: integer('last_used_at'),
+    lastRefreshedAt: integer('last_refreshed_at'),
+    brokenAt: integer('broken_at'),
+    brokenReason: text('broken_reason'),
+    revision: integer('revision').notNull().default(1),
+  },
+  () => [
+    check('drive_connection_singleton', sql`"id" = 1`),
+    check(
+      'drive_connection_status_check',
+      sql`"status" IN ('connected', 'broken')`,
+    ),
+    check(
+      'drive_connection_credential_shape',
+      sql`("status" = 'connected') = ("refresh_token_sealed" IS NOT NULL)`,
+    ),
+    check(
+      'drive_connection_broken_shape',
+      sql`("status" = 'broken') = ("broken_at" IS NOT NULL)`,
+    ),
+  ],
+);

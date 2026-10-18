@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const cleanupVerificationState = vi.hoisted(() => vi.fn());
 const cleanupSavedReportContent = vi.hoisted(() => vi.fn());
 const runInvariants = vi.hoisted(() => vi.fn());
+const driveKeepalive = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/server/cleanup/verification', () => ({
   cleanupVerificationState,
@@ -11,6 +12,8 @@ vi.mock('../../src/server/cleanup/verification', () => ({
 vi.mock('../../src/server/cleanup/reports', () => ({
   cleanupSavedReportContent,
 }));
+
+vi.mock('../../src/server/drive/keepalive', () => ({ driveKeepalive }));
 
 vi.mock('../../src/server/db/invariants', async (importOriginal) => ({
   // formatInvariantRun is pure and worth exercising for real — the log lines
@@ -62,6 +65,8 @@ describe('the daily scheduled jobs', () => {
     cleanupSavedReportContent.mockReset();
     cleanupSavedReportContent.mockResolvedValue({ reportRows: 5 });
     runInvariants.mockReset();
+    driveKeepalive.mockReset();
+    driveKeepalive.mockResolvedValue('skipped');
     vi.restoreAllMocks();
   });
 
@@ -74,6 +79,35 @@ describe('the daily scheduled jobs', () => {
     expect(cleanupVerificationState).toHaveBeenCalledWith(env);
     expect(cleanupSavedReportContent).toHaveBeenCalledWith(env);
     expect(runInvariants).toHaveBeenCalledWith(env);
+    expect(driveKeepalive).toHaveBeenCalledWith(env);
+  });
+
+  it('still runs the other jobs when the Drive keepalive fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    driveKeepalive.mockRejectedValue(new Error('Google answered 503'));
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: drive-keepalive',
+    );
+    expect(cleanupVerificationState).toHaveBeenCalledWith(env);
+    expect(cleanupSavedReportContent).toHaveBeenCalledWith(env);
+    expect(runInvariants).toHaveBeenCalledWith(env);
+  });
+
+  it('logs a broken Drive connection without failing the run', async () => {
+    // Broken is a fact Google decided, for a System Administrator to fix by
+    // reconnecting; it is not the job failing (spec 2026-10-18 decision 1).
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    driveKeepalive.mockResolvedValue('broken');
+
+    await expect(runScheduledJobs(env)).resolves.toBeUndefined();
+    expect(error.mock.calls.map((c) => String(c[0]))).toContain(
+      '[drive-keepalive] the Drive connection is broken; a System Administrator must reconnect it',
+    );
   });
 
   it('still checks invariants when the cleanup sweep fails', async () => {

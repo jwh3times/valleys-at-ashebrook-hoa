@@ -110,6 +110,10 @@ const SYSTEM_ADMIN_ONLY = new Set([
   'admin/redactions',
   'admin/access-denials',
   'admin/audit-integrity',
+  // ADR 0027: only a System Administrator manages the Drive connection.
+  'admin/drive/connect',
+  'admin/drive/callback',
+  'admin/drive/disconnect',
 ]);
 
 function cases(modules: Record<string, Record<string, unknown>>) {

@@ -73,14 +73,25 @@ current worktree from 1Password instead of copying these values by hand, and
 `npm run secrets:put -- <NAME>` deploys a production secret the same way — value-free, via stdin
 and the operator token from 1Password. Both report variable names only.
 
-| Secret                                                   | Purpose                                              |
-| -------------------------------------------------------- | ---------------------------------------------------- |
-| `BETTER_AUTH_SECRET`                                     | Better Auth secret and verification-code HMAC key    |
-| `EMAIL_API_KEY`, `EMAIL_FROM`                            | Account verification and password-reset email        |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | SMS homeowner-verification codes                     |
-| `TURNSTILE_SECRET_KEY`                                   | Server-side Turnstile verification                   |
-| `BOOTSTRAP_SECRET`                                       | One-time first-System-Administrator bootstrap secret |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional)    | Individual Google sign-in; set both or neither       |
+| Secret                                                    | Purpose                                                       |
+| --------------------------------------------------------- | ------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`                                      | Better Auth secret and verification-code HMAC key             |
+| `EMAIL_API_KEY`, `EMAIL_FROM`                             | Account verification and password-reset email                 |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`  | SMS homeowner-verification codes                              |
+| `TURNSTILE_SECRET_KEY`                                    | Server-side Turnstile verification                            |
+| `BOOTSTRAP_SECRET`                                        | One-time first-System-Administrator bootstrap secret          |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (optional)     | Individual Google sign-in; set both or neither                |
+| `DRIVE_CLIENT_ID`, `DRIVE_CLIENT_SECRET` (optional)       | Association Google Drive OAuth client (#290)                  |
+| `DRIVE_PICKER_API_KEY`, `DRIVE_PROJECT_NUMBER` (optional) | Google Picker API key and Cloud project number                |
+| `DRIVE_TOKEN_KEY` (optional)                              | Seals the stored Drive refresh token: 32 random bytes, base64 |
+
+The Drive connection is off unless **all five** `DRIVE_*` secrets are set (and `DRIVE_TOKEN_KEY`
+decodes to exactly 32 bytes); otherwise every `/api/admin/drive/*` route answers 404 and the daily
+keepalive skips. Apply migration `0040` (`drive_connection`) **before** setting the secrets. Once
+configured, a System Administrator connects the association's Google account from Site Settings;
+the grant is `drive.file` scope only. The Google Cloud project setup and key generation
+step-by-step live in the private wiki. Losing or rotating `DRIVE_TOKEN_KEY` makes the sealed token
+unreadable, so reconnect afterward.
 
 Google sign-in is off unless **both** Google secrets are set; without them `/sign-in/social`
 answers 404 and email/password is unchanged. To enable it, create an OAuth 2.0 Web client in Google
