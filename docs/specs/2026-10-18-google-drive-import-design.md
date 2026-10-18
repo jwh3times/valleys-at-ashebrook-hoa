@@ -15,10 +15,10 @@ import is a one-time snapshot: after the export, the existing upload pipeline ta
 duplicate checks, the search twin and tier enforcement.
 
 The design was settled with the maintainer on 2026-10-01 and recorded in the [#290 decisions
-comment](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/290#issuecomment-5925066225).
+comment](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/290#issuecomment-5925066225). <!-- fixture-ok: GitHub comment ID, not a phone number -->
 It was then amended on 2026-10-17 to share the sign-in Cloud project. A throwaway prototype checked
 the three assumptions Google's docs leave open; its [verdict is also on
-#290](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/290#issuecomment-6244099893).
+#290](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/290#issuecomment-6244099893). <!-- fixture-ok: GitHub comment ID, not a phone number -->
 This spec turns those decisions into routes, tables and tests.
 [Changes from the 2026-10-01 decisions](#changes-from-the-2026-10-01-decisions) lists every place
 this spec departs from them, for review.

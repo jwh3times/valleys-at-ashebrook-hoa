@@ -7,6 +7,26 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.3.17] - 2026-10-18
+
+### Added
+
+- **A design spec and a proposed ADR for importing from Google Drive (#290).**
+  - **The spec.** `docs/specs/2026-10-18-google-drive-import-design.md` turns the settled
+    decisions and the 2026-10-17 prototype results into routes, tables, tests and three delivery
+    slices.
+  - **What needs review.** The spec lists three places where it departs from the earlier
+    decisions:
+    - the connection is kept in a one-row D1 table rather than in KV;
+    - the new uploader column is plain text rather than a foreign key;
+    - a re-import of the same Drive version gets its own refusal.
+  - **ADR 0027**, proposed, records the association's Drive connection. It is the site's first
+    stored third-party credential.
+  - **`CONTEXT.md`** gains three terms: Association Google Account, Drive Connection and Drive
+    Import.
+
+  Drive import itself is not built yet.
+
 ## [2.3.16] - 2026-10-15
 
 ### Security
@@ -3985,7 +4005,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.16...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.17...HEAD
+[2.3.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.16...v2.3.17
 [2.3.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.15...v2.3.16
 [2.3.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.14...v2.3.15
 [2.3.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.13...v2.3.14
