@@ -9,6 +9,7 @@ import { readJson } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
 import { deleteDocuments } from '../../../server/documents/store';
+import { D1_MAX_BOUND_PARAMS } from '../../../server/db/chunked';
 import {
   sha256Hex,
   groupExact,
@@ -188,10 +189,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // deletions, so a refused deletion (a document cited as evidence) leaves the
   // whole group exactly as it was (#442). keep_verified_at is unix seconds,
   // matching the column's drizzle `timestamp` mode.
-  const markKept = env.DATABASE.prepare(
-    `UPDATE documents SET keep_verified_at = ?, keep_verified_by = ? WHERE id IN (${keepIds.map(() => '?').join(',')})`,
-  ).bind(Math.floor(Date.now() / 1000), ctx?.userId ?? null, ...keepIds);
-  const result = await deleteDocuments(env, deleteIds, [markKept]);
+  // Each UPDATE binds two values besides its ids, so it takes at most
+  // D1_MAX_BOUND_PARAMS - 2 of them.
+  const keptAt = Math.floor(Date.now() / 1000);
+  const perStatement = D1_MAX_BOUND_PARAMS - 2;
+  const markKept: D1PreparedStatement[] = [];
+  for (let i = 0; i < keepIds.length; i += perStatement) {
+    const chunk = keepIds.slice(i, i + perStatement);
+    markKept.push(
+      env.DATABASE.prepare(
+        `UPDATE documents SET keep_verified_at = ?, keep_verified_by = ? WHERE id IN (${chunk.map(() => '?').join(',')})`,
+      ).bind(keptAt, ctx?.userId ?? null, ...chunk),
+    );
+  }
+  const result = await deleteDocuments(env, deleteIds, markKept);
   if (result.kind === 'cited')
     return Response.json(
       {

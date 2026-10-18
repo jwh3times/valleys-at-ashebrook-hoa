@@ -437,19 +437,23 @@ async function deleteRequest(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
+  if (res.ok) return;
+  // A body can be read only once, so read it as text and parse it from that.
+  const text = await res.text();
   if (res.status === 409) {
-    const refusal = (await res.json().catch(() => ({}))) as {
-      error?: string;
-      citedBy?: unknown;
-    };
+    let refusal: { error?: string; citedBy?: unknown } = {};
+    try {
+      refusal = JSON.parse(text) as typeof refusal;
+    } catch {
+      // Not JSON: fall through to the plain-text error below.
+    }
     if (refusal.error === 'document-cited') {
       const kinds = Array.isArray(refusal.citedBy) ? refusal.citedBy : [];
       throw new Error(cited(citingRecords(kinds), kinds.length > 1));
     }
   }
   // Same contract as adminRequest for every other failure.
-  if (!res.ok)
-    throw new Error((await res.text()) || `${fallback}: ${res.status}`);
+  throw new Error(text || `${fallback}: ${res.status}`);
 }
 
 export async function resolveDuplicates(

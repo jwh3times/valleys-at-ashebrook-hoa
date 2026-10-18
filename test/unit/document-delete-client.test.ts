@@ -47,3 +47,16 @@ describe('a delete refused because the document is cited', () => {
     );
   });
 });
+
+describe('any other refused delete', () => {
+  it("reports the server's own text for a 409 that is not a citation", async () => {
+    // A real Response: its body can be read only once.
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(new Response('Document is locked', { status: 409 })),
+    );
+    await expect(deleteDocument('doc-1')).rejects.toThrow('Document is locked');
+  });
+});

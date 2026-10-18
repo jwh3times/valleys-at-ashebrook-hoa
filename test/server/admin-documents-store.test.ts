@@ -270,6 +270,12 @@ describe('resolving a duplicate group (#442)', () => {
     return row?.keptAt ?? null;
   }
 
+  it('handles a resolution naming more documents than D1 binds in one query', async () => {
+    const many = (prefix: string) =>
+      Array.from({ length: 120 }, (_, i) => `${prefix}-${i}`);
+    expect((await resolve(many('keep'), many('gone'))).status).toBe(204);
+  });
+
   it('deletes nothing and keeps nothing when one of the deletions is cited', async () => {
     await upload('Minutes March', 'minutes-march.txt');
     await upload('Minutes March copy', 'minutes-march-copy.txt');

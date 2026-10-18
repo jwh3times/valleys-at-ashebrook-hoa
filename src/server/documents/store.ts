@@ -2,6 +2,7 @@ import { eq, ne, inArray } from 'drizzle-orm';
 import { DOCUMENT_TYPES } from '../../lib/document-types';
 import { generateTwin } from '../ai/twin';
 import { getDb } from '../db/client';
+import { chunkedIn, D1_MAX_BOUND_PARAMS } from '../db/chunked';
 import { documents } from '../db/schema';
 import {
   sha256Hex,
@@ -174,11 +175,13 @@ export async function storeDocument(
     const matchedIds = others
       .filter((e) => nearScore(candidate(id), e as DocLike) >= NEAR_THRESHOLD)
       .map((e) => e.id);
-    if (matchedIds.length > 0) {
+    for (let i = 0; i < matchedIds.length; i += D1_MAX_BOUND_PARAMS) {
       await db
         .update(documents)
         .set({ keepVerifiedAt: null, keepVerifiedBy: null })
-        .where(inArray(documents.id, matchedIds));
+        .where(
+          inArray(documents.id, matchedIds.slice(i, i + D1_MAX_BOUND_PARAMS)),
+        );
     }
   }
 
@@ -206,16 +209,16 @@ async function citationsOf(
   const citedBy: CitingKind[] = [];
   const documentIds = new Set<string>();
   for (const { table, kind } of CITING_TABLES) {
-    for (let i = 0; i < ids.length; i += 50) {
-      const chunk = ids.slice(i, i + 50);
-      const { results } = await env.DATABASE.prepare(
+    const results = await chunkedIn(ids, async (chunk) => {
+      const { results: rows } = await env.DATABASE.prepare(
         `SELECT DISTINCT evidence_document_id AS id FROM ${table} WHERE evidence_document_id IN (${chunk.map(() => '?').join(',')})`,
       )
         .bind(...chunk)
         .all<{ id: string }>();
-      if (results.length > 0 && !citedBy.includes(kind)) citedBy.push(kind);
-      for (const r of results) documentIds.add(r.id);
-    }
+      return rows;
+    });
+    if (results.length > 0 && !citedBy.includes(kind)) citedBy.push(kind);
+    for (const r of results) documentIds.add(r.id);
   }
   return { citedBy, documentIds: [...documentIds] };
 }
@@ -246,13 +249,12 @@ export async function deleteDocuments(
   alsoInBatch: D1PreparedStatement[] = [],
 ): Promise<DeleteResult> {
   const unique = [...new Set(ids)];
-  const rows =
-    unique.length === 0
-      ? []
-      : await getDb(env)
-          .select({ id: documents.id, r2Key: documents.r2Key })
-          .from(documents)
-          .where(inArray(documents.id, unique));
+  const rows = await chunkedIn(unique, (chunk) =>
+    getDb(env)
+      .select({ id: documents.id, r2Key: documents.r2Key })
+      .from(documents)
+      .where(inArray(documents.id, chunk)),
+  );
 
   const precheck = await citationsOf(env, unique);
   if (precheck.citedBy.length > 0) return { kind: 'cited', ...precheck };
