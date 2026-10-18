@@ -29,9 +29,12 @@ that produced it.
 - **File grants survive disconnect.** Connection 4 came after a disconnect, which revoked the token
   at Google, and a reconnect as the same account. It exported all previously picked files without a
   new pick.
-- **Picker key and website restriction.** With the key's Application restriction set to Websites
-  (`http://localhost:8790/*`), the Picker refused it in Firefox with "The API developer key is
-  invalid." With the restriction set to None, it worked. Not yet compared in Chrome.
+- **The Picker key's website restriction must also allow `https://docs.google.com/*`.** With only
+  `http://localhost:8790/*` allowed, the Picker refused the key with "The API developer key is
+  invalid." It still refused it after the restriction had been in place for five minutes, so
+  propagation wasn't the cause. With no restriction, it worked. With `http://localhost:8790/*` **and**
+  `https://docs.google.com/*` allowed, it also worked. The Picker runs in a `docs.google.com` frame,
+  so the cause is the frame, not Firefox. Google's docs don't state this requirement.
 - **Private windows.** A Firefox private window needed the connected account signed in before the
   Picker would load.
 
