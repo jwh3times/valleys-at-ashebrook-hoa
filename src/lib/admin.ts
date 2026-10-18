@@ -35,6 +35,10 @@ import {
   type ReportDetail,
   type ReportPage,
 } from './reports';
+import {
+  CITING_RECORD_PHRASE,
+  type CitingRecordKind,
+} from './document-citations';
 
 /**
  * Every admin request goes through here — reads as well as writes — so that a
@@ -412,20 +416,18 @@ export async function fetchDuplicates(): Promise<DuplicatesView> {
 
 // A delete the server refused because a recorded change cites the document as
 // evidence (#442). The route answers 409 { error: 'document-cited', citedBy }.
-const CITING_RECORD: Record<string, string> = {
-  roster_change: 'roster change',
-  board_service_change: 'board service change',
-  identity_event: 'identity record',
-};
-
-function citingRecords(citedBy: unknown): string {
-  const kinds = Array.isArray(citedBy) ? citedBy : [];
-  const names = kinds.map((k) => CITING_RECORD[String(k)] ?? 'record');
+function citingRecordPhrase(citedBy: unknown[]): string {
+  const names = citedBy.map(
+    (k) => CITING_RECORD_PHRASE[k as CitingRecordKind] ?? 'record',
+  );
   return names.length === 0 ? 'record' : names.join(' and ');
 }
 
-/** Send an admin delete, turning a document-cited 409 into a sentence. */
-async function deleteRequest(
+/**
+ * Send a request that deletes documents (a delete, or a duplicate resolution
+ * that also keeps some), turning a document-cited 409 into a sentence.
+ */
+async function sendDocumentDeletion(
   url: string,
   method: 'DELETE' | 'POST',
   body: unknown,
@@ -449,7 +451,7 @@ async function deleteRequest(
     }
     if (refusal.error === 'document-cited') {
       const kinds = Array.isArray(refusal.citedBy) ? refusal.citedBy : [];
-      throw new Error(cited(citingRecords(kinds), kinds.length > 1));
+      throw new Error(cited(citingRecordPhrase(kinds), kinds.length > 1));
     }
   }
   // Same contract as adminRequest for every other failure.
@@ -460,7 +462,7 @@ export async function resolveDuplicates(
   keepIds: string[],
   deleteIds: string[],
 ): Promise<void> {
-  await deleteRequest(
+  await sendDocumentDeletion(
     '/api/admin/duplicates',
     'POST',
     { action: 'resolve', keepIds, deleteIds },
@@ -483,7 +485,7 @@ export async function editDocument(
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  await deleteRequest(
+  await sendDocumentDeletion(
     '/api/admin/documents',
     'DELETE',
     { id },

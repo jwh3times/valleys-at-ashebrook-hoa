@@ -1,5 +1,7 @@
 import { eq, ne, inArray } from 'drizzle-orm';
 import { DOCUMENT_TYPES } from '../../lib/document-types';
+import type { CitingRecordKind } from '../../lib/document-citations';
+import type { Visibility } from '../../lib/types';
 import { generateTwin } from '../ai/twin';
 import { getDb } from '../db/client';
 import { chunkedIn, D1_MAX_BOUND_PARAMS } from '../db/chunked';
@@ -17,8 +19,6 @@ import {
 // shape an uploaded one does.
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
-
-export type Visibility = 'public' | 'homeowner' | 'board';
 
 export interface StoreInput {
   bytes: ArrayBuffer;
@@ -48,6 +48,25 @@ export type StoreResult =
       kind: 'near-duplicate';
       similar: (DocumentRef & { filename: string })[];
     };
+
+/** The existing documents `candidate` is a near-duplicate of (ADR 0007). */
+async function nearMatches(env: Env, candidate: DocLike) {
+  const existing = await getDb(env)
+    .select({
+      id: documents.id,
+      title: documents.title,
+      filename: documents.filename,
+      sizeBytes: documents.sizeBytes,
+      contentType: documents.contentType,
+      category: documents.category,
+      visibility: documents.visibility,
+    })
+    .from(documents)
+    .where(ne(documents.id, candidate.id));
+  return existing.filter(
+    (e) => nearScore(candidate, e as DocLike) >= NEAR_THRESHOLD,
+  );
+}
 
 export async function storeDocument(
   env: Env,
@@ -84,28 +103,13 @@ export async function storeDocument(
   });
 
   if (!input.confirmDuplicate) {
-    const existing = await db
-      .select({
-        id: documents.id,
-        title: documents.title,
-        filename: documents.filename,
-        sizeBytes: documents.sizeBytes,
-        contentType: documents.contentType,
-        category: documents.category,
-        visibility: documents.visibility,
-      })
-      .from(documents);
-    const similar = existing
-      .filter(
-        (e) => nearScore(candidate('new'), e as DocLike) >= NEAR_THRESHOLD,
-      )
-      .map((e) => ({
-        id: e.id,
-        title: e.title,
-        filename: e.filename,
-        category: e.category,
-        visibility: e.visibility,
-      }));
+    const similar = (await nearMatches(env, candidate('new'))).map((e) => ({
+      id: e.id,
+      title: e.title,
+      filename: e.filename,
+      category: e.category,
+      visibility: e.visibility,
+    }));
     if (similar.length > 0) return { kind: 'near-duplicate', similar };
   }
 
@@ -152,7 +156,8 @@ export async function storeDocument(
   } catch (err) {
     // R2 was written first, so a refused insert would otherwise leave objects
     // no row points at (#442). Remove them, then let the caller see the error.
-    await Promise.allSettled(written.map((key) => env.DOCS.delete(key)));
+    // An object that still won't delete is logged by key for the orphan sweep.
+    for (const key of written) await deleteObject(env, key);
     throw err;
   }
 
@@ -161,20 +166,7 @@ export async function storeDocument(
   // above). When it happens, the board's earlier "keep" decisions on those
   // matches are stale — clear them so the group resurfaces for re-review.
   if (input.confirmDuplicate) {
-    const others = await db
-      .select({
-        id: documents.id,
-        title: documents.title,
-        filename: documents.filename,
-        sizeBytes: documents.sizeBytes,
-        contentType: documents.contentType,
-        visibility: documents.visibility,
-      })
-      .from(documents)
-      .where(ne(documents.id, id));
-    const matchedIds = others
-      .filter((e) => nearScore(candidate(id), e as DocLike) >= NEAR_THRESHOLD)
-      .map((e) => e.id);
+    const matchedIds = (await nearMatches(env, candidate(id))).map((e) => e.id);
     for (let i = 0; i < matchedIds.length; i += D1_MAX_BOUND_PARAMS) {
       await db
         .update(documents)
@@ -190,23 +182,21 @@ export async function storeDocument(
 
 // The audit records that may cite a document as evidence, all with
 // ON DELETE RESTRICT (audit-schema.ts). A cited document cannot be deleted.
-const CITING_TABLES = [
+const CITING_TABLES: readonly { table: string; kind: CitingRecordKind }[] = [
   { table: 'roster_changes', kind: 'roster_change' },
   { table: 'board_service_changes', kind: 'board_service_change' },
   { table: 'identity_events', kind: 'identity_event' },
-] as const;
-
-export type CitingKind = (typeof CITING_TABLES)[number]['kind'];
+];
 
 export type DeleteResult =
   | { kind: 'deleted' }
-  | { kind: 'cited'; citedBy: CitingKind[]; documentIds: string[] };
+  | { kind: 'cited'; citedBy: CitingRecordKind[]; documentIds: string[] };
 
 async function citationsOf(
   env: Env,
   ids: string[],
-): Promise<{ citedBy: CitingKind[]; documentIds: string[] }> {
-  const citedBy: CitingKind[] = [];
+): Promise<{ citedBy: CitingRecordKind[]; documentIds: string[] }> {
+  const citedBy: CitingRecordKind[] = [];
   const documentIds = new Set<string>();
   for (const { table, kind } of CITING_TABLES) {
     const results = await chunkedIn(ids, async (chunk) => {
@@ -230,8 +220,8 @@ async function deleteObject(env: Env, key: string): Promise<void> {
     try {
       await env.DOCS.delete(key);
     } catch (err) {
-      // The row is already gone, so the object is unreachable; it stays until
-      // the orphan sweep removes it (#442).
+      // No row points at the object any more, so it is unreachable; it stays
+      // until the orphan sweep removes it (#442).
       console.error('[documents] R2 delete failed twice; orphaned', key, err);
     }
   }

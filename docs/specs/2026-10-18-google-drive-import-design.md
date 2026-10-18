@@ -401,6 +401,11 @@ now deletes the R2 objects it wrote before rethrowing, which closes the upload h
 the duplicates panel. It deletes the `documents` row first, then the R2 original and twin, which
 closes the delete half of #442.
 
+The duplicates panel's resolve passes its keep-verified update into the same D1 batch as its
+deletions, so a refused deletion leaves the whole group untouched, and its `409 document-cited`
+also lists the cited `documentIds`. Every `IN (...)` on these paths is chunked to D1's
+100-bound-parameter limit (`src/server/db/chunked.ts`).
+
 - **A delete D1 refuses touches nothing.** When an `evidence_document_id` reference blocks the row
   delete, the store answers `409 document-cited`, naming the kind of record that cites the
   document, and both R2 objects stay.
@@ -408,8 +413,8 @@ closes the delete half of #442.
   object is unreachable. It is logged by key and left for the orphan sweep, which is a separate PR
   under #442 (see [Out of scope](#out-of-scope)).
 
-**One result type.** Its result is a discriminated union: `stored`, `exact-duplicate`,
-`near-duplicate` or `too-large`. The upload route's existing status codes and JSON bodies stay
+**One result type.** Its result is a discriminated union: `stored`, `too-large`,
+`unsupported-type`, `exact-duplicate` or `near-duplicate`. The upload route's existing status codes and JSON bodies stay
 byte-for-byte the same.
 
 ### 6. Records

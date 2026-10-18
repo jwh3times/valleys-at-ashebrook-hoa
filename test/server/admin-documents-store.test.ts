@@ -157,15 +157,25 @@ describe('a store that fails part-way (#442)', () => {
   it('leaves no R2 objects behind when the documents insert fails', async () => {
     const before = await r2Keys();
     failDocumentWrites('insert');
-    const outcome = await upload('Budget draft', 'budget.txt').then(
-      (res) => res.status,
-      () => 'threw',
-    );
+    // The handler rethrows the D1 error, which Astro answers as a 500.
+    await expect(upload('Budget draft', 'budget.txt')).rejects.toThrow();
     vi.restoreAllMocks();
-    expect(outcome === 'threw' || outcome === 500).toBe(true);
     expect(await r2Keys()).toEqual(before);
     const rows = await getDb(env).select().from(documents);
     expect(rows.find((r) => r.title === 'Budget draft')).toBeUndefined();
+  });
+
+  it('logs each object it could not remove after a failed insert', async () => {
+    const before = await r2Keys();
+    failDocumentWrites('insert');
+    vi.spyOn(env.DOCS, 'delete').mockRejectedValue(new Error('R2 unavailable'));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(upload('Paving quote', 'paving.txt')).rejects.toThrow();
+    vi.restoreAllMocks();
+    const leftBehind = (await r2Keys()).filter((k) => !before.includes(k));
+    expect(leftBehind).toHaveLength(2);
+    for (const key of leftBehind)
+      expect(logged.mock.calls.some((call) => call.includes(key))).toBe(true);
   });
 });
 

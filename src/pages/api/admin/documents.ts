@@ -9,12 +9,15 @@ import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { fetchAdminDocuments } from '../../../server/content/reads';
 import { documents } from '../../../server/db/schema';
-import { DOCUMENT_CATEGORIES, INPUT_LIMITS } from '../../../lib/types';
+import {
+  DOCUMENT_CATEGORIES,
+  INPUT_LIMITS,
+  type Visibility,
+} from '../../../lib/types';
 import {
   MAX_DOCUMENT_BYTES,
   deleteDocuments,
   storeDocument,
-  type Visibility,
 } from '../../../server/documents/store';
 
 export const prerender = false;
