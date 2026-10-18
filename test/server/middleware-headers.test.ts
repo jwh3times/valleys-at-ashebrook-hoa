@@ -129,4 +129,33 @@ describe('security headers', () => {
     expect(res.headers.get('location')).toBe('/login');
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
   });
+
+  // #290 slice 3: Google Picker runs only in the admin panel. Its loader
+  // script and its frames are allowed there and nowhere else.
+  const directive = (csp: string, name: string) =>
+    csp
+      .split(';')
+      .map((d) => d.trim())
+      .find((d) => d.split(/\s+/, 1)[0] === name) ?? '';
+
+  it('allows Google Picker on /admin responses', async () => {
+    const res = await call('/admin', async () => new Response('ok'));
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(directive(csp, 'script-src')).toContain('https://apis.google.com');
+    expect(directive(csp, 'frame-src')).toContain('https://docs.google.com');
+    expect(directive(csp, 'frame-src')).toContain(
+      'https://accounts.google.com',
+    );
+  });
+
+  it.each(['/', '/documents', '/administrators', '/api/admin/documents'])(
+    'keeps Google Picker out of the policy for %s',
+    async (path) => {
+      const res = await call(path, async () => new Response('ok'));
+      const csp = res.headers.get('content-security-policy') ?? '';
+      expect(csp).not.toContain('apis.google.com');
+      expect(csp).not.toContain('docs.google.com');
+      expect(csp).not.toContain('accounts.google.com');
+    },
+  );
 });

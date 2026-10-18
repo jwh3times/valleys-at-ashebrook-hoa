@@ -7,6 +7,48 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-18
+
+### Added
+
+- **Board admins can import files from the association's Google Drive (#290, slice 3 of the
+  design spec).**
+  - **Picking and previewing.** "Import from Google Drive" sits beside Upload in the Documents
+    panel. It opens Google's file picker on the association's account, and a preview shows what
+    each file would become: Docs and Slides as PDF, Sheets as XLSX, and stored PDFs, Word,
+    Excel, text and CSV files as they are. It also says why a file can't be imported, and warns
+    about duplicates.
+  - **Settings.** Category is set for the batch (required) and visibility defaults to board;
+    either can be changed per file.
+  - **Importing.** Files import one at a time, each with its own result, and a near-duplicate
+    can be imported anyway.
+  - **Duplicates.** A second import of the same Drive version is refused. Two admins importing
+    it at the same moment get one import and one refusal.
+  - **What an import is.** Each one is an ordinary document: the same search twin and visibility
+    rules, the importing admin recorded as uploader, and no difference anywhere outside the
+    admin panel.
+  - **Not yet visible.** The feature appears only once the Drive connection is set up and
+    connected. Migration `0041` must be applied before the Drive secrets are set.
+
+### Changed
+
+- The admin panel's Content Security Policy now allows Google's file picker: its script from
+  `apis.google.com`, and its frames from `docs.google.com` and `accounts.google.com`. Every
+  other page keeps the policy it had.
+
+## [2.5.1] - 2026-10-18
+
+### Changed
+
+- Bumped eleven packages in the npm minor-and-patch group, with the generated Worker types
+  regenerated to match (#447):
+  - `better-auth`, `@better-auth/core` and `@better-auth/drizzle-adapter` 1.7.7 → 1.7.9;
+  - `better-auth-cloudflare` 0.4.0 → 0.4.1;
+  - `@anthropic-ai/sdk` 0.133.0 → 0.134.0;
+  - `react` and `react-dom` 19.3.0 → 19.3.1;
+  - `@cloudflare/workers-types` 5.20261012.1 → 5.20261015.1 and `wrangler` 4.149.0 → 4.151.0;
+  - `@testing-library/user-event` 14.6.7 → 14.6.8 and `jsdom` 30.1.2 → 30.1.3.
+
 ## [2.5.0] - 2026-10-18
 
 ### Added
@@ -4061,7 +4103,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.1...v2.6.0
+[2.5.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.17...v2.4.0
 [2.3.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.16...v2.3.17

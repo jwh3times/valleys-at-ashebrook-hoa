@@ -1016,3 +1016,31 @@ export const driveConnection = sqliteTable(
     ),
   ],
 );
+
+// #290 slice 3: where each imported document came from in the association's
+// Google Drive (migration 0041). Removed with its document; the unique index
+// on (file, modifiedTime) is the Drive-duplicate rule inside the write.
+export const driveImports = sqliteTable(
+  'drive_imports',
+  {
+    documentId: text('document_id')
+      .primaryKey()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    driveFileId: text('drive_file_id').notNull(),
+    driveMimeType: text('drive_mime_type').notNull(),
+    driveModifiedTime: text('drive_modified_time').notNull(),
+    exportFormat: text('export_format', { enum: ['pdf', 'xlsx'] }),
+    googleSub: text('google_sub').notNull(),
+    importedAt: integer('imported_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('drive_imports_file_version').on(
+      t.driveFileId,
+      t.driveModifiedTime,
+    ),
+    check(
+      'drive_imports_export_format_check',
+      sql`"export_format" IS NULL OR "export_format" IN ('pdf', 'xlsx')`,
+    ),
+  ],
+);

@@ -87,7 +87,7 @@ and the operator token from 1Password. Both report variable names only.
 
 The Drive connection is off unless **all five** `DRIVE_*` secrets are set (and `DRIVE_TOKEN_KEY`
 decodes to exactly 32 bytes); otherwise every `/api/admin/drive/*` route answers 404 and the daily
-keepalive skips. Apply migration `0040` (`drive_connection`) **before** setting the secrets. Once
+keepalive skips. Apply migrations `0040` (`drive_connection`) and `0041` (`drive_imports`) **before** setting the secrets. Once
 configured, a System Administrator connects the association's Google account from Site Settings;
 the grant is `drive.file` scope only. The Google Cloud project setup and key generation
 step-by-step live in the private wiki. Losing or rotating `DRIVE_TOKEN_KEY` makes the sealed token

@@ -60,6 +60,8 @@ export type MintResult =
       accessToken: string;
       expiresIn: number;
       version: ConnectionVersion;
+      /** The Google account the token belongs to. */
+      googleSub: string;
     }
   | { kind: 'unavailable' }
   | { kind: 'broken' };
@@ -100,7 +102,7 @@ export async function mintAccessToken(
 
   try {
     const minted = await refreshAccessToken(config, refreshToken);
-    return { kind: 'minted', ...minted, version };
+    return { kind: 'minted', ...minted, version, googleSub: row.googleSub };
   } catch (err) {
     if (err instanceof GoogleTokenError && err.isPermanent) {
       const marked = await markBroken(env, {
@@ -113,3 +115,36 @@ export async function mintAccessToken(
     throw err;
   }
 }
+
+/**
+ * Record that the connection was used, on a best-effort basis. Matches the
+ * version that was read, and leaves `revision` alone: a timestamp is not a
+ * change of state, and bumping it would make an in-flight reconnect lose.
+ */
+export async function touchLastUsed(
+  env: Env,
+  version: ConnectionVersion,
+): Promise<void> {
+  try {
+    await env.DATABASE.prepare(
+      'UPDATE drive_connection SET last_used_at = ? WHERE id = 1 AND revision = ? AND refresh_token_sealed = ?',
+    )
+      .bind(Date.now(), version.revision, version.sealed)
+      .run();
+  } catch (err) {
+    console.error('[drive] recording last use failed', err);
+  }
+}
+
+/** The answer for an import surface when there is no working connection. */
+export const noConnection = () =>
+  new Response(
+    'Google Drive is not connected. Ask a System Administrator to connect it.',
+    { status: 409 },
+  );
+
+/** The answer when Google failed in a way that may pass. */
+export const googleUnavailable = () =>
+  new Response('Google did not answer. Try again in a moment.', {
+    status: 503,
+  });

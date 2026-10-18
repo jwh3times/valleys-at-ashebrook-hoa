@@ -341,6 +341,15 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Fonts, the Google Calendar embed, Turnstile, Web3Forms, and the Cloudflare Web Analytics beacon).
   HSTS is enabled at the Cloudflare zone level (`max-age=2592000`, one month; subdomains not
   included; preload off) — a zone-level operator setting, not a repository or Worker header.
+- **The CSP differs on `/admin` pages only (#290 slice 3).** The admin panel opens Google Picker,
+  so `/admin` and `/admin/*` responses additionally allow `https://apis.google.com` in `script-src`
+  and `https://docs.google.com https://accounts.google.com` in `frame-src`; every other route keeps
+  the base policy. The origin set is Google's documented one and has not yet been measured in
+  production. Opening the Picker requires the browser to hold a short-lived Drive access token from
+  `POST /api/admin/drive/picker-session` (board-only, `no-store`, never stored, valid for up to an
+  hour, `drive.file` scope so it reaches only files the association has picked). This exposure to
+  board-admin browsers was accepted in review. Imports themselves run server-side, re-check the
+  file's version and duplicates, and are subject to the write freeze.
 - **`script-src` does not permit `'unsafe-inline'`.** Middleware generates a fresh 128-bit nonce for
   every HTML response, adds its nonce source to the enforced CSP response header, and applies the
   matching `nonce` attribute to every script already present in Astro's rendered HTML. Cloudflare

@@ -715,3 +715,24 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   `POST disconnect` (`systemAdmin`) is the write freeze's **third exemption**: it revokes the token
   (best effort), deletes the row with no revision check, and returns `{ revokeFailed }`, or `204`
   when nothing was stored.
+- Google Drive import, `/api/admin/drive/{picker-session,preview,import}` (#290 slice 3). All three
+  are `POST`, `requireBoard` (not System-Administrator-only), `404` when `driveConfig` is null, and
+  **write-freeze covered** like any admin POST (preview writes nothing but is still a POST). Each
+  mints a short-lived access token (`mintAccessToken`) and answers `409` when there is no usable
+  connection (`noConnection`) and `503` on a transient Google failure (`googleUnavailable`); each
+  success calls `touchLastUsed`. `picker-session` returns `{ accessToken, expiresAt, developerKey,
+appId }` with `cache-control: no-store`; the token reaches the browser for up to an hour (accepted
+  in review, scope `drive.file`). `preview` takes `{ fileIds }` (1 to `MAX_FILES_PER_BATCH` = 10,
+  each matching `DRIVE_FILE_ID`, else `400`), reads Drive metadata only, and returns per-file
+  `{ plan: 'export'|'download'|'refused', storedAs, title, filename, newerVersionOf,
+nearDuplicates }`; a same-version re-import or an unreadable file is a per-file `refused`, not a
+  route error. `import` takes one file per request (`fileId`, `expectedModifiedTime`, `title`,
+  `category`, `visibility`, optional `confirmDuplicate`; `400` on a bad shape) and re-checks
+  everything preview did. `409` bodies: `{ error: 'not-picked' }`, `'changed-since-preview'`
+  (modifiedTime differs), `'refused'` (+ `refusal`), `'drive-duplicate'` (same file and version
+  already imported, also returned when `drive_imports`' unique index loses a race),
+  `'exact-duplicate'` (+ `existing`, from `storeDocument`), and the warning
+  `{ warning: 'near-duplicate', similar }`, which `confirmDuplicate: true` overrides. `413` when
+  Drive content exceeds the streaming cap (10 MiB for Google-native exports, 25 MiB for downloads;
+  also a known size over the cap before fetching). Success is `201 { id }`; the `drive_imports`
+  provenance row is written in the same D1 batch as the document (`storeDocument`'s `alsoInBatch`).
