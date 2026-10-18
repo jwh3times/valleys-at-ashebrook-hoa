@@ -52,15 +52,17 @@ repeatedly, up to 10 times, before matching a route, so an encoded namespace lik
 `/api/%6dember/proxies` would otherwise classify as `mutations` while still routing to the frozen
 `everything`-class handler — then is the single authority both enforcement layers consult:
 
-| Policy       | Paths                                                                  |
-| ------------ | ---------------------------------------------------------------------- |
-| `everything` | `/api/member/*` and `/api/vote` — no read-only half worth keeping live |
-| `exempt`     | `/api/auth/*` and `/api/bootstrap/board` — exactly two                 |
-| `mutations`  | **everything else**, including paths nobody has written yet            |
+| Policy       | Paths                                                                                |
+| ------------ | ------------------------------------------------------------------------------------ |
+| `everything` | `/api/member/*` and `/api/vote` — no read-only half worth keeping live               |
+| `exempt`     | `/api/auth/*`, `/api/bootstrap/board`, `/api/admin/drive/disconnect` — exactly three |
+| `mutations`  | **everything else**, including paths nobody has written yet                          |
 
-The two exemptions each have a reason: sign-in writes a session row, and an operator locked out of
-`/admin` cannot run the flip; and flip step 4 creates the first System Administrator while the
-freeze is on.
+The three exemptions each have a reason: sign-in writes a session row, and an operator locked out of
+`/admin` cannot run the flip; flip step 4 creates the first System Administrator while the
+freeze is on; and Drive disconnect (#290, ADR 0027) ends the site's stored third-party credential,
+which must never wait for a freeze to lift. `connect` and `callback` are GETs that write, so they
+check `isWriteFrozen` themselves.
 
 `writeFreezeError(env, request)` takes no scope argument — it derives coverage from the request's
 own path, so no call site can hold a stale opinion about what its surface freezes, and middleware

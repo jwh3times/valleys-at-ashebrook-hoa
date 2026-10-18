@@ -7,6 +7,33 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-18
+
+### Added
+
+- **A Google Drive connection for the association (#290, slice 2 of the design spec; ADR 0027).**
+  A System Administrator can connect the association's own Google account from a new **Google
+  Drive connection** card in Site Settings. Board admins see the connection's status there, and
+  System Administrators also see a one-line status above Documents.
+  - **What it asks for:** the site requests only Google's narrow `drive.file` permission, plus
+    the account's identity, and refuses a connection where Drive access wasn't granted.
+  - **What it stores:** the one credential, encrypted. Disconnect withdraws it at Google and
+    deletes it, and still works during a site write freeze.
+  - **Keeping it alive:** a daily job uses the credential so it never expires from disuse, and
+    marks the connection broken if Google stops honoring it.
+  - **Not yet:** importing documents arrives with slice 3, so nothing can be imported yet.
+  - **Hidden until set up:** the feature stays invisible until all five `DRIVE_*` secrets are
+    set. Migration `0040` must be applied before they are.
+- `/privacy` describes the association's Drive connection, and its effective date is now
+  18 October 2026. Resident Google sign-in still never touches Drive.
+
+### Changed
+
+- The write freeze now has three exemptions. The new one is disconnecting Google Drive, because
+  cutting off a third-party credential must never wait for a freeze to lift.
+- The test that every admin route refuses anonymous callers now also checks routes in
+  subfolders.
+
 ## [2.4.0] - 2026-10-18
 
 ### Added
@@ -4034,7 +4061,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.17...v2.4.0
 [2.3.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.16...v2.3.17
 [2.3.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.15...v2.3.16

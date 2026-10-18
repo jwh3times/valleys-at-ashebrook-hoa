@@ -698,6 +698,20 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   `access_grants` (`grant_reason='bootstrap'`), the `system_admin_bootstrap` singleton row itself,
   a root `identity` ledger event plus its caused `access` event. The old credential-based signup and
   board-count guard are retired — `src/server/auth/seed-board.ts` and `scripts/seed-board.ts` are
-  deleted. The route stays at its unchanged path and remains one of the write freeze's two
+  deleted. The route stays at its unchanged path and remains one of the write freeze's three
   permanent exemptions; it never calls `writeFreezeError`.
 - Better Auth handler: `/api/auth/[...all]`.
+- Google Drive connection, `/api/admin/drive/*` (#290 slice 2, ADR 0027). Every route returns `404`
+  unless `driveConfig(env)` finds all five `DRIVE_*` secrets. `GET status` is board-only
+  (`requireBoard`) and returns `{ configured, status: 'none'|'connected'|'broken', canManage, … }`,
+  never the credential. `GET connect` and `GET callback` need the `systemAdmin` capability and are
+  **explicitly frozen** (`isWriteFrozen`, `503`) because they are GETs that write and the freeze
+  policy leaves admin GETs live. `connect` answers `409` if already connected without
+  `?reconnect=1`, then sets the HMAC-signed state/PKCE cookie and redirects to Google (`drive.file`
+  scope). `callback` checks the cookie's state and account, exchanges the code, verifies the
+  `id_token`, requires the `drive.file` scope, and inserts or updates the row with the revision it
+  started from; it redirects back to Site Settings with a `?drive=` outcome. A refused grant is
+  revoked at Google only when it is not the stored account's own, since revocation is project-wide.
+  `POST disconnect` (`systemAdmin`) is the write freeze's **third exemption**: it revokes the token
+  (best effort), deletes the row with no revision check, and returns `{ revokeFailed }`, or `204`
+  when nothing was stored.

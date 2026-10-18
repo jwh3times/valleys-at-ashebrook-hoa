@@ -308,19 +308,33 @@ EMAIL_NOT_VERIFIED` for an existing-but-unverified account versus `401` for anyt
   `cutover_settings.write_freeze` singleton (built for the ADR 0022 phase-3 flip and retained
   afterward as a general maintenance switch) is read uncached on every covered request, in two
   layers — the per-route guards and a middleware backstop. Coverage is **deny-by-default**: a single
-  `freezePolicyFor(path)` freezes every mutation unless the path is one of two declared exemptions,
+  `freezePolicyFor(path)` freezes every mutation unless the path is one of three declared exemptions,
   so admin writes, the whole homeowner-write surface (`/api/member/*`, `POST /api/vote`, frozen on
   reads too), homeowner verification, and any route added later are all covered without being
   enumerated. `test/unit/freeze-coverage.test.ts` fails the build if a mutating route escapes.
   Reads stay live throughout — public pages, `/api/content/*`, `/api/files/*`, and admin `GET`s —
-  so a frozen site remains fully readable. The two exemptions are `/api/auth/*` and
-  `/api/bootstrap/board`, each because freezing it would break the freeze's own purpose: an operator
-  locked out of sign-in cannot run the flip, and the flip creates its first System Administrator
-  while the freeze is on. A frozen request answers `503`, never `404`, so a frozen site does not
+  so a frozen site remains fully readable. The three exemptions are `/api/auth/*`, `/api/bootstrap/board`, and
+  `POST /api/admin/drive/disconnect`, each because freezing it would break the freeze's own purpose: an operator
+  locked out of sign-in cannot run the flip, the flip creates its first System Administrator
+  while the freeze is on, and cutting off the stored Google Drive credential must never wait for a
+  freeze to lift. A frozen request answers `503`, never `404`, so a frozen site does not
   appear to mask a surface's existence. Reading the setting fails closed: an error is treated as
   frozen, and an absent row is the normal un-frozen state. It is written only by direct D1 access
   (`wrangler d1 execute`); it is not exposed in the admin Site panel, because pausing the site is an
   operator action rather than a board decision.
+- **The site holds one stored third-party credential: the association's Google Drive connection
+  (ADR 0027, #290).** A System Administrator connects it through Google's OAuth consent; the
+  refresh token is stored only sealed (AES-256-GCM, bound to the Google account and key version) in
+  the single-row `drive_connection` table, under `DRIVE_TOKEN_KEY`, a Worker secret that never
+  reaches D1, logs, or any response. The OAuth `state`/PKCE cookie is an HMAC keyed by a value
+  derived from that secret, and the returned `id_token` issuer and audience are checked. The
+  requested scope is `drive.file` only, so the site can reach just the files an administrator
+  explicitly picks. Only System Administrators may connect, reconnect, or disconnect; board admins
+  can read non-secret status. Disconnect revokes the token at Google and deletes the row, and is
+  exempt from the write freeze. The connection is absent entirely (every Drive route answers 404)
+  unless all five `DRIVE_*` secrets are set. A daily keepalive refreshes the token so Google's
+  inactivity expiry does not silently break it; a connection Google has revoked is marked broken
+  and its credential cleared. `/privacy` discloses it.
 - **Every response carries baseline security headers.** Middleware sets `X-Content-Type-Options:
 nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy that allowlists only the third-party resources the site uses (Google

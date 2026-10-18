@@ -168,10 +168,11 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `exempt` for exactly two paths, and `mutations` for **everything else** — including paths nobody
   has written yet. `writeFreezeError(env, request)` therefore takes no scope argument: it derives
   coverage from the request's own path, so no call site can hold a stale opinion about what its
-  surface freezes, and middleware and the per-route guards cannot drift. The two exemptions are
+  surface freezes, and middleware and the per-route guards cannot drift. The three exemptions are
   `/api/auth/*` (sign-in writes a session row; an operator locked out of `/admin` cannot run the
   flip) and `/api/bootstrap/board` (flip step 4 creates the first System Administrator while the
-  freeze is on). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`, both
+  freeze is on) and `/api/admin/drive/disconnect` (ending the stored Drive credential must not wait
+  for a freeze). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`, both
   `/api/verify/*` routes, and `src/middleware.ts` — whose final `else` branch is what catches any
   surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
   and fails if a mutating route ends up live without being declared in both that test and
@@ -286,7 +287,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `reports.ts` purges de-anonymized saved-report text after 90 days and supplies the statement that
   performs the same purge atomically with roster redactions.
 - `scheduled.ts`: `runScheduledJobs(env)`, the body of the Worker's daily `0 7 * * *` cron trigger;
-  it independently runs verification cleanup, saved-report cleanup, and ADR 0022 invariants — see
+  it independently runs verification cleanup, saved-report cleanup, ADR 0022 invariants, and the
+  Drive keepalive (a broken connection is logged, not a failure) — see
   **Deploy** below.
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
@@ -364,6 +366,17 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   `document-cited` when evidence records cite a document. Used by `/api/admin/documents` and
   `/api/admin/duplicates`; the Drive import (#290) will reuse it. Wide IN-lists go through
   `db/chunked.ts` (`chunkedIn`, D1's 100-bound-parameter limit).
+- `drive/`: the association's Google Drive connection (#290 slice 2, ADR 0027) — the site's first
+  stored third-party credential. `config.ts` (`driveConfig`) returns null unless all five `DRIVE_*`
+  secrets are set and the key decodes to 32 bytes; every route then 404s and the keepalive skips.
+  `seal.ts` seals the refresh token (AES-256-GCM bound to account + key version) and signs the
+  HKDF-derived HMAC OAuth state cookie and PKCE values. `oauth.ts` holds the redirect and scope
+  constants; `google.ts` does token exchange, refresh, and revoke and checks the `id_token`
+  issuer/audience. `connection.ts` (`mintAccessToken`, `markBroken`) is the only path to a usable
+  access token and writes by compare-and-swap on `revision` plus the sealed value.
+  `history.ts` records transitions in `setting_changes` (key `drive_connection`, with a
+  `scheduled-job` actor sentinel). `keepalive.ts` is the daily cron job. Client side,
+  `src/lib/drive.ts` reads `/api/admin/drive/status`.
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible

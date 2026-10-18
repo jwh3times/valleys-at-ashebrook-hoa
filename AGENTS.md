@@ -265,7 +265,7 @@ are **not** granted to board sessions; see `src/server/auth/permissions.ts`. A b
 escalate their own access beyond `board`.
 
 **The write freeze is deny-by-default.** `freezePolicyFor(path)` freezes every mutation unless the
-path is one of two named exemptions, so a route added tomorrow is covered before anyone thinks
+path is one of three named exemptions, so a route added tomorrow is covered before anyone thinks
 about it. When adding a route you must remember its auth guard; you do not have to remember the
 freeze.
 
@@ -346,8 +346,8 @@ npx wrangler deploy -c dist/server/wrangler.json
 The root `wrangler.toml` uses `main = "src/worker.ts"` so the Worker exposes both Astro SSR
 handling and the daily `0 7 * * *` scheduled trigger. `src/worker.ts` is a thin adapter: `fetch`
 delegates to Astro's `handle`, `scheduled` delegates to `runScheduledJobs(env)`, which runs the
-verification-state retention sweep, the 90-day saved-report-content sweep, and the ADR 0022
-invariant drift check **independently**, so one failure cannot hide or stop the other jobs, and
+verification-state retention sweep, the 90-day saved-report-content sweep, the ADR 0022
+invariant drift check, and the Google Drive connection keepalive **independently**, so one failure cannot hide or stop the other jobs, and
 throws if any failed so a partial-success invocation still shows red in the dashboard.
 
 Deploys from `main` are handled by Cloudflare Workers Builds. Manual deploys use the
