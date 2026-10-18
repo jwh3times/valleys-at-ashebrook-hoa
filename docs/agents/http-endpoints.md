@@ -80,12 +80,18 @@ API routes live under `src/pages/api/`:
   `board_office_assignments` through `/api/admin/board-service` (see the ADR 0022 roster routes
   below), not the legacy `board_people`/`board_terms` tables.
   `POST /api/admin/documents` hashes uploads, blocks exact duplicates, warns on near duplicates,
-  and stores `content_hash` on success; a confirmed near-duplicate upload also clears
+  and stores `content_hash` and the acting Account as `uploaded_by` on success (all through
+  `storeDocument`, `src/server/documents/store.ts`; if the D1 insert fails the R2 objects are removed); a confirmed near-duplicate upload also clears
   `keep_verified_at`/`keep_verified_by` on the existing documents it near-matches, so that
   duplicate group resurfaces for review. `PATCH /api/admin/documents` answers `404 "Document not
 found"` for an id that does not match any row — the update uses `.returning({ id })` and checks
   the result rather than trusting an unconditional `UPDATE` to have matched anything, so an unknown
   id can no longer read back as the same silent `204` a real edit gets.
+  `GET /api/admin/documents` also returns `uploadedBy` and `uploadedByName` (left join `users`).
+  `DELETE /api/admin/documents` goes through `deleteDocuments`: D1 rows are deleted first in one
+  batch, then the R2 original and twin; a document cited as evidence by `roster_changes`,
+  `board_service_changes`, or `identity_events` answers `409 { error: 'document-cited', citedBy }`
+  with nothing changed (also when the citation races the batch, via the RESTRICT FK).
 - Site settings and feature gates, `requireBoard`-gated (#363, ADR 0024): `/api/admin/site`
   supports `PUT` and `POST`. **`PUT` no longer writes any gate.** It replaces the presentation
   fields (name, tagline, welcome copy, disclaimer, about body) but the `ON CONFLICT DO UPDATE`'s
@@ -418,7 +424,9 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
   `POST /api/admin/duplicates` takes `{ action: 'resolve', keepIds, deleteIds }`, deletes each
-  `deleteIds` document (D1 row + R2 object), and marks the surviving `keepIds` as kept-verified;
+  `deleteIds` document through `deleteDocuments` (D1 rows first, then R2), and marks the surviving
+  `keepIds` as kept-verified in the same D1 batch; a cited document answers
+  `409 { error: 'document-cited', citedBy, documentIds }` with nothing changed;
   `keepIds` must be non-empty and disjoint from `deleteIds`, while `deleteIds` may be empty for a
   keep-all/mark-reviewed resolution.
 - Board handoff: `GET /api/admin/roles` lists accounts with live Access Grants, independently
