@@ -109,6 +109,9 @@ export function DriveImportButton({
       {error && <div className="form-message">Error: {error}</div>}
       {files && (
         <ImportTable
+          // A new pick is a new batch: fresh settings and results, never the
+          // previous batch's state applied to different files.
+          key={files.map((f) => f.fileId).join('|')}
           files={files}
           onDone={onImported}
           onClose={() => setFiles(null)}

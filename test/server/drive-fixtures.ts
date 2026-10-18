@@ -70,7 +70,9 @@ export interface DriveFileStub {
   trashed?: boolean;
   canDownload?: boolean;
   /** What `files.get?alt=media` or `files.export` returns. */
-  content?: string | Uint8Array<ArrayBuffer>;
+  content?: string | Uint8Array<ArrayBuffer> | (() => ReadableStream);
+  /** Make the content request answer this error instead. */
+  contentError?: { status: number; reason: string };
   /** Make metadata answer this error instead. */
   error?: { status: number; reason: string };
 }
@@ -79,6 +81,8 @@ export interface GoogleStubOptions {
   files?: DriveFileStub[];
   /** The token endpoint's answer when the server refreshes. */
   token?: { status: number; body: object };
+  /** Runs when the server refreshes, before Google answers. */
+  onToken?: () => Promise<void>;
 }
 
 /**
@@ -95,6 +99,7 @@ export function stubGoogleDrive(options: GoogleStubOptions = {}) {
       const url = urlOf(input);
       calls.push({ url, init });
       if (url === 'https://oauth2.googleapis.com/token') {
+        await options.onToken?.();
         const t = options.token ?? {
           status: 200,
           body: { access_token: 'server-access-token', expires_in: 3599 },
@@ -116,6 +121,18 @@ export function stubGoogleDrive(options: GoogleStubOptions = {}) {
         );
       }
       if (m[2] || params.get('alt') === 'media') {
+        if (file.contentError)
+          return Response.json(
+            {
+              error: {
+                code: file.contentError.status,
+                errors: [{ reason: file.contentError.reason }],
+              },
+            },
+            { status: file.contentError.status },
+          );
+        if (typeof file.content === 'function')
+          return new Response(file.content(), { status: 200 });
         const body =
           typeof file.content === 'string'
             ? new TextEncoder().encode(file.content)

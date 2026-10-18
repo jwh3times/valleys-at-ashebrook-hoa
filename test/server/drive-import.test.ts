@@ -633,6 +633,161 @@ describe('POST /api/admin/drive/import', () => {
     ).toBe(400);
   });
 
+  it('accepts a downloaded file between the export cap and the upload cap', async () => {
+    configureDrive();
+    await seedDriveConnection();
+    stubGoogleDrive({
+      files: [
+        {
+          id: 'f-pdf',
+          name: 'Plans.pdf',
+          mimeType: 'application/pdf',
+          content: new Uint8Array(15 * 1024 * 1024).fill(1),
+        },
+      ],
+    });
+    const res = await post(
+      importFile,
+      'import',
+      importBody({ fileId: 'f-pdf', title: 'Plans' }),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it('stops reading an export as soon as it passes the cap', async () => {
+    // An endless body: only a reader that stops at the cap can answer at all.
+    configureDrive();
+    await seedDriveConnection();
+    let pulled = 0;
+    stubGoogleDrive({
+      files: [
+        {
+          id: 'f-doc',
+          name: 'Endless',
+          mimeType: DOC,
+          content: () =>
+            new ReadableStream({
+              pull(controller) {
+                pulled++;
+                controller.enqueue(new Uint8Array(1024 * 1024));
+              },
+            }),
+        },
+      ],
+    });
+    const res = await post(importFile, 'import', importBody());
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(20);
+  });
+
+  it.each([
+    [{ status: 429, reason: 'rateLimitExceeded' }],
+    [{ status: 403, reason: 'userRateLimitExceeded' }],
+    [{ status: 401, reason: 'authError' }],
+    [{ status: 500, reason: 'backendError' }],
+  ])(
+    'answers 503, not "too large", when the export fails with %o',
+    async (contentError) => {
+      configureDrive();
+      await seedDriveConnection();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      stubGoogleDrive({
+        files: [
+          { id: 'f-doc', name: 'Bylaws draft', mimeType: DOC, contentError },
+        ],
+      });
+      expect((await post(importFile, 'import', importBody())).status).toBe(503);
+    },
+  );
+
+  it('answers 413 when Google refuses an export for its size', async () => {
+    configureDrive();
+    await seedDriveConnection();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    stubGoogleDrive({
+      files: [
+        {
+          id: 'f-doc',
+          name: 'Bylaws draft',
+          mimeType: DOC,
+          contentError: { status: 403, reason: 'exportSizeLimitExceeded' },
+        },
+      ],
+    });
+    expect((await post(importFile, 'import', importBody())).status).toBe(413);
+  });
+
+  it('asks for the file to be picked again when Drive no longer grants it', async () => {
+    configureDrive();
+    await seedDriveConnection();
+    stubGoogleDrive({
+      files: [
+        {
+          id: 'f-doc',
+          name: 'Bylaws draft',
+          mimeType: DOC,
+          error: { status: 403, reason: 'appNotAuthorizedToFile' },
+        },
+      ],
+    });
+    const res = await post(importFile, 'import', importBody());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: 'not-picked' });
+  });
+
+  it('refuses a file the library would not accept', async () => {
+    configureDrive();
+    await seedDriveConnection();
+    stubGoogleDrive({
+      files: [
+        {
+          id: 'f-doc',
+          name: 'Link',
+          mimeType: 'application/vnd.google-apps.shortcut',
+        },
+      ],
+    });
+    const res = await post(importFile, 'import', importBody());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'refused' });
+  });
+
+  it('records the Google account the file was actually read from', async () => {
+    configureDrive();
+    await seedDriveConnection();
+    stubGoogleDrive({
+      files: [{ id: 'f-doc', name: 'Bylaws draft', mimeType: DOC }],
+      // A System Administrator reconnects to another account mid-import.
+      onToken: async () => {
+        await env.DATABASE.exec(
+          "UPDATE drive_connection SET google_sub = 'google-sub-2', revision = revision + 1",
+        );
+      },
+    });
+    expect((await post(importFile, 'import', importBody())).status).toBe(201);
+    expect(
+      await env.DATABASE.prepare('SELECT google_sub FROM drive_imports').first(
+        'google_sub',
+      ),
+    ).toBe('google-sub-1');
+  });
+
+  it.each(['..', '.', 'a/b', 'x'.repeat(300)])(
+    'answers 400 for a malformed file ID %j',
+    async (fileId) => {
+      configureDrive();
+      await seedDriveConnection();
+      const calls = stubGoogleDrive();
+      expect(
+        (await post(importFile, 'import', importBody({ fileId }))).status,
+      ).toBe(400);
+      expect(
+        (await post(preview, 'preview', { fileIds: [fileId] })).status,
+      ).toBe(400);
+      expect(calls).toEqual([]);
+    },
+  );
+
   it('answers 409 when Google Drive is not connected', async () => {
     configureDrive();
     stubGoogleDrive();

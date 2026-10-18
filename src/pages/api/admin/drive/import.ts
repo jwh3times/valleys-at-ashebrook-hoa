@@ -15,6 +15,7 @@ import {
   touchLastUsed,
 } from '../../../../server/drive/connection';
 import {
+  DRIVE_FILE_ID,
   MAX_EXPORT_BYTES,
   fetchDriveContent,
   getDriveFile,
@@ -59,10 +60,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const title = str('title').trim();
   const category = str('category').trim();
   const visibility = str('visibility');
-  if (!fileId || !expectedModifiedTime)
-    return new Response('fileId and expectedModifiedTime are required', {
-      status: 400,
-    });
+  if (!DRIVE_FILE_ID.test(fileId) || !expectedModifiedTime)
+    return new Response(
+      'A valid fileId and expectedModifiedTime are required',
+      {
+        status: 400,
+      },
+    );
   if (!title) return new Response('title is required', { status: 400 });
   if (title.length > INPUT_LIMITS.title)
     return new Response('title is too long', { status: 400 });
@@ -80,10 +84,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return googleUnavailable();
   }
   if (minted.kind !== 'minted') return noConnection();
-  const connection = await env.DATABASE.prepare(
-    'SELECT google_sub FROM drive_connection WHERE id = 1',
-  ).first<{ google_sub: string }>();
-  if (!connection) return noConnection();
 
   const got = await getDriveFile(minted.accessToken, fileId);
   if (!got.ok)
@@ -165,7 +165,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
           file.mimeType,
           file.modifiedTime,
           exportFormat,
-          connection.google_sub,
+          // The account the token was minted for, not a later re-read.
+          minted.googleSub,
           Date.now(),
         ),
       ],

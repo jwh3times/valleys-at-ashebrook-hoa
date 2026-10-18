@@ -8,6 +8,12 @@ import { MAX_DOCUMENT_BYTES } from '../documents/store';
 
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
 
+/**
+ * The shape of a Drive file ID. Checked before an ID reaches a Drive URL, so
+ * `.` or `..` can't normalize the request onto another Drive endpoint.
+ */
+export const DRIVE_FILE_ID = /^[A-Za-z0-9_-]{1,200}$/;
+
 /** Files per Picker batch (spec decision 2). */
 export const MAX_FILES_PER_BATCH = 10;
 
@@ -152,6 +158,13 @@ export function planFor(file: DriveFile): DrivePlan {
   };
 }
 
+const TRANSIENT_REASONS = new Set([
+  'rateLimitExceeded',
+  'userRateLimitExceeded',
+  'backendError',
+  'internalError',
+]);
+
 export type ContentResult =
   | { ok: true; bytes: ArrayBuffer }
   | { ok: false; kind: 'too-large' | 'not-picked' | 'google-error' };
@@ -182,19 +195,23 @@ export async function fetchDriveContent(
   if (!res.ok) {
     const err = await driveError(res);
     if (isNotPicked(err)) return { ok: false, kind: 'not-picked' };
-    // Google documents no specific reason for the export limit; any other
-    // export refusal is reported as too large (spec decision 4).
     console.error(
       '[drive] fetching file content failed',
       err.status,
       err.reason,
     );
+    // A failure that may pass on retry is never reported as "too large":
+    // rate limits, an expired or revoked token, and Google's own errors.
+    // Google documents no specific reason for its 10 MB export limit (research
+    // §4), so any other refusal of an export is read as that limit.
+    const transient =
+      err.status === 401 ||
+      err.status === 429 ||
+      err.status >= 500 ||
+      (err.reason !== null && TRANSIENT_REASONS.has(err.reason));
     return {
       ok: false,
-      kind:
-        plan.kind === 'export' && err.status < 500
-          ? 'too-large'
-          : 'google-error',
+      kind: plan.kind === 'export' && !transient ? 'too-large' : 'google-error',
     };
   }
   const reader = res.body?.getReader();

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -96,7 +97,36 @@ describe('Import from Google Drive', () => {
       <DriveImportButton pick={pick} onImported={vi.fn()} />,
     );
     await waitFor(() => expect(fetchDriveStatus).toHaveBeenCalled());
+    // Let the status load settle, so "renders nothing" means "saw null".
+    await act(async () => {
+      await fetchDriveStatus.mock.results[0]?.value;
+    });
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('replaces the preview when a second set of files is picked', async () => {
+    await openPreview();
+    pick.mockResolvedValue(['f-other']);
+    previewDriveFiles.mockResolvedValue([
+      {
+        fileId: 'f-other',
+        name: 'Newsletter',
+        plan: 'export',
+        storedAs: 'pdf',
+        filename: 'Newsletter.pdf',
+        title: 'Newsletter',
+        modifiedTime: '2026-10-03T12:00:00.000Z',
+        newerVersionOf: [],
+        nearDuplicates: [],
+      },
+    ]);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Import from Google Drive' }),
+    );
+    expect(
+      await screen.findByRole('textbox', { name: 'Title: Newsletter' }),
+    ).toHaveValue('Newsletter');
+    expect(screen.queryByText('Bylaws draft')).toBeNull();
   });
 
   it.each([

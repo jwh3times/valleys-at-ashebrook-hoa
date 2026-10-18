@@ -60,6 +60,8 @@ export type MintResult =
       accessToken: string;
       expiresIn: number;
       version: ConnectionVersion;
+      /** The Google account the token belongs to. */
+      googleSub: string;
     }
   | { kind: 'unavailable' }
   | { kind: 'broken' };
@@ -100,7 +102,7 @@ export async function mintAccessToken(
 
   try {
     const minted = await refreshAccessToken(config, refreshToken);
-    return { kind: 'minted', ...minted, version };
+    return { kind: 'minted', ...minted, version, googleSub: row.googleSub };
   } catch (err) {
     if (err instanceof GoogleTokenError && err.isPermanent) {
       const marked = await markBroken(env, {

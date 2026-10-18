@@ -14,6 +14,7 @@ import {
   touchLastUsed,
 } from '../../../../server/drive/connection';
 import {
+  DRIVE_FILE_ID,
   MAX_FILES_PER_BATCH,
   getDriveFile,
   isNotPicked,
@@ -58,7 +59,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     !Array.isArray(raw) ||
     raw.length < 1 ||
     raw.length > MAX_FILES_PER_BATCH ||
-    !raw.every((id) => typeof id === 'string' && id.length > 0)
+    !raw.every((id) => typeof id === 'string' && DRIVE_FILE_ID.test(id))
   )
     return new Response(
       `fileIds must list 1 to ${MAX_FILES_PER_BATCH} Drive file IDs`,
