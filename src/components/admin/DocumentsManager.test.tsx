@@ -3,8 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // The factory's locals are suffixed so they don't shadow the names this
 // destructuring binds in the module scope around it.
-const { uploadDocument, fetchAdminDocuments, DuplicateError } = vi.hoisted(
-  () => {
+const { uploadDocument, fetchAdminDocuments, deleteDocument, DuplicateError } =
+  vi.hoisted(() => {
     const uploadDocumentMock = vi.fn().mockResolvedValue(undefined);
     const fetchAdminDocumentsMock = vi.fn().mockResolvedValue([]);
     class DuplicateErrorMock extends Error {
@@ -27,14 +27,14 @@ const { uploadDocument, fetchAdminDocuments, DuplicateError } = vi.hoisted(
     return {
       uploadDocument: uploadDocumentMock,
       fetchAdminDocuments: fetchAdminDocumentsMock,
+      deleteDocument: vi.fn().mockResolvedValue(undefined),
       DuplicateError: DuplicateErrorMock,
     };
-  },
-);
+  });
 vi.mock('../../lib/admin', () => ({
   uploadDocument: (...a: unknown[]) => uploadDocument(...a),
   editDocument: vi.fn(),
-  deleteDocument: vi.fn(),
+  deleteDocument: (...a: unknown[]) => deleteDocument(...a),
   fetchAdminDocuments: (...a: unknown[]) => fetchAdminDocuments(...a),
   DuplicateError,
 }));
@@ -351,5 +351,67 @@ describe('DocumentsManager search', () => {
     expect(
       screen.queryByText(/no documents are set to this visibility/i),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('DocumentsManager uploader and refused deletes', () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    id: 'd1',
+    title: 'Pool Rules',
+    category: 'Rules & Regulations',
+    visibility: 'board',
+    updatedAt: '2026-01-01',
+    filename: 'pool-rules.pdf',
+    ragStatus: 'ok',
+    uploadedBy: null,
+    uploadedByName: null,
+    ...overrides,
+  });
+
+  it('shows who uploaded a document', async () => {
+    fetchAdminDocuments.mockResolvedValueOnce([
+      row({ uploadedBy: 'u1', uploadedByName: 'Uploader One' }),
+    ]);
+    render(<DocumentsManager />);
+    expect(
+      await screen.findByText(/Uploaded by Uploader One/),
+    ).toBeInTheDocument();
+  });
+
+  it('says "a former account" when the uploader no longer exists', async () => {
+    fetchAdminDocuments.mockResolvedValueOnce([
+      row({ uploadedBy: 'gone', uploadedByName: null }),
+    ]);
+    render(<DocumentsManager />);
+    expect(
+      await screen.findByText(/Uploaded by a former account/),
+    ).toBeInTheDocument();
+  });
+
+  it('shows no uploader line when none was recorded', async () => {
+    fetchAdminDocuments.mockResolvedValueOnce([row({})]);
+    render(<DocumentsManager />);
+    await screen.findByText('Pool Rules');
+    expect(screen.queryByText(/Uploaded by/)).toBeNull();
+  });
+
+  it('shows why a delete was refused and keeps the document listed', async () => {
+    fetchAdminDocuments.mockResolvedValue([row({})]);
+    deleteDocument.mockRejectedValueOnce(
+      new Error(
+        "This document can't be deleted: a recorded roster change cites it as evidence.",
+      ),
+    );
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<DocumentsManager />);
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Delete document: Pool Rules',
+      }),
+    );
+    expect(
+      await screen.findByText(/a recorded roster change cites it as evidence/),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Pool Rules')).toBeInTheDocument();
   });
 });

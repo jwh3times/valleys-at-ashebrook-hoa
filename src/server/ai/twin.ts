@@ -4,17 +4,20 @@
 // document is flagged "not searchable". A successful twin is written to
 // rag/<id>.md by the caller and indexed at the next AI Search sync.
 
+import { DOCUMENT_EXTENSIONS } from '../../lib/document-types';
+
 // Below this many trimmed characters a conversion is treated as unusable
 // (e.g. a scanned/image-only PDF that yields ~nothing).
 const MIN_TWIN_CHARS = 16;
 
 // Text-native uploads are already searchable text — use the bytes directly.
 const TEXT_NATIVE = new Set(['md', 'txt', 'csv']);
-// Binary formats Workers AI can convert to Markdown.
-const CONVERTIBLE = new Set(['pdf', 'docx', 'xls', 'xlsx', 'doc']);
-// Must stay in sync with the upload allowlist EXT_TO_TYPE in
-// src/pages/api/admin/documents.ts — adding an extension there without adding
-// it to one of these sets silently marks that upload's twin "unsupported".
+// Every other allowed upload type (src/lib/document-types.ts) is a binary
+// format handed to Workers AI to convert to Markdown, so adding a type to the
+// allowlist makes it convertible here too. twin.test.ts checks each one.
+const CONVERTIBLE = new Set(
+  DOCUMENT_EXTENSIONS.filter((ext) => !TEXT_NATIVE.has(ext)),
+);
 
 export interface TwinInput {
   filename: string;

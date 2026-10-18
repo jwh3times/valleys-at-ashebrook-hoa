@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -8,6 +8,8 @@ import {
 import { readJson } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
+import { deleteDocuments } from '../../../server/documents/store';
+import { D1_MAX_BOUND_PARAMS } from '../../../server/db/chunked';
 import {
   sha256Hex,
   groupExact,
@@ -183,17 +185,32 @@ export const POST: APIRoute = async ({ request, locals }) => {
       status: 400,
     });
 
-  const db = getDb(env);
-  for (const id of deleteIds) {
-    const [doc] = await db.select().from(documents).where(eq(documents.id, id));
-    if (!doc) continue;
-    await env.DOCS.delete(doc.r2Key);
-    await env.DOCS.delete(`rag/${id}.md`); // remove the AI-index twin (ADR 0009 §1)
-    await db.delete(documents).where(eq(documents.id, id));
+  // The kept documents are marked verified in the same D1 batch as the
+  // deletions, so a refused deletion (a document cited as evidence) leaves the
+  // whole group exactly as it was (#442). keep_verified_at is unix seconds,
+  // matching the column's drizzle `timestamp` mode.
+  // Each UPDATE binds two values besides its ids, so it takes at most
+  // D1_MAX_BOUND_PARAMS - 2 of them.
+  const keptAt = Math.floor(Date.now() / 1000);
+  const perStatement = D1_MAX_BOUND_PARAMS - 2;
+  const markKept: D1PreparedStatement[] = [];
+  for (let i = 0; i < keepIds.length; i += perStatement) {
+    const chunk = keepIds.slice(i, i + perStatement);
+    markKept.push(
+      env.DATABASE.prepare(
+        `UPDATE documents SET keep_verified_at = ?, keep_verified_by = ? WHERE id IN (${chunk.map(() => '?').join(',')})`,
+      ).bind(keptAt, ctx?.userId ?? null, ...chunk),
+    );
   }
-  await db
-    .update(documents)
-    .set({ keepVerifiedAt: new Date(), keepVerifiedBy: ctx?.userId ?? null })
-    .where(inArray(documents.id, keepIds));
+  const result = await deleteDocuments(env, deleteIds, markKept);
+  if (result.kind === 'cited')
+    return Response.json(
+      {
+        error: 'document-cited',
+        citedBy: result.citedBy,
+        documentIds: result.documentIds,
+      },
+      { status: 409 },
+    );
   return new Response(null, { status: 204 });
 };

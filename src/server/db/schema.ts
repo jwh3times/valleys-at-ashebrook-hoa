@@ -354,6 +354,10 @@ export const documents = sqliteTable(
     // format — downloadable but not assistant-searchable). Null for documents
     // loaded by the offline corpus importer, which already have twins.
     ragStatus: text('rag_status', { enum: ['ok', 'unsupported'] }),
+    // The Account that uploaded or imported this document (#290). Plain text
+    // with no FK, like every actor column, so removing an Account never erases
+    // attribution. Null = not recorded (rows that predate migration 0039).
+    uploadedBy: text('uploaded_by'),
     uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   },

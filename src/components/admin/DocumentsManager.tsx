@@ -12,6 +12,7 @@ import {
   type Visibility,
 } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
+import { DOCUMENT_EXTENSIONS } from '../../lib/document-types';
 
 type EditForm = {
   title: string;
@@ -33,18 +34,7 @@ const FILTER_TABS: { value: Visibility | 'all'; label: string }[] = [
   { value: 'board', label: 'Board' },
 ];
 
-// Mirror the server-side allowlist in src/pages/api/admin/documents.ts.
-const ALLOWED_EXTENSIONS = [
-  'pdf',
-  'txt',
-  'md',
-  'csv',
-  'doc',
-  'docx',
-  'xls',
-  'xlsx',
-];
-const ACCEPT_ATTR = ALLOWED_EXTENSIONS.map((e) => `.${e}`).join(',');
+const ACCEPT_ATTR = DOCUMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
 
 export default function DocumentsManager() {
   const {
@@ -133,7 +123,7 @@ export default function DocumentsManager() {
       return;
     }
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    if (!DOCUMENT_EXTENSIONS.includes(ext)) {
       setMsg(
         'Unsupported file type. Allowed: PDF, Word, Excel, CSV, text, Markdown.',
       );
@@ -155,7 +145,11 @@ export default function DocumentsManager() {
 
   async function handleDelete(item: AdminDocumentItem) {
     if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
-    await deleteDocument(item.id);
+    // run() shows a refusal, such as a document cited as evidence (#442),
+    // instead of dropping it; the list reloads either way.
+    await run(async () => {
+      await deleteDocument(item.id);
+    }, 'Document deleted.');
     await reload();
   }
 
@@ -425,6 +419,13 @@ export default function DocumentsManager() {
                 <div className="admin-row-title">{d.title}</div>
                 <div className="admin-row-sub">
                   {d.category} &middot; {d.visibility}
+                  {d.uploadedBy && (
+                    <>
+                      {' '}
+                      &middot; Uploaded by{' '}
+                      {d.uploadedByName ?? 'a former account'}
+                    </>
+                  )}
                   {d.ragStatus === 'unsupported' && (
                     <span
                       className="pinned-badge"

@@ -7,6 +7,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-18
+
+### Added
+
+- **The board can see who uploaded each document.** The admin Documents panel shows "Uploaded by"
+  and the uploader's name, or "a former account" when that Account no longer exists. Documents
+  uploaded before this release show no uploader. The uploader is never shown outside the board's
+  admin panel. Migration `0039` adds the column and must be applied before this release is
+  deployed.
+
+### Fixed
+
+- **A document that a recorded roster, board-service or identity change cites as evidence can no
+  longer lose its file when someone tries to delete it (#442).** Deleting one used to remove the
+  file first and then fail, which left a listed document with no file behind it. The delete is
+  now refused with a plain explanation, and nothing changes. The same applies when resolving a
+  duplicate group: nothing is deleted or marked kept.
+- Deleting a document now removes its record first and its files second, retrying the file
+  removal once. An upload that fails after its file was stored no longer leaves that file behind.
+- Resolving a duplicate group that names more than 100 documents no longer fails.
+- A failed delete in the Documents panel now shows its reason instead of failing silently.
+
+### Changed
+
+- Uploads and deletes now go through one shared document store, which the planned Google Drive
+  import will also use (#290, slice 1 of the design spec). The list of accepted file types now
+  has one source, shared by that store, the search-twin builder and the upload form.
+
 ## [2.3.17] - 2026-10-18
 
 ### Added
@@ -4006,7 +4034,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.17...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.17...v2.4.0
 [2.3.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.16...v2.3.17
 [2.3.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.15...v2.3.16
 [2.3.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.3.14...v2.3.15

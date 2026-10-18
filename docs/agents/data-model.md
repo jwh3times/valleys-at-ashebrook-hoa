@@ -35,7 +35,10 @@ These are operational counters, not account or roster records.
 D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`,
 `documents` (metadata including nullable indexed `content_hash`, plus nullable `keep_verified_at`
 and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
-review; the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
+review, and nullable `uploaded_by` (migration `0039`, #290: the acting Account id, plain text with
+no FK like every actor column so removing an Account never erases attribution; `NULL` = not
+recorded; returned only by board-only `GET /api/admin/documents`, never by public/homeowner reads);
+the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
 (key/value singletons `dues` and `site`; the site JSON includes `officialMode` and the
 fail-closed/default-false `liveVotingEnabled` flag — per #363/ADR 0024 both are transition-only:
 `PUT /api/admin/site` preserves whatever is already stored for every key in `SITE_GATE_KEYS`

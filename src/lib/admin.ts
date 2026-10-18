@@ -35,6 +35,10 @@ import {
   type ReportDetail,
   type ReportPage,
 } from './reports';
+import {
+  CITING_RECORD_PHRASE,
+  type CitingRecordKind,
+} from './document-citations';
 
 /**
  * Every admin request goes through here — reads as well as writes — so that a
@@ -410,15 +414,61 @@ export async function fetchDuplicates(): Promise<DuplicatesView> {
   );
 }
 
+// A delete the server refused because a recorded change cites the document as
+// evidence (#442). The route answers 409 { error: 'document-cited', citedBy }.
+function citingRecordPhrase(citedBy: unknown[]): string {
+  const names = citedBy.map(
+    (k) => CITING_RECORD_PHRASE[k as CitingRecordKind] ?? 'record',
+  );
+  return names.length === 0 ? 'record' : names.join(' and ');
+}
+
+/**
+ * Send a request that deletes documents (a delete, or a duplicate resolution
+ * that also keeps some), turning a document-cited 409 into a sentence.
+ */
+async function sendDocumentDeletion(
+  url: string,
+  method: 'DELETE' | 'POST',
+  body: unknown,
+  fallback: string,
+  cited: (records: string, plural: boolean) => string,
+): Promise<void> {
+  const res = await fetch(url, {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) return;
+  // A body can be read only once, so read it as text and parse it from that.
+  const text = await res.text();
+  if (res.status === 409) {
+    let refusal: { error?: string; citedBy?: unknown } = {};
+    try {
+      refusal = JSON.parse(text) as typeof refusal;
+    } catch {
+      // Not JSON: fall through to the plain-text error below.
+    }
+    if (refusal.error === 'document-cited') {
+      const kinds = Array.isArray(refusal.citedBy) ? refusal.citedBy : [];
+      throw new Error(cited(citingRecordPhrase(kinds), kinds.length > 1));
+    }
+  }
+  // Same contract as adminRequest for every other failure.
+  throw new Error(text || `${fallback}: ${res.status}`);
+}
+
 export async function resolveDuplicates(
   keepIds: string[],
   deleteIds: string[],
 ): Promise<void> {
-  await adminRequest(
+  await sendDocumentDeletion(
     '/api/admin/duplicates',
     'POST',
     { action: 'resolve', keepIds, deleteIds },
     'Resolve failed',
+    (records) =>
+      `Nothing was deleted or kept: a document marked for deletion is cited as evidence by a recorded ${records}.`,
   );
 }
 
@@ -435,7 +485,14 @@ export async function editDocument(
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  await adminRequest('/api/admin/documents', 'DELETE', { id }, 'Delete failed');
+  await sendDocumentDeletion(
+    '/api/admin/documents',
+    'DELETE',
+    { id },
+    'Delete failed',
+    (records, plural) =>
+      `This document can't be deleted: a recorded ${records} ${plural ? 'cite' : 'cites'} it as evidence.`,
+  );
 }
 
 // ---------- Settings (singletons) ----------

@@ -10,8 +10,17 @@ export const prerender = false;
 
 export const GET: APIRoute = async ({ params, request, locals }) => {
   const id = params.id!;
+  // Read only what a download needs. A bare select() names every column in
+  // schema.ts, so a column added by a migration that has not reached
+  // production yet (code deploys on merge; migrations are applied separately)
+  // would otherwise be requested by every download.
   const [doc] = await getDb(env)
-    .select()
+    .select({
+      visibility: documents.visibility,
+      r2Key: documents.r2Key,
+      contentType: documents.contentType,
+      filename: documents.filename,
+    })
     .from(documents)
     .where(eq(documents.id, id));
   if (!doc) return new Response('Not Found', { status: 404 });

@@ -75,6 +75,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   assessments, enforcement, meetings/voting, maintenance) with their hand-tuned retrieval
   sub-queries, pagination constants, and the shared `ReportPage`/`ReportListItem`/`ReportDetail`/
   `ReportSource` shapes used by both the admin UI and the `/api/admin/reports` endpoint.
+- `src/lib/document-types.ts` is the single document upload allowlist (extension to content type),
+  shared by the store, the search-twin builder (`ai/twin.ts`), and the upload form's file picker.
 - `src/lib/types.ts` contains shared shapes, `DEFAULT_*` fallbacks, `DOCUMENT_CATEGORIES`, the
   `Visibility` type, fail-closed `SiteSettings.liveVotingEnabled`, admin-write input normalizers
   (`normalize{Announcement,Property,Owner,Resolution,Election,Candidate,Proxy}Input`,
@@ -355,6 +357,13 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   the per-Lot section list is built from `fetchMemberLotAddresses` rather than from either record
   read, because both omit a Lot with nothing on it and a page driven by them would drop the home of
   a reader who owes nothing and has no violations.
+- `documents/store.ts`: the one place a document is stored or deleted. `storeDocument` enforces the
+  allowlist and 25 MiB cap, exact/near-duplicate checks, then R2 original, search twin, D1 insert
+  (R2 objects removed if the insert fails). `deleteDocuments` deletes D1 rows first in one batch
+  (optionally with a caller's extra statements), then R2 with one inline retry, and refuses with
+  `document-cited` when evidence records cite a document. Used by `/api/admin/documents` and
+  `/api/admin/duplicates`; the Drive import (#290) will reuse it. Wide IN-lists go through
+  `db/chunked.ts` (`chunkedIn`, D1's 100-bound-parameter limit).
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
   Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible
