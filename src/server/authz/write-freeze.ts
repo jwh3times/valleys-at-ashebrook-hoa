@@ -35,7 +35,7 @@ export function isMutatingMethod(method: string): boolean {
 /**
  * How much of a path the freeze covers.
  *
- *  `exempt`     — never frozen, even for a mutation. Two paths only; see below.
+ *  `exempt`     — never frozen, even for a mutation. Three paths only; see below.
  *  `everything` — frozen on every verb, reads included.
  *  `mutations`  — frozen on POST/PUT/PATCH/DELETE; reads stay live.
  */

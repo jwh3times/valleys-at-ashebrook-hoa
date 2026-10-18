@@ -50,20 +50,54 @@ async function tokenRequest(form: Record<string, string>) {
 }
 
 /**
+ * Google issued tokens, but its id_token isn't one this client can trust. The
+ * grant still exists at Google, so the caller holds `token` to revoke it.
+ */
+export class GoogleClaimsError extends Error {
+  constructor(readonly token: string) {
+    super('Google id_token is not valid for this client');
+    this.name = 'GoogleClaimsError';
+  }
+}
+
+const GOOGLE_ISSUERS = new Set([
+  'https://accounts.google.com',
+  'accounts.google.com',
+]);
+
+/**
  * The `sub` and `email` claims of an id_token. The token came straight from
  * Google's token endpoint over TLS, so OpenID Connect lets the client trust it
- * without checking the signature (Core §3.1.3.7).
+ * without checking the signature — but it must still check the issuer and
+ * that the audience is this client (Core §3.1.3.7). Null when it fails.
  */
-function idTokenClaims(idToken: unknown): { sub: string; email: string } {
-  if (typeof idToken !== 'string') throw new Error('Google sent no id_token');
-  const payload = idToken.split('.')[1] ?? '';
-  const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-  const claims = JSON.parse(
-    atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)),
-  ) as { sub?: unknown; email?: unknown };
-  if (typeof claims.sub !== 'string' || typeof claims.email !== 'string')
-    throw new Error('Google id_token lacks sub or email');
-  return { sub: claims.sub, email: claims.email };
+function idTokenClaims(
+  idToken: unknown,
+  clientId: string,
+): { sub: string; email: string } | null {
+  if (typeof idToken !== 'string') return null;
+  try {
+    const b64 = (idToken.split('.')[1] ?? '')
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const binary = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const claims = JSON.parse(new TextDecoder().decode(bytes)) as {
+      iss?: unknown;
+      aud?: unknown;
+      sub?: unknown;
+      email?: unknown;
+    };
+    if (typeof claims.iss !== 'string' || !GOOGLE_ISSUERS.has(claims.iss))
+      return null;
+    const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+    if (!audiences.includes(clientId)) return null;
+    if (typeof claims.sub !== 'string' || typeof claims.email !== 'string')
+      return null;
+    return { sub: claims.sub, email: claims.email };
+  } catch {
+    return null;
+  }
 }
 
 export async function exchangeCode(
@@ -78,11 +112,15 @@ export async function exchangeCode(
     client_id: config.clientId,
     client_secret: config.clientSecret,
   });
-  const { sub, email } = idTokenClaims(body.id_token);
+  const accessToken = text(body.access_token);
+  const refreshToken =
+    typeof body.refresh_token === 'string' ? body.refresh_token : null;
+  const claims = idTokenClaims(body.id_token, config.clientId);
+  if (!claims) throw new GoogleClaimsError(refreshToken ?? accessToken);
+  const { sub, email } = claims;
   return {
-    accessToken: text(body.access_token),
-    refreshToken:
-      typeof body.refresh_token === 'string' ? body.refresh_token : null,
+    accessToken,
+    refreshToken,
     scope: typeof body.scope === 'string' ? body.scope.split(' ') : [],
     googleSub: sub,
     googleEmail: email,

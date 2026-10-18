@@ -19,13 +19,26 @@ export async function readConnection(env: Env) {
 }
 
 /**
+ * The row a request read, identified for a later compare-and-swap. `revision`
+ * alone is not enough: disconnect deletes the row, so the next connect starts
+ * again at revision 1. The sealed credential is unique to one connection (each
+ * seal draws a fresh random IV), so matching it as well means a request that
+ * read an old connection can never write to a newer one.
+ */
+export interface ConnectionVersion {
+  revision: number;
+  sealed: string;
+}
+
+/**
  * Record the connection broken and clear its credential, as a compare-and-swap
- * on `revision`: a request that read the row before a reconnect or disconnect
- * cannot overwrite the newer state. Returns whether this call marked it.
+ * on the version that was read: a request that read the row before a
+ * reconnect or disconnect cannot overwrite the newer state. Returns whether
+ * this call marked it.
  */
 export async function markBroken(
   env: Env,
-  input: { revision: number; reason: string; actor: string },
+  input: ConnectionVersion & { reason: string; actor: string },
 ): Promise<boolean> {
   const now = Date.now();
   const [update] = await env.DATABASE.batch([
@@ -33,15 +46,21 @@ export async function markBroken(
       `UPDATE drive_connection
           SET status = 'broken', refresh_token_sealed = NULL, broken_at = ?,
               broken_reason = ?, revision = revision + 1
-        WHERE id = 1 AND status = 'connected' AND revision = ?`,
-    ).bind(now, input.reason, input.revision),
+        WHERE id = 1 AND status = 'connected' AND revision = ?
+          AND refresh_token_sealed = ?`,
+    ).bind(now, input.reason, input.revision, input.sealed),
     recordDriveConnectionChange(env, 'connected', 'broken', input.actor, now),
   ]);
   return (update.meta.changes ?? 0) === 1;
 }
 
 export type MintResult =
-  | { kind: 'minted'; accessToken: string; expiresIn: number; revision: number }
+  | {
+      kind: 'minted';
+      accessToken: string;
+      expiresIn: number;
+      version: ConnectionVersion;
+    }
   | { kind: 'unavailable' }
   | { kind: 'broken' };
 
@@ -60,6 +79,7 @@ export async function mintAccessToken(
   if (!row || row.status !== 'connected' || !row.refreshTokenSealed)
     return { kind: 'unavailable' };
 
+  const version = { revision: row.revision, sealed: row.refreshTokenSealed };
   let refreshToken: string;
   try {
     refreshToken = await unsealRefreshToken(
@@ -71,7 +91,7 @@ export async function mintAccessToken(
     // Sealed under a key this Worker no longer holds (spec review Q8: key
     // rotation is a reconnect).
     const marked = await markBroken(env, {
-      revision: row.revision,
+      ...version,
       reason: 'key-unavailable',
       actor,
     });
@@ -80,11 +100,11 @@ export async function mintAccessToken(
 
   try {
     const minted = await refreshAccessToken(config, refreshToken);
-    return { kind: 'minted', ...minted, revision: row.revision };
+    return { kind: 'minted', ...minted, version };
   } catch (err) {
     if (err instanceof GoogleTokenError && err.isPermanent) {
       const marked = await markBroken(env, {
-        revision: row.revision,
+        ...version,
         reason: err.code ?? 'invalid_grant',
         actor,
       });

@@ -704,8 +704,9 @@ Slices 2 and 3 each leave human steps, filed as `ready-for-human` follow-ups by 
   `https://ashebrookresidents.com/api/admin/drive/callback`;
 - create the production Picker key, restricted to `https://ashebrookresidents.com/*` and
   `https://docs.google.com/*` and to the Picker API;
+- apply the migrations, **before** setting any secret: with the secrets set and `0040` missing,
+  the Drive routes answer 500 and the daily keepalive fails every run;
 - generate `DRIVE_TOKEN_KEY` and set the five secrets;
-- apply the migrations;
 - connect;
 - delete the prototype client, the prototype key, the prototype 1Password item and the test
   account.

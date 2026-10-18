@@ -10,6 +10,7 @@ import { getDb } from '../../../../server/db/client';
 import { driveConnection } from '../../../../server/db/schema';
 import { driveConfig, notConfigured } from '../../../../server/drive/config';
 import {
+  GoogleClaimsError,
   exchangeCode,
   grantsDriveFile,
   revokeToken,
@@ -31,7 +32,8 @@ type Outcome =
   | 'drive-not-granted'
   | 'no-refresh-token'
   | 'wrong-account'
-  | 'conflict';
+  | 'conflict'
+  | 'save-failed';
 
 /** Back to the admin panel, which reads `drive` to explain what happened. */
 function finish(outcome: Outcome): Response {
@@ -94,6 +96,7 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
   const code = url.searchParams.get('code');
   if (!code) return finish('expired');
 
+  const db = getDb(env);
   let granted;
   try {
     granted = await exchangeCode(config, {
@@ -103,10 +106,19 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
     });
   } catch (err) {
     console.error('[drive] code exchange failed', err);
+    // Google issued a grant whose id_token this client can't trust. The
+    // account is unknown, so revoke it only when no connection is stored —
+    // revoking the stored account's own grant would kill that connection.
+    if (err instanceof GoogleClaimsError) {
+      const [stored] = await db
+        .select({ id: driveConnection.id })
+        .from(driveConnection)
+        .where(eq(driveConnection.id, 1));
+      if (!stored) await revokeToken(err.token);
+    }
     return finish('google-error');
   }
 
-  const db = getDb(env);
   const readStored = async () =>
     (
       await db
@@ -163,29 +175,40 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
       ]);
       written = true;
     } catch (err) {
-      // A row appeared since the read: another connect won the race.
-      if (!/UNIQUE|PRIMARY KEY|constraint/i.test(String(err))) throw err;
+      // A row appeared since the read: another connect won the race. Any
+      // other failure means the grant was not saved, so it must not stay
+      // live at Google either.
+      if (!/UNIQUE constraint failed: drive_connection\.id/.test(String(err))) {
+        console.error('[drive] saving the connection failed', err);
+        return refuse('save-failed');
+      }
     }
   } else {
-    const [update] = await env.DATABASE.batch([
-      env.DATABASE.prepare(
-        `UPDATE drive_connection
+    let update: D1Result;
+    try {
+      [update] = await env.DATABASE.batch([
+        env.DATABASE.prepare(
+          `UPDATE drive_connection
             SET status = 'connected', refresh_token_sealed = ?, key_version = 1,
                 google_email = ?, granted_scope = ?, connected_by = ?,
                 connected_at = ?, broken_at = NULL, broken_reason = NULL,
                 revision = revision + 1
           WHERE id = 1 AND revision = ? AND google_sub = ?`,
-      ).bind(
-        sealed,
-        granted.googleEmail,
-        scope,
-        ctx.userId,
-        now,
-        started.revision,
-        granted.googleSub,
-      ),
-      record(stored.status),
-    ]);
+        ).bind(
+          sealed,
+          granted.googleEmail,
+          scope,
+          ctx.userId,
+          now,
+          started.revision,
+          granted.googleSub,
+        ),
+        record(stored.status),
+      ]);
+    } catch (err) {
+      console.error('[drive] saving the connection failed', err);
+      return refuse('save-failed');
+    }
     written = (update.meta.changes ?? 0) === 1;
   }
   if (!written) return refuse('conflict');

@@ -167,6 +167,33 @@ describe('the Drive keepalive', () => {
     expect(await history()).toEqual([]);
   });
 
+  it('never breaks a new connection made after a disconnect while Google answered', async () => {
+    // Disconnect deletes the row, so the next connect starts again at
+    // revision 1: revision alone cannot tell the old connection from the new.
+    configure();
+    await seedConnected();
+    const newer = await sealRefreshToken(KEY, 'newer-refresh-token', {
+      googleSub: 'google-sub-1',
+      keyVersion: 1,
+    });
+    stubRefresh(dead, async () => {
+      await env.DATABASE.exec('DELETE FROM drive_connection');
+      await env.DATABASE.prepare(
+        `INSERT INTO drive_connection (id, status, google_sub, google_email, refresh_token_sealed, key_version, granted_scope, connected_by, connected_at)
+         VALUES (1, 'connected', 'google-sub-1', 'association@example.test', ?, 1, 'openid email drive.file', 'sysadmin-1', 2)`,
+      )
+        .bind(newer)
+        .run();
+    });
+    expect(await driveKeepalive(env)).toBe('skipped');
+    expect(await row()).toMatchObject({
+      status: 'connected',
+      refresh_token_sealed: newer,
+      revision: 1,
+    });
+    expect(await history()).toEqual([]);
+  });
+
   it('never overwrites a connection that changed while Google answered', async () => {
     configure();
     await seedConnected();

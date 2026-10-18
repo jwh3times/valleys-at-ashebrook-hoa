@@ -56,6 +56,7 @@ export const DRIVE_OUTCOME_MESSAGES: Record<string, string> = {
     "Google didn't return a lasting credential. Connect again; if it repeats, remove the app from the Google account's third-party connections first.",
   'wrong-account':
     'This connection belongs to a different Google account. Disconnect it first to connect another account.',
+  'save-failed': "The site couldn't save the connection. Try again.",
   conflict:
     'The connection changed while Google was asked. Check its status below and try again if needed.',
 };

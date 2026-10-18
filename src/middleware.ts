@@ -251,7 +251,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     // /api/files/*, /api/verify/*, /api/auth/*, /api/bootstrap/board. The freeze
     // is deny-by-default, so this branch is what catches a mutating surface
     // nobody thought to name — /api/verify/* today, whatever ships next
-    // otherwise. freezePolicyFor decides; the two genuine exemptions live there.
+    // otherwise. freezePolicyFor decides; the three genuine exemptions live there.
     response = (await writeFreezeError(env, context.request)) ?? (await next());
   }
   return finalizeResponse(response);

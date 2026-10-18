@@ -22,9 +22,9 @@ export async function driveKeepalive(
   if (result.kind === 'unavailable') return 'skipped';
   if (result.kind === 'broken') return 'broken';
   await env.DATABASE.prepare(
-    'UPDATE drive_connection SET last_refreshed_at = ? WHERE id = 1 AND revision = ?',
+    'UPDATE drive_connection SET last_refreshed_at = ? WHERE id = 1 AND revision = ? AND refresh_token_sealed = ?',
   )
-    .bind(Date.now(), result.revision)
+    .bind(Date.now(), result.version.revision, result.version.sealed)
     .run();
   return 'refreshed';
 }

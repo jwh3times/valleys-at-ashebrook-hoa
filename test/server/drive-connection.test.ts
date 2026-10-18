@@ -12,6 +12,7 @@ import {
 import { users } from '../../src/server/db/auth-schema';
 import { getDb } from '../../src/server/db/client';
 import { callerContext } from './caller-context';
+import { pauseNextBatch } from './fixtures';
 
 // #290 slice 2 (spec 2026-10-18 decision 1, ADR 0027): the association's
 // Google Drive connection — its feature gate, status, connect, callback,
@@ -276,13 +277,24 @@ describe('GET /api/admin/drive/callback', () => {
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
   /** A fake id_token; the callback reads claims from Google's own response. */
-  function idToken(sub: string, email: string) {
+  function idToken(
+    sub: string,
+    email: string,
+    claims: Record<string, unknown> = {},
+  ) {
     const part = (o: object) =>
       btoa(JSON.stringify(o))
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '');
-    return `${part({ alg: 'none' })}.${part({ sub, email, email_verified: true })}.sig`;
+    return `${part({ alg: 'none' })}.${part({
+      iss: 'https://accounts.google.com',
+      aud: DRIVE_SECRETS.DRIVE_CLIENT_ID,
+      sub,
+      email,
+      email_verified: true,
+      ...claims,
+    })}.sig`;
   }
 
   interface GoogleReply {
@@ -291,6 +303,7 @@ describe('GET /api/admin/drive/callback', () => {
     scope?: string;
     refreshToken?: string | null;
     tokenStatus?: number;
+    claims?: Record<string, unknown>;
   }
 
   /** Stub Google's token and revoke endpoints; returns the calls made. */
@@ -321,6 +334,7 @@ describe('GET /api/admin/drive/callback', () => {
             id_token: idToken(
               reply.sub ?? 'google-sub-1',
               reply.email ?? 'association@example.test',
+              reply.claims,
             ),
           });
         }
@@ -592,6 +606,50 @@ describe('GET /api/admin/drive/callback', () => {
     });
     expect(await history()).toEqual([]);
     expect(calls.some((c) => c.url.endsWith('/revoke'))).toBe(false);
+  });
+
+  it('loses cleanly when another connect lands between its check and its insert', async () => {
+    configure();
+    const { state, cookie } = await begin();
+    const calls = stubGoogle();
+    const paused = pauseNextBatch();
+    const pending = finish(state, cookie);
+    await paused.reached;
+    paused.restore();
+    await seedConnection({ connected_by: 'sysadmin-2' });
+    paused.release();
+    const res = await pending;
+    expect(outcome(res)).toBe('conflict');
+    expect(await connectionRow()).toMatchObject({ connected_by: 'sysadmin-2' });
+    expect(await history()).toEqual([]);
+    expect(calls.some((c) => c.url.endsWith('/revoke'))).toBe(false);
+  });
+
+  it('revokes the new grant when the site cannot save it', async () => {
+    configure();
+    const { state, cookie } = await begin();
+    const calls = stubGoogle();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(env.DATABASE, 'batch').mockRejectedValueOnce(
+      new Error('D1 unavailable'),
+    );
+    const res = await finish(state, cookie);
+    expect(outcome(res)).toBe('save-failed');
+    expect(await connectionRow()).toBeNull();
+    expect(
+      calls.find((c) => c.url.endsWith('/revoke'))?.body.get('token'),
+    ).toBe('new-refresh-token');
+  });
+
+  it('refuses, and revokes, a grant whose id_token names another client', async () => {
+    configure();
+    const { state, cookie } = await begin();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const calls = stubGoogle({ claims: { aud: 'some-other-client' } });
+    const res = await finish(state, cookie);
+    expect(outcome(res)).toBe('google-error');
+    expect(await connectionRow()).toBeNull();
+    expect(calls.some((c) => c.url.endsWith('/revoke'))).toBe(true);
   });
 
   it('is frozen during a write freeze', async () => {

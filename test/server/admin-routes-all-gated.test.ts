@@ -15,7 +15,9 @@ import { describe, it, expect, beforeAll } from 'vitest';
  * bypasses middleware entirely, so this proves the in-handler guard is really
  * there rather than relying on the production backstop.
  */
-const modules = import.meta.glob('../../src/pages/api/admin/*.ts', {
+// Recursive: admin routes may live in subfolders (the Drive routes are the
+// first, under admin/drive/), and a flat glob would silently skip them.
+const modules = import.meta.glob('../../src/pages/api/admin/**/*.ts', {
   eager: true,
 }) as Record<string, Record<string, unknown>>;
 
@@ -34,7 +36,10 @@ describe('every admin route rejects an anonymous caller', () => {
 
   const cases: { name: string; verb: string; handler: unknown }[] = [];
   for (const [path, mod] of Object.entries(modules)) {
-    const name = path.split('/').pop() ?? path;
+    // The route path relative to /api/admin, so admin/drive/status and a
+    // future top-level admin/status stay distinct.
+    const name =
+      path.split('/src/pages/api/admin/')[1]?.replace(/\.ts$/, '') ?? path;
     for (const verb of VERBS) {
       const handler = mod[verb];
       if (typeof handler === 'function') cases.push({ name, verb, handler });
@@ -43,6 +48,17 @@ describe('every admin route rejects an anonymous caller', () => {
 
   it('discovered a plausible number of verbs', () => {
     expect(cases.length).toBeGreaterThanOrEqual(30);
+  });
+
+  it('includes the admin routes that live in subfolders', () => {
+    const names = cases.map((c) => `${c.name} ${c.verb}`);
+    for (const route of [
+      'drive/status GET',
+      'drive/connect GET',
+      'drive/callback GET',
+      'drive/disconnect POST',
+    ])
+      expect(names).toContain(route);
   });
 
   for (const { name, verb, handler } of cases) {
