@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pathToDocMeta } from './doc-tiers.ts';
 import { resolvePrivatePath } from './private-root.ts';
+import { requireWriteFreeze } from './wrangler-d1.ts';
 
 export interface DocumentEntry {
   id: string;
@@ -208,6 +209,15 @@ async function main() {
     execFileSync(process.execPath, [wranglerBin, ...args], {
       stdio: 'inherit',
     });
+  const refusal = requireWriteFreeze((args) =>
+    execFileSync(process.execPath, [wranglerBin, ...args], {
+      encoding: 'utf8',
+    }),
+  );
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
+  }
   const total = entries.length;
 
   // Resume support: record every uploaded key so a re-run skips what's already

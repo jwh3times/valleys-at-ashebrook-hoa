@@ -287,8 +287,9 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `reports.ts` purges de-anonymized saved-report text after 90 days and supplies the statement that
   performs the same purge atomically with roster redactions.
 - `scheduled.ts`: `runScheduledJobs(env)`, the body of the Worker's daily `0 7 * * *` cron trigger;
-  it independently runs verification cleanup, saved-report cleanup, ADR 0022 invariants, and the
-  Drive keepalive (a broken connection is logged, not a failure) — see
+  it independently runs verification cleanup, saved-report cleanup, ADR 0022 invariants, the
+  Drive keepalive (a broken connection is logged, not a failure), and the R2 orphan sweep
+  (over-threshold or a throw fails the run; it logs counts and document ids, never keys) — see
   **Deploy** below.
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
@@ -368,6 +369,15 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   `document-cited` when evidence records cite a document. Used by `/api/admin/documents` and
   `/api/admin/duplicates`; the Drive import (#290 slice 3) also uses it. Wide IN-lists go through
   `db/chunked.ts` (`chunkedIn`, D1's 100-bound-parameter limit).
+- `documents/sweep.ts`: `sweepR2Orphans(env, opts)`, the daily R2 orphan sweep (#442). Lists only
+  `documents/` and `rag/`; a `documents/<id>/<name>` object is an orphan when no `documents` row has
+  that exact `r2_key`, a `rag/<id>.md` twin when no row has that id; other keys are never touched.
+  Objects younger than 7 days (R2 `uploaded`) are spared. Report-only unless the optional Worker var
+  `R2_SWEEP_DELETE` is exactly `"true"`. When deleting it skips during the write freeze (freeze read
+  before rows, both after the listing), deletes nothing and returns `over-threshold` past
+  `ORPHAN_THRESHOLD` (provisional 200), deletes at most 100 per run, and throws past 20 list pages
+  per prefix. Any code that uploads to R2 before writing its row (the import scripts) must run under
+  the freeze for this reason.
 - `drive/`: the association's Google Drive connection (#290 slice 2, ADR 0027) — the site's first
   stored third-party credential. `config.ts` (`driveConfig`) returns null unless all five `DRIVE_*`
   secrets are set and the key decodes to 32 bytes; every route then 404s and the keepalive skips.
