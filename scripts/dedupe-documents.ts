@@ -10,6 +10,7 @@ import {
   type DupeGroup,
 } from '../src/server/content/dedupe.ts';
 import type { DocumentEntry } from './import-documents.ts';
+import { ragKeyFor } from './corpus-import-meta.ts';
 import { resolvePrivatePath } from './private-root.ts';
 
 function sqlStr(v: string): string {
@@ -38,6 +39,29 @@ export function planExactDeletions(
       (x): x is { keepId: string; deleteIds: string[] } =>
         x !== null && x.deleteIds.length > 0,
     );
+}
+
+/**
+ * What removing the duplicates `deleteIds` takes: one statement deleting their
+ * rows, then each one's original and search twin (#442). The rows go first,
+ * as in the app's own delete: if D1 refuses them (a recorded change cites one
+ * as evidence), nothing has been removed from R2.
+ */
+export function planDuplicateRemoval(
+  entries: DocumentEntry[],
+  deleteIds: string[],
+): { deleteRowsSql: string | null; r2Keys: string[] } {
+  if (deleteIds.length === 0) return { deleteRowsSql: null, r2Keys: [] };
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  return {
+    deleteRowsSql: `DELETE FROM documents WHERE id IN (${deleteIds.map(sqlStr).join(', ')});\n`,
+    // An id missing from the manifest still loses its twin; its original is
+    // left for the R2 orphan sweep, since only the manifest knows its key.
+    r2Keys: deleteIds.flatMap((id) => {
+      const entry = byId.get(id);
+      return entry ? [entry.r2Key, ragKeyFor(id)] : [ragKeyFor(id)];
+    }),
+  };
 }
 
 async function main() {
@@ -140,35 +164,35 @@ async function main() {
     hashSqlPath,
   ]);
 
-  const byId = new Map(entries.map((e) => [e.id, e]));
-  for (const id of deletedIds) {
-    const entry = byId.get(id);
-    if (!entry) continue;
-    console.log(`Deleting R2 object for ${entry.filename} (${id})`);
+  const removal = planDuplicateRemoval(entries, [...deletedIds]);
+  if (removal.deleteRowsSql) {
+    const delSqlPath = resolvePrivatePath(['dedupe-delete.sql']);
+    fs.writeFileSync(delSqlPath, removal.deleteRowsSql);
+    console.log('Deleting duplicate rows from D1...');
+    try {
+      runWrangler([
+        'd1',
+        'execute',
+        'ashebrook-hoa',
+        '--remote',
+        '--file',
+        delSqlPath,
+      ]);
+    } catch (err) {
+      console.error(
+        'D1 refused the delete, so nothing was removed from R2. A recorded change may cite one of these documents as evidence; resolve it in /admin -> Duplicates instead.',
+      );
+      throw err;
+    }
+  }
+  for (const key of removal.r2Keys) {
+    console.log(`Deleting R2 object ${key}`);
     runWrangler([
       'r2',
       'object',
       'delete',
-      `ashebrook-hoa-docs/${entry.r2Key}`,
+      `ashebrook-hoa-docs/${key}`,
       '--remote',
-    ]);
-  }
-
-  if (deletedIds.size > 0) {
-    const ids = [...deletedIds].map((id) => sqlStr(id)).join(', ');
-    const delSqlPath = resolvePrivatePath(['dedupe-delete.sql']);
-    fs.writeFileSync(
-      delSqlPath,
-      `DELETE FROM documents WHERE id IN (${ids});\n`,
-    );
-    console.log('Deleting duplicate rows from D1...');
-    runWrangler([
-      'd1',
-      'execute',
-      'ashebrook-hoa',
-      '--remote',
-      '--file',
-      delSqlPath,
     ]);
   }
 

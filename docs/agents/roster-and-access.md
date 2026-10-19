@@ -64,6 +64,11 @@ freeze is on; and Drive disconnect (#290, ADR 0027) ends the site's stored third
 which must never wait for a freeze to lift. `connect` and `callback` are GETs that write, so they
 check `isWriteFrozen` themselves.
 
+Not every freeze reader is a request guard: the daily R2 orphan sweep (`documents/sweep.ts`, #442)
+checks the same switch and deletes nothing while it is on, still reporting. The `docs:import` and
+`corpus:import` scripts refuse `--commit` unless production's freeze is on (`requireWriteFreeze` in
+`scripts/wrangler-d1.ts`, fail-closed), since they upload to R2 before writing rows.
+
 `writeFreezeError(env, request)` takes no scope argument — it derives coverage from the request's
 own path, so no call site can hold a stale opinion about what its surface freezes, and middleware
 and the per-route guards cannot drift. It is called from `requireBoard`, `requireMemberApi`,

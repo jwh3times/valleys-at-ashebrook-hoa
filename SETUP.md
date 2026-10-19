@@ -266,6 +266,15 @@ Document archive files and generated manifests belong under the configured priva
 in §5. They may live outside the public checkout through `ASHEBROOK_PRIVATE_ROOT`; leaving it unset
 continues to use `private/`.
 
+**Imports run under the write freeze.** `docs:import` and `corpus:import` upload to R2 first and
+write their D1 rows only at the end, so mid-run the bucket holds files no row points at yet. The
+daily R2 orphan sweep never deletes while the operator write freeze is on, so both scripts refuse
+`--commit` unless it is on. Turn the freeze on before committing (the private operator runbook
+has the procedure), and turn it off only once the import has finished. If you turn it off with an
+import still unfinished, delete the script's private resume file (`documents-uploaded.json` or
+`rag_corpus/import-uploaded.json`) before resuming, so files the sweep has since removed are
+uploaded again.
+
 ```bash
 npm run docs:import
 # Review the private manifest and proposed visibility tiers.
@@ -283,7 +292,9 @@ npm run docs:dedupe
 npm run docs:dedupe -- --commit
 ```
 
-The cleanup script auto-resolves only same-tier exact duplicates. Cross-tier exact groups and
+The cleanup script auto-resolves only same-tier exact duplicates. It deletes their D1 rows first,
+then each one's file and search twin; if D1 refuses (a recorded change cites one of them as
+evidence), nothing is removed from R2. Cross-tier exact groups and
 near-duplicate groups are left for board review in `/admin` -> **Duplicates**.
 
 ### Importing the RAG/Download Corpus
