@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   chunkStatements,
   parseD1Output,
+  requireWriteFreeze,
+  WRITE_FREEZE_QUERY,
   withRetry,
 } from '../../scripts/wrangler-d1';
 
@@ -190,5 +192,49 @@ describe('withRetry', () => {
     const fn = vi.fn(() => 42);
     expect(withRetry(fn, 3)).toBe(42);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// #442: the operator imports write R2 first and their D1 rows only at the
+// end, so `--commit` runs only under the write freeze, which holds the R2
+// orphan sweep's deletion off until the import has finished.
+describe('requireWriteFreeze', () => {
+  const answer = (rows: object[]) =>
+    JSON.stringify([{ results: rows, success: true, meta: {} }]);
+
+  it('reads the freeze from remote D1 through the query API', () => {
+    const run = vi.fn(() => answer([{ value: 'on' }]));
+    requireWriteFreeze(run);
+    expect(run).toHaveBeenCalledWith([
+      'd1',
+      'execute',
+      'ashebrook-hoa',
+      '--remote',
+      '--json',
+      '--command',
+      WRITE_FREEZE_QUERY,
+    ]);
+  });
+
+  it('allows the commit while the freeze is on', () => {
+    expect(requireWriteFreeze(() => answer([{ value: 'on' }]))).toBeNull();
+  });
+
+  it.each([
+    ['the freeze is off', answer([{ value: 'off' }])],
+    ['the freeze has never been set', answer([])],
+    ['wrangler answers with an import summary', importSummary],
+    ['wrangler answers with an error', '{"error":{"text":"no such table"}}'],
+    ['wrangler prints no JSON', 'Authentication error'],
+  ])('refuses the commit when %s', (_, output) => {
+    expect(requireWriteFreeze(() => output)).toMatch(/write freeze/);
+  });
+
+  it('refuses the commit when the freeze cannot be read', () => {
+    expect(
+      requireWriteFreeze(() => {
+        throw new Error('spawn failed');
+      }),
+    ).toMatch(/could not read the write freeze: spawn failed/);
   });
 });

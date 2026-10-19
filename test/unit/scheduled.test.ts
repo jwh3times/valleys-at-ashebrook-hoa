@@ -4,6 +4,7 @@ const cleanupVerificationState = vi.hoisted(() => vi.fn());
 const cleanupSavedReportContent = vi.hoisted(() => vi.fn());
 const runInvariants = vi.hoisted(() => vi.fn());
 const driveKeepalive = vi.hoisted(() => vi.fn());
+const sweepR2Orphans = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/server/cleanup/verification', () => ({
   cleanupVerificationState,
@@ -14,6 +15,8 @@ vi.mock('../../src/server/cleanup/reports', () => ({
 }));
 
 vi.mock('../../src/server/drive/keepalive', () => ({ driveKeepalive }));
+
+vi.mock('../../src/server/documents/sweep', () => ({ sweepR2Orphans }));
 
 vi.mock('../../src/server/db/invariants', async (importOriginal) => ({
   // formatInvariantRun is pure and worth exercising for real — the log lines
@@ -59,6 +62,13 @@ const VIOLATED = run({
   healthy: false,
 });
 
+const NO_ORPHANS = {
+  mode: 'report-only',
+  documents: [],
+  twins: [],
+  deleted: 0,
+};
+
 describe('the daily scheduled jobs', () => {
   beforeEach(() => {
     cleanupVerificationState.mockReset();
@@ -67,6 +77,8 @@ describe('the daily scheduled jobs', () => {
     runInvariants.mockReset();
     driveKeepalive.mockReset();
     driveKeepalive.mockResolvedValue('skipped');
+    sweepR2Orphans.mockReset();
+    sweepR2Orphans.mockResolvedValue(NO_ORPHANS);
     vi.restoreAllMocks();
   });
 
@@ -80,6 +92,47 @@ describe('the daily scheduled jobs', () => {
     expect(cleanupSavedReportContent).toHaveBeenCalledWith(env);
     expect(runInvariants).toHaveBeenCalledWith(env);
     expect(driveKeepalive).toHaveBeenCalledWith(env);
+    expect(sweepR2Orphans).toHaveBeenCalledWith(env);
+  });
+
+  it('still runs the other jobs when the R2 orphan sweep fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    sweepR2Orphans.mockRejectedValue(
+      new Error('300 orphans exceed the sanity threshold of 200'),
+    );
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: r2-orphan-sweep',
+    );
+    expect(cleanupVerificationState).toHaveBeenCalledWith(env);
+    expect(cleanupSavedReportContent).toHaveBeenCalledWith(env);
+    expect(runInvariants).toHaveBeenCalledWith(env);
+    expect(driveKeepalive).toHaveBeenCalledWith(env);
+  });
+
+  it('logs the orphan report by document id, without failing the run', async () => {
+    // Ids only: a key ends in the filename, and a board filename can name a
+    // resident.
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    sweepR2Orphans.mockResolvedValue({
+      mode: 'report-only',
+      documents: ['d-1'],
+      twins: ['t-1', 't-2'],
+      deleted: 0,
+    });
+
+    await expect(runScheduledJobs(env)).resolves.toBeUndefined();
+    expect(log.mock.calls.map((c) => String(c[0]))).toEqual(
+      expect.arrayContaining([
+        '[r2-orphan-sweep] report-only: 1 orphaned file(s), 2 orphaned twin(s), 0 deleted',
+        '[r2-orphan-sweep] orphaned files: d-1',
+        '[r2-orphan-sweep] orphaned twins: t-1, t-2',
+      ]),
+    );
   });
 
   it('still runs the other jobs when the Drive keepalive fails', async () => {

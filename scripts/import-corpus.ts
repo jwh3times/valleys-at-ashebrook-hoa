@@ -10,6 +10,7 @@ import {
   type ManifestEntry,
 } from './corpus-import-meta.ts';
 import { resolvePrivatePath } from './private-root.ts';
+import { requireWriteFreeze } from './wrangler-d1.ts';
 
 const HOA = resolvePrivatePath(['HOA_files']);
 const CORPUS = resolvePrivatePath(['rag_corpus']);
@@ -97,6 +98,14 @@ async function main() {
       `\nReview the per-document tiers in ${MANIFEST} (especially homeowner/board), then re-run with \`-- --commit\` (add \`--wipe\` to clear the current library first).`,
     );
     return;
+  }
+
+  // R2 is written first and the rows only at the end, and --wipe empties the
+  // table for the whole run: only under the write freeze (#442).
+  const refusal = requireWriteFreeze(runWranglerJson);
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
   }
 
   // --- destructive wipe of the current library (only with --wipe) ---
