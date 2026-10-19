@@ -163,3 +163,45 @@ export function withRetry<T>(
   }
   throw lastError;
 }
+
+export const WRITE_FREEZE_QUERY =
+  "SELECT value FROM cutover_settings WHERE key = 'write_freeze'";
+
+/**
+ * The operator imports' `--commit` preflight (#442): null when production's
+ * write freeze is on, otherwise why the commit is refused.
+ *
+ * The imports write R2 objects first and their D1 rows only at the end, and
+ * `--wipe` leaves the table empty for the whole run. Under the freeze, the R2
+ * orphan sweep reports but deletes nothing, so an interrupted import cannot
+ * lose its uploads. FAIL-CLOSED: anything but a readable `on` refuses.
+ * `run` spawns wrangler with the given arguments and returns its stdout.
+ */
+export function requireWriteFreeze(
+  run: (args: string[]) => string,
+): string | null {
+  let output: string;
+  try {
+    output = run([
+      'd1',
+      'execute',
+      'ashebrook-hoa',
+      '--remote',
+      '--json',
+      '--command',
+      WRITE_FREEZE_QUERY,
+    ]);
+  } catch (error) {
+    const line = String(error instanceof Error ? error.message : error).split(
+      '\n',
+    )[0];
+    return `Refusing --commit: could not read the write freeze: ${line}`;
+  }
+  const parsed = parseD1Output(output);
+  if (parsed.kind !== 'statements' || parsed.statements.length !== 1)
+    return `Refusing --commit: could not read the write freeze (${parsed.kind === 'statements' ? `${parsed.statements.length} results` : `${parsed.kind}: ${parsed.detail}`}).`;
+  const [row] = (parsed.statements[0].results ?? []) as { value?: unknown }[];
+  if (row?.value !== 'on')
+    return 'Refusing --commit: turn the write freeze on first (SETUP.md §7), and off again once the import has finished.';
+  return null;
+}

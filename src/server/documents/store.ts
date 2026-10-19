@@ -170,8 +170,8 @@ export async function storeDocument(
   } catch (err) {
     // R2 was written first, so a refused insert would otherwise leave objects
     // no row points at (#442). Remove them, then let the caller see the error.
-    // An object that still won't delete is logged by key for the orphan sweep.
-    for (const key of written) await deleteObject(env, key);
+    // An object that still won't delete is left for the orphan sweep.
+    for (const key of written) await deleteObject(env, key, id);
     throw err;
   }
 
@@ -227,7 +227,13 @@ async function citationsOf(
   return { citedBy, documentIds: [...documentIds] };
 }
 
-async function deleteObject(env: Env, key: string): Promise<void> {
+/** `documentId` is what a failure logs: a key ends in the filename, and a
+ * board filename can name a resident. */
+async function deleteObject(
+  env: Env,
+  key: string,
+  documentId: string,
+): Promise<void> {
   try {
     await env.DOCS.delete(key);
   } catch {
@@ -236,7 +242,10 @@ async function deleteObject(env: Env, key: string): Promise<void> {
     } catch (err) {
       // No row points at the object any more, so it is unreachable; it stays
       // until the orphan sweep removes it (#442).
-      console.error('[documents] R2 delete failed twice; orphaned', key, err);
+      console.error(
+        `[documents] R2 delete failed twice; left an orphaned ${key.startsWith('rag/') ? 'twin' : 'file'} of document ${documentId}`,
+        err,
+      );
     }
   }
 }
@@ -283,8 +292,8 @@ export async function deleteDocuments(
   }
 
   for (const r of rows) {
-    await deleteObject(env, r.r2Key);
-    await deleteObject(env, `rag/${r.id}.md`); // the AI-index twin (ADR 0009 §1)
+    await deleteObject(env, r.r2Key, r.id);
+    await deleteObject(env, `rag/${r.id}.md`, r.id); // the AI-index twin (ADR 0009 §1)
   }
   return { kind: 'deleted' };
 }

@@ -7,6 +7,33 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-10-19
+
+### Added
+
+- **A daily sweep reports document files that nothing points at (#442).** It lists the
+  `documents/` originals and `rag/` search twins in R2 that are more than 7 days old and that no
+  document row points at, and logs them by document id, never by key, since a filename can name a
+  resident. It never touches any other key. It deletes nothing until `R2_SWEEP_DELETE` is set to
+  `"true"` by a later, reviewed change. Once deletion is on, it never deletes during the write
+  freeze, deletes at most 100 objects a run, and deletes nothing and fails the run when it finds
+  more orphans than a sanity threshold. It runs independently of the other daily jobs.
+
+### Changed
+
+- **`docs:import` and `corpus:import` refuse `--commit` unless the write freeze is on.** Both
+  write R2 first and their D1 rows only at the end, and the sweep never deletes during the freeze,
+  so an interrupted import can't lose its uploads. SETUP.md §7 has the step.
+- **A document whose R2 file could not be deleted is logged by document id rather than by key.**
+
+### Fixed
+
+- **`docs:dedupe` now removes each duplicate's search twin, and deletes rows before files.**
+  Previously it left the `rag/<id>.md` twin behind, and removed the files first, so a duplicate
+  that a recorded change cites could keep a row with no file. Now D1 refuses the delete before
+  anything is removed from R2. `corpus:import --wipe` deletes rows before files for the same
+  reason.
+
 ## [2.6.0] - 2026-10-18
 
 ### Added
@@ -4103,7 +4130,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.1...HEAD
+[2.6.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.0...v2.6.1
 [2.6.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.1...v2.6.0
 [2.5.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.0...v2.5.1
 [2.5.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.4.0...v2.5.0

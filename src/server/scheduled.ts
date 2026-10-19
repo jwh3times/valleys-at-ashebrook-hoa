@@ -2,6 +2,7 @@ import { cleanupVerificationState } from './cleanup/verification';
 import { cleanupSavedReportContent } from './cleanup/reports';
 import { formatInvariantRun, runInvariants } from './db/invariants';
 import { driveKeepalive } from './drive/keepalive';
+import { sweepR2Orphans } from './documents/sweep';
 
 /**
  * The body of the daily `0 7 * * *` cron trigger.
@@ -13,7 +14,7 @@ import { driveKeepalive } from './drive/keepalive';
  *
  * The jobs are independent on purpose: one broken cleanup must not hide a
  * roster invariant violation, stop the other retention sweep, or skip the
- * Drive keepalive. Every job
+ * Drive keepalive or the R2 orphan sweep. Every job
  * always runs, and this throws afterwards if any failed — a partial-success
  * invocation still shows red in the dashboard.
  */
@@ -70,6 +71,34 @@ export async function runScheduledJobs(env: Env): Promise<void> {
   } catch (err) {
     console.error('[drive-keepalive] failed', err);
     failures.push('drive-keepalive');
+  }
+
+  // #442: remove document files and search twins no row points at. Report-only
+  // until R2_SWEEP_DELETE is "true", and it never deletes during the write
+  // freeze. Logged by document id, never by key: a key ends in the filename,
+  // and a board filename can name a resident.
+  try {
+    const sweep = await sweepR2Orphans(env);
+    console.log(
+      `[r2-orphan-sweep] ${sweep.mode}: ${sweep.documents.length} orphaned file(s), ${sweep.twins.length} orphaned twin(s), ${sweep.deleted} deleted`,
+    );
+    if (sweep.documents.length > 0)
+      console.log(
+        `[r2-orphan-sweep] orphaned files: ${sweep.documents.join(', ')}`,
+      );
+    if (sweep.twins.length > 0)
+      console.log(
+        `[r2-orphan-sweep] orphaned twins: ${sweep.twins.join(', ')}`,
+      );
+    if (sweep.mode === 'over-threshold') {
+      console.error(
+        '[r2-orphan-sweep] more orphans than the sanity threshold; deleted nothing',
+      );
+      failures.push('r2-orphan-sweep');
+    }
+  } catch (err) {
+    console.error('[r2-orphan-sweep] failed', err);
+    failures.push('r2-orphan-sweep');
   }
 
   if (failures.length > 0)

@@ -32,6 +32,15 @@ declare namespace Cloudflare {
     DRIVE_PICKER_API_KEY?: string;
     DRIVE_PROJECT_NUMBER?: string;
     DRIVE_TOKEN_KEY?: string;
+    /**
+     * The R2 orphan sweep's deletion switch (#442). Only the literal "true"
+     * deletes; anything else, including unset, reports orphans and deletes
+     * nothing. Turned on by a reviewed change once the reports are checked:
+     * that change sets it under [vars] in wrangler.toml (a dashboard value is
+     * replaced on the next deploy) and deletes this declaration, which the
+     * generated literal type would otherwise conflict with.
+     */
+    R2_SWEEP_DELETE?: string;
     /** Anthropic API key for the admin document assistant (Claude generation). */
     ANTHROPIC_API_KEY: string;
     /**

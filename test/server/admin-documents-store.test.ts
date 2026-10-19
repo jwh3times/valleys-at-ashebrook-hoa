@@ -171,8 +171,12 @@ describe('a store that fails part-way (#442)', () => {
     vi.restoreAllMocks();
     const leftBehind = (await r2Keys()).filter((k) => !before.includes(k));
     expect(leftBehind).toHaveLength(2);
-    for (const key of leftBehind)
-      expect(logged.mock.calls.some((call) => call.includes(key))).toBe(true);
+    const id = /^documents\/([^/]+)\//.exec(
+      leftBehind.find((k) => k.startsWith('documents/'))!,
+    )![1];
+    const lines = logged.mock.calls.map((call) => call.map(String).join(' '));
+    expect(lines.filter((line) => line.includes(id))).toHaveLength(2);
+    expect(lines.some((line) => line.includes('paving'))).toBe(false);
   });
 });
 
@@ -241,7 +245,7 @@ describe('R2 failures after a delete (#442)', () => {
     expect((await adminList()).map((d) => d.id)).not.toContain(id);
   });
 
-  it('still removes the document when R2 keeps failing, and logs the orphaned key', async () => {
+  it('still removes the document when R2 keeps failing, and logs its id but never its filename', async () => {
     await upload('Landscaping bid', 'landscaping.txt');
     const id = await idOf('Landscaping bid');
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -252,8 +256,10 @@ describe('R2 failures after a delete (#442)', () => {
     expect((await adminList()).map((d) => d.id)).not.toContain(id);
     const orphans = (await r2Keys()).filter((k) => k.includes(id));
     expect(orphans).toHaveLength(2);
-    for (const key of orphans)
-      expect(logged.mock.calls.some((call) => call.includes(key))).toBe(true);
+    // A key ends in the filename, and a board filename can name a resident.
+    const lines = logged.mock.calls.map((call) => call.map(String).join(' '));
+    expect(lines.filter((line) => line.includes(id))).toHaveLength(2);
+    expect(lines.some((line) => line.includes('landscaping'))).toBe(false);
   });
 });
 
