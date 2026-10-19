@@ -112,6 +112,26 @@ describe('the daily scheduled jobs', () => {
     expect(driveKeepalive).toHaveBeenCalledWith(env);
   });
 
+  it('fails the run past the sanity threshold, still logging the ids', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    sweepR2Orphans.mockResolvedValue({
+      mode: 'over-threshold',
+      documents: ['d-1'],
+      twins: [],
+      deleted: 0,
+    });
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: r2-orphan-sweep',
+    );
+    expect(log.mock.calls.map((c) => String(c[0]))).toContain(
+      '[r2-orphan-sweep] orphaned files: d-1',
+    );
+  });
+
   it('logs the orphan report by document id, without failing the run', async () => {
     // Ids only: a key ends in the filename, and a board filename can name a
     // resident.

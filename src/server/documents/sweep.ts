@@ -37,8 +37,12 @@ export interface SweepOptions {
 }
 
 export interface SweepResult {
-  /** `frozen`: deletion is on, but the write freeze held it back. */
-  mode: 'report-only' | 'frozen' | 'deleted';
+  /**
+   * `frozen`: deletion is on, but the write freeze held it back.
+   * `over-threshold`: deletion is on, but more orphans than the sanity
+   * threshold were found, so nothing was deleted; the run must fail.
+   */
+  mode: 'report-only' | 'frozen' | 'over-threshold' | 'deleted';
   /** Document ids (the key's id segment) of orphaned `documents/` files. */
   documents: string[];
   /** Document ids of orphaned `rag/<id>.md` twins. */
@@ -82,9 +86,14 @@ export async function sweepR2Orphans(
   const files = (await listPrefix(env, 'documents/', maxPages)).filter(old);
   const twins = (await listPrefix(env, 'rag/', maxPages)).filter(old);
 
-  // Rows and the freeze are read after the listing, the slow part, and just
-  // before anything is deleted: a row or a freeze that lands while the bucket
-  // is listed is respected.
+  // The freeze, then the rows, are read after the listing, the slow part, and
+  // just before anything is deleted, so a freeze or a row that lands while
+  // the bucket is listed is respected. The freeze goes first: an import
+  // writes its rows before the operator ends the freeze, so once the freeze
+  // reads off, the rows read next include them.
+  // Fail-closed: only the literal string turns deletion on.
+  const deleting = env.R2_SWEEP_DELETE === 'true';
+  const frozen = deleting && (await isWriteFrozen(env));
   const { results: rows } = await env.DATABASE.prepare(
     'SELECT id, r2_key FROM documents',
   ).all<{ id: string; r2_key: string }>();
@@ -103,17 +112,11 @@ export async function sweepR2Orphans(
     twins: orphanTwins.map((o) => TWIN_KEY.exec(o.key)![1]),
   };
 
-  // Fail-closed: only the literal string turns deletion on.
-  if (env.R2_SWEEP_DELETE !== 'true')
-    return { mode: 'report-only', ...report, deleted: 0 };
-  if (await isWriteFrozen(env))
-    return { mode: 'frozen', ...report, deleted: 0 };
-
+  if (!deleting) return { mode: 'report-only', ...report, deleted: 0 };
+  if (frozen) return { mode: 'frozen', ...report, deleted: 0 };
   const orphans = [...orphanFiles, ...orphanTwins];
   if (orphans.length > threshold)
-    throw new Error(
-      `${orphans.length} orphans exceed the sanity threshold of ${threshold}; deleted nothing`,
-    );
+    return { mode: 'over-threshold', ...report, deleted: 0 };
 
   const doomed = orphans.slice(0, maxDeletes).map((o) => o.key);
   if (doomed.length > 0) await env.DOCS.delete(doomed);

@@ -90,6 +90,12 @@ export async function runScheduledJobs(env: Env): Promise<void> {
       console.log(
         `[r2-orphan-sweep] orphaned twins: ${sweep.twins.join(', ')}`,
       );
+    if (sweep.mode === 'over-threshold') {
+      console.error(
+        '[r2-orphan-sweep] more orphans than the sanity threshold; deleted nothing',
+      );
+      failures.push('r2-orphan-sweep');
+    }
   } catch (err) {
     console.error('[r2-orphan-sweep] failed', err);
     failures.push('r2-orphan-sweep');

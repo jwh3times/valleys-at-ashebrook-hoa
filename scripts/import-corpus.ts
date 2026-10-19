@@ -122,13 +122,11 @@ async function main() {
     ]);
     const rows: { id: string; r2_key: string }[] =
       JSON.parse(out)[0]?.results ?? [];
+    // Rows first, as in the app's own delete (#442): if D1 refuses (a recorded
+    // change cites a document as evidence), nothing has been removed from R2.
     console.log(
-      `[wipe] deleting ${rows.length} R2 objects (+ rag twins) and all rows…`,
+      `[wipe] deleting all ${rows.length} rows, then their R2 objects (+ rag twins)…`,
     );
-    for (const r of rows) {
-      tryDeleteR2(r.r2_key);
-      tryDeleteR2(ragKeyFor(r.id));
-    }
     runWrangler([
       'd1',
       'execute',
@@ -137,6 +135,10 @@ async function main() {
       '--command',
       'DELETE FROM documents',
     ]);
+    for (const r of rows) {
+      tryDeleteR2(r.r2_key);
+      tryDeleteR2(ragKeyFor(r.id));
+    }
     fs.writeFileSync(UPLOADED, '[]');
   }
 

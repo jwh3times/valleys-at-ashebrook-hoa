@@ -204,12 +204,15 @@ describe('the R2 orphan sweep', () => {
     expect(await keys()).toEqual(['rag/c.md']);
   });
 
-  it('deletes nothing and fails when the orphan count passes the sanity threshold', async () => {
+  it('deletes nothing, and says so with the report, past the sanity threshold', async () => {
     deleting();
     await put('rag/a.md', 'rag/b.md', 'documents/c/c.pdf');
-    await expect(
-      sweepR2Orphans(env, { now: later(), threshold: 2 }),
-    ).rejects.toThrow(/3 orphans exceed the sanity threshold of 2/);
+    expect(await sweepR2Orphans(env, { now: later(), threshold: 2 })).toEqual({
+      mode: 'over-threshold',
+      documents: ['c'],
+      twins: ['a', 'b'],
+      deleted: 0,
+    });
     expect(await keys()).toHaveLength(3);
   });
 
@@ -228,5 +231,44 @@ describe('the R2 orphan sweep', () => {
       sweepR2Orphans(paged, { now: later(), maxPages: 2 }),
     ).rejects.toThrow(/more than 2 pages/);
     expect(await keys()).toHaveLength(3);
+  });
+
+  it('reads every page of the listing', async () => {
+    await put('rag/a.md', 'rag/b.md', 'rag/c.md');
+    const paged = listingWith(async () => {}, 1);
+    expect(
+      await sweepR2Orphans(paged, { now: later(), maxPages: 5 }),
+    ).toMatchObject({ twins: ['a', 'b', 'c'] });
+  });
+
+  it('never deletes a file whose row landed just before the freeze ended', async () => {
+    // An import resumed after the grace writes its rows, and only then does
+    // the operator end the freeze. Reading the freeze first means a sweep
+    // that sees it off reads rows written before it ended.
+    deleting();
+    await freeze();
+    await put('documents/late/a.pdf');
+    const database = new Proxy(env.DATABASE, {
+      get(target, prop) {
+        if (prop !== 'prepare') return Reflect.get(target, prop, target);
+        return (sql: string) => {
+          const statement = target.prepare(sql);
+          if (!sql.trim().endsWith('FROM documents')) return statement;
+          return {
+            all: async () => {
+              const read = await statement.all();
+              await row('late', 'documents/late/a.pdf');
+              await env.DATABASE.exec(
+                "DELETE FROM cutover_settings WHERE key = 'write_freeze'",
+              );
+              return read;
+            },
+          };
+        };
+      },
+    });
+    const racing = { ...env, DATABASE: database } as Env;
+    await sweepR2Orphans(racing, { now: later() });
+    expect(await keys()).toEqual(['documents/late/a.pdf']);
   });
 });
