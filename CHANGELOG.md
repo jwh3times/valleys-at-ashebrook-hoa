@@ -7,6 +7,38 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.6.4] - 2026-10-20
+
+### Fixed
+
+- **The board's document assistant now finds the bylaws and covenants (#305).** Its search
+  ranked homeowner correspondence, checklists and a roster export above the governing documents,
+  so it often saw no bylaws or covenants passage and said the association had none. Each question
+  now also searches the Governing Documents category on its own, and adds up to four passages from
+  it after the usual eight. The assistant is told which governing documents the library holds,
+  with titles pseudonymized like every other title, and is told never to say a listed document is
+  missing: it says instead that the passages it was given don't cover the point. A follow-up
+  question is searched together with the previous question, so "and what about quorum?" keeps
+  its context.
+
+## [2.6.3] - 2026-10-19
+
+### Changed
+
+- Bumped `oxlint` 1.87.0 → 1.88.0 (#449).
+
+## [2.6.2] - 2026-10-19
+
+### Changed
+
+- Bumped ten packages in the npm minor-and-patch group (#450):
+  - `better-auth`, `@better-auth/core` and `@better-auth/drizzle-adapter` 1.7.9 → 1.7.10;
+  - `astro` 7.3.8 → 7.4.0, `@astrojs/cloudflare` 14.3.4 → 14.4.0 and `@astrojs/react`
+    7.0.1 → 7.1.0;
+  - `@anthropic-ai/sdk` 0.134.0 → 0.135.0;
+  - `@cloudflare/workers-types` 5.20261015.1 → 5.20261016.1;
+  - `vitest` and `@vitest/coverage-v8` 4.1.11 → 4.1.12.
+
 ## [2.6.1] - 2026-10-19
 
 ### Added
@@ -4130,7 +4162,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.1...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.4...HEAD
+[2.6.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.3...v2.6.4
+[2.6.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.2...v2.6.3
+[2.6.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.1...v2.6.2
 [2.6.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.0...v2.6.1
 [2.6.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.1...v2.6.0
 [2.5.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.5.0...v2.5.1

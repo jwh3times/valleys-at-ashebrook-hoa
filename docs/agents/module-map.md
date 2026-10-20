@@ -398,8 +398,10 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   with the minted token; `src/components/admin/DriveImport.tsx` (beside Upload in
   `DocumentsManager`) drives pick, preview table, per-file import results, and "Import anyway".
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
-- `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
-  Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible
+- `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`, library-wide
+  Cloudflare AI Search/autorag retrieval, and `retrieveFrom`, the same query restricted to named
+  documents' twins by an `or` of `filename eq <id>.md` filters — AI Search matches a twin by its
+  bare name, without `rag/`; empty id list returns `[]` without searching), `pii.ts` (`buildPseudonymizer`, a reversible
   roster-based PII pseudonymizer with streaming de-anonymization), `sources.ts` (`toSources` maps
   retrieved chunks back to real D1 document rows for citations; `docIdFromFolder` extracts a
   document's uuid from either R2 key shape, `documents/<uuid>/…` or `rag/<uuid>.md`), `context.ts`
@@ -413,7 +415,7 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   ended contact value already used in a document stays masked, redacted rows arrive `NULL` and are
   skipped, and Organization names are deliberately excluded from tokenized name matching (their
   contact methods are still masked) — see #233 and SECURITY.md — and the shared `claudeTextStream`/
-  `ClaudeStream` streaming helpers; orchestrates retrieve -> pseudonymize -> Claude generation ->
+  `ClaudeStream` streaming helpers; orchestrates retrieve (top 8, library-wide) plus `retrieveFrom` (top 4, the `Governing Documents` category rows read from D1 on every question, run in parallel, governing passages not already present appended; the search query also carries the previous user question so follow-ups keep context) -> pseudonymize -> Claude generation ->
   de-anonymized streamed output), and `report.ts` (`planSubQueries`, a small Claude Haiku call that
   expands a freeform topic into 3-6 retrieval sub-queries from the pseudonymized topic and returns
   de-anonymized queries, degrading to a single query on any failure; `generateReport`, which uses a
