@@ -150,11 +150,10 @@ async function search(
   try {
     return await attempt();
   } catch (first) {
-    // The message only: the options carry the search text, which can name
-    // a resident.
-    console.warn(
-      `[search] retrying a failed search: ${first instanceof Error ? first.message : String(first)}`,
-    );
+    // The start of the message only: the options carry the search text,
+    // which can name a resident.
+    const message = first instanceof Error ? first.message : String(first);
+    console.warn(`[search] retrying a failed search: ${message.slice(0, 200)}`);
   }
   await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
   try {

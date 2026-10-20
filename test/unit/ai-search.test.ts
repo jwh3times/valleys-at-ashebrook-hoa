@@ -5,6 +5,10 @@ import {
   AiSearchUnavailableError,
 } from '../../src/server/ai/search';
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 function fakeEnv(search: (opts: unknown) => Promise<unknown>): Env {
   return {
     AI_SEARCH_INSTANCE: 'test-instance',
@@ -94,6 +98,7 @@ describe('retrieve', () => {
   });
 
   it('wraps binding errors as AiSearchUnavailableError', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const search = vi.fn(async () => {
       throw new Error('AutoRAGNotFoundError');
     });
@@ -136,6 +141,7 @@ describe('retrieveFrom', () => {
   });
 
   it('wraps binding errors as AiSearchUnavailableError', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const search = vi.fn(async () => {
       throw new Error('down');
     });
