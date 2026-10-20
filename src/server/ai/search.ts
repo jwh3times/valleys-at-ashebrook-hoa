@@ -127,22 +127,61 @@ function normalizeChunk(item: RawSearchItem): AiSearchChunk {
   };
 }
 
+async function search(
+  env: Env,
+  options: Record<string, unknown>,
+): Promise<AiSearchChunk[]> {
+  try {
+    const res = (await env.AI.autorag(env.AI_SEARCH_INSTANCE).search(
+      options as never,
+    )) as unknown as RawSearchResult;
+    const raw = res.data ?? res.chunks ?? [];
+    return raw.map(normalizeChunk);
+  } catch (err) {
+    throw new AiSearchUnavailableError(err);
+  }
+}
+
 /** Retrieve the top document chunks relevant to `query` from the AI Search index. */
 export async function retrieve(
   env: Env,
   query: string,
   limit = 8,
 ): Promise<AiSearchChunk[]> {
-  try {
-    const res = (await env.AI.autorag(env.AI_SEARCH_INSTANCE).search({
-      query,
-      max_num_results: limit,
-      ranking_options: { score_threshold: 0.3 },
-      rewrite_query: true,
-    })) as unknown as RawSearchResult;
-    const raw = res.data ?? res.chunks ?? [];
-    return raw.map(normalizeChunk);
-  } catch (err) {
-    throw new AiSearchUnavailableError(err);
-  }
+  return search(env, {
+    query,
+    max_num_results: limit,
+    ranking_options: { score_threshold: 0.3 },
+    rewrite_query: true,
+  });
+}
+
+/**
+ * Retrieve the chunks most relevant to `query` from the named documents only
+ * (#305). The library-wide search ranks correspondence and checklists above
+ * the bylaws and covenants, so the assistant also searches within the
+ * governing documents. AI Search matches a twin by its bare name, without the
+ * `rag/` folder.
+ */
+export async function retrieveFrom(
+  env: Env,
+  query: string,
+  documentIds: string[],
+  limit = 4,
+): Promise<AiSearchChunk[]> {
+  if (documentIds.length === 0) return [];
+  return search(env, {
+    query,
+    max_num_results: limit,
+    ranking_options: { score_threshold: 0.3 },
+    rewrite_query: true,
+    filters: {
+      type: 'or',
+      filters: documentIds.map((id) => ({
+        type: 'eq',
+        key: 'filename',
+        value: `${id}.md`,
+      })),
+    },
+  });
 }

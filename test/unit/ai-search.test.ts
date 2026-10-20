@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { retrieve, AiSearchUnavailableError } from '../../src/server/ai/search';
+import {
+  retrieve,
+  retrieveFrom,
+  AiSearchUnavailableError,
+} from '../../src/server/ai/search';
 
 function fakeEnv(search: (opts: unknown) => Promise<unknown>): Env {
   return {
@@ -96,5 +100,47 @@ describe('retrieve', () => {
     await expect(retrieve(fakeEnv(search), 'x')).rejects.toBeInstanceOf(
       AiSearchUnavailableError,
     );
+  });
+});
+
+// #305: the governing-documents pass. A vector search over the whole library
+// ranks correspondence and checklists above the bylaws and covenants, so the
+// assistant also searches only within the governing documents.
+describe('retrieveFrom', () => {
+  it("searches only the named documents' search twins", async () => {
+    const search = vi.fn(async () => ({ data: [] }));
+    await retrieveFrom(fakeEnv(search), 'who serves on the board?', [
+      'gov-1',
+      'gov-2',
+    ]);
+    expect(search).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: 'who serves on the board?',
+        max_num_results: 4,
+        // AI Search matches a twin by its bare name, without the rag/ folder.
+        filters: {
+          type: 'or',
+          filters: [
+            { type: 'eq', key: 'filename', value: 'gov-1.md' },
+            { type: 'eq', key: 'filename', value: 'gov-2.md' },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('returns nothing, without searching, when there are no documents to search', async () => {
+    const search = vi.fn(async () => ({ data: [] }));
+    expect(await retrieveFrom(fakeEnv(search), 'q', [])).toEqual([]);
+    expect(search).not.toHaveBeenCalled();
+  });
+
+  it('wraps binding errors as AiSearchUnavailableError', async () => {
+    const search = vi.fn(async () => {
+      throw new Error('down');
+    });
+    await expect(
+      retrieveFrom(fakeEnv(search), 'q', ['gov-1']),
+    ).rejects.toBeInstanceOf(AiSearchUnavailableError);
   });
 });

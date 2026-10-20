@@ -407,7 +407,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   way; roster phone numbers are pseudonymized in any format (including bare digits), and any number
   written in a standard phone format (parenthesized area code or separators) is pseudonymized
   whether or not it matches the roster. Document titles are pseudonymized the same way and sent as
-  part of each excerpt label; citations
+  part of each excerpt label, and the pseudonymized titles of the Governing Documents category are
+  listed at the start of the model input; citations
   reference retrieved excerpts by index label and are resolved back to real documents server-side.
   The dictionary uses Person names and Contact Methods from the permanent party roster
   (`people`, `contact_methods`), plus Lot addresses. It
@@ -452,6 +453,9 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   member may still delete the retained row manually (`DELETE /api/admin/reports`). Only a completed
   generation is saved — the row is inserted before the SSE `done` frame is emitted, so a failed or
   client-disconnected generation leaves no row.
+- **The retrieval query is not pseudonymized.** The question, plus the previous user question from
+  chat history so follow-ups keep context, is sent as-is to Cloudflare AI Search, which runs inside
+  the same Cloudflare account as the Worker; only text bound for Anthropic is pseudonymized.
 - **The AI Search index is not tier-aware, which is why the assistant stays board-only.** Retrieval
   runs over a single Cloudflare AI Search index built from every document's Markdown text
   (`rag/<uuid>.md`) regardless of that document's visibility tier, and returns un-pseudonymized
