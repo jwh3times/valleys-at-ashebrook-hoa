@@ -176,4 +176,27 @@ describe('retrieveFrom', () => {
     const found = await retrieveFrom(fakeEnv(search), 'q', ids, 3);
     expect(found.map((c) => c.id)).toEqual(['c', 'a', 'b']);
   });
+
+  it('keeps the passages of the batches that succeeded when another fails', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let calls = 0;
+    const search = vi.fn(async () => {
+      if (calls++ === 0) throw new Error('down');
+      return {
+        data: [
+          {
+            id: 'kept',
+            score: 0.5,
+            content: 'kept',
+            metadata: { filename: 'kept.md', folder: 'rag/', timestamp: 1 },
+          },
+        ],
+      };
+    });
+    const ids = Array.from({ length: 41 }, (_, i) => `gov-${i}`);
+    const found = await retrieveFrom(fakeEnv(search), 'q', ids);
+    expect(found.map((c) => c.id)).toEqual(['kept']);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
 });

@@ -12,6 +12,10 @@ import type { Pseudonymizer } from './pii';
 
 const GOVERNING_CATEGORY = 'Governing Documents';
 
+/** Governing passages per search. A report runs up to 6 searches into a
+ * 30-passage pool, so this also bounds how much of the pool they can take. */
+export const GOVERNING_PASSAGES = 4;
+
 export interface GoverningDocument {
   id: string;
   title: string;
@@ -40,6 +44,7 @@ export async function governingPassages(
       env,
       query,
       docs.map((d) => d.id),
+      GOVERNING_PASSAGES,
     );
   } catch (err) {
     console.error('[governing] governing-documents search failed', err);

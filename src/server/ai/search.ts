@@ -169,6 +169,12 @@ export const FILTER_BATCH = 40;
  * the bylaws and covenants, so the assistant and reports also search within
  * the governing documents. AI Search matches a twin by its bare name, without
  * the `rag/` folder.
+ *
+ * Past `FILTER_BATCH` documents, each batch is its own search and the best
+ * `limit` across them are kept. Each batch may rewrite the query a little
+ * differently, so their scores are close to comparable, not exactly. A batch
+ * that fails is logged and left out; only when every batch fails does this
+ * throw.
  */
 export async function retrieveFrom(
   env: Env,
@@ -179,7 +185,7 @@ export async function retrieveFrom(
   const batches: string[][] = [];
   for (let i = 0; i < documentIds.length; i += FILTER_BATCH)
     batches.push(documentIds.slice(i, i + FILTER_BATCH));
-  const found = await Promise.all(
+  const settled = await Promise.allSettled(
     batches.map((ids) =>
       search(env, {
         query,
@@ -197,6 +203,16 @@ export async function retrieveFrom(
       }),
     ),
   );
+  const found = settled.flatMap((r) =>
+    r.status === 'fulfilled' ? [r.value] : [],
+  );
+  const failed = settled.filter((r) => r.status === 'rejected');
+  if (failed.length > 0 && found.length === 0) throw failed[0].reason;
+  if (failed.length > 0)
+    console.error(
+      `[search] ${failed.length} of ${batches.length} filtered searches failed`,
+      failed[0].reason,
+    );
   return found
     .flat()
     .sort((a, b) => b.score - a.score)

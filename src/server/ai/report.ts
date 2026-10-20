@@ -108,8 +108,8 @@ export interface ReportGeneration {
  * The governing documents control (see the system prompt), and a library-wide
  * search ranks correspondence above them (#453), so ranking the two pools
  * together would let the cap cut the passages the report most needs. At most
- * 4 governing passages per sub-query, so the library-wide pool keeps at least
- * 6 of the 30 places.
+ * GOVERNING_PASSAGES (4) per sub-query and 6 sub-queries, so the library-wide
+ * pool keeps at least 6 of the 30 places.
  */
 function poolChunks(
   library: AiSearchChunk[][],
