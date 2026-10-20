@@ -7,6 +7,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.6.5] - 2026-10-20
+
+### Fixed
+
+- **Board reports now draw on the bylaws and covenants too (#453).** A report's searches ranked
+  correspondence and checklists above the governing documents, so a report could be written from
+  letters while the covenants went unread, or fail to start at all. Every search a report runs now
+  also searches the Governing Documents category on its own. Those passages are placed first
+  within the report's 30-passage limit, since the report already treats the governing documents
+  as controlling. A report is told which governing documents the library holds, with titles
+  pseudonymized, and is told never to say a listed document is missing.
+- **The governing-documents search keeps working as that category grows.** Cloudflare's search
+  rejects a filter that names more than 48 documents. The assistant and reports now search the
+  governing documents in groups of 40 and keep the best passages across the groups; if one group
+  fails, the others' passages are still used.
+
 ## [2.6.4] - 2026-10-20
 
 ### Fixed
@@ -4162,7 +4178,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.4...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.5...HEAD
+[2.6.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.4...v2.6.5
 [2.6.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.3...v2.6.4
 [2.6.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.2...v2.6.3
 [2.6.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.1...v2.6.2
