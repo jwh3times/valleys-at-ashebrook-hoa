@@ -40,6 +40,9 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
 vi.mock('../../src/server/ai/search', async (orig) => ({
   ...(await orig<typeof import('../../src/server/ai/search')>()),
   retrieve: retrieveMock,
+  // The governing-documents pass (#453) is covered by report-generate.test.ts;
+  // here it finds nothing, so these tests see only `retrieveMock`'s passages.
+  retrieveFrom: async () => [],
 }));
 vi.mock('../../src/server/ai/anthropic', () => {
   class AssistantNotConfiguredError extends Error {}

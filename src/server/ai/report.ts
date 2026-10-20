@@ -3,6 +3,13 @@ import { buildPseudonymizer, type Pseudonymizer } from './pii';
 import { retrieve, type AiSearchChunk } from './search';
 import { buildExcerptContext } from './context';
 import {
+  governingCatalog,
+  governingInstruction,
+  governingPassages,
+  loadGoverningDocuments,
+  uniqueChunks,
+} from './governing';
+import {
   loadRosterEntries,
   claudeTextStream,
   type ClaudeStream,
@@ -68,6 +75,7 @@ const REPORT_SYSTEM_PROMPT = [
   '## Gaps — aspects of the topic the documents do not address; if none, say so.',
   '',
   'Cite every claim drawn from an excerpt with its [Source N] label. When governing documents (CC&Rs, bylaws, articles, amendments, rules) conflict with other retrieved material, the governing documents control — note the difference.',
+  governingInstruction('topic'),
   'Do not present general knowledge as document content; if you add context the excerpts do not support, clearly mark it, for example "General knowledge (not from the documents):".',
   'Do not fabricate document contents or [Source N] citations. Names, addresses, phone numbers, and emails in the excerpts are placeholders — use them exactly as written; never alter, abbreviate, or reformat them.',
   'Respond with the report only — no preamble.',
@@ -94,24 +102,30 @@ export interface ReportGeneration {
   textStream: ReadableStream<string>; // de-anonymized markdown
 }
 
-/** Pool chunks across sub-queries: best-score first, dedupe by (folder, content), capped. */
-function poolChunks(perQuery: AiSearchChunk[][]): AiSearchChunk[] {
+/**
+ * Pool chunks across sub-queries, capped: the governing passages first, then
+ * the library-wide ones, each best-score first, with one copy of each passage.
+ * The governing documents control (see the system prompt), and a library-wide
+ * search ranks correspondence above them (#453), so ranking the two pools
+ * together would let the cap cut the passages the report most needs. At most
+ * 4 governing passages per sub-query, so the library-wide pool keeps at least
+ * 6 of the 30 places.
+ */
+function poolChunks(
+  library: AiSearchChunk[][],
+  governing: AiSearchChunk[][],
+): AiSearchChunk[] {
   // Sort BEFORE dedupe: a duplicate chunk can be returned at a low score by one
   // sub-query and a high score by another (they run independent retrievals), and
-  // `perQuery.flat()` is in sub-query order, not score order. Sorting first means
-  // the first-seen (kept) copy is always the best-scored one, so a strong hit
-  // can't be discarded in favor of a weak duplicate before the cap is applied.
-  const all = perQuery.flat().sort((a, b) => b.score - a.score);
-  const seen = new Set<string>();
-  const pooled: AiSearchChunk[] = [];
-  for (const c of all) {
-    const key = `${c.metadata.folder} ${c.content}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      pooled.push(c);
-    }
-  }
-  return pooled.slice(0, REPORT_CONTEXT_CHUNK_CAP);
+  // `flat()` is in sub-query order, not score order. Sorting first means the
+  // first-seen (kept) copy is always the best-scored one, so a strong hit can't
+  // be discarded in favor of a weak duplicate before the cap is applied.
+  const byScore = (perQuery: AiSearchChunk[][]) =>
+    perQuery.flat().sort((a, b) => b.score - a.score);
+  return uniqueChunks([...byScore(governing), ...byScore(library)]).slice(
+    0,
+    REPORT_CONTEXT_CHUNK_CAP,
+  );
 }
 
 export async function generateReport(
@@ -135,8 +149,18 @@ export async function generateReport(
     subQueries = await planSubQueries(env, pseud, topic);
   }
 
-  const perQuery = await Promise.all(subQueries.map((q) => retrieve(env, q)));
-  const pooled = poolChunks(perQuery);
+  // The library-wide searches need nothing from D1, so they run alongside the
+  // read of the governing documents and the searches within them.
+  const [library, { governingDocs, governing }] = await Promise.all([
+    Promise.all(subQueries.map((q) => retrieve(env, q))),
+    loadGoverningDocuments(env).then(async (docs) => ({
+      governingDocs: docs,
+      governing: await Promise.all(
+        subQueries.map((q) => governingPassages(env, q, docs)),
+      ),
+    })),
+  ]);
+  const pooled = poolChunks(library, governing);
   if (pooled.length === 0) throw new NoRelevantDocumentsError();
   const { sources, contextText } = await buildExcerptContext(
     env,
@@ -147,6 +171,7 @@ export async function generateReport(
     throw new NoRelevantDocumentsError();
 
   const userText =
+    governingCatalog(governingDocs, pseud) +
     `Document excerpts:\n\n${contextText}\n\n` +
     `Report topic: ${pseud.anonymize(topic)}`;
 
