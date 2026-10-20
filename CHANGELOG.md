@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.6.6] - 2026-10-20
+
+### Fixed
+
+- **A document search that fails once is tried again (#455).** About 2 in 100 searches fail once,
+  with a gateway timeout or a vector-search error, and succeed when repeated. Until now, one such
+  failure made the board assistant answer with an error, and a report, which runs several searches
+  at once, failed about one time in six. Each search is now tried once more after a 200 ms pause
+  before it counts as failed. The retry is logged with the start of the error message only, never
+  the search text, which can name a resident.
+
 ## [2.6.5] - 2026-10-20
 
 ### Fixed
@@ -4178,7 +4189,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.5...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.6...HEAD
+[2.6.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.5...v2.6.6
 [2.6.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.4...v2.6.5
 [2.6.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.3...v2.6.4
 [2.6.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.2...v2.6.3

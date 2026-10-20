@@ -401,7 +401,7 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
 - `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`, library-wide
   Cloudflare AI Search/autorag retrieval, and `retrieveFrom`, the same query restricted to named
   documents' twins by an `or` of `filename eq <id>.md` filters — AI Search matches a twin by its
-  bare name, without `rag/`; empty id list returns `[]` without searching; AI Search fails any `or` filter over 48 clauses, so ids are split into batches of `FILTER_BATCH = 40`, searched in parallel, and the best `limit` by score kept — a failed batch is logged and dropped, and it throws only when every batch fails), `pii.ts` (`buildPseudonymizer`, a reversible
+  bare name, without `rag/`; empty id list returns `[]` without searching; AI Search fails any `or` filter over 48 clauses, so ids are split into batches of `FILTER_BATCH = 40`, searched in parallel, and the best `limit` by score kept — a failed batch is logged and dropped, and it throws only when every batch fails; the shared `search()` call behind both retries a failed binding call once after `RETRY_DELAY_MS` (200 ms) before throwing `AiSearchUnavailableError`, and the retry warning logs only the first 200 chars of the error message, never the query or options), `pii.ts` (`buildPseudonymizer`, a reversible
   roster-based PII pseudonymizer with streaming de-anonymization), `sources.ts` (`toSources` maps
   retrieved chunks back to real D1 document rows for citations; `docIdFromFolder` extracts a
   document's uuid from either R2 key shape, `documents/<uuid>/…` or `rag/<uuid>.md`), `context.ts`
