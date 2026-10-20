@@ -1,8 +1,14 @@
-import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { documents, lots } from '../db/schema';
+import { lots } from '../db/schema';
 import { contactMethods, people } from '../db/roster-schema';
-import { retrieve, retrieveFrom, type AiSearchChunk } from './search';
+import { retrieve } from './search';
+import {
+  governingCatalog,
+  governingInstruction,
+  governingPassages,
+  loadGoverningDocuments,
+  uniqueChunks,
+} from './governing';
 import { type Source } from './sources';
 import { buildExcerptContext } from './context';
 import { buildPseudonymizer, type PiiEntry } from './pii';
@@ -35,7 +41,7 @@ const SYSTEM_PROMPT = [
   '- If the documents and general knowledge disagree, defer to the documents and note the difference.',
   '- If you can answer from neither, say so.',
   '',
-  'The excerpts are the passages that best match the question, not whole documents. The message also lists the governing documents the library holds. Never say the association lacks a document on that list: if no excerpt from it covers the point, say the excerpts provided do not cover it.',
+  governingInstruction('question'),
   '',
   'Do not fabricate document contents or [Source N] citations for claims the excerpts do not support. Names, addresses, phone numbers, and emails in the excerpts are placeholders — use them exactly as written; never alter, abbreviate, or reformat them. Respond with the answer only — no preamble or meta-commentary.',
 ].join('\n');
@@ -112,10 +118,6 @@ export function claudeTextStream(stream: ClaudeStream): ReadableStream<string> {
   });
 }
 
-/** The governing documents (#305): searched on every question, and listed to
- * the model so it knows they exist when no passage from them is retrieved. */
-const GOVERNING_CATEGORY = 'Governing Documents';
-
 /**
  * What to search for. A follow-up such as "and quorum?" means nothing on its
  * own, so the previous question goes with it. Retrieval runs inside
@@ -130,34 +132,6 @@ function searchQuery(question: string, history: Turn[]): string {
   return `${previous.content.slice(0, INPUT_LIMITS.assistantQuestion)}\n${question}`;
 }
 
-/**
- * The governing passages for `query`. A supplement to the library-wide
- * search, so a failure here leaves them out rather than failing the answer;
- * the model is still told the governing documents exist.
- */
-async function governingPassages(
-  env: Env,
-  query: string,
-  documentIds: string[],
-): Promise<AiSearchChunk[]> {
-  try {
-    return await retrieveFrom(env, query, documentIds);
-  } catch (err) {
-    console.error('[assistant] governing-documents search failed', err);
-    return [];
-  }
-}
-
-/** The library-wide passages, then any governing passage not already there. */
-function mergeChunks(
-  library: AiSearchChunk[],
-  governing: AiSearchChunk[],
-): AiSearchChunk[] {
-  const key = (c: AiSearchChunk) => `${c.metadata.folder}\n${c.content}`;
-  const seen = new Set(library.map(key));
-  return [...library, ...governing.filter((c) => !seen.has(key(c)))];
-}
-
 export async function answer(
   env: Env,
   input: { question: string; history?: Turn[] },
@@ -167,30 +141,20 @@ export async function answer(
   // read of the governing documents and the search within them.
   const [library, { governingDocs, governing }] = await Promise.all([
     retrieve(env, query),
-    getDb(env)
-      .select({ id: documents.id, title: documents.title })
-      .from(documents)
-      .where(eq(documents.category, GOVERNING_CATEGORY))
-      .orderBy(documents.title)
-      .then(async (docs) => ({
-        governingDocs: docs,
-        governing: await governingPassages(
-          env,
-          query,
-          docs.map((d) => d.id),
-        ),
-      })),
+    loadGoverningDocuments(env).then(async (docs) => ({
+      governingDocs: docs,
+      governing: await governingPassages(env, query, docs),
+    })),
   ]);
-  const chunks = mergeChunks(library, governing);
+  // The library-wide passages, then any governing passage not already there.
+  const chunks = uniqueChunks([...library, ...governing]);
   const pseud = buildPseudonymizer(await loadRosterEntries(env));
   const { sources, contextText, documentsFound } = await buildExcerptContext(
     env,
     chunks,
     pseud,
   );
-  const catalog = governingDocs
-    .map((d) => `- "${pseud.anonymize(d.title)}"`)
-    .join('\n');
+  const catalog = governingCatalog(governingDocs, pseud);
 
   const history = (input.history ?? []).map((t) => ({
     role: t.role,
@@ -201,7 +165,7 @@ export async function answer(
       .slice(0, INPUT_LIMITS.assistantQuestion),
   }));
   const userText =
-    (catalog ? `Governing documents in the library:\n${catalog}\n\n` : '') +
+    catalog +
     `Document excerpts:\n\n${contextText || '(no relevant excerpts found)'}\n\n` +
     `Question: ${pseud.anonymize(input.question)}`;
 

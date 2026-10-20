@@ -157,11 +157,24 @@ export async function retrieve(
 }
 
 /**
+ * Documents per search in `retrieveFrom`. AI Search fails every search whose
+ * `or` filter has more than 48 clauses (measured against production,
+ * 2026-10-20; the limit is not documented), so a longer list is split.
+ */
+export const FILTER_BATCH = 40;
+
+/**
  * Retrieve the chunks most relevant to `query` from the named documents only
  * (#305). The library-wide search ranks correspondence and checklists above
- * the bylaws and covenants, so the assistant also searches within the
- * governing documents. AI Search matches a twin by its bare name, without the
- * `rag/` folder.
+ * the bylaws and covenants, so the assistant and reports also search within
+ * the governing documents. AI Search matches a twin by its bare name, without
+ * the `rag/` folder.
+ *
+ * Past `FILTER_BATCH` documents, each batch is its own search and the best
+ * `limit` across them are kept. Each batch may rewrite the query a little
+ * differently, so their scores are close to comparable, not exactly. A batch
+ * that fails is logged and left out; only when every batch fails does this
+ * throw.
  */
 export async function retrieveFrom(
   env: Env,
@@ -169,19 +182,39 @@ export async function retrieveFrom(
   documentIds: string[],
   limit = 4,
 ): Promise<AiSearchChunk[]> {
-  if (documentIds.length === 0) return [];
-  return search(env, {
-    query,
-    max_num_results: limit,
-    ranking_options: { score_threshold: 0.3 },
-    rewrite_query: true,
-    filters: {
-      type: 'or',
-      filters: documentIds.map((id) => ({
-        type: 'eq',
-        key: 'filename',
-        value: `${id}.md`,
-      })),
-    },
-  });
+  const batches: string[][] = [];
+  for (let i = 0; i < documentIds.length; i += FILTER_BATCH)
+    batches.push(documentIds.slice(i, i + FILTER_BATCH));
+  const settled = await Promise.allSettled(
+    batches.map((ids) =>
+      search(env, {
+        query,
+        max_num_results: limit,
+        ranking_options: { score_threshold: 0.3 },
+        rewrite_query: true,
+        filters: {
+          type: 'or',
+          filters: ids.map((id) => ({
+            type: 'eq',
+            key: 'filename',
+            value: `${id}.md`,
+          })),
+        },
+      }),
+    ),
+  );
+  const found = settled.flatMap((r) =>
+    r.status === 'fulfilled' ? [r.value] : [],
+  );
+  const failed = settled.filter((r) => r.status === 'rejected');
+  if (failed.length > 0 && found.length === 0) throw failed[0].reason;
+  if (failed.length > 0)
+    console.error(
+      `[search] ${failed.length} of ${batches.length} filtered searches failed`,
+      failed[0].reason,
+    );
+  return found
+    .flat()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }

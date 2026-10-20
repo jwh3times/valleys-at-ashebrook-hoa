@@ -143,4 +143,60 @@ describe('retrieveFrom', () => {
       retrieveFrom(fakeEnv(search), 'q', ['gov-1']),
     ).rejects.toBeInstanceOf(AiSearchUnavailableError);
   });
+
+  // #453: AI Search fails every search whose `or` filter has more than 48
+  // clauses (measured against production, 2026-10-20).
+  it('never sends a filter of more than 40 documents, and still searches every one', async () => {
+    const search = vi.fn(async (_opts: unknown) => ({ data: [] }));
+    const ids = Array.from({ length: 90 }, (_, i) => `gov-${i}`);
+    await retrieveFrom(fakeEnv(search), 'q', ids);
+    const batches = search.mock.calls.map(
+      ([opts]) =>
+        (opts as { filters: { filters: { value: string }[] } }).filters.filters,
+    );
+    for (const batch of batches) expect(batch.length).toBeLessThanOrEqual(40);
+    expect(batches.flat().map((f) => f.value)).toEqual(
+      ids.map((id) => `${id}.md`),
+    );
+  });
+
+  it('keeps the best-scoring passages across the batches', async () => {
+    const hit = (id: string, score: number) => ({
+      id,
+      score,
+      content: id,
+      metadata: { filename: `${id}.md`, folder: 'rag/', timestamp: 1 },
+    });
+    const pages = [
+      [hit('a', 0.5), hit('b', 0.4)],
+      [hit('c', 0.9), hit('d', 0.3)],
+    ];
+    const search = vi.fn(async () => ({ data: pages.shift() }));
+    const ids = Array.from({ length: 41 }, (_, i) => `gov-${i}`);
+    const found = await retrieveFrom(fakeEnv(search), 'q', ids, 3);
+    expect(found.map((c) => c.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('keeps the passages of the batches that succeeded when another fails', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let calls = 0;
+    const search = vi.fn(async () => {
+      if (calls++ === 0) throw new Error('down');
+      return {
+        data: [
+          {
+            id: 'kept',
+            score: 0.5,
+            content: 'kept',
+            metadata: { filename: 'kept.md', folder: 'rag/', timestamp: 1 },
+          },
+        ],
+      };
+    });
+    const ids = Array.from({ length: 41 }, (_, i) => `gov-${i}`);
+    const found = await retrieveFrom(fakeEnv(search), 'q', ids);
+    expect(found.map((c) => c.id)).toEqual(['kept']);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
 });
