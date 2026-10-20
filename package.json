@@ -78,7 +78,7 @@
     "prettier-plugin-astro": "^1.1.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9",
-    "wrangler": "^4.151.0",
+    "wrangler": "^4.151.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "overrides": {
