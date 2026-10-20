@@ -124,7 +124,28 @@ const GOVERNING_CATEGORY = 'Governing Documents';
  */
 function searchQuery(question: string, history: Turn[]): string {
   const previous = history.findLast((t) => t.role === 'user');
-  return previous ? `${previous.content}\n${question}` : question;
+  if (!previous) return question;
+  // A real client sends back questions it already capped; this keeps a
+  // hand-built history turn from growing the query past what one question can.
+  return `${previous.content.slice(0, INPUT_LIMITS.assistantQuestion)}\n${question}`;
+}
+
+/**
+ * The governing passages for `query`. A supplement to the library-wide
+ * search, so a failure here leaves them out rather than failing the answer;
+ * the model is still told the governing documents exist.
+ */
+async function governingPassages(
+  env: Env,
+  query: string,
+  documentIds: string[],
+): Promise<AiSearchChunk[]> {
+  try {
+    return await retrieveFrom(env, query, documentIds);
+  } catch (err) {
+    console.error('[assistant] governing-documents search failed', err);
+    return [];
+  }
 }
 
 /** The library-wide passages, then any governing passage not already there. */
@@ -142,18 +163,23 @@ export async function answer(
   input: { question: string; history?: Turn[] },
 ): Promise<AnswerResult> {
   const query = searchQuery(input.question, input.history ?? []);
-  const governingDocs = await getDb(env)
-    .select({ id: documents.id, title: documents.title })
-    .from(documents)
-    .where(eq(documents.category, GOVERNING_CATEGORY))
-    .orderBy(documents.title);
-  const [library, governing] = await Promise.all([
+  // The library-wide search needs nothing from D1, so it runs alongside the
+  // read of the governing documents and the search within them.
+  const [library, { governingDocs, governing }] = await Promise.all([
     retrieve(env, query),
-    retrieveFrom(
-      env,
-      query,
-      governingDocs.map((d) => d.id),
-    ),
+    getDb(env)
+      .select({ id: documents.id, title: documents.title })
+      .from(documents)
+      .where(eq(documents.category, GOVERNING_CATEGORY))
+      .orderBy(documents.title)
+      .then(async (docs) => ({
+        governingDocs: docs,
+        governing: await governingPassages(
+          env,
+          query,
+          docs.map((d) => d.id),
+        ),
+      })),
   ]);
   const chunks = mergeChunks(library, governing);
   const pseud = buildPseudonymizer(await loadRosterEntries(env));

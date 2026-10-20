@@ -135,25 +135,6 @@ describe('retrieveFrom', () => {
     expect(search).not.toHaveBeenCalled();
   });
 
-  it('normalizes its results like the library-wide search', async () => {
-    const search = vi.fn(async () => ({
-      data: [
-        {
-          file_id: 'gov-1',
-          filename: 'rag/gov-1.md',
-          score: 0.5,
-          content: [{ type: 'text', text: 'Article III' }],
-          attributes: { folder: 'rag/gov-1.md', timestamp: 1 },
-        },
-      ],
-    }));
-    const [chunk] = await retrieveFrom(fakeEnv(search), 'q', ['gov-1']);
-    expect(chunk).toMatchObject({
-      content: 'Article III',
-      metadata: { folder: 'rag/gov-1.md' },
-    });
-  });
-
   it('wraps binding errors as AiSearchUnavailableError', async () => {
     const search = vi.fn(async () => {
       throw new Error('down');

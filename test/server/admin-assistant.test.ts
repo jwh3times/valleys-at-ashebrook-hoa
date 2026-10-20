@@ -2,6 +2,7 @@ import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import type { AiSearchChunk } from '../../src/server/ai/search';
+import { INPUT_LIMITS } from '../../src/lib/types';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
@@ -457,11 +458,44 @@ describe('the governing documents (#305)', () => {
     expect(system).toMatch(/never say the association lacks a document/i);
   });
 
+  it('keeps a governing passage the library search did not return, even from the same document', async () => {
+    retrieveMock.mockImplementationOnce(async () => [
+      chunk('gov-bylaws', 'gov-bylaws', 'Article I: the association.'),
+    ]);
+    retrieveFromMock.mockImplementationOnce(async () => [
+      chunk('gov-bylaws', 'gov-bylaws', 'Article IV: the directors.'),
+    ]);
+    await answer(env, { question: 'Who are the directors?' });
+    expect(userText()).toContain('Article I: the association.');
+    expect(userText()).toContain('Article IV: the directors.');
+  });
+
+  it('still answers, without governing passages, when the governing search fails', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    retrieveMock.mockImplementationOnce(async () => [
+      chunk('c1', 'letter-1', 'The meeting is in April.'),
+    ]);
+    retrieveFromMock.mockImplementationOnce(async () => {
+      throw new Error('filter rejected');
+    });
+    const { sources, textStream } = await answer(env, {
+      question: 'When is the annual meeting?',
+    });
+    expect(sources.map((s) => s.id)).toEqual(['letter-1']);
+    expect((await readAll(textStream)).length).toBeGreaterThan(0);
+    // The model is still told the governing documents exist.
+    expect(userText()).toContain('- "By-Laws"');
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
   it('searches with the previous question too, so a follow-up keeps its context', async () => {
     retrieveMock.mockImplementationOnce(async () => []);
     await answer(env, {
       question: 'And what about quorum?',
       history: [
+        { role: 'user', content: 'Where is the pool?' },
+        { role: 'assistant', content: 'Behind the clubhouse.' },
         { role: 'user', content: 'What do the bylaws say about meetings?' },
         { role: 'assistant', content: 'They require an annual meeting.' },
       ],
@@ -470,6 +504,18 @@ describe('the governing documents (#305)', () => {
       'What do the bylaws say about meetings?\nAnd what about quorum?';
     expect(retrieveMock.mock.calls.at(-1)?.[1]).toBe(expected);
     expect(retrieveFromMock.mock.calls.at(-1)?.[1]).toBe(expected);
+  });
+
+  it('caps the previous question it searches with at the question limit', async () => {
+    retrieveMock.mockImplementationOnce(async () => []);
+    await answer(env, {
+      question: 'And quorum?',
+      history: [{ role: 'user', content: 'x'.repeat(30_000) }],
+    });
+    const query = retrieveMock.mock.calls.at(-1)?.[1] as string;
+    expect(query).toBe(
+      `${'x'.repeat(INPUT_LIMITS.assistantQuestion)}\nAnd quorum?`,
+    );
   });
 });
 
