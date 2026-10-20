@@ -1,6 +1,7 @@
 import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
+import type { AiSearchChunk } from '../../src/server/ai/search';
 
 vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
@@ -10,13 +11,17 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
 // Retrieval is mocked (no AI binding in the test pool); Anthropic is mocked to
 // capture the outgoing payload and return a scripted surrogate answer.
 const captured: { params?: unknown } = {};
-const { retrieveMock, mockFinal } = vi.hoisted(() => ({
+const { retrieveMock, retrieveFromMock, mockFinal } = vi.hoisted(() => ({
   retrieveMock: vi.fn(),
+  retrieveFromMock: vi.fn(
+    async (..._args: unknown[]): Promise<AiSearchChunk[]> => [],
+  ),
   mockFinal: { stop_reason: 'end_turn' },
 }));
 vi.mock('../../src/server/ai/search', async (orig) => ({
   ...(await orig<typeof import('../../src/server/ai/search')>()),
   retrieve: retrieveMock,
+  retrieveFrom: retrieveFromMock,
 }));
 vi.mock('../../src/server/ai/anthropic', () => ({
   AssistantNotConfiguredError: class extends Error {},
@@ -361,6 +366,110 @@ describe('assistant.answer', () => {
     const userText = params.messages[params.messages.length - 1].content;
     expect(userText).not.toContain('Jane Q Homeowner'); // title pseudonymized before the model
     expect(userText).toContain('Member Correspondence'); // category sent verbatim
+  });
+});
+
+// #305: a library-wide vector search ranks correspondence and checklists
+// above the bylaws and covenants, and the model, seeing no bylaws passage,
+// said the association had no bylaws.
+describe('the governing documents (#305)', () => {
+  const chunk = (id: string, docId: string, content: string) => ({
+    id,
+    score: 0.5,
+    content,
+    metadata: {
+      filename: `${docId}.md`,
+      folder: `rag/${docId}.md`,
+      timestamp: 1,
+    },
+  });
+  const userText = () => {
+    const params = captured.params as { messages: { content: string }[] };
+    return params.messages[params.messages.length - 1].content;
+  };
+
+  beforeAll(async () => {
+    const doc = (id: string, title: string, category: string) => ({
+      id,
+      title,
+      category,
+      visibility: 'public' as const,
+      r2Key: `documents/${id}/x.pdf`,
+      filename: 'x.pdf',
+      sizeBytes: 1,
+      contentType: 'application/pdf',
+      uploadedAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await getDb(env)
+      .insert(documents)
+      .values([
+        doc('gov-bylaws', 'By-Laws', 'Governing Documents'),
+        doc('gov-named', 'Jane Q Homeowner Easement', 'Governing Documents'),
+        doc('letter-1', 'Annual meeting letter', 'Meetings'),
+      ]);
+  });
+
+  it('also searches the governing documents, adding their passages after the rest', async () => {
+    retrieveMock.mockImplementationOnce(async () => [
+      chunk('c1', 'letter-1', 'The meeting is in April.'),
+    ]);
+    retrieveFromMock.mockImplementationOnce(async () => [
+      chunk('c2', 'gov-bylaws', 'Article II: the annual meeting.'),
+    ]);
+
+    const { sources } = await answer(env, {
+      question: 'When is the annual meeting?',
+    });
+
+    const [, query, ids] = retrieveFromMock.mock.calls.at(-1) as unknown as [
+      Env,
+      string,
+      string[],
+    ];
+    expect(query).toBe('When is the annual meeting?');
+    expect(ids).toEqual(expect.arrayContaining(['gov-bylaws', 'gov-named']));
+    expect(ids).not.toContain('letter-1');
+    expect(sources.map((s) => s.id)).toEqual(['letter-1', 'gov-bylaws']);
+    expect(userText()).toContain(
+      '[Source 2] Governing Documents — "By-Laws"\nArticle II: the annual meeting.',
+    );
+  });
+
+  it('never repeats a passage both searches found', async () => {
+    const same = chunk('c1', 'gov-bylaws', 'Article II: the annual meeting.');
+    retrieveMock.mockImplementationOnce(async () => [same]);
+    retrieveFromMock.mockImplementationOnce(async () => [{ ...same }]);
+    await answer(env, { question: 'When is the annual meeting?' });
+    expect(userText().split('Article II: the annual meeting.').length - 1).toBe(
+      1,
+    );
+  });
+
+  it('tells the model which governing documents exist, with titles pseudonymized', async () => {
+    retrieveMock.mockImplementationOnce(async () => []);
+    await answer(env, { question: 'Do we have the bylaws?' });
+    const text = userText();
+    expect(text).toMatch(/Governing documents in the library:[^]*- "By-Laws"/);
+    expect(text).not.toContain('Jane Q Homeowner');
+    expect(text).toMatch(/- "[^"]*Easement"/);
+    const system = (captured.params as { system: string }).system;
+    expect(system).toMatch(/never say the association lacks a document/i);
+  });
+
+  it('searches with the previous question too, so a follow-up keeps its context', async () => {
+    retrieveMock.mockImplementationOnce(async () => []);
+    await answer(env, {
+      question: 'And what about quorum?',
+      history: [
+        { role: 'user', content: 'What do the bylaws say about meetings?' },
+        { role: 'assistant', content: 'They require an annual meeting.' },
+      ],
+    });
+    const expected =
+      'What do the bylaws say about meetings?\nAnd what about quorum?';
+    expect(retrieveMock.mock.calls.at(-1)?.[1]).toBe(expected);
+    expect(retrieveFromMock.mock.calls.at(-1)?.[1]).toBe(expected);
   });
 });
 
