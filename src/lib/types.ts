@@ -25,6 +25,8 @@ export interface DocumentItem {
  * `ragStatus` is never included in the public `/api/content/documents` read. */
 export interface AdminDocumentItem extends DocumentItem {
   ragStatus: 'ok' | 'unsupported' | null;
+  /** Marked for tenants to see (#294); only ever true on a homeowner document. */
+  tenantVisible: boolean;
   filename: string;
   /** The Account that uploaded or imported it; null when not recorded. */
   uploadedBy: string | null;
@@ -92,6 +94,12 @@ export interface SiteSettings {
    * surface to exist.
    */
   lotRecordsEnabled: boolean;
+  /**
+   * ADR 0028 (#294): lets owners request tenants and lets approved tenants see
+   * the homeowner documents the board marks Tenant-Visible. Like
+   * `lotRecordsEnabled`, it needs `officialMode` as well.
+   */
+  tenantAccessEnabled: boolean;
   /** Footer "not affiliated" disclaimer (unofficial mode only); blank ⇒ built-in copy. */
   disclaimerText: string;
   /** /about page body; blank lines separate paragraphs; blank ⇒ built-in copy. */
@@ -112,6 +120,7 @@ export const SITE_GATE_KEYS = [
   'officialMode',
   'liveVotingEnabled',
   'lotRecordsEnabled',
+  'tenantAccessEnabled',
 ] as const;
 export type SiteGateKey = (typeof SITE_GATE_KEYS)[number];
 
@@ -318,6 +327,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   officialMode: false,
   liveVotingEnabled: false,
   lotRecordsEnabled: false,
+  tenantAccessEnabled: false,
   disclaimerText: '',
   aboutBody: '',
 };
@@ -347,6 +357,7 @@ export function normalizeSiteSettings(raw: unknown): SiteSettings {
     officialMode: r.officialMode === true,
     liveVotingEnabled: r.liveVotingEnabled === true,
     lotRecordsEnabled: r.lotRecordsEnabled === true,
+    tenantAccessEnabled: r.tenantAccessEnabled === true,
     disclaimerText: str(r.disclaimerText, DEFAULT_SITE_SETTINGS.disclaimerText),
     aboutBody: str(r.aboutBody, DEFAULT_SITE_SETTINGS.aboutBody),
   };

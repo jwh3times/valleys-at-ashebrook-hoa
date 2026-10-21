@@ -6,7 +6,6 @@ import { fetchDocumentsFor } from '../../../server/content/reads';
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request, locals }) => {
-  const role =
-    (await resolveAuthContext(locals, request, env))?.contentTier ?? 'visitor';
-  return Response.json(await fetchDocumentsFor(env, role));
+  const reader = await resolveAuthContext(locals, request, env);
+  return Response.json(await fetchDocumentsFor(env, reader));
 };

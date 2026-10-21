@@ -808,7 +808,10 @@ describe('POST /api/admin/drive/import', () => {
     await seedDocument('d-up', 'Uploaded');
     await env.DATABASE.exec("UPDATE documents SET visibility = 'public'");
     for (const role of ['visitor', 'homeowner'] as const) {
-      const rows = await fetchDocumentsFor(env, role);
+      const rows = await fetchDocumentsFor(env, {
+        contentTier: role,
+        capabilities: new Set(),
+      });
       expect(rows).toHaveLength(2);
       const [a, b] = rows.map((r) => Object.keys(r).sort());
       expect(a).toEqual(b);

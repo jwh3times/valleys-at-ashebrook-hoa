@@ -99,7 +99,7 @@ beforeEach(async () => {
  * empty against the board-tier fixture above.
  */
 const TIER_SCOPED: Record<string, () => Promise<unknown>> = {
-  fetchDocumentsFor: () => reads.fetchDocumentsFor(env, 'visitor'),
+  fetchDocumentsFor: () => reads.fetchDocumentsFor(env, null),
   fetchAnnouncementsFor: () => reads.fetchAnnouncementsFor(env, 'visitor'),
   fetchMeetingsFor: () => reads.fetchMeetingsFor(env, 'visitor'),
   fetchMeetingFor: () => reads.fetchMeetingFor(env, 'visitor', 'm1'),

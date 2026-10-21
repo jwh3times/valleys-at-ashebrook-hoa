@@ -22,6 +22,9 @@ export type Role = 'visitor' | 'homeowner' | 'board';
  */
 export type Capability =
   | 'member'
+  // A Current Tenancy (ADR 0028, #294). Read-only: it satisfies no member,
+  // voting or board guard, and only widens which documents a caller sees.
+  | 'tenant'
   | 'board'
   | 'systemAdmin'
   | 'redactionAuthorize'

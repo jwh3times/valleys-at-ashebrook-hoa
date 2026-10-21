@@ -37,7 +37,11 @@ D1 tables are defined in `src/server/db/schema.ts`. They include `announcements`
 and `keep_verified_by`, set when a board member explicitly keeps a document during duplicate
 review, and nullable `uploaded_by` (migration `0039`, #290: the acting Account id, plain text with
 no FK like every actor column so removing an Account never erases attribution; `NULL` = not
-recorded; returned only by board-only `GET /api/admin/documents`, never by public/homeowner reads);
+recorded; returned only by board-only `GET /api/admin/documents`, never by public/homeowner reads),
+and `tenant_visible` (migration `0042`, #294 slice 1, ADR 0028: boolean, `NOT NULL DEFAULT 0`; the
+board's "Tenant-Visible" mark. A CHECK allows `1` only while `visibility = 'homeowner'`, and the
+PATCH route clears it when a document leaves that tier. It widens who may read the document only for
+a caller holding the `tenant` capability, which nothing grants yet);
 the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
 (key/value singletons `dues` and `site`; the site JSON includes `officialMode` and the
 fail-closed/default-false `liveVotingEnabled` flag — per #363/ADR 0024 both are transition-only:
@@ -239,6 +243,10 @@ so a future tier edit can never publish one Lot's record to every member. Both t
 `liveVotingEnabled`: a Lot Record surface requires both `officialMode` and `lotRecordsEnabled`
 literally `true`, since presenting the site officially and publishing Lot-level financial and
 enforcement detail are separate decisions (`src/server/lot-records/gate.ts`).
+
+`tenantAccessEnabled` (ADR 0028, #294 slice 1) is a further member of `SITE_GATE_KEYS`, default off and
+changed only through the same audited compare-and-swap. It too requires `officialMode` literally
+`true` alongside it (`TENANT_ACCESS_ENABLED_SQL` in `src/server/roster/tenancy.ts`).
 
 Board data entry landed in #291 slice 2 (v1.2.7):
 `POST /api/admin/lot-violations` creates and transitions `lot_violations` rows and appends their

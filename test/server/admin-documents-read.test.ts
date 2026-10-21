@@ -53,7 +53,7 @@ describe('GET /api/admin/documents', () => {
   });
 
   it('the public documents read never exposes rag_status', async () => {
-    const rows = await fetchDocumentsFor(env, 'board');
+    const rows = await fetchDocumentsFor(env, callerContext('b', 'board', []));
     for (const r of rows) expect('ragStatus' in r).toBe(false);
   });
 

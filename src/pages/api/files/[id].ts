@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { resolveAuthContext } from '../../../server/authz/api-guards';
-import { tierAllows } from '../../../server/content/visibility';
+import { documentVisibleTo } from '../../../server/content/visibility';
 import { getDb } from '../../../server/db/client';
 import { documents } from '../../../server/db/schema';
 
@@ -27,11 +27,15 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
 
   if (doc.visibility !== 'public') {
     const ctx = await resolveAuthContext(locals, request, env);
-    const role = ctx?.contentTier ?? 'visitor';
-    // A hidden record renders 404, never 403 — the same answer as an unknown
-    // id, so the response never confirms the document exists.
-    if (!tierAllows(role, doc.visibility))
-      return new Response('Not Found', { status: 404 });
+    // The same predicate the document list uses (#294), so a download is
+    // allowed exactly when the list shows the document. A hidden record
+    // renders 404, never 403 — the same answer as an unknown id, so the
+    // response never confirms the document exists.
+    const [visible] = await getDb(env)
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.id, id), documentVisibleTo(ctx)));
+    if (!visible) return new Response('Not Found', { status: 404 });
   }
 
   const object = await env.DOCS.get(doc.r2Key);

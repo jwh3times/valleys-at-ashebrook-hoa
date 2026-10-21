@@ -39,6 +39,7 @@ beforeEach(() => {
     officialMode: true,
     liveVotingEnabled: true,
     lotRecordsEnabled: false,
+    tenantAccessEnabled: false,
     disclaimerText: '',
     aboutBody: '',
   });
@@ -270,6 +271,7 @@ describe('ElectionsManager', () => {
       officialMode: true,
       liveVotingEnabled: false,
       lotRecordsEnabled: false,
+      tenantAccessEnabled: false,
       disclaimerText: '',
       aboutBody: '',
     });
@@ -300,6 +302,7 @@ describe('ElectionsManager', () => {
       officialMode: false,
       liveVotingEnabled: true,
       lotRecordsEnabled: false,
+      tenantAccessEnabled: false,
       disclaimerText: '',
       aboutBody: '',
     });
