@@ -358,6 +358,12 @@ export const documents = sqliteTable(
     // with no FK, like every actor column, so removing an Account never erases
     // attribution. Null = not recorded (rows that predate migration 0039).
     uploadedBy: text('uploaded_by'),
+    // Tenant-Visible (#294, ADR 0028): a homeowner-tier document the board has
+    // marked for tenants to see. Migration 0042's CHECK allows the mark only
+    // while `visibility` is 'homeowner'.
+    tenantVisible: integer('tenant_visible', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     uploadedAt: integer('uploaded_at', { mode: 'timestamp' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   },

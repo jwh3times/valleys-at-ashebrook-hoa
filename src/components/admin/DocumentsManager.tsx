@@ -19,6 +19,7 @@ type EditForm = {
   title: string;
   category: string;
   visibility: Visibility;
+  tenantVisible: boolean;
 };
 
 const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
@@ -27,13 +28,22 @@ const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
   { value: 'board', label: 'Board only' },
 ];
 
-// Segmented filter for the document list. 'all' is the reset that shows every doc.
-const FILTER_TABS: { value: Visibility | 'all'; label: string }[] = [
+// Segmented filter for the document list. 'all' is the reset that shows every
+// doc; 'tenant' is the homeowner documents marked Tenant-Visible (#294).
+type Filter = Visibility | 'all' | 'tenant';
+const FILTER_TABS: { value: Filter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'public', label: 'Public' },
   { value: 'homeowner', label: 'Homeowners' },
   { value: 'board', label: 'Board' },
+  { value: 'tenant', label: 'Tenant-Visible' },
 ];
+
+function matchesFilter(d: AdminDocumentItem, filter: Filter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'tenant') return d.tenantVisible;
+  return d.visibility === filter;
+}
 
 const ACCEPT_ATTR = DOCUMENT_EXTENSIONS.map((e) => `.${e}`).join(',');
 
@@ -55,13 +65,14 @@ export default function DocumentsManager() {
   const [dupWarning, setDupWarning] = useState<{
     similar: { id: string; title?: string; filename?: string }[];
   } | null>(null);
-  const [filter, setFilter] = useState<Visibility | 'all'>('all');
+  const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     title: '',
     category: DOCUMENT_CATEGORIES[0],
     visibility: 'public',
+    tenantVisible: false,
   });
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -71,6 +82,7 @@ export default function DocumentsManager() {
       title: d.title,
       category: d.category,
       visibility: d.visibility,
+      tenantVisible: d.tenantVisible,
     });
     setMsg('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -155,8 +167,7 @@ export default function DocumentsManager() {
   }
 
   const q = query.trim().toLowerCase();
-  const byVisibility =
-    filter === 'all' ? items : items.filter((d) => d.visibility === filter);
+  const byVisibility = items.filter((d) => matchesFilter(d, filter));
   const shown = q
     ? byVisibility.filter(
         (d) =>
@@ -164,10 +175,8 @@ export default function DocumentsManager() {
           d.filename.toLowerCase().includes(q),
       )
     : byVisibility;
-  const countFor = (value: Visibility | 'all') =>
-    value === 'all'
-      ? items.length
-      : items.filter((d) => d.visibility === value).length;
+  const countFor = (value: Filter) =>
+    items.filter((d) => matchesFilter(d, value)).length;
 
   return (
     <div className="admin-panel">
@@ -227,6 +236,9 @@ export default function DocumentsManager() {
                 setEditForm({
                   ...editForm,
                   visibility: e.target.value as Visibility,
+                  // The mark belongs to the homeowner tier only; the server
+                  // clears it too when a document leaves that tier.
+                  tenantVisible: false,
                 })
               }
             >
@@ -237,6 +249,28 @@ export default function DocumentsManager() {
               ))}
             </select>
           </div>
+          {editForm.visibility === 'homeowner' && (
+            <div className="field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={editForm.tenantVisible}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      tenantVisible: e.target.checked,
+                    })
+                  }
+                />{' '}
+                Tenant-Visible
+              </label>
+              <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
+                Tenants see this document as well as homeowners, such as the
+                architectural rules or amenity policy. They see it only once
+                tenant access is turned on in the site settings.
+              </p>
+            </div>
+          )}
           <div className="btn-row">
             <button className="btn btn--small" type="submit" disabled={busy}>
               {busy ? 'Saving…' : 'Save Changes'}
@@ -429,6 +463,14 @@ export default function DocumentsManager() {
                       &middot; Uploaded by{' '}
                       {d.uploadedByName ?? 'a former account'}
                     </>
+                  )}
+                  {d.tenantVisible && (
+                    <span
+                      className="pinned-badge"
+                      title="Tenants can see this homeowner document."
+                    >
+                      Tenant-Visible
+                    </span>
                   )}
                   {d.ragStatus === 'unsupported' && (
                     <span

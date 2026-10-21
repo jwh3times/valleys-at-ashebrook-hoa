@@ -40,6 +40,7 @@ vi.mock('../../lib/admin', () => ({
 }));
 
 import DocumentsManager from './DocumentsManager';
+import { editDocument } from '../../lib/admin';
 
 function fileInput(): HTMLInputElement {
   return document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -413,5 +414,92 @@ describe('DocumentsManager uploader and refused deletes', () => {
       await screen.findByText(/a recorded roster change cites it as evidence/),
     ).toBeInTheDocument();
     expect(screen.getByText('Pool Rules')).toBeInTheDocument();
+  });
+});
+
+// #294 slice 1: the board marks homeowner documents Tenant-Visible.
+describe('DocumentsManager Tenant-Visible mark', () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    id: 'h1',
+    title: 'Architectural Rules',
+    category: 'Rules & Regulations',
+    visibility: 'homeowner',
+    updatedAt: '2026-01-01',
+    filename: 'arch.pdf',
+    ragStatus: 'ok',
+    tenantVisible: false,
+    uploadedBy: null,
+    uploadedByName: null,
+    ...overrides,
+  });
+  const edited = vi.mocked(editDocument);
+
+  beforeEach(() => edited.mockReset().mockResolvedValue(undefined));
+
+  async function openEdit(title: string) {
+    render(<DocumentsManager />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: `Edit document: ${title}` }),
+    );
+  }
+
+  function setVisibility(value: string) {
+    fireEvent.change(screen.getByLabelText('Visibility'), {
+      target: { value },
+    });
+  }
+
+  it('offers the mark only while the document is homeowner-tier', async () => {
+    fetchAdminDocuments.mockResolvedValue([row({})]);
+    await openEdit('Architectural Rules');
+    expect(screen.getByLabelText(/Tenant-Visible/)).toBeInTheDocument();
+    setVisibility('public');
+    expect(screen.queryByLabelText(/Tenant-Visible/)).toBeNull();
+  });
+
+  it('saves the mark with the edit', async () => {
+    fetchAdminDocuments.mockResolvedValue([row({})]);
+    await openEdit('Architectural Rules');
+    fireEvent.click(screen.getByLabelText(/Tenant-Visible/));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() =>
+      expect(edited).toHaveBeenCalledWith(
+        'h1',
+        expect.objectContaining({ tenantVisible: true }),
+      ),
+    );
+  });
+
+  it('clears the mark when the document leaves the homeowner tier', async () => {
+    fetchAdminDocuments.mockResolvedValue([row({ tenantVisible: true })]);
+    await openEdit('Architectural Rules');
+    setVisibility('board');
+    setVisibility('homeowner');
+    expect(screen.getByLabelText(/Tenant-Visible/)).not.toBeChecked();
+    setVisibility('board');
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await waitFor(() =>
+      expect(edited).toHaveBeenCalledWith(
+        'h1',
+        expect.objectContaining({ visibility: 'board', tenantVisible: false }),
+      ),
+    );
+  });
+
+  it('badges marked documents and filters to them', async () => {
+    fetchAdminDocuments.mockResolvedValue([
+      row({ tenantVisible: true }),
+      row({ id: 'h2', title: 'Board Minutes', tenantVisible: false }),
+    ]);
+    render(<DocumentsManager />);
+    await screen.findByText('Board Minutes');
+    expect(
+      screen.getAllByText('Tenant-Visible', { selector: 'span' }),
+    ).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole('button', { name: /Tenant-Visible \(1\)/ }),
+    );
+    expect(screen.getByText('Architectural Rules')).toBeInTheDocument();
+    expect(screen.queryByText('Board Minutes')).toBeNull();
   });
 });

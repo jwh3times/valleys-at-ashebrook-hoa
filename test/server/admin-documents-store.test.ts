@@ -143,7 +143,10 @@ describe('uploader attribution', () => {
       visibility: 'public',
     });
     for (const role of ['visitor', 'homeowner', 'board'] as const) {
-      const rows = await fetchDocumentsFor(env, role);
+      const rows = await fetchDocumentsFor(env, {
+        contentTier: role,
+        capabilities: new Set(),
+      });
       expect(rows.length).toBeGreaterThan(0);
       for (const r of rows) expect(Object.keys(r)).not.toContain('uploadedBy');
     }

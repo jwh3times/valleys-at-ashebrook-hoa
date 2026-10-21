@@ -36,7 +36,11 @@ import { people } from '../db/roster-schema';
 import { users } from '../db/auth-schema';
 import { fetchLotAuthority } from '../roster/authority';
 import { associationDateIso, personDisplayLabel } from '../../lib/format';
-import { visibleTiers } from './visibility';
+import {
+  documentVisibleTo,
+  visibleTiers,
+  type DocumentReader,
+} from './visibility';
 import type { Role } from '../authz/guards';
 import { tallyVotes } from '../../lib/types';
 import type {
@@ -59,7 +63,10 @@ import type {
   MemberProxyLists,
 } from '../../lib/types';
 
-export async function fetchDocumentsFor(env: Env, role: Role) {
+export async function fetchDocumentsFor(
+  env: Env,
+  reader: DocumentReader | null,
+) {
   // Project only the DocumentItem contract columns. A bare .select() would ship
   // internal storage metadata (r2Key, filename, sizeBytes, contentType) to every
   // caller; the download path re-reads the row server-side, so the public list
@@ -73,7 +80,7 @@ export async function fetchDocumentsFor(env: Env, role: Role) {
       updatedAt: documents.updatedAt,
     })
     .from(documents)
-    .where(inArray(documents.visibility, visibleTiers(role)));
+    .where(documentVisibleTo(reader));
 }
 
 export async function fetchAdminDocuments(env: Env) {
@@ -87,6 +94,7 @@ export async function fetchAdminDocuments(env: Env) {
       visibility: documents.visibility,
       updatedAt: documents.updatedAt,
       ragStatus: documents.ragStatus,
+      tenantVisible: documents.tenantVisible,
       filename: documents.filename,
       // Who uploaded or imported it (#290): board-only, like rag_status. The
       // name is null when the Account no longer exists or was never recorded.

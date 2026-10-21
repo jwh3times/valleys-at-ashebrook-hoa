@@ -118,17 +118,64 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
       return new Response('Invalid visibility', { status: 400 });
     patch.visibility = v;
   }
+  // Tenant-Visible (#294, ADR 0028) is a mark on a homeowner document only.
+  if ('tenantVisible' in body) {
+    if (typeof body.tenantVisible !== 'boolean')
+      return new Response('tenantVisible must be true or false', {
+        status: 400,
+      });
+    if (body.tenantVisible) {
+      const visibility = patch.visibility ?? (await storedVisibility(id));
+      if (visibility === null)
+        return new Response('Document not found', { status: 404 });
+      if (visibility !== 'homeowner')
+        return new Response('Only a homeowner document can be Tenant-Visible', {
+          status: 400,
+        });
+    }
+    patch.tenantVisible = body.tenantVisible;
+  }
+  // Leaving the homeowner tier clears the mark in the same UPDATE, so a
+  // document never carries it onto a tier where it would mean nothing.
+  if (patch.visibility !== undefined && patch.visibility !== 'homeowner')
+    patch.tenantVisible = false;
   // Answer 404 for an id that is not there rather than 204: a silent success
   // for a document that does not exist tells the caller their edit landed.
-  const updated = await getDb(env)
-    .update(documents)
-    .set(patch)
-    .where(eq(documents.id, id))
-    .returning({ id: documents.id });
+  let updated: { id: string }[];
+  try {
+    updated = await getDb(env)
+      .update(documents)
+      .set(patch)
+      .where(eq(documents.id, id))
+      .returning({ id: documents.id });
+  } catch (err) {
+    // Migration 0042's CHECK: another edit moved the document off the
+    // homeowner tier after the check above.
+    if (!isCheckViolation(err)) throw err;
+    return new Response(
+      'The document changed while you were editing it; reload and try again',
+      { status: 409 },
+    );
+  }
   if (updated.length === 0)
     return new Response('Document not found', { status: 404 });
   return new Response(null, { status: 204 });
 };
+
+async function storedVisibility(id: string): Promise<Visibility | null> {
+  const [row] = await getDb(env)
+    .select({ visibility: documents.visibility })
+    .from(documents)
+    .where(eq(documents.id, id));
+  return row?.visibility ?? null;
+}
+
+// D1 surfaces a CHECK failure on the cause chain of the query error.
+function isCheckViolation(err: unknown): boolean {
+  for (let e: unknown = err; e instanceof Error; e = e.cause)
+    if (/CHECK constraint failed/i.test(e.message)) return true;
+  return false;
+}
 
 export const DELETE: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);

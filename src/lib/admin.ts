@@ -474,7 +474,12 @@ export async function resolveDuplicates(
 
 export async function editDocument(
   id: string,
-  patch: { title?: string; category?: string; visibility?: string },
+  patch: {
+    title?: string;
+    category?: string;
+    visibility?: string;
+    tenantVisible?: boolean;
+  },
 ): Promise<void> {
   await adminRequest(
     '/api/admin/documents',

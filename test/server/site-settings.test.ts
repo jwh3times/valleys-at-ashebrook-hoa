@@ -27,6 +27,18 @@ describe('getSiteSettings', () => {
     ).toBe(false);
   });
 
+  it('normalizes tenant access as a fail-closed boolean', () => {
+    expect(DEFAULT_SITE_SETTINGS.tenantAccessEnabled).toBe(false);
+    expect(normalizeSiteSettings({}).tenantAccessEnabled).toBe(false);
+    expect(
+      normalizeSiteSettings({ tenantAccessEnabled: true }).tenantAccessEnabled,
+    ).toBe(true);
+    expect(
+      normalizeSiteSettings({ tenantAccessEnabled: 'true' })
+        .tenantAccessEnabled,
+    ).toBe(false);
+  });
+
   it('returns defaults (official mode off) when no row exists', async () => {
     const s = await getSiteSettings(env);
     expect(s.officialMode).toBe(false);

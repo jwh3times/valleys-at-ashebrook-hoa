@@ -193,6 +193,26 @@ describe('POST /api/admin/site { action: "setGate" }', () => {
     expect(rows[0].newValue).toBe('true');
   });
 
+  it('swaps tenantAccessEnabled, the gate ADR 0028 added, through the same path', async () => {
+    await seedSite({ officialMode: false, liveVotingEnabled: false });
+    const res = await post(
+      {
+        action: 'setGate',
+        key: 'tenantAccessEnabled',
+        expected: false,
+        value: true,
+      },
+      board,
+    );
+    expect(res.status).toBe(204);
+    expect(await storedGate('tenantAccessEnabled')).toBe(true);
+    const rows = await changeRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe('tenantAccessEnabled');
+    expect(rows[0].oldValue).toBe('false');
+    expect(rows[0].newValue).toBe('true');
+  });
+
   it('refuses non-boolean expected/value with 400', async () => {
     await seedSite({ officialMode: false, liveVotingEnabled: false });
 
