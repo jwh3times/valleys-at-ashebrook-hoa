@@ -108,6 +108,22 @@ describe('a tenant reading documents', () => {
     expect(await listed(tenant)).toEqual(['doc-pub']);
     expect(await downloadStatus(tenant, 'doc-marked')).toBe(404);
   });
+
+  it('sees only public documents when the settings are not valid JSON', async () => {
+    await getDb(env).run(sql`
+      INSERT INTO settings (key, value, updated_at)
+      VALUES ('site', '{"officialMode": true, "tenantAccessEnabled": tru', ${Date.now()})`);
+    expect(await listed(tenant)).toEqual(['doc-pub']);
+    expect(await downloadStatus(tenant, 'doc-marked')).toBe(404);
+  });
+
+  it('sees only public documents when a gate is the string "true"', async () => {
+    await getDb(env).run(sql`
+      INSERT INTO settings (key, value, updated_at)
+      VALUES ('site', ${JSON.stringify({ officialMode: true, tenantAccessEnabled: 'true' })}, ${Date.now()})`);
+    expect(await listed(tenant)).toEqual(['doc-pub']);
+    expect(await downloadStatus(tenant, 'doc-marked')).toBe(404);
+  });
 });
 
 describe('the mark reaches no one but tenants', () => {

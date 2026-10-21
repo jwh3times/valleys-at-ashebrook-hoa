@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import {
   requireBoard,
@@ -119,19 +119,20 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     patch.visibility = v;
   }
   // Tenant-Visible (#294, ADR 0028) is a mark on a homeowner document only.
+  const NOT_HOMEOWNER = 'Only a homeowner document can be Tenant-Visible';
+  // Marking without moving the document must find it still homeowner-tier
+  // at the moment of the write, so the condition rides inside the UPDATE
+  // rather than in a read before it.
+  let mustBeHomeowner = false;
   if ('tenantVisible' in body) {
     if (typeof body.tenantVisible !== 'boolean')
       return new Response('tenantVisible must be true or false', {
         status: 400,
       });
     if (body.tenantVisible) {
-      const visibility = patch.visibility ?? (await storedVisibility(id));
-      if (visibility === null)
-        return new Response('Document not found', { status: 404 });
-      if (visibility !== 'homeowner')
-        return new Response('Only a homeowner document can be Tenant-Visible', {
-          status: 400,
-        });
+      if (patch.visibility === undefined) mustBeHomeowner = true;
+      else if (patch.visibility !== 'homeowner')
+        return new Response(NOT_HOMEOWNER, { status: 400 });
     }
     patch.tenantVisible = body.tenantVisible;
   }
@@ -139,42 +140,33 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
   // document never carries it onto a tier where it would mean nothing.
   if (patch.visibility !== undefined && patch.visibility !== 'homeowner')
     patch.tenantVisible = false;
-  // Answer 404 for an id that is not there rather than 204: a silent success
-  // for a document that does not exist tells the caller their edit landed.
-  let updated: { id: string }[];
-  try {
-    updated = await getDb(env)
-      .update(documents)
-      .set(patch)
-      .where(eq(documents.id, id))
-      .returning({ id: documents.id });
-  } catch (err) {
-    // Migration 0042's CHECK: another edit moved the document off the
-    // homeowner tier after the check above.
-    if (!isCheckViolation(err)) throw err;
-    return new Response(
-      'The document changed while you were editing it; reload and try again',
-      { status: 409 },
-    );
+  const updated = await getDb(env)
+    .update(documents)
+    .set(patch)
+    .where(
+      mustBeHomeowner
+        ? and(eq(documents.id, id), eq(documents.visibility, 'homeowner'))
+        : eq(documents.id, id),
+    )
+    .returning({ id: documents.id });
+  if (updated.length === 0) {
+    // Answer 404 for an id that is not there rather than 204: a silent
+    // success for a document that does not exist tells the caller their edit
+    // landed. A document that is there but not homeowner-tier refuses the mark.
+    const exists = mustBeHomeowner && (await documentExists(id));
+    return exists
+      ? new Response(NOT_HOMEOWNER, { status: 400 })
+      : new Response('Document not found', { status: 404 });
   }
-  if (updated.length === 0)
-    return new Response('Document not found', { status: 404 });
   return new Response(null, { status: 204 });
 };
 
-async function storedVisibility(id: string): Promise<Visibility | null> {
+async function documentExists(id: string): Promise<boolean> {
   const [row] = await getDb(env)
-    .select({ visibility: documents.visibility })
+    .select({ id: documents.id })
     .from(documents)
     .where(eq(documents.id, id));
-  return row?.visibility ?? null;
-}
-
-// D1 surfaces a CHECK failure on the cause chain of the query error.
-function isCheckViolation(err: unknown): boolean {
-  for (let e: unknown = err; e instanceof Error; e = e.cause)
-    if (/CHECK constraint failed/i.test(e.message)) return true;
-  return false;
+  return row !== undefined;
 }
 
 export const DELETE: APIRoute = async ({ request, locals }) => {
