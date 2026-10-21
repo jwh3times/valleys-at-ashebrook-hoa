@@ -80,6 +80,18 @@ _Avoid_: Active owner, homeowner
 A time-bounded, audited authorization for a Person to act for an Organization without becoming an Owner, either organization-wide or limited to explicitly named Lots the Organization owns. An Organization may have multiple current Representatives with equal authority within their scopes; only a System Administrator or current Board Member with Board Access may create, correct, or end one, and Representatives cannot directly appoint others.
 _Avoid_: Ownership, Account role, organizational contact
 
+**Tenancy**:
+A time-bounded relationship between a Person and a Lot that grants Tenant Access and nothing else: never Lot Authority, Member Access, or Board eligibility. It rests on one basis Ownership, the Current Ownership of the party that owns the Lot for the tenant, and ends when that Ownership ends, when its required end day arrives, or earlier when a current holder of Lot Authority over the Lot or the Board ends it. A renewal is a new, adjacent Tenancy.
+_Avoid_: Lease, rental, tenant Representation
+
+**Tenant**:
+A Person with a Current Tenancy. A Tenant may also be an Owner of another Lot.
+_Avoid_: Renter, resident, occupant
+
+**Tenancy Request**:
+A request by a current holder of Lot Authority to admit a named Tenant to the Lot until a stated end day. It is not a roster fact: only a System Administrator or a current Board Member with Board Access may approve it, which records the Tenancy as a Roster Change; until then, or once refused, it grants nothing.
+_Avoid_: Tenant invitation, tenant registration
+
 **Lot Authority**:
 Equal authority held by every individual Current Owner and every current Representative of an organizational Current Owner to act for a Lot, with no primary-person hierarchy. When an occasion permits one controlling action per Lot, the first valid action controls unless that kind of action remains revocable or correctable under its own rules.
 _Avoid_: Primary owner, account ownership
@@ -109,7 +121,7 @@ An immutable account of opening or resolving a Review Flag, linked to the change
 _Avoid_: Review note, mutable status
 
 **Roster Change**:
-An immutable account of a creation, correction, consolidation, retirement, or ending involving a Lot, Person, Organization, Ownership, Representation, or Contact Method. Only a System Administrator or current Board Member with Board Access may accept such a fact, recording its Effective Day, reason, supporting reference, actor, and Recorded At; member-submitted information remains a request until accepted.
+An immutable account of a creation, correction, consolidation, retirement, or ending involving a Lot, Person, Organization, Ownership, Representation, Tenancy, or Contact Method. Only a System Administrator or current Board Member with Board Access may accept such a fact, recording its Effective Day, reason, supporting reference, actor, and Recorded At; member-submitted information remains a request until accepted.
 _Avoid_: Ownership change, mutable audit row
 
 **Roster Redaction**:
@@ -170,6 +182,10 @@ _Avoid_: Board Term, Ownership
 Access automatically available to an Account linked to a Person who is an individual Association Member or a current Representative of an organizational Association Member. It follows Current Ownership and Representation rather than an Access Grant and ends when the Person loses their final qualifying relationship, without ending the Person Link.
 _Avoid_: Homeowner role, member role
 
+**Tenant Access**:
+Read-only access available to an Account linked to a Person with a Current Tenancy whose basis Ownership is current: the public site plus Tenant-Visible Documents. It follows the Tenancy rather than an Access Grant, and it confers no Member Access.
+_Avoid_: Tenant role, resident access, homeowner access
+
 **Board Access**:
 An Access Grant allowing an Account linked to a Person with a current or scheduled Board Term to use the Board's administration surfaces. It is revoked when that qualifying term ends or is cancelled, never resumes automatically after a later term, and may otherwise be granted or revoked by a System Administrator or by a current Board Member who holds Board Access.
 _Avoid_: Board membership, Board Term
@@ -221,6 +237,10 @@ The correction path for a Dues Ledger Entry: an appended entry negating exactly 
 _Avoid_: Void, deletion, edit, un-payment
 
 ## Documents
+
+**Tenant-Visible Document**:
+A homeowner-tier document the Board has marked for Tenants to see, such as the architectural rules or amenity policy. Only a homeowner-tier document can carry the mark, and the rest of the homeowner tier stays hidden from Tenants.
+_Avoid_: Resident tier, tenant tier, public document
 
 **Association Google Account**:
 The Google account that belongs to the association rather than to any person. It holds the association's working files and is the only account a Drive Connection may reach. No one uses it as a personal login, and it never signs in to the site.
