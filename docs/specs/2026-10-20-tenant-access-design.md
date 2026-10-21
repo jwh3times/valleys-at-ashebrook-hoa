@@ -1,7 +1,7 @@
 # Tenant Access — Design
 
 - **Date:** 2026-10-20
-- **Status:** Proposed. Awaiting answers to the [open questions](#open-questions).
+- **Status:** Accepted 2026-10-20, after maintainer review ([decisions](#review-decisions-2026-10-20))
 - **Issue:** [#294](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/294)
 - **ADR:** [0028](../adr/0028-tenant-access.md)
 
@@ -18,7 +18,7 @@ decisions:
 - The feature is gated by `officialMode` plus its own audited `tenantAccessEnabled` flag.
 
 This spec turns that into tables, routes, screens, tests and delivery slices.
-[Departures from ADR 0028](#departures-from-adr-0028) lists the one place it departs from the ADR.
+[Departures from ADR 0028](#departures-from-adr-0028) lists the one place it departs from the ADR, which the maintainer accepted.
 
 ## Goals
 
@@ -604,19 +604,15 @@ Those are association decisions, tracked on #361 and #294, not code.
 - Bulk tenant import. A roster import screen is #292's question.
 - A tenant directory.
 
-## Open questions
+## Review decisions (2026-10-20)
 
-Each question has a recommendation. The answers will be folded into the sections above.
+The maintainer accepted every recommendation on 2026-10-20. The sections above already describe
+these answers.
 
-1. **Invitation link versus code.** Should the claim use a 14-day, single-use 256-bit link instead
-   of the 6-digit code, amending ADR 0028? _Recommended: yes (decision 4)._
-2. **Who may re-invite.** Should both the board and any Lot Authority holder over the Lot be able
-   to re-invite, limited to 3 sends a day per Tenancy? _Recommended: yes. The owner is usually the
-   one the tenant asks._
-3. **The request keeps no name or contact once decided.** Should refusal clear them entirely,
-   leaving only the reason, with no record of whom an owner proposed? _Recommended: yes. The roster
-   is the only place a resident's name should outlive its purpose._
-4. **Who may withdraw a request.** Any Lot Authority holder over the Lot, or only the one who made
-   it? _Recommended: any. Lot Authority has no primary holder._
-5. **The order of the slices,** with each migration applied before its merge. _Recommended: as
-   listed. Slice 1 is useful alone, and every later slice is dark behind the flag._
+| #   | Decision                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------ |
+| 1   | The claim uses a 14-day, single-use 256-bit link instead of the 6-digit code. Slice 4 amends ADR 0028. |
+| 2   | The board and any Lot Authority holder over the Lot may re-invite, at most 3 sends a day per Tenancy.  |
+| 3   | A decided request keeps no tenant name or contact. A refusal leaves only its reason.                   |
+| 4   | Any Lot Authority holder over the Lot may withdraw an open request, whoever made it.                   |
+| 5   | The four slices ship in the order listed, each migration applied to production before its PR merges.   |

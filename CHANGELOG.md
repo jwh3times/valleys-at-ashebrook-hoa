@@ -7,6 +7,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.6.9] - 2026-10-20
+
+### Added
+
+- **The tenant-access implementation spec (#294).** `docs/specs/2026-10-20-tenant-access-design.md`
+  turns ADR 0028 into tables, routes, screens, tests and four delivery slices: the Tenant-Visible
+  document flag and its setting, the Tenancy fact, owner requests with board approval, and the
+  invitation and claim. Nothing is built yet. The tenant claims with a 14-day, single-use link
+  rather than a 6-digit code, because the invitation reaches the tenant before they have an
+  account. Each slice's migration must be applied to production before that slice merges.
+
 ## [2.6.8] - 2026-10-20
 
 ### Added
@@ -4208,7 +4219,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.8...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.9...HEAD
+[2.6.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.8...v2.6.9
 [2.6.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.7...v2.6.8
 [2.6.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.6...v2.6.7
 [2.6.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.5...v2.6.6
