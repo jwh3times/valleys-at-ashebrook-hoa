@@ -33,3 +33,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0025: A Per-Lot Dues Ledger, with Online Payments Reconciled from Verified Provider Events](./0025-dues-ledger-and-online-payments.md)
 - [ADR 0026: A Lot's Own Holders May See Whether Its Paper Ballot Was Recorded](./0026-paper-ballot-receipt-for-own-lot.md)
 - [ADR 0027: The Association's Google Drive Connection Is One Sealed Server-Held Credential](./0027-association-drive-connection.md)
+- [ADR 0028: Tenant Access Is a Tenancy Beside Lot Authority, Seeing Only Documents Marked for Tenants](./0028-tenant-access.md)
