@@ -141,6 +141,11 @@ const NEW_MODEL_SURFACE = new Set([
   // #248 part 2: the single definition of "this Person holds Lot Authority
   // over this Lot", shared by the content guards and the casting SQL.
   'server/roster/authority.ts',
+  // ADR 0028 (#294): Tenancies. The board's list, end and void, and the module
+  // holding the currency rule and the consequences of losing a basis. A
+  // Tenancy grants no Lot Authority; `tenancy-not-lot-authority` pins that.
+  'pages/api/admin/tenancies.ts',
+  'server/roster/tenancy.ts',
 ]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
@@ -168,6 +173,7 @@ const NEW_TABLES = [
   'system_admin_bootstrap',
   'cutover_settings',
   'cutover_shadow_mismatches',
+  'tenancies',
 ];
 
 function sourceFiles(dir: string): string[] {

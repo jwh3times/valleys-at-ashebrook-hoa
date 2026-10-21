@@ -38,26 +38,34 @@ export const VIOLATION_SAMPLE_LIMIT = 10;
 /**
  * Overlap for inclusive-start / exclusive-end intervals, where a NULL start
  * reads as negative infinity (accepted legacy history) and a NULL end as open.
+ * `end` gives the effective end of the row with the given alias: a column, or
+ * an expression such as a Tenancy's early-or-scheduled end.
  */
-function overlapPredicate(alias: string, other: string, end: string): string {
-  return `(${alias}.start_day IS NULL OR ${other}.${end} IS NULL OR ${alias}.start_day < ${other}.${end})
-      AND (${other}.start_day IS NULL OR ${alias}.${end} IS NULL OR ${other}.start_day < ${alias}.${end})`;
+function overlapPredicate(
+  alias: string,
+  other: string,
+  end: (alias: string) => string,
+): string {
+  return `(${alias}.start_day IS NULL OR ${end(other)} IS NULL OR ${alias}.start_day < ${end(other)})
+      AND (${other}.start_day IS NULL OR ${end(alias)} IS NULL OR ${other}.start_day < ${end(alias)})`;
 }
 
 function intervalCheck(
   name: string,
   table: string,
   keyColumns: string[],
-  end = 'end_day',
+  end: string | ((alias: string) => string) = 'end_day',
   live = `a.voided_at IS NULL AND b.voided_at IS NULL`,
 ): Check {
   const keys = keyColumns.map((c) => `a.${c} = b.${c}`).join(' AND ');
+  const endOf =
+    typeof end === 'string' ? (alias: string) => `${alias}.${end}` : end;
   return {
     name,
     meaning: `two overlapping ${table} rows share ${keyColumns.join(' + ')}`,
     sql: `SELECT a.id AS a_id, b.id AS b_id FROM ${table} a
           JOIN ${table} b ON ${keys} AND a.id < b.id
-          WHERE ${live} AND ${overlapPredicate('a', 'b', end)}`,
+          WHERE ${live} AND ${overlapPredicate('a', 'b', endOf)}`,
   };
 }
 
@@ -87,6 +95,35 @@ export const INVARIANT_CHECKS: Check[] = [
   intervalCheck('office_holder_overlap', 'board_office_assignments', [
     'office',
   ]),
+  // ADR 0028. One Person may rent one Lot in adjacent periods (a renewal is a
+  // new row starting where the last one ends), never two overlapping ones.
+  intervalCheck(
+    'tenancy_overlap',
+    'tenancies',
+    ['tenant_person_id', 'lot_id'],
+    (alias) => `COALESCE(${alias}.actual_end_day, ${alias}.scheduled_end_day)`,
+  ),
+  {
+    // A Tenancy rests on its basis Ownership, so its record must stop where
+    // that Ownership stops: an end recorded no later than the basis's end day
+    // (or its own start, when it had not begun). For a voided basis, the void's
+    // day must have ended any Tenancy still running then; the UTC day of the
+    // void is at or after the Association Day it was recorded on, so the check
+    // never flags a Tenancy the void correctly left alone. Derivation already
+    // refuses such a Tenancy; this reports the record that disagrees.
+    name: 'tenancy_on_ended_basis',
+    meaning:
+      'a Tenancy is recorded as running past the end or void of its basis Ownership',
+    sql: `SELECT t.id AS tenancy_id, o.id AS ownership_id FROM tenancies t
+          JOIN ownerships o ON o.id = t.basis_ownership_id
+          WHERE t.voided_at IS NULL
+            AND (
+              (o.voided_at IS NOT NULL AND t.actual_end_day IS NULL
+                AND date(o.voided_at / 1000, 'unixepoch') < t.scheduled_end_day)
+              OR (o.voided_at IS NULL AND o.end_day IS NOT NULL
+                AND MAX(o.end_day, t.start_day) < COALESCE(t.actual_end_day, t.scheduled_end_day))
+            )`,
+  },
   {
     name: 'board_term_person_overlap',
     meaning: 'one Person holds two overlapping Board Terms',
@@ -235,7 +272,7 @@ export interface InvariantRun {
  *
  * Sequential rather than concurrent on purpose: this is a daily background job
  * with no latency budget, and `PRAGMA foreign_key_check` walks every table.
- * Racing seventeen scans against the production database to save a few seconds
+ * Racing nineteen scans against the production database to save a few seconds
  * of cron time is the wrong trade.
  *
  * Never throws for a violation or a broken query — it reports them. Deciding

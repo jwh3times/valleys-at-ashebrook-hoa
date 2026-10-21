@@ -1,5 +1,5 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { getDb } from '../../src/server/db/client';
 import { parties } from '../../src/server/db/roster-schema';
 import {
@@ -10,6 +10,7 @@ import {
   type InvariantRun,
 } from '../../src/server/db/invariants';
 import { runScheduledJobs } from '../../src/server/scheduled';
+import { resetRoster, seedRoster, type TenancySpec } from './dual-fixtures';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -155,5 +156,92 @@ describe('the scheduled job', () => {
     await expect(runScheduledJobs(env)).rejects.toThrow(
       /scheduled job failed: invariants/,
     );
+  });
+});
+
+describe('the Tenancy invariants (ADR 0028)', () => {
+  afterEach(resetRoster);
+
+  /** One Lot owned by `owner` (Ownership `owner-own`) and a tenant Person. */
+  async function seed(...tenancies: Partial<TenancySpec>[]): Promise<void> {
+    await seedRoster({
+      lots: [{ id: 'lot-a', owners: [{ id: 'owner', name: 'Olive Owner' }] }],
+      people: [{ id: 'tenant', name: 'Tess Tenant' }],
+      tenancies: tenancies.map((t, i) => ({
+        id: `ten-${i + 1}`,
+        tenantPersonId: 'tenant',
+        lotId: 'lot-a',
+        basisOwnershipId: 'owner-own',
+        startDay: '2026-01-01',
+        scheduledEndDay: '2027-01-01',
+        ...t,
+      })),
+    });
+  }
+
+  async function violations(name: string): Promise<unknown[]> {
+    const run = await runInvariants(env);
+    return run.results.find((r) => r.name === name)?.sample ?? [];
+  }
+
+  it('reports two overlapping Tenancies of one Person and Lot', async () => {
+    await seed(
+      { scheduledEndDay: '2026-07-01' },
+      { startDay: '2026-06-01', scheduledEndDay: '2026-12-01' },
+    );
+    expect(await violations('tenancy_overlap')).toEqual([
+      { a_id: 'ten-1', b_id: 'ten-2' },
+    ]);
+  });
+
+  it('accepts a renewal that starts where the last Tenancy ends, early or scheduled', async () => {
+    await seed(
+      { scheduledEndDay: '2026-07-01', actualEndDay: '2026-03-01' },
+      { startDay: '2026-03-01', scheduledEndDay: '2026-12-01' },
+    );
+    expect(await violations('tenancy_overlap')).toEqual([]);
+  });
+
+  async function endBasis(day: string): Promise<void> {
+    await env.DATABASE.prepare(
+      `UPDATE ownerships SET end_day = ? WHERE id = 'owner-own'`,
+    )
+      .bind(day)
+      .run();
+  }
+
+  it('reports a Tenancy recorded as running past its basis Ownership', async () => {
+    await seed({});
+    await endBasis('2026-03-01');
+    expect(await violations('tenancy_on_ended_basis')).toEqual([
+      { tenancy_id: 'ten-1', ownership_id: 'owner-own' },
+    ]);
+  });
+
+  it('accepts a Tenancy ended on its basis end, or on its own start when it had not begun', async () => {
+    await seed(
+      { actualEndDay: '2026-03-01', endReason: 'basis_ended' },
+      {
+        tenantPersonId: 'tenant',
+        startDay: '2026-05-01',
+        scheduledEndDay: '2026-09-01',
+        actualEndDay: '2026-05-01',
+        endReason: 'basis_ended',
+      },
+    );
+    await endBasis('2026-03-01');
+    expect(await violations('tenancy_on_ended_basis')).toEqual([]);
+  });
+
+  it('reports a Tenancy still running after its basis was voided, and not one that had lapsed first', async () => {
+    await seed({}, { startDay: '2025-01-01', scheduledEndDay: '2025-12-01' });
+    await env.DATABASE.prepare(
+      `UPDATE ownerships SET voided_at = ? WHERE id = 'owner-own'`,
+    )
+      .bind(Date.UTC(2026, 2, 1, 12))
+      .run();
+    expect(await violations('tenancy_on_ended_basis')).toEqual([
+      { tenancy_id: 'ten-1', ownership_id: 'owner-own' },
+    ]);
   });
 });

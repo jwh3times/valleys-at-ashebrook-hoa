@@ -12,6 +12,7 @@ import BoardServicePanel from './BoardServicePanel';
 import AccessPanel from './AccessPanel';
 import ReviewPanel from './ReviewPanel';
 import CompliancePanel from './CompliancePanel';
+import TenantsPanel from './TenantsPanel';
 import BoardAccessManager from './BoardAccessManager';
 import MeetingsManager from './MeetingsManager';
 import ResolutionsManager from './ResolutionsManager';
@@ -59,6 +60,13 @@ const SECTIONS = [
     key: 'board-service',
     label: 'Board',
     render: () => <BoardServicePanel />,
+  },
+  {
+    // ADR 0028 (#294): tenancies, which grant read access only and never
+    // Lot Authority, so they sit beside the roster rather than inside it.
+    key: 'tenants',
+    label: 'Tenants',
+    render: () => <TenantsPanel />,
   },
   { key: 'access', label: 'Access', render: () => <AccessPanel /> },
   { key: 'review', label: 'Review', render: () => <ReviewPanel /> },

@@ -59,6 +59,7 @@ beforeEach(async () => {
       officialMode: true,
       liveVotingEnabled: true,
       lotRecordsEnabled: true,
+      tenantAccessEnabled: true,
     }),
     updatedAt: new Date(),
   });
@@ -100,6 +101,9 @@ const SYSTEM_ADMIN = caller(
 );
 /** Authenticated, linked to nothing. Under derived authorization this is 403. */
 const UNLINKED = caller('u');
+/** A tenant who owns nothing (ADR 0028). `tenant` is read-only: it satisfies
+ * no admin, member or voting guard. */
+const TENANT = caller('t', 'tenant');
 
 /**
  * Admin routes whose DECLARED capability is finer than `board`: the
@@ -207,6 +211,10 @@ describe('the admin API declares board', () => {
         await callWith(handler, route, verb, UNLINKED),
         `${name} ${verb} must refuse an unlinked caller`,
       ).toBe(403);
+      expect(
+        await callWith(handler, route, verb, TENANT),
+        `${name} ${verb} must refuse a tenant`,
+      ).toBe(403);
       // Board passes the GATE exactly when the route declares `board`; on a
       // System-Administrator-only route the refusal must be 403, never 401.
       const boardStatus = await callWith(handler, route, verb, BOARD);
@@ -265,6 +273,10 @@ describe('the homeowner-write API declares member', () => {
         [401, 403].includes(await callWith(handler, route, verb, MEMBER_ONLY)),
         `${name} ${verb} must admit a member`,
       ).toBe(false);
+      expect(
+        await callWith(handler, route, verb, TENANT),
+        `${name} ${verb} must refuse a tenant`,
+      ).toBe(403);
     });
 
     it(`${name} ${verb} refuses a board member who owns no Lot`, async () => {

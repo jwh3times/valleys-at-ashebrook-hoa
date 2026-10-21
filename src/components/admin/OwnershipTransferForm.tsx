@@ -306,6 +306,12 @@ export default function OwnershipTransferForm({
               .
             </p>
           ))}
+          {preview.tenanciesEnding.map((tenancy) => (
+            <p key={tenancy.tenancyId}>
+              {tenancy.displayName}: Tenancy ends on {preview.effectiveDay} (was
+              scheduled to end {tenancy.scheduledEndDay}).
+            </p>
+          ))}
           <p>
             {preview.resetMotionIds.length} open member-motion vote(s) will be
             reset. Up to {preview.reviewFlagCount} Review Flag(s) may be opened

@@ -21,6 +21,7 @@ import {
   type Evidence,
   type SqlGuard,
 } from '../../../server/roster/audit';
+import { tenancyLossStatements } from '../../../server/roster/tenancy';
 
 // ADR 0022 phase 3b (#218): Lot retirement, per #205's resolution.
 //
@@ -249,7 +250,19 @@ async function retireLot(
       },
     });
   }
-  statements.push(...correlation.statements);
+  // ADR 0028: every Tenancy of the Lot ends with the Ownerships it rests on.
+  const tenancyLoss = await tenancyLossStatements({
+    database: env.DATABASE,
+    nowMs,
+    ownershipIds: current.results.map((ownership) => ownership.id),
+    day: effectiveDay,
+    reason: 'lot_retired',
+    rootGuard,
+    correlation,
+    cause: 'lot_retired',
+    actorAccountId,
+  });
+  statements.push(...tenancyLoss.statements, ...correlation.statements);
 
   const results = await env.DATABASE.batch(statements);
   if (results[0].meta.changes !== 1)

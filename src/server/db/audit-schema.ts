@@ -31,6 +31,7 @@ import {
   boardTerms,
   boardOfficeAssignments,
   accessGrants,
+  tenancies,
 } from './roster-schema';
 
 // The ADR 0022 immutable history: a causally ordered typed Audit Event ledger.
@@ -546,6 +547,10 @@ export const rosterChangeSubjects = sqliteTable(
     personLinkId: text('person_link_id').references(() => personLinks.id, {
       onDelete: 'restrict',
     }),
+    // Added by 0043's rebuild (ADR 0028).
+    tenancyId: text('tenancy_id').references(() => tenancies.id, {
+      onDelete: 'restrict',
+    }),
   },
   (t) => [
     check(
@@ -554,11 +559,12 @@ export const rosterChangeSubjects = sqliteTable(
     ),
     check(
       'roster_change_subjects_exactly_one',
-      sql`(CASE WHEN "lot_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "party_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "contact_method_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "ownership_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "representation_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "person_link_id" IS NULL THEN 0 ELSE 1 END) = 1`,
+      sql`(CASE WHEN "lot_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "party_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "contact_method_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "ownership_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "representation_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "person_link_id" IS NULL THEN 0 ELSE 1 END + CASE WHEN "tenancy_id" IS NULL THEN 0 ELSE 1 END) = 1`,
     ),
     index('roster_change_subjects_event_idx').on(t.eventId),
     index('roster_change_subjects_party_idx').on(t.partyId),
     index('roster_change_subjects_lot_idx').on(t.lotId),
+    index('roster_change_subjects_tenancy_idx').on(t.tenancyId),
   ],
 );
 
