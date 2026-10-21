@@ -1,15 +1,23 @@
 import { seedRosterOwner } from './roster-fixtures';
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 
 const captured: { planParams?: unknown; genParams?: unknown } = {};
-const { retrieveMock, anthropicState } = vi.hoisted(() => ({
+const { retrieveMock, retrieveFromMock, anthropicState } = vi.hoisted(() => ({
   retrieveMock: vi.fn(),
+  retrieveFromMock: vi.fn(
+    async (
+      _env: unknown,
+      _query: string,
+      _documentIds: string[],
+    ): Promise<AiSearchChunk[]> => [],
+  ),
   anthropicState: { planFail: false, genFail: false },
 }));
 vi.mock('../../src/server/ai/search', async (orig) => ({
   ...(await orig<typeof import('../../src/server/ai/search')>()),
   retrieve: retrieveMock,
+  retrieveFrom: retrieveFromMock,
 }));
 vi.mock('../../src/server/ai/anthropic', () => ({
   AssistantNotConfiguredError: class extends Error {},
@@ -57,6 +65,7 @@ import { buildPseudonymizer } from '../../src/server/ai/pii';
 import { getDb } from '../../src/server/db/client';
 import { lots, documents } from '../../src/server/db/schema';
 import { REPORT_TEMPLATES } from '../../src/lib/reports';
+import type { AiSearchChunk } from '../../src/server/ai/search';
 
 let SURROGATE_NAME = '';
 
@@ -297,5 +306,139 @@ describe('generateReport', () => {
     await expect(
       generateReport(env, { templateKey: 'nope' }),
     ).rejects.toBeInstanceOf(UnknownTemplateError);
+  });
+});
+
+// #453: the same governing-documents pass the assistant got in #305. A
+// library-wide search ranks correspondence and checklists above the bylaws and
+// covenants, so every sub-query also searches within the governing documents.
+describe('the governing documents (#453)', () => {
+  const userText = () =>
+    (captured.genParams as { messages: { content: string }[] }).messages[0]
+      .content;
+  const template = REPORT_TEMPLATES.find((t) => t.key === 'rentals')!;
+
+  beforeAll(async () => {
+    await getDb(env).insert(documents).values({
+      id: 'gov-named',
+      title: 'Jane Q Homeowner Easement',
+      category: 'Governing Documents',
+      visibility: 'board',
+      r2Key: 'documents/gov-named/e.pdf',
+      filename: 'e.pdf',
+      sizeBytes: 1,
+      contentType: 'application/pdf',
+      uploadedAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
+
+  afterEach(() => {
+    retrieveFromMock.mockReset();
+    retrieveFromMock.mockImplementation(async () => []);
+    retrieveMock.mockImplementation(async (_env: unknown, query: string) => [
+      chunk(`c-${query}`, 0.9, `Provision about ${query}.`, 'doc-1'),
+    ]);
+  });
+
+  it('also searches the governing documents for every sub-query', async () => {
+    retrieveFromMock.mockClear();
+    await readAll(
+      (await generateReport(env, { templateKey: template.key })).textStream,
+    );
+    expect(retrieveFromMock.mock.calls.map((c) => [c[1], c[2]])).toEqual(
+      template.subQueries.map((q) => [q, ['doc-1', 'gov-named']]),
+    );
+  });
+
+  it('keeps every governing passage within the 30-passage limit, ahead of the rest', async () => {
+    retrieveMock.mockImplementation(async (_env: unknown, query: string) =>
+      Array.from({ length: 10 }, (_, i) =>
+        chunk(`l-${query}-${i}`, 0.9, `Excerpt ${query} ${i}.`, 'doc-1'),
+      ),
+    );
+    retrieveFromMock.mockImplementation(
+      async (_env: unknown, query: unknown) => [
+        chunk(`g-${String(query)}`, 0.31, `Clause ${String(query)}.`, 'doc-1'),
+      ],
+    );
+    await readAll(
+      (await generateReport(env, { templateKey: template.key })).textStream,
+    );
+    const text = userText();
+    for (const q of template.subQueries) expect(text).toContain(`Clause ${q}.`);
+    expect(text.match(/Excerpt |Clause /g)).toHaveLength(30);
+    const lastGoverning = Math.max(
+      ...template.subQueries.map((q) => text.indexOf(`Clause ${q}.`)),
+    );
+    expect(lastGoverning).toBeLessThan(text.indexOf('Excerpt '));
+  });
+
+  it('puts the best-matching governing passage first', async () => {
+    const scores = [0.4, 0.8, 0.6, 0.5];
+    retrieveFromMock.mockImplementation(
+      async (_env: unknown, query: unknown) => {
+        const i = template.subQueries.indexOf(String(query));
+        return [chunk(`g-${i}`, scores[i], `Governing passage ${i}.`, 'doc-1')];
+      },
+    );
+    await readAll(
+      (await generateReport(env, { templateKey: template.key })).textStream,
+    );
+    expect(userText().match(/Governing passage \d/g)).toEqual([
+      'Governing passage 1',
+      'Governing passage 2',
+      'Governing passage 3',
+      'Governing passage 0',
+    ]);
+  });
+
+  it('keeps one copy of a passage both searches return', async () => {
+    retrieveMock.mockImplementation(async () => [
+      chunk('l-1', 0.9, 'Leases must run a year.', 'doc-1'),
+    ]);
+    retrieveFromMock.mockImplementation(async () => [
+      chunk('g-1', 0.5, 'Leases must run a year.', 'doc-1'),
+    ]);
+    await readAll(
+      (await generateReport(env, { templateKey: template.key })).textStream,
+    );
+    expect(userText().match(/Leases must run a year\./g)).toHaveLength(1);
+  });
+
+  it('writes the report from the governing passages when the library search finds nothing', async () => {
+    retrieveMock.mockImplementation(async () => []);
+    retrieveFromMock.mockImplementation(async () => [
+      chunk('g-1', 0.5, 'Article IX: leasing.', 'doc-1'),
+    ]);
+    const gen = await generateReport(env, { templateKey: template.key });
+    await readAll(gen.textStream);
+    expect(gen.sources.map((s) => s.id)).toEqual(['doc-1']);
+    expect(userText()).toContain('Article IX: leasing.');
+  });
+
+  it('still writes the report, without governing passages, when the governing search fails', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    retrieveFromMock.mockImplementation(async () => {
+      throw new Error('filter rejected');
+    });
+    const gen = await generateReport(env, { templateKey: template.key });
+    expect((await readAll(gen.textStream)).length).toBeGreaterThan(0);
+    expect(userText()).toContain(`Provision about ${template.subQueries[0]}.`);
+    expect(userText()).toContain('- "CCRs"');
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it('tells the model which governing documents exist, with titles pseudonymized', async () => {
+    await readAll(
+      (await generateReport(env, { templateKey: template.key })).textStream,
+    );
+    const text = userText();
+    expect(text).toMatch(/^Governing documents in the library:\n- "CCRs"\n/);
+    expect(text).toContain(`- "${SURROGATE_NAME} Easement"`);
+    expect(text).not.toContain('Jane Q Homeowner');
+    const system = (captured.genParams as { system: string }).system;
+    expect(system).toMatch(/never say the association lacks a document/i);
   });
 });

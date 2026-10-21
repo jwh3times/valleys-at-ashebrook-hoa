@@ -398,8 +398,10 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   with the minted token; `src/components/admin/DriveImport.tsx` (beside Upload in
   `DocumentsManager`) drives pick, preview table, per-file import results, and "Import anyway".
 - `http.ts`: `readJson` and `stringField` request-body helpers for admin writes.
-- `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`,
-  Cloudflare AI Search/autorag retrieval), `pii.ts` (`buildPseudonymizer`, a reversible
+- `ai/`: the board-only document assistant and report generator — `search.ts` (`retrieve`, library-wide
+  Cloudflare AI Search/autorag retrieval, and `retrieveFrom`, the same query restricted to named
+  documents' twins by an `or` of `filename eq <id>.md` filters — AI Search matches a twin by its
+  bare name, without `rag/`; empty id list returns `[]` without searching; AI Search fails any `or` filter over 48 clauses, so ids are split into batches of `FILTER_BATCH = 40`, searched in parallel, and the best `limit` by score kept — a failed batch is logged and dropped, and it throws only when every batch fails; the shared `search()` call behind both retries a failed binding call once after `RETRY_DELAY_MS` (200 ms) before throwing `AiSearchUnavailableError`, and the retry warning logs only the first 200 chars of the error message, never the query or options), `pii.ts` (`buildPseudonymizer`, a reversible
   roster-based PII pseudonymizer with streaming de-anonymization), `sources.ts` (`toSources` maps
   retrieved chunks back to real D1 document rows for citations; `docIdFromFolder` extracts a
   document's uuid from either R2 key shape, `documents/<uuid>/…` or `rag/<uuid>.md`), `context.ts`
@@ -413,9 +415,18 @@ personId, associationDay)` returns each Lot's itemized entries from the caller's
   ended contact value already used in a document stays masked, redacted rows arrive `NULL` and are
   skipped, and Organization names are deliberately excluded from tokenized name matching (their
   contact methods are still masked) — see #233 and SECURITY.md — and the shared `claudeTextStream`/
-  `ClaudeStream` streaming helpers; orchestrates retrieve -> pseudonymize -> Claude generation ->
+  `ClaudeStream` streaming helpers; orchestrates retrieve (top 8, library-wide) plus `governingPassages` (top 4 from the `Governing Documents` category, run in parallel, governing passages not already present appended; the search query also carries the previous user question so follow-ups keep context) -> pseudonymize -> Claude generation ->
   de-anonymized streamed output), and `report.ts` (`planSubQueries`, a small Claude Haiku call that
   expands a freeform topic into 3-6 retrieval sub-queries from the pseudonymized topic and returns
   de-anonymized queries, degrading to a single query on any failure; `generateReport`, which uses a
   template's fixed sub-queries or a planned freeform topic, retrieves and pools/dedupes/caps chunks
-  at 30, and streams one Claude Opus generation into a five-section governing-documents report).
+  at 30, and streams one Claude Opus generation into a five-section governing-documents report.
+  Per sub-query it also runs `governingPassages`, in parallel with the library `retrieve` calls;
+  pooling puts governing passages first (best score first, at most 24), then library ones (best
+  score first), deduped, capped at `REPORT_CONTEXT_CHUNK_CAP` = 30, so a report whose library search
+  finds nothing can still be written from governing passages). `governing.ts` is the Governing
+  Documents support shared by both: `loadGoverningDocuments` (D1 read of the category, ordered by
+  title), `governingPassages` (`GOVERNING_PASSAGES = 4`; failure-tolerant — logs `[governing] ...`
+  and returns `[]`), `governingCatalog` (the pseudonymized title list prefixed to the user
+  message), `governingInstruction('question'|'topic')` (system-prompt line never to deny a listed
+  document exists), and `uniqueChunks` (dedupe keyed on folder plus content).

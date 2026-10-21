@@ -2,6 +2,13 @@ import { getDb } from '../db/client';
 import { lots } from '../db/schema';
 import { contactMethods, people } from '../db/roster-schema';
 import { retrieve } from './search';
+import {
+  governingCatalog,
+  governingInstruction,
+  governingPassages,
+  loadGoverningDocuments,
+  uniqueChunks,
+} from './governing';
 import { type Source } from './sources';
 import { buildExcerptContext } from './context';
 import { buildPseudonymizer, type PiiEntry } from './pii';
@@ -33,6 +40,8 @@ const SYSTEM_PROMPT = [
   '- Clearly mark any statement that comes from general knowledge and is not supported by the excerpts — for example, prefix it with "General knowledge (not from the documents):" — and never present such information as if it came from the HOA’s documents.',
   '- If the documents and general knowledge disagree, defer to the documents and note the difference.',
   '- If you can answer from neither, say so.',
+  '',
+  governingInstruction('question'),
   '',
   'Do not fabricate document contents or [Source N] citations for claims the excerpts do not support. Names, addresses, phone numbers, and emails in the excerpts are placeholders — use them exactly as written; never alter, abbreviate, or reformat them. Respond with the answer only — no preamble or meta-commentary.',
 ].join('\n');
@@ -109,17 +118,43 @@ export function claudeTextStream(stream: ClaudeStream): ReadableStream<string> {
   });
 }
 
+/**
+ * What to search for. A follow-up such as "and quorum?" means nothing on its
+ * own, so the previous question goes with it. Retrieval runs inside
+ * Cloudflare, which already holds the documents; only the model's input is
+ * pseudonymized.
+ */
+function searchQuery(question: string, history: Turn[]): string {
+  const previous = history.findLast((t) => t.role === 'user');
+  if (!previous) return question;
+  // A real client sends back questions it already capped; this keeps a
+  // hand-built history turn from growing the query past what one question can.
+  return `${previous.content.slice(0, INPUT_LIMITS.assistantQuestion)}\n${question}`;
+}
+
 export async function answer(
   env: Env,
   input: { question: string; history?: Turn[] },
 ): Promise<AnswerResult> {
-  const chunks = await retrieve(env, input.question);
+  const query = searchQuery(input.question, input.history ?? []);
+  // The library-wide search needs nothing from D1, so it runs alongside the
+  // read of the governing documents and the search within them.
+  const [library, { governingDocs, governing }] = await Promise.all([
+    retrieve(env, query),
+    loadGoverningDocuments(env).then(async (docs) => ({
+      governingDocs: docs,
+      governing: await governingPassages(env, query, docs),
+    })),
+  ]);
+  // The library-wide passages, then any governing passage not already there.
+  const chunks = uniqueChunks([...library, ...governing]);
   const pseud = buildPseudonymizer(await loadRosterEntries(env));
   const { sources, contextText, documentsFound } = await buildExcerptContext(
     env,
     chunks,
     pseud,
   );
+  const catalog = governingCatalog(governingDocs, pseud);
 
   const history = (input.history ?? []).map((t) => ({
     role: t.role,
@@ -130,6 +165,7 @@ export async function answer(
       .slice(0, INPUT_LIMITS.assistantQuestion),
   }));
   const userText =
+    catalog +
     `Document excerpts:\n\n${contextText || '(no relevant excerpts found)'}\n\n` +
     `Question: ${pseud.anonymize(input.question)}`;
 

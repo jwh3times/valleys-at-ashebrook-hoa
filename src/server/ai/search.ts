@@ -127,22 +127,115 @@ function normalizeChunk(item: RawSearchItem): AiSearchChunk {
   };
 }
 
+/**
+ * The pause before the one retry (#455). About 2 searches in 100 fail once, as
+ * a gateway timeout or "All search methods failed: vector", and succeed when
+ * repeated straight away (measured against production, 2026-10-20). A
+ * permanent failure, such as a filter AI Search rejects, fails the same way,
+ * so there is one retry and no more.
+ */
+export const RETRY_DELAY_MS = 200;
+
+async function search(
+  env: Env,
+  options: Record<string, unknown>,
+): Promise<AiSearchChunk[]> {
+  const attempt = async () => {
+    const res = (await env.AI.autorag(env.AI_SEARCH_INSTANCE).search(
+      options as never,
+    )) as unknown as RawSearchResult;
+    const raw = res.data ?? res.chunks ?? [];
+    return raw.map(normalizeChunk);
+  };
+  try {
+    return await attempt();
+  } catch (first) {
+    // The start of the message only: the options carry the search text,
+    // which can name a resident.
+    const message = first instanceof Error ? first.message : String(first);
+    console.warn(`[search] retrying a failed search: ${message.slice(0, 200)}`);
+  }
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  try {
+    return await attempt();
+  } catch (err) {
+    throw new AiSearchUnavailableError(err);
+  }
+}
+
 /** Retrieve the top document chunks relevant to `query` from the AI Search index. */
 export async function retrieve(
   env: Env,
   query: string,
   limit = 8,
 ): Promise<AiSearchChunk[]> {
-  try {
-    const res = (await env.AI.autorag(env.AI_SEARCH_INSTANCE).search({
-      query,
-      max_num_results: limit,
-      ranking_options: { score_threshold: 0.3 },
-      rewrite_query: true,
-    })) as unknown as RawSearchResult;
-    const raw = res.data ?? res.chunks ?? [];
-    return raw.map(normalizeChunk);
-  } catch (err) {
-    throw new AiSearchUnavailableError(err);
-  }
+  return search(env, {
+    query,
+    max_num_results: limit,
+    ranking_options: { score_threshold: 0.3 },
+    rewrite_query: true,
+  });
+}
+
+/**
+ * Documents per search in `retrieveFrom`. AI Search fails every search whose
+ * `or` filter has more than 48 clauses (measured against production,
+ * 2026-10-20; the limit is not documented), so a longer list is split.
+ */
+export const FILTER_BATCH = 40;
+
+/**
+ * Retrieve the chunks most relevant to `query` from the named documents only
+ * (#305). The library-wide search ranks correspondence and checklists above
+ * the bylaws and covenants, so the assistant and reports also search within
+ * the governing documents. AI Search matches a twin by its bare name, without
+ * the `rag/` folder.
+ *
+ * Past `FILTER_BATCH` documents, each batch is its own search and the best
+ * `limit` across them are kept. Each batch may rewrite the query a little
+ * differently, so their scores are close to comparable, not exactly. A batch
+ * that fails is logged and left out; only when every batch fails does this
+ * throw.
+ */
+export async function retrieveFrom(
+  env: Env,
+  query: string,
+  documentIds: string[],
+  limit = 4,
+): Promise<AiSearchChunk[]> {
+  const batches: string[][] = [];
+  for (let i = 0; i < documentIds.length; i += FILTER_BATCH)
+    batches.push(documentIds.slice(i, i + FILTER_BATCH));
+  const settled = await Promise.allSettled(
+    batches.map((ids) =>
+      search(env, {
+        query,
+        max_num_results: limit,
+        ranking_options: { score_threshold: 0.3 },
+        rewrite_query: true,
+        filters: {
+          type: 'or',
+          filters: ids.map((id) => ({
+            type: 'eq',
+            key: 'filename',
+            value: `${id}.md`,
+          })),
+        },
+      }),
+    ),
+  );
+  const found = settled.flatMap((r) =>
+    r.status === 'fulfilled' ? [r.value] : [],
+  );
+  const failed = settled.filter((r) => r.status === 'rejected');
+  if (failed.length > 0 && found.length === 0) throw failed[0].reason;
+  if (failed.length > 0)
+    console.error(
+      `[search] ${failed.length} of ${batches.length} filtered searches failed`,
+      failed[0].reason,
+    );
+  return found
+    .flat()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }

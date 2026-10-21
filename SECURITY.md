@@ -407,7 +407,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   way; roster phone numbers are pseudonymized in any format (including bare digits), and any number
   written in a standard phone format (parenthesized area code or separators) is pseudonymized
   whether or not it matches the roster. Document titles are pseudonymized the same way and sent as
-  part of each excerpt label; citations
+  part of each excerpt label, and the pseudonymized titles of the Governing Documents category are
+  listed at the start of the model input; citations
   reference retrieved excerpts by index label and are resolved back to real documents server-side.
   The dictionary uses Person names and Contact Methods from the permanent party roster
   (`people`, `contact_methods`), plus Lot addresses. It
@@ -433,8 +434,10 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   for a freeform topic, a small Claude Haiku structured-output call first expands the
   **pseudonymized** topic into 3-6 retrieval sub-queries and the returned queries are de-anonymized
   before retrieval, so search still runs over real document text — any planning failure degrades to
-  a single query on the raw topic rather than failing the request. Retrieval that yields no usable
-  excerpt returns before a report-writing model call. Otherwise the Claude Opus call receives the
+  a single query on the raw topic rather than failing the request. Every sub-query also pulls
+  passages from the Governing Documents category, and the pseudonymized titles of that category
+  are listed at the start of the model input, as in the chat assistant. Retrieval (library and
+  governing) that yields no usable excerpt returns before a report-writing model call. Otherwise the Claude Opus call receives the
   same pseudonymized excerpt and title context as the chat assistant, built from one shared
   pseudonymizer instance per request, and the streamed markdown is de-anonymized server-side
   before it reaches the board member's browser. Retrieval itself is not tier-aware for the same
@@ -452,6 +455,10 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   member may still delete the retained row manually (`DELETE /api/admin/reports`). Only a completed
   generation is saved — the row is inserted before the SSE `done` frame is emitted, so a failed or
   client-disconnected generation leaves no row.
+- **The retrieval query is not pseudonymized.** The question, plus the previous user question from
+  chat history so follow-ups keep context, is sent as-is to Cloudflare AI Search, which runs inside
+  the same Cloudflare account as the Worker, and so are the report generator's sub-queries; only
+  text bound for Anthropic is pseudonymized.
 - **The AI Search index is not tier-aware, which is why the assistant stays board-only.** Retrieval
   runs over a single Cloudflare AI Search index built from every document's Markdown text
   (`rag/<uuid>.md`) regardless of that document's visibility tier, and returns un-pseudonymized
