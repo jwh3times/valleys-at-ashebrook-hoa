@@ -236,6 +236,7 @@ describe('transferring an Ownership', () => {
         personId: 'tenant',
         displayName: 'Person tenant',
         scheduledEndDay: '2099-01-01',
+        endDay: today,
       },
     ]);
     expect((await tenancy('ten')).actual_end_day).toBeNull();
@@ -249,6 +250,22 @@ describe('transferring an Ownership', () => {
       actual_end_day: today,
       end_reason: 'basis_ended',
     });
+  });
+
+  it('shows a Tenancy that has not begun ending on its own start day', async () => {
+    await seedTenancy('later', {
+      startDay: '2099-02-01',
+      scheduledEndDay: '2099-06-01',
+    });
+    const review = await preview();
+    expect(review.tenanciesEnding[0].endDay).toBe('2099-02-01');
+    const res = await ownerships({
+      action: 'transfer',
+      ...input,
+      previewToken: review.token,
+    });
+    expect(res.status).toBe(200);
+    expect((await tenancy('later')).actual_end_day).toBe('2099-02-01');
   });
 
   it('refuses a preview made before a Tenancy was recorded', async () => {

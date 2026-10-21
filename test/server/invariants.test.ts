@@ -233,6 +233,12 @@ describe('the Tenancy invariants (ADR 0028)', () => {
     expect(await violations('tenancy_on_ended_basis')).toEqual([]);
   });
 
+  it('accepts a Tenancy ended before a later, backdated end of its basis', async () => {
+    await seed({ actualEndDay: '2026-10-21', endReason: 'board_ended' });
+    await endBasis('2026-09-15');
+    expect(await violations('tenancy_on_ended_basis')).toEqual([]);
+  });
+
   it('reports a Tenancy still running after its basis was voided, and not one that had lapsed first', async () => {
     await seed({}, { startDay: '2025-01-01', scheduledEndDay: '2025-12-01' });
     await env.DATABASE.prepare(

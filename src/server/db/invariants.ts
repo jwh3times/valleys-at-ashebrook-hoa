@@ -104,24 +104,29 @@ export const INVARIANT_CHECKS: Check[] = [
     (alias) => `COALESCE(${alias}.actual_end_day, ${alias}.scheduled_end_day)`,
   ),
   {
-    // A Tenancy rests on its basis Ownership, so its record must stop where
-    // that Ownership stops: an end recorded no later than the basis's end day
-    // (or its own start, when it had not begun). For a voided basis, the void's
-    // day must have ended any Tenancy still running then; the UTC day of the
-    // void is at or after the Association Day it was recorded on, so the check
-    // never flags a Tenancy the void correctly left alone. Derivation already
-    // refuses such a Tenancy; this reports the record that disagrees.
+    // A Tenancy with no recorded end whose basis Ownership ended or was voided
+    // while it was still scheduled to run: the end the basis loss should have
+    // recorded is missing. Derivation already refuses such a Tenancy; this
+    // reports the record that disagrees, and ending it clears the report.
+    //
+    // A Tenancy that already HAS an end is never reported, even when a later,
+    // backdated Ownership end falls before it: the earlier end was real, and
+    // nothing could correct it short of a void that would call it an error.
+    //
+    // For a voided basis, the UTC day of the void is at or after the
+    // Association Day it was recorded on, so the check never flags a Tenancy
+    // that had lapsed before the void.
     name: 'tenancy_on_ended_basis',
     meaning:
-      'a Tenancy is recorded as running past the end or void of its basis Ownership',
+      'a Tenancy with no recorded end outlived the end or void of its basis Ownership',
     sql: `SELECT t.id AS tenancy_id, o.id AS ownership_id FROM tenancies t
           JOIN ownerships o ON o.id = t.basis_ownership_id
-          WHERE t.voided_at IS NULL
+          WHERE t.voided_at IS NULL AND t.actual_end_day IS NULL
             AND (
-              (o.voided_at IS NOT NULL AND t.actual_end_day IS NULL
+              (o.voided_at IS NOT NULL
                 AND date(o.voided_at / 1000, 'unixepoch') < t.scheduled_end_day)
               OR (o.voided_at IS NULL AND o.end_day IS NOT NULL
-                AND MAX(o.end_day, t.start_day) < COALESCE(t.actual_end_day, t.scheduled_end_day))
+                AND o.end_day < t.scheduled_end_day)
             )`,
   },
   {

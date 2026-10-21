@@ -20,6 +20,11 @@ const TENANCY_TABLES: Record<string, string> = {
   tenancyInvitations: 'tenancy_invitations',
 };
 
+/** Importing the tenancy module would reach the table through its SQL
+ * fragments, which name only an alias, so it is forbidden too. */
+const TENANCY_MODULE_IMPORT =
+  /from\s+['"][^'"]*roster\/tenancy['"]|from\s+['"]\.\/tenancy['"]/;
+
 const AUTHORITY_MODULES = [
   'src/server/roster/authority.ts',
   'src/server/roster/board-consequences.ts',
@@ -30,10 +35,15 @@ describe('Lot Authority never reads a Tenancy', () => {
     it(`${path} names no tenancy table`, () => {
       const source = readFileSync(join(process.cwd(), path), 'utf8');
       expect(tablesReferencedIn(source, TENANCY_TABLES)).toEqual([]);
+      expect(source).not.toMatch(TENANCY_MODULE_IMPORT);
     });
 
   it('LOT_SQL names no tenancy table', () => {
     expect(tablesReferencedIn(LOT_SQL, TENANCY_TABLES)).toEqual([]);
+  });
+
+  it('LOT_SQL embeds no tenancy predicate', () => {
+    expect(LOT_SQL).not.toMatch(/tenan/i);
   });
 
   it('would catch one: the tenant statement is seen to read tenancies', () => {
@@ -48,5 +58,11 @@ describe('Lot Authority never reads a Tenancy', () => {
         TENANCY_TABLES,
       ),
     ).toEqual(['tenancies']);
+    expect("import { tenancyCurrentSql } from './tenancy';").toMatch(
+      TENANCY_MODULE_IMPORT,
+    );
+    expect("import { tenancyCurrentSql } from '../roster/tenancy';").toMatch(
+      TENANCY_MODULE_IMPORT,
+    );
   });
 });

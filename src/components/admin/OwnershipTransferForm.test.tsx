@@ -210,6 +210,7 @@ it('names each Tenancy the transfer will end', async () => {
         personId: 'tenant',
         displayName: 'Tess Tenant',
         scheduledEndDay: '2099-01-01',
+        endDay: '2098-02-01',
       },
     ],
   });
@@ -217,7 +218,7 @@ it('names each Tenancy the transfer will end', async () => {
   await user.click(screen.getByRole('button', { name: 'Review transfer' }));
   expect(
     await screen.findByText(
-      `Tess Tenant: Tenancy ends on ${review.effectiveDay} (was scheduled to end 2099-01-01).`,
+      'Tess Tenant: Tenancy ends on 2098-02-01 (was scheduled to end 2099-01-01).',
     ),
   ).toBeInTheDocument();
 });

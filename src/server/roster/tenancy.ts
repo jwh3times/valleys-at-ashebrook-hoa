@@ -84,6 +84,8 @@ export interface EndingTenancy {
   tenantPersonId: string;
   lotId: string;
   scheduledEndDay: string;
+  /** The end it will receive: the later of its start and the loss day. */
+  endDay: string;
 }
 
 /**
@@ -107,18 +109,21 @@ export async function tenancyLossStatements(
   const placeholders = input.ownershipIds.map(() => '?').join(', ');
   const found = await input.database
     .prepare(
-      `SELECT id, tenant_person_id, lot_id, scheduled_end_day FROM tenancies
+      `SELECT id, tenant_person_id, lot_id, scheduled_end_day,
+              MAX(start_day, ?) AS end_day
+       FROM tenancies
        WHERE basis_ownership_id IN (${placeholders})
          AND voided_at IS NULL AND actual_end_day IS NULL
          AND MAX(start_day, ?) < scheduled_end_day
        ORDER BY start_day, id`,
     )
-    .bind(...input.ownershipIds, input.day)
+    .bind(input.day, ...input.ownershipIds, input.day)
     .all<{
       id: string;
       tenant_person_id: string;
       lot_id: string;
       scheduled_end_day: string;
+      end_day: string;
     }>();
 
   const statements: D1PreparedStatement[] = [];
@@ -168,6 +173,7 @@ export async function tenancyLossStatements(
       tenantPersonId: row.tenant_person_id,
       lotId: row.lot_id,
       scheduledEndDay: row.scheduled_end_day,
+      endDay: row.end_day,
     });
   }
   return { statements, ending };

@@ -308,7 +308,7 @@ export default function OwnershipTransferForm({
           ))}
           {preview.tenanciesEnding.map((tenancy) => (
             <p key={tenancy.tenancyId}>
-              {tenancy.displayName}: Tenancy ends on {preview.effectiveDay} (was
+              {tenancy.displayName}: Tenancy ends on {tenancy.endDay} (was
               scheduled to end {tenancy.scheduledEndDay}).
             </p>
           ))}

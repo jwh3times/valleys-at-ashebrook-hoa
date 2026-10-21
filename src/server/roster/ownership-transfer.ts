@@ -532,6 +532,7 @@ async function planTransfer(
       personId: tenancy.tenantPersonId,
       displayName: label(tenancy.tenantPersonId),
       scheduledEndDay: tenancy.scheduledEndDay,
+      endDay: tenancy.endDay,
     })),
     resetMotionIds: effects.resetMotionIds,
     reviewFlagCount: effects.openedFlagCount,
