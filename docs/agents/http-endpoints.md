@@ -35,8 +35,10 @@ API routes live under `src/pages/api/`:
   blob's read is **not** here: it is `GET /api/admin/dues`, board-only beside the `PUT` it
   mirrors, because the board's Dues panel is its only caller and `/dues` reads
   `getDuesSettings` in its own frontmatter (#364).
-- Gated document download from R2 with tier checks: `GET /api/files/[id]`. A document outside
-  the caller's tier answers `404 Not Found`, exactly as an unknown id does, so the response never
+- Gated document download from R2 with tier checks: `GET /api/files/[id]`. Visibility is decided by
+  `documentVisibleTo` (the same predicate the document list uses, evaluated inside the lookup
+  query), so a download is allowed exactly when the list shows the document. A document outside
+  the caller's reach answers `404 Not Found`, exactly as an unknown id does, so the response never
   confirms it exists.
 - The caller's own access: `GET /api/me` returns `{ capabilities, contentTier }` from the same
   `AuthContext` every route gate reads (`401` when anonymous, `no-store`). It sits outside the
@@ -87,6 +89,11 @@ API routes live under `src/pages/api/`:
 found"` for an id that does not match any row — the update uses `.returning({ id })` and checks
   the result rather than trusting an unconditional `UPDATE` to have matched anything, so an unknown
   id can no longer read back as the same silent `204` a real edit gets.
+  `PATCH` also takes `tenantVisible` (#294): a non-boolean is `400`; `true` with a `visibility` other
+  than `homeowner` in the same body is `400`; `true` on its own adds `visibility = 'homeowner'` to
+  the `UPDATE`'s `WHERE`, so the tier is re-checked at write time, and a row that exists but is not
+  homeowner-tier answers `400 "Only a homeowner document can be Tenant-Visible"` (an unknown id is
+  still `404`). A `visibility` change to `public` or `board` clears the mark in the same `UPDATE`.
   `GET /api/admin/documents` also returns `uploadedBy` and `uploadedByName` (left join `users`).
   `DELETE /api/admin/documents` goes through `deleteDocuments`: D1 rows are deleted first in one
   batch, then the R2 original and twin; a document cited as evidence by `roster_changes`,
@@ -95,8 +102,8 @@ found"` for an id that does not match any row — the update uses `.returning({ 
 - Site settings and feature gates, `requireBoard`-gated (#363, ADR 0024): `/api/admin/site`
   supports `PUT` and `POST`. **`PUT` no longer writes any gate.** It replaces the presentation
   fields (name, tagline, welcome copy, disclaimer, about body) but the `ON CONFLICT DO UPDATE`'s
-  `json_set` rewrites every key in `SITE_GATE_KEYS` (`officialMode`, `liveVotingEnabled`, and
-  `lotRecordsEnabled`) back to whatever is currently stored on the row, regardless of what the body
+  `json_set` rewrites every key in `SITE_GATE_KEYS` (`officialMode`, `liveVotingEnabled`,
+  `lotRecordsEnabled`, and `tenantAccessEnabled`) back to whatever is currently stored on the row, regardless of what the body
   sends — a `json_type = 'true'` check re-wrapped through `json('true'|'false')` so the value stays
   a JSON boolean rather than the integer `json_extract` would coerce it to, which
   `LIVE_VOTING_ENABLED_SQL` would then read as permanently off. A first-ever `PUT` (no stored row to

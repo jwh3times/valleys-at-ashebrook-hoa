@@ -7,6 +7,28 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-21
+
+### Added
+
+- **The board can mark homeowner documents Tenant-Visible (#294, slice 1 of tenant access).** The
+  Documents panel's edit form has a Tenant-Visible checkbox for homeowner-tier documents, plus a
+  Tenant-Visible filter tab and badge. The mark exists for the architectural rules, amenity policy
+  and similar documents a tenant needs. Only a homeowner document can carry it. Moving a document
+  to another tier clears the mark, and a new upload or Drive import starts unmarked.
+- **A Tenant access setting**, off by default, joins site settings. Like the other feature gates,
+  it changes only through the audited switch and needs official mode as well.
+
+Tenants cannot have accounts yet; later slices add them. Until then the mark only prepares which
+documents tenants will see. Homeowners, the board and visitors see exactly what they saw before.
+
+### Changed
+
+- The document list and file downloads now decide visibility with one shared check, so the two
+  can never disagree about a document.
+- Migration `0042` adds `documents.tenant_visible`. It must be applied to production **before**
+  this release deploys, because the document list, downloads and the admin list read the column.
+
 ## [2.6.9] - 2026-10-20
 
 ### Added
@@ -4219,7 +4241,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.9...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.9...v2.7.0
 [2.6.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.8...v2.6.9
 [2.6.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.7...v2.6.8
 [2.6.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.6...v2.6.7

@@ -188,7 +188,11 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   phase-2 shadow layer (`shadow.ts`, `shadow-compare.ts`, the `CUTOVER_SHADOW` env var, and the
   offline `scripts/shadow-sweep.ts` sweep) was deleted in phase 4 (#212). `getAuthContext`/`resolveAuthContext` remain the entry
   point for every request.
-- `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`), `reads.ts` (per-role reads for
+- `content/`: `visibility.ts` (`tierAllows`, `visibleTiers`, and `documentVisibleTo(reader)`, the one
+  SQL condition for "may this reader see this document" (#294): the tier rule, plus Tenant-Visible
+  documents for a caller holding the `tenant` capability while both gates are on. `fetchDocumentsFor`
+  and `GET /api/files/[id]` both filter with it so the list and the download cannot disagree;
+  `fetchDocumentsFor(env, reader)` takes an `AuthContext`-shaped reader or `null`, not a role), `reads.ts` (per-role reads for
   announcements, documents, and now the meeting record — `fetchMeetingsFor`/`fetchMeetingFor`
   filter `status = 'approved'` UNCONDITIONALLY, including for a board caller, so a draft meeting is
   reachable only through the board-only `fetchAdminMeetings`/`fetchAdminMeeting`; a shared
@@ -291,6 +295,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   Drive keepalive (a broken connection is logged, not a failure), and the R2 orphan sweep
   (over-threshold or a throw fails the run; it logs counts and document ids, never keys) — see
   **Deploy** below.
+- `roster/tenancy.ts` (#294, ADR 0028; slice 1 holds only the gate): `TENANT_ACCESS_ENABLED_SQL`, the
+  mutation-boundary fragment requiring `officialMode` AND `tenantAccessEnabled` literal JSON `true`,
+  fail-closed. `documentVisibleTo` embeds it, so turning either gate off takes effect on the next
+  request. The Tenancy fact itself joins this module in slice 2.
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
   shared Person Link creation/ending machinery behind `/api/verify/unlink` and

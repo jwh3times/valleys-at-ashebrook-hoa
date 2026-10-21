@@ -33,8 +33,10 @@ link or grant affects the next request. The API regression suite
 `test/server/derived-only-access.test.ts` covers this boundary.
 
 **Capabilities are a set, not a ladder.** `AuthContext.capabilities` holds
-`member`/`board`/`systemAdmin`: `systemAdmin` implies `board`, but neither implies `member`, which
-comes only from Lot Authority. The live consequence of derived authorization is exactly this — a
+`member`/`tenant`/`board`/`systemAdmin`: `systemAdmin` implies `board`, but neither implies `member`, which
+comes only from Lot Authority. `tenant` (ADR 0028, #294) is a read-only capability that satisfies no
+member, voting or board guard and only adds Tenant-Visible documents to what the caller reads; it is
+declared in `guards.ts` but nothing grants it yet (slice 2). The live consequence of derived authorization is exactly this — a
 board member who owns no Lot is refused the member surfaces while still admitted to board ones.
 Content reads take the caller's `contentTier`; access questions take `capabilities`. The phase-3
 aliases for those (`role`, `propertyIds`) are deleted (#212).

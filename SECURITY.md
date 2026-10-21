@@ -43,7 +43,11 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
 - **Access is enforced server-side and fail-closed.** Roles are `visitor | homeowner | board`;
   content visibility tiers are `public | homeowner | board`. Anonymous users resolve to `visitor`
   and unknown states resolve to the most restrictive tier. Document downloads are tier-checked on
-  the server before the R2 object is served.
+  the server before the R2 object is served. A homeowner-tier document the board marks Tenant-Visible
+  (`documents.tenant_visible`, ADR 0028, #294) is additionally readable by a caller holding the
+  `tenant` capability, and only while `officialMode` and `tenantAccessEnabled` are both literally on,
+  checked inside the query. The list and the download share one predicate, so they cannot disagree.
+  The capability is declared but not yet granted to anyone.
 - **Homeowner business is available only after the board enables official mode.** The `/proxies`
   page and every `/api/member/*` handler fail closed to 404 while `officialMode` is off. When it is
   on, the page offers sign-in/verification guidance while the API returns 401 to anonymous callers
