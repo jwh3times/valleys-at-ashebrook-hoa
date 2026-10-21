@@ -7,6 +7,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.6.8] - 2026-10-20
+
+### Added
+
+- **ADR 0028 records how tenant accounts will work (#294).** It turns the board's 2026-08-11
+  decisions into a design; nothing is built yet. A tenant gets a **Tenancy**, a new roster
+  relationship kept apart from Lot Authority, so a tenant can never vote, grant a proxy or read
+  Lot Records. An owner requests the Tenancy, the board approves it, and only then does the tenant
+  receive a code to claim it. A Tenancy runs to an end day at most 13 months out and ends with the
+  owner's Ownership. Tenants see the public site plus the homeowner documents the board marks
+  Tenant-Visible. The feature needs official mode and its own audited, default-off setting.
+  `CONTEXT.md` gains Tenancy, Tenant, Tenancy Request, Tenant Access and Tenant-Visible Document.
+
+## [2.6.7] - 2026-10-20
+
+### Changed
+
+- Development dependency update (Dependabot, #452): `wrangler` 4.151.0 → 4.151.1.
+
 ## [2.6.6] - 2026-10-20
 
 ### Fixed
@@ -4189,7 +4208,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.6...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.8...HEAD
+[2.6.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.7...v2.6.8
+[2.6.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.6...v2.6.7
 [2.6.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.5...v2.6.6
 [2.6.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.4...v2.6.5
 [2.6.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.3...v2.6.4
