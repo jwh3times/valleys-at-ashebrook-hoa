@@ -1,9 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   retrieve,
   retrieveFrom,
   AiSearchUnavailableError,
 } from '../../src/server/ai/search';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function fakeEnv(search: (opts: unknown) => Promise<unknown>): Env {
   return {
@@ -94,6 +98,7 @@ describe('retrieve', () => {
   });
 
   it('wraps binding errors as AiSearchUnavailableError', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const search = vi.fn(async () => {
       throw new Error('AutoRAGNotFoundError');
     });
@@ -136,6 +141,7 @@ describe('retrieveFrom', () => {
   });
 
   it('wraps binding errors as AiSearchUnavailableError', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     const search = vi.fn(async () => {
       throw new Error('down');
     });
@@ -179,9 +185,11 @@ describe('retrieveFrom', () => {
 
   it('keeps the passages of the batches that succeeded when another fails', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let calls = 0;
-    const search = vi.fn(async () => {
-      if (calls++ === 0) throw new Error('down');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // The first batch fails on every attempt, its retry included.
+    const search = vi.fn(async (opts: unknown) => {
+      const { filters } = opts as { filters: { filters: { value: string }[] } };
+      if (filters.filters[0].value === 'gov-0.md') throw new Error('down');
       return {
         data: [
           {
@@ -197,6 +205,78 @@ describe('retrieveFrom', () => {
     const found = await retrieveFrom(fakeEnv(search), 'q', ids);
     expect(found.map((c) => c.id)).toEqual(['kept']);
     expect(logged).toHaveBeenCalled();
-    logged.mockRestore();
+    vi.restoreAllMocks();
+  });
+});
+
+// #455: about 2 in 100 searches fail once (a gateway timeout, or "All search
+// methods failed: vector") and succeed when repeated (measured against
+// production, 2026-10-20).
+describe('a search that fails', () => {
+  const ok = {
+    data: [
+      {
+        id: 'found',
+        score: 0.5,
+        content: 'found',
+        metadata: { filename: 'found.md', folder: 'rag/', timestamp: 1 },
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('is tried again after a short pause, and its second result is used', async () => {
+    const search = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('ai_gateway_timeout'))
+      .mockResolvedValueOnce(ok);
+    const pending = retrieve(fakeEnv(search), 'q');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(search).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(200);
+    expect((await pending).map((c) => c.id)).toEqual(['found']);
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('is tried only twice, then reported unavailable', async () => {
+    const search = vi.fn().mockRejectedValue(new Error('down'));
+    // Caught at once, so the rejection is handled while the timers run.
+    const failure = retrieve(fakeEnv(search), 'q').catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await failure).toBeInstanceOf(AiSearchUnavailableError);
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a governing-documents search too', async () => {
+    const search = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('down'))
+      .mockResolvedValueOnce(ok);
+    const pending = retrieveFrom(fakeEnv(search), 'q', ['gov-1']);
+    await vi.advanceTimersByTimeAsync(200);
+    expect((await pending).map((c) => c.id)).toEqual(['found']);
+  });
+
+  it('logs the retry without the search text, which can name a resident', async () => {
+    const warned = vi.mocked(console.warn);
+    const search = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('ai_gateway_timeout'))
+      .mockResolvedValueOnce(ok);
+    const pending = retrieve(fakeEnv(search), 'Jane Q Homeowner fence');
+    await vi.advanceTimersByTimeAsync(200);
+    await pending;
+    const lines = warned.mock.calls.map((call) => call.map(String).join(' '));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('ai_gateway_timeout');
+    expect(lines[0]).not.toContain('Jane');
   });
 });

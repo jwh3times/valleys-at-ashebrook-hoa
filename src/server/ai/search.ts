@@ -127,16 +127,37 @@ function normalizeChunk(item: RawSearchItem): AiSearchChunk {
   };
 }
 
+/**
+ * The pause before the one retry (#455). About 2 searches in 100 fail once, as
+ * a gateway timeout or "All search methods failed: vector", and succeed when
+ * repeated straight away (measured against production, 2026-10-20). A
+ * permanent failure, such as a filter AI Search rejects, fails the same way,
+ * so there is one retry and no more.
+ */
+export const RETRY_DELAY_MS = 200;
+
 async function search(
   env: Env,
   options: Record<string, unknown>,
 ): Promise<AiSearchChunk[]> {
-  try {
+  const attempt = async () => {
     const res = (await env.AI.autorag(env.AI_SEARCH_INSTANCE).search(
       options as never,
     )) as unknown as RawSearchResult;
     const raw = res.data ?? res.chunks ?? [];
     return raw.map(normalizeChunk);
+  };
+  try {
+    return await attempt();
+  } catch (first) {
+    // The start of the message only: the options carry the search text,
+    // which can name a resident.
+    const message = first instanceof Error ? first.message : String(first);
+    console.warn(`[search] retrying a failed search: ${message.slice(0, 200)}`);
+  }
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+  try {
+    return await attempt();
   } catch (err) {
     throw new AiSearchUnavailableError(err);
   }
