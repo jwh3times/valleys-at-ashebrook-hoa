@@ -36,7 +36,8 @@ link or grant affects the next request. The API regression suite
 `member`/`tenant`/`board`/`systemAdmin`: `systemAdmin` implies `board`, but neither implies `member`, which
 comes only from Lot Authority. `tenant` (ADR 0028, #294) is a read-only capability that satisfies no
 member, voting or board guard and only adds Tenant-Visible documents to what the caller reads; it is
-declared in `guards.ts` but nothing grants it yet (slice 2). The live consequence of derived authorization is exactly this — a
+declared in `guards.ts` and granted by `deriveAccess` from a current Tenancy (see
+[Tenancies](#tenancies)); it never raises `contentTier`. The live consequence of derived authorization is exactly this — a
 board member who owns no Lot is refused the member surfaces while still admitted to board ones.
 Content reads take the caller's `contentTier`; access questions take `capabilities`. The phase-3
 aliases for those (`role`, `propertyIds`) are deleted (#212).
@@ -261,10 +262,33 @@ supersedes its own open flags rather than deleting them.
 **Ballot secrecy:** this module never reads, joins, names, or counts `ballot_choices` or a
 candidate selection. See [`voting-and-ballots.md`](./voting-and-ballots.md).
 
+## Tenancies
+
+A Tenancy (`tenancies`, migration `0043`, #294 slice 2, ADR 0028) records that a Person rents a Lot
+under a basis Ownership. It is its own relation: no Lot Authority reader joins it, and
+`test/unit/tenancy-not-lot-authority.test.ts` fails if one does, so a tenant never acts for the Lot
+they rent. `tenancyCurrentSql(alias, day)` in `src/server/roster/tenancy.ts` is the one currency
+rule: not voided; `start_day <= day < COALESCE(actual_end_day, scheduled_end_day)`; the basis
+Ownership unvoided, on the same Lot and current on `day`; the Lot not retired.
+
+`deriveAccess` runs it as a third batch statement (`TENANCY_SQL`, sharing the one-hop `me` CTE) and
+sets the read-only `tenant` capability. `contentTier` is unchanged: a tenant who owns nothing stays
+`visitor`. Nothing in this slice creates a Tenancy through the API.
+
+**Losing the basis ends the Tenancy.** `tenancyLossStatements` ends every current or upcoming
+Tenancy of a lost basis Ownership at `MAX(start_day, day)` with `end_reason` `basis_ended` (or
+`lot_retired`), and records a caused `tenancy_ended` roster_change event. It is hooked into
+Ownership end and void (void ends at today), the reviewed transfer (the preview lists each as
+`tenanciesEnding`, and `tenancies` is a snapshot table) and Lot retirement. No Review Flag is raised.
+
+`/api/admin/tenancies` lets the board `end` (`board_ended`) or `void` (`recorded_in_error`) a
+Tenancy, deliberately not gated on `officialMode`/`tenantAccessEnabled` so ending access never waits
+on a gate; see [`http-endpoints.md`](./http-endpoints.md).
+
 ## The invariant gate
 
-17 queries in `src/server/db/invariants.ts` (`INVARIANT_CHECKS`) — interval non-overlap on
-Ownerships/Representations/Board Terms/Office Assignments, party-subtype completeness, audit-event
+19 queries in `src/server/db/invariants.ts` (`INVARIANT_CHECKS`) — interval non-overlap on
+Ownerships/Representations/Board Terms/Office Assignments/Tenancies (`tenancy_overlap`), a Tenancy left unended on a basis Ownership that ended or was voided before its scheduled end (`tenancy_on_ended_basis`), party-subtype completeness, audit-event
 detail cardinality and causal order, redaction/review-flag completeness, a check that no
 `review_flags` column references ballot choices or candidates, and two view-backed checks.
 
@@ -296,7 +320,7 @@ Two constraints worth knowing before adding a check:
   and a response shaped as anything other than exactly one statement result throws rather than
   being read as zero rows.
 
-`test/server/invariants.test.ts` runs all 17 through the real `DATABASE` binding;
+`test/server/invariants.test.ts` runs all 19 through the real `DATABASE` binding;
 `test/unit/invariants-single-source.test.ts` is the anti-drift guard, asserting neither caller
 contains a `SELECT`/`PRAGMA` of its own.
 

@@ -55,7 +55,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   create/correct/consolidate, ownership create/end/void, representation
   create/end/void/correctScope, contact-method add/end/void/setPreferred, `exportRoster`), Board
   (`fetchBoardService` plus the nine create/end/cancel/void-term, substitute-qualifying-lot,
-  correct-term, and assign/end/void-office actions), Access
+  correct-term, and assign/end/void-office actions), Tenants (`fetchTenancies`/`endTenancy`/`voidTenancy`,
+  `AdminTenancy`), Access
   (`fetchAccessGrants`/`grantAccess`/`revokeAccess`,
   `fetchPersonLinks`/`manualVerifyPersonLink`/`unlinkPersonLink`, and the
   verification-review/correction-request queue helpers), Review
@@ -295,10 +296,12 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   Drive keepalive (a broken connection is logged, not a failure), and the R2 orphan sweep
   (over-threshold or a throw fails the run; it logs counts and document ids, never keys) — see
   **Deploy** below.
-- `roster/tenancy.ts` (#294, ADR 0028; slice 1 holds only the gate): `TENANT_ACCESS_ENABLED_SQL`, the
-  mutation-boundary fragment requiring `officialMode` AND `tenantAccessEnabled` literal JSON `true`,
-  fail-closed. `documentVisibleTo` embeds it, so turning either gate off takes effect on the next
-  request. The Tenancy fact itself joins this module in slice 2.
+- `roster/tenancy.ts` (#294, ADR 0028): `TENANT_ACCESS_ENABLED_SQL`, the mutation-boundary fragment
+  requiring `officialMode` AND `tenantAccessEnabled` literal JSON `true`, fail-closed
+  (`documentVisibleTo` embeds it, so turning either gate off takes effect on the next request);
+  `tenancyCurrentSql(alias, day)`, the one Tenancy currency rule; and `tenancyLossStatements`, the
+  statements that end Tenancies when their basis Ownership or Lot is lost. Never a Lot Authority
+  reader.
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
   shared Person Link creation/ending machinery behind `/api/verify/unlink` and
