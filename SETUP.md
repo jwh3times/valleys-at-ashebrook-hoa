@@ -428,7 +428,7 @@ a failure in one does not hide or stop the others:
   and cited-source metadata with a fixed non-PII removal state after 90 days while retaining the
   report ID, template, creator, and timestamp. An authorized roster name/contact redaction performs
   the same purge immediately in its mutation batch.
-- The ADR 0022 invariant drift check (`runInvariants`, the same 17 checks `npm run
+- The ADR 0022 invariant drift check (`runInvariants`, the same 19 checks `npm run
 verify:invariants` runs) — added by #240 so the phase-4 soak isn't running without automated
   drift detection. A violation is logged (IDs and codes only, never a personal value) and fails the
   cron invocation, which surfaces as a red run in Workers Logs/the Cloudflare dashboard; nothing is

@@ -141,6 +141,8 @@ export async function truncateAll() {
   // writes one per (person, lot) pair and it references BOTH `parties` and
   // `lots` with RESTRICT — so it goes after every table citing a Person
   // and before both of its own parents.
+  // A Tenancy (ADR 0028) cites a Person, a Lot and an Ownership.
+  await env.DATABASE.prepare('DELETE FROM tenancies').run();
   await env.DATABASE.prepare('DELETE FROM person_links').run();
   await env.DATABASE.prepare('DELETE FROM person_verifications').run();
   await env.DATABASE.prepare('DELETE FROM contact_methods').run();

@@ -54,7 +54,8 @@ export function updatedRowGuard(
     | 'ownerships'
     | 'representations'
     | 'board_terms'
-    | 'board_office_assignments',
+    | 'board_office_assignments'
+    | 'tenancies',
   id: string,
   nowMs: number,
   // `lots` is the one legacy table here; its timestamps are SECONDS.
@@ -152,7 +153,10 @@ export type RosterChangeReason =
   | 'consolidation_correction'
   | 'correction_request_accepted'
   | 'scope_correction'
-  | 'recorded_in_error';
+  | 'recorded_in_error'
+  // Tenancy endings (ADR 0028). `lot_retired` above serves a Tenancy too.
+  | 'board_ended'
+  | 'basis_ended';
 
 /**
  * Identity Event reason codes (#201/#219). The `identity_events.reason_code`
@@ -209,7 +213,8 @@ export type RosterSubjectColumn =
   | 'contact_method_id'
   | 'ownership_id'
   | 'representation_id'
-  | 'person_link_id';
+  | 'person_link_id'
+  | 'tenancy_id';
 
 export type BoardSubjectColumn =
   'board_term_id' | 'office_assignment_id' | 'lot_id';
@@ -231,6 +236,7 @@ const ROSTER_SUBJECT_COLUMNS: ReadonlySet<string> = new Set([
   'ownership_id',
   'representation_id',
   'person_link_id',
+  'tenancy_id',
 ]);
 
 const BOARD_SUBJECT_COLUMNS: ReadonlySet<string> = new Set([

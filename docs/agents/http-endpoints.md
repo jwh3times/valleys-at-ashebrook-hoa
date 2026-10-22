@@ -533,6 +533,17 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     Unselected co-owners remain unchanged. The Roster panel requires another review after changing
     any input or qualifying-Lot substitution. See
     [`roster-and-access.md`](./roster-and-access.md#reviewed-ownership-transfers).
+  - `GET`+`POST /api/admin/tenancies` (#294 slice 2) — `requireBoard` first. `GET` lists every
+    Tenancy with a status (`current`/`upcoming`/`ended`/`voided`) computed by the shared currency
+    rule. `POST` is an action bus: `end` (ends today, or on the start day if not yet begun; reason
+    `board_ended`; `409` if already ended, voided, or past its end day) and `void` (reason
+    `recorded_in_error`; `409` if already voided); an unknown id is `404`. Optional `evidence` as on
+    the other roster routes. Deliberately **not** gated on `officialMode`/`tenantAccessEnabled`:
+    ending access must not wait on a gate. The write freeze covers it by default. Both actions write
+    `tenancy_ended`/`tenancy_voided` roster-change events.
+  - `/api/admin/roster-ownerships` `end`/`void`/`transfer` and `/api/admin/roster-lots` retire also
+    end the affected Tenancies in the same batch (`tenancyLossStatements`); the transfer preview
+    lists them as `tenanciesEnding`.
   - `POST /api/admin/roster-export` — the bulk export, deliberately a mutating verb: it is the one
     read that is also a recorded act, writing an `access` ledger event (`roster_export`) BEFORE
     any data leaves and failing closed (500, no export) if the record cannot be written. Nothing

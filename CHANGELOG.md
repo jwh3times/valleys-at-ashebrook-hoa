@@ -7,6 +7,32 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-21
+
+### Added
+
+- **Tenancies exist on the roster (#294, slice 2 of tenant access).** A Tenancy records that a
+  tenant may use the site for a Lot, from a start day to an end day, resting on the owning party's
+  Ownership. A current Tenancy gives its tenant's account read access to the documents marked
+  Tenant-Visible, once tenant access is switched on. It gives no Lot Authority: a tenant cannot
+  vote, grant proxies or act for the Lot, and a tenant who owns nothing still sees only public
+  pages beyond those documents.
+- **A Tenants panel for the board.** It lists every Tenancy with its tenant, Lot and status, and
+  can end one today or void one recorded in error. Both work whether or not tenant access is
+  switched on, because ending access must never wait on a setting. Owners requesting tenants and
+  tenants claiming access come in later slices, so for now the list starts empty.
+- **Tenancies end with the Ownership they rest on.** Ending, voiding or transferring an Ownership,
+  or retiring its Lot, ends that Ownership's Tenancies in the same step, recorded in the audit
+  ledger. The transfer review names each Tenancy that will end and on which day.
+- Two new data checks, bringing the invariant gate and the daily check to 19: no overlapping
+  Tenancies for one tenant and Lot, and no Tenancy left running after its Ownership ended.
+
+### Changed
+
+- Migration `0043` adds the `tenancies` table and lets an audit ledger entry name a Tenancy. It
+  must be applied to production **before** this release deploys, because every signed-in request
+  now reads `tenancies`.
+
 ## [2.7.0] - 2026-10-21
 
 ### Added
@@ -4241,7 +4267,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.9...v2.7.0
 [2.6.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.8...v2.6.9
 [2.6.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.7...v2.6.8

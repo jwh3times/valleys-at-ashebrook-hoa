@@ -19,6 +19,7 @@ import { CAPABILITY_SQL, LOT_SQL } from '../authz/derive';
 import { lotAuthorityExists } from './authority';
 import { lossConsequences, qualifiesGuard } from './board-consequences';
 import { transferEffects } from './transfer-effects';
+import { tenancyLossStatements } from './tenancy';
 import { parseEvidence, parseSubstitutions } from './ownership-input';
 import {
   AuditCorrelation,
@@ -47,6 +48,7 @@ const snapshotTables = [
   roster.boardTerms,
   roster.boardOfficeAssignments,
   roster.accessGrants,
+  roster.tenancies,
   meetings,
   motions,
   memberVotes,
@@ -476,6 +478,18 @@ async function planTransfer(
     resetOpenMotionVotes: true,
     affectedTermIds: consequences.affectedTermIds,
   });
+  // ADR 0028: each departing Ownership's Tenancies end on the effective day.
+  const tenancyLoss = await tenancyLossStatements({
+    database,
+    nowMs,
+    ownershipIds: input.departingOwnershipIds,
+    day: input.effectiveDay,
+    reason: 'basis_ended',
+    rootGuard,
+    correlation,
+    cause: 'ownership_ended',
+    actorAccountId,
+  });
   if (state !== (await snapshot(database)))
     throw new TransferError(
       'Transfer data changed — request a new preview',
@@ -513,6 +527,13 @@ async function planTransfer(
       .map((id) => ({ id, displayName: label(id) })),
     access,
     boardTerms: termPreview,
+    tenanciesEnding: tenancyLoss.ending.map((tenancy) => ({
+      tenancyId: tenancy.id,
+      personId: tenancy.tenantPersonId,
+      displayName: label(tenancy.tenantPersonId),
+      scheduledEndDay: tenancy.scheduledEndDay,
+      endDay: tenancy.endDay,
+    })),
     resetMotionIds: effects.resetMotionIds,
     reviewFlagCount: effects.openedFlagCount,
   };
@@ -526,6 +547,7 @@ async function planTransfer(
     correlation,
     consequences,
     effects,
+    tenancyLoss,
   };
 }
 
@@ -597,6 +619,7 @@ export async function ownershipTransfer(
           ),
       ),
       ...plan.consequences.statements,
+      ...plan.tenancyLoss.statements,
       ...plan.effects.statements,
       ...plan.correlation.statements,
       ...plan.effects.flagStatements,

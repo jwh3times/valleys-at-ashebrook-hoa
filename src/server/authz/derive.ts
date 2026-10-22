@@ -1,4 +1,5 @@
 import type { Capability, Role } from './guards';
+import { tenancyCurrentSql } from '../roster/tenancy';
 
 // ADR 0022 derived authorization (issue #210, phase 2).
 //
@@ -134,13 +135,15 @@ export const CAPABILITY_SQL = `
  * Retired Lots are excluded. `lots.status` is deliberately not consulted:
  * it remains the legacy field, and `retired_at` is the new model's answer.
  */
-export const LOT_SQL = `
-  WITH me AS (
+const ME_CTE = `me AS (
     SELECT COALESCE(pa.consolidated_into_party_id, pa.id) AS party_id
     FROM person_links pl
     JOIN parties pa ON pa.id = pl.person_id
     WHERE pl.account_id = ?1 AND pl.ended_at IS NULL
-  )
+  )`;
+
+export const LOT_SQL = `
+  WITH ${ME_CTE}
   SELECT DISTINCT x.lot_id AS lot_id
   FROM (
     SELECT o.lot_id
@@ -175,6 +178,24 @@ export const LOT_SQL = `
   WHERE p.retired_at IS NULL
 `;
 
+/**
+ * Whether the caller holds a current Tenancy (ADR 0028). Its own statement,
+ * never a branch of `LOT_SQL`: a Tenancy grants no Lot Authority, so it must
+ * never put a Lot in `lotIds`. The same one-hop `me`, so a tenant whose Person
+ * was consolidated resolves to the survivor.
+ *
+ * It reads no site settings. The roster says who is a tenant; the gates decide
+ * what that unlocks, inside each reader's own SQL (`TENANT_ACCESS_ENABLED_SQL`).
+ */
+export const TENANCY_SQL = `
+  WITH ${ME_CTE}
+  SELECT EXISTS (
+    SELECT 1 FROM tenancies t
+    JOIN me ON t.tenant_person_id = me.party_id
+    WHERE ${tenancyCurrentSql('t', '?2')}
+  ) AS has_tenancy
+`;
+
 export interface CapabilityRow {
   person_id: string;
   has_system_admin: number;
@@ -186,7 +207,7 @@ export interface CapabilityRow {
 /**
  * Derives one caller's access from current facts.
  *
- * Two D1 statements in ONE batch — one round trip, matching what the legacy
+ * Three D1 statements in ONE batch — one round trip, matching what the legacy
  * context already costs. Raw D1 rather than Drizzle here on purpose: `batch`
  * is what makes it a single round trip, and Drizzle's builder cannot carry
  * these recursive-CTE and EXISTS shapes into one.
@@ -204,20 +225,24 @@ export async function deriveAccess(
   accountId: string,
   associationDay: string,
 ): Promise<DerivedAccess> {
-  const [capabilityResult, lotResult] = await env.DATABASE.batch([
-    env.DATABASE.prepare(CAPABILITY_SQL).bind(accountId, associationDay),
-    env.DATABASE.prepare(LOT_SQL).bind(accountId, associationDay),
-  ]);
+  const [capabilityResult, lotResult, tenancyResult] = await env.DATABASE.batch(
+    [
+      env.DATABASE.prepare(CAPABILITY_SQL).bind(accountId, associationDay),
+      env.DATABASE.prepare(LOT_SQL).bind(accountId, associationDay),
+      env.DATABASE.prepare(TENANCY_SQL).bind(accountId, associationDay),
+    ],
+  );
 
   return toDerivedAccess(
     accountId,
     (capabilityResult.results as CapabilityRow[])[0],
     (lotResult.results as { lot_id: string }[]).map((r) => r.lot_id),
+    (tenancyResult.results as { has_tenancy: number }[])[0]?.has_tenancy === 1,
   );
 }
 
 /**
- * Turns the two query results into a context.
+ * Turns the three query results into a context.
  *
  * Pure: the mapping from query rows to capabilities, kept apart from the
  * queries that produce them.
@@ -226,6 +251,7 @@ export function toDerivedAccess(
   accountId: string,
   row: CapabilityRow | undefined,
   lotIds: string[],
+  hasTenancy = false,
 ): DerivedAccess {
   // No current Person Link means visitor. Not "member with no lots" — visitor.
   if (!row) {
@@ -245,6 +271,9 @@ export function toDerivedAccess(
   // linked Person holds at least one Lot through Ownership or Representation.
   if (lotIds.length > 0) capabilities.add('member');
   if (row.has_board === 1) capabilities.add('board');
+  // Tenant Access (ADR 0028) is read-only and moves no content tier: a tenant
+  // who owns nothing stays `visitor`, and only the document predicate reads it.
+  if (hasTenancy) capabilities.add('tenant');
   if (row.has_system_admin === 1) {
     capabilities.add('systemAdmin');
     // Implied, not a duplicate grant.

@@ -129,6 +129,15 @@ columns above; migration `0023` adds eight server-side views over them. What tho
 who writes them, and the invariants they must satisfy are in
 [`roster-and-access.md`](./roster-and-access.md).
 
+`tenancies` (migration `0043`, #294 slice 2, ADR 0028) is the Tenancy fact: `tenant_person_id` →
+`people`, `lot_id` → `lots`, `basis_ownership_id` → `ownerships`, and optional `renews_tenancy_id`
+(self-FK), every FK `RESTRICT`. `start_day`, `scheduled_end_day` and nullable `actual_end_day`
+(CHECK `>= start_day` and `< scheduled_end_day`); `end_reason` (`owner_ended`, `board_ended`,
+`basis_ended`, `lot_retired`) is set exactly when `actual_end_day` is; `ended_by_account_id` is plain
+text, no FK; `voided_at` voids. `roster_change_subjects` gained a `tenancy_id` subject column
+(exactly one subject per row) and `audit_event_subjects_v` a `tenancy` subject kind. Currency and
+authority rules are in [`roster-and-access.md`](./roster-and-access.md#tenancies).
+
 ## Resolutions
 
 `resolutions` (the resolutions book — standing rules the board adopts, per

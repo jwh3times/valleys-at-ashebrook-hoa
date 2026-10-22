@@ -34,9 +34,30 @@ export interface AccountSpec {
   boardTerm?: { startDay: string; scheduledEndDay: string; lotId?: string };
 }
 
+/** A Person who owns nothing, such as a tenant. */
+export interface PersonSpec {
+  id: string;
+  name: string;
+}
+
+/** A Tenancy (ADR 0028). The basis is an owner's Ownership, `<owner id>-own`. */
+export interface TenancySpec {
+  id: string;
+  tenantPersonId: string;
+  lotId: string;
+  basisOwnershipId: string;
+  startDay: string;
+  scheduledEndDay: string;
+  actualEndDay?: string;
+  endReason?: 'owner_ended' | 'board_ended' | 'basis_ended' | 'lot_retired';
+  voided?: boolean;
+}
+
 export interface RosterSpec {
   lots?: LotSpec[];
+  people?: PersonSpec[];
   accounts?: AccountSpec[];
+  tenancies?: TenancySpec[];
 }
 
 const db = () => getDb(env);
@@ -44,6 +65,7 @@ const q = (v: string | null | undefined) =>
   v === null || v === undefined ? 'NULL' : `'${v.replace(/'/g, "''")}'`;
 
 const NEW_TABLES = [
+  'tenancies',
   'access_grants',
   'board_office_assignments',
   'board_terms',
@@ -61,6 +83,11 @@ const NEW_TABLES = [
 const LOT_TABLES = ['lots'];
 
 export async function resetRoster(): Promise<void> {
+  // The self-reference is RESTRICT, checked row by row, so a consolidated
+  // duplicate would block deleting its survivor.
+  await db().run(
+    sql.raw('UPDATE parties SET consolidated_into_party_id = NULL'),
+  );
   for (const table of [...NEW_TABLES, ...LOT_TABLES]) {
     await db().run(sql.raw(`DELETE FROM "${table}"`));
   }
@@ -101,6 +128,14 @@ export async function seedRoster(spec: RosterSpec): Promise<void> {
     }
   }
 
+  for (const person of spec.people ?? []) {
+    statements.push(
+      `INSERT INTO parties (id, kind, created_at, updated_at) VALUES (${q(person.id)}, 'person', ${now}, ${now})`,
+      `INSERT INTO people (party_id, party_kind, full_name, name_normalized, updated_at)
+       VALUES (${q(person.id)}, 'person', ${q(person.name)}, ${q(person.name.toLowerCase())}, ${now})`,
+    );
+  }
+
   for (const account of spec.accounts ?? []) {
     statements.push(
       `INSERT INTO users (id, name, email, email_verified, role, created_at, updated_at)
@@ -132,6 +167,17 @@ export async function seedRoster(spec: RosterSpec): Promise<void> {
                  ${grant === 'board' ? q(termId) : 'NULL'}, ${now})`,
       );
     }
+  }
+
+  for (const t of spec.tenancies ?? []) {
+    statements.push(
+      `INSERT INTO tenancies (id, tenant_person_id, lot_id, basis_ownership_id, start_day,
+         scheduled_end_day, actual_end_day, end_reason, voided_at, created_at, updated_at)
+       VALUES (${q(t.id)}, ${q(t.tenantPersonId)}, ${q(t.lotId)}, ${q(t.basisOwnershipId)},
+               ${q(t.startDay)}, ${q(t.scheduledEndDay)}, ${q(t.actualEndDay)},
+               ${q(t.actualEndDay ? (t.endReason ?? 'board_ended') : null)},
+               ${t.voided ? now : 'NULL'}, ${now}, ${now})`,
+    );
   }
 
   for (const statement of statements) {

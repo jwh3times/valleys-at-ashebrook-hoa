@@ -1367,6 +1367,56 @@ export async function fetchAuditIntegrity(): Promise<AuditIntegrityView> {
 }
 
 // ---------------------------------------------------------------------------
+// Tenancies (ADR 0028)
+// ---------------------------------------------------------------------------
+
+export type TenancyStatus = 'current' | 'upcoming' | 'ended' | 'voided';
+
+/** Mirrors `AdminTenancyRow` (`GET /api/admin/tenancies`). */
+export interface AdminTenancy {
+  id: string;
+  tenantPersonId: string;
+  tenantName: string;
+  lotId: string;
+  address: string;
+  startDay: string;
+  scheduledEndDay: string;
+  actualEndDay: string | null;
+  endReason: string | null;
+  renewsTenancyId: string | null;
+  status: TenancyStatus;
+}
+
+export async function fetchTenancies(): Promise<AdminTenancy[]> {
+  return rosterRequest<AdminTenancy[]>(
+    '/api/admin/tenancies',
+    'GET',
+    undefined,
+    'Load tenancies failed',
+  );
+}
+
+/** Ends a Tenancy today; one that has not begun ends on its start day. */
+export async function endTenancy(tenancyId: string): Promise<void> {
+  return rosterRequest(
+    '/api/admin/tenancies',
+    'POST',
+    { action: 'end', tenancyId },
+    'End tenancy failed',
+  );
+}
+
+/** Voids a Tenancy recorded in error. */
+export async function voidTenancy(tenancyId: string): Promise<void> {
+  return rosterRequest(
+    '/api/admin/tenancies',
+    'POST',
+    { action: 'void', tenancyId },
+    'Void tenancy failed',
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Capability refusals
 // ---------------------------------------------------------------------------
 

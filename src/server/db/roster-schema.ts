@@ -871,3 +871,83 @@ export const verificationReviewRequests = sqliteTable(
     index('verification_review_requests_status_idx').on(t.status),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Tenancy (ADR 0028)
+// ---------------------------------------------------------------------------
+
+/** Why a Tenancy ended early. Mirrors `tenancies_end_reason_check` (0043). */
+export const TENANCY_END_REASONS = [
+  'owner_ended',
+  'board_ended',
+  'basis_ended',
+  'lot_retired',
+] as const;
+export type TenancyEndReason = (typeof TENANCY_END_REASONS)[number];
+
+// A tenant's right to read Tenant-Visible documents for a period. Its own
+// relation on purpose: nothing that answers Lot Authority (`authority.ts`,
+// `board-consequences.ts`, `LOT_SQL`) joins it, so a tenant never acts for the
+// Lot they rent. The names follow `board_terms`; a renewal is a new adjacent
+// row, never an extended one.
+//
+// The basis is the owning party's Ownership. When it ends or is voided the
+// Tenancy stops being current at once (see `tenancyCurrentSql`), and the
+// mutation that ended it also records the Tenancy's end.
+export const tenancies = sqliteTable(
+  'tenancies',
+  {
+    id: text('id').primaryKey(),
+    tenantPersonId: text('tenant_person_id')
+      .notNull()
+      .references(() => people.partyId, { onDelete: 'restrict' }),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => lots.id, { onDelete: 'restrict' }),
+    basisOwnershipId: text('basis_ownership_id')
+      .notNull()
+      .references(() => ownerships.id, { onDelete: 'restrict' }),
+    startDay: day('start_day').notNull(),
+    // Exclusive, and at most 13 months after the start (checked in the
+    // mutation SQL, since the board may change the number).
+    scheduledEndDay: day('scheduled_end_day').notNull(),
+    // Exclusive. An early end; equal to the start when a Tenancy that had not
+    // begun loses its basis.
+    actualEndDay: day('actual_end_day'),
+    endReason: text('end_reason', { enum: TENANCY_END_REASONS }),
+    // Plain text, no FK, by the actor-column convention.
+    endedByAccountId: text('ended_by_account_id'),
+    renewsTenancyId: text('renews_tenancy_id').references(
+      (): AnySQLiteColumn => tenancies.id,
+      { onDelete: 'restrict' },
+    ),
+    voidedAt: instant('voided_at'),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (t) => [
+    check(
+      'tenancies_scheduled_ordered',
+      sql`"scheduled_end_day" > "start_day"`,
+    ),
+    check(
+      'tenancies_actual_end_ordered',
+      sql`"actual_end_day" IS NULL OR ("actual_end_day" >= "start_day" AND "actual_end_day" < "scheduled_end_day")`,
+    ),
+    check(
+      'tenancies_end_paired',
+      sql`("actual_end_day" IS NULL) = ("end_reason" IS NULL)`,
+    ),
+    check(
+      'tenancies_end_reason_check',
+      sql`"end_reason" IS NULL OR "end_reason" IN ('owner_ended', 'board_ended', 'basis_ended', 'lot_retired')`,
+    ),
+    check(
+      'tenancies_no_self_renewal',
+      sql`"renews_tenancy_id" IS NULL OR "renews_tenancy_id" <> "id"`,
+    ),
+    index('tenancies_person_lot_idx').on(t.tenantPersonId, t.lotId, t.startDay),
+    index('tenancies_lot_idx').on(t.lotId),
+    index('tenancies_basis_idx').on(t.basisOwnershipId),
+  ],
+);

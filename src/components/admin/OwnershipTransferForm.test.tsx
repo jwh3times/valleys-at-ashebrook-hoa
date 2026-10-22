@@ -62,6 +62,7 @@ const review: OwnershipTransferPreview = {
     },
   ],
   boardTerms: [],
+  tenanciesEnding: [],
   resetMotionIds: ['motion'],
   reviewFlagCount: 1,
 };
@@ -198,4 +199,26 @@ it('cancels without committing a transfer', async () => {
     screen.queryByRole('button', { name: 'Confirm ownership transfer' }),
   ).not.toBeInTheDocument();
   expect(transferApi.commitOwnershipTransfer).not.toHaveBeenCalled();
+});
+
+it('names each Tenancy the transfer will end', async () => {
+  vi.mocked(transferApi.previewOwnershipTransfer).mockResolvedValue({
+    ...review,
+    tenanciesEnding: [
+      {
+        tenancyId: 'ten-1',
+        personId: 'tenant',
+        displayName: 'Tess Tenant',
+        scheduledEndDay: '2099-01-01',
+        endDay: '2098-02-01',
+      },
+    ],
+  });
+  const user = await start();
+  await user.click(screen.getByRole('button', { name: 'Review transfer' }));
+  expect(
+    await screen.findByText(
+      'Tess Tenant: Tenancy ends on 2098-02-01 (was scheduled to end 2099-01-01).',
+    ),
+  ).toBeInTheDocument();
 });

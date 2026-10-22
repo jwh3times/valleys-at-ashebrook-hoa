@@ -38,6 +38,15 @@ export interface OwnershipTransferPreview {
     offices: string[];
     boardGrantsEnding: number;
   }[];
+  /** Tenancies whose basis departs. Each ends on the effective day, or on
+   * its own start day when it has not begun. */
+  tenanciesEnding: {
+    tenancyId: string;
+    personId: string;
+    displayName: string;
+    scheduledEndDay: string;
+    endDay: string;
+  }[];
   resetMotionIds: string[];
   reviewFlagCount: number;
 }

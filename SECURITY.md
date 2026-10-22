@@ -47,7 +47,9 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   (`documents.tenant_visible`, ADR 0028, #294) is additionally readable by a caller holding the
   `tenant` capability, and only while `officialMode` and `tenantAccessEnabled` are both literally on,
   checked inside the query. The list and the download share one predicate, so they cannot disagree.
-  The capability is declared but not yet granted to anyone.
+  The capability is derived per request from a current Tenancy (unvoided, within its dates, on a
+  still-current basis Ownership); it is read-only, never raises the content tier, and ends with its
+  basis Ownership. A Tenancy is never Lot Authority.
 - **Homeowner business is available only after the board enables official mode.** The `/proxies`
   page and every `/api/member/*` handler fail closed to 404 while `officialMode` is off. When it is
   on, the page offers sign-in/verification guidance while the API returns 401 to anonymous callers

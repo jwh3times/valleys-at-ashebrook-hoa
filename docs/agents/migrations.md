@@ -120,6 +120,10 @@ safe-in-either-order rule.
 list, the download and the admin list select them, so each fails against a database that lacks the
 column. Apply with `npm run db:migrate:remote` before the merge, not after.
 
+**`0043` is the same ordering for an added table the merged code reads on every request.**
+`deriveAccess` selects from `tenancies` for every signed-in caller, so the merged Worker fails
+every signed-in page until the table exists. Apply before the merge/deploy, as with `0033`.
+
 ## The ledger
 
 One line per migration. The files themselves are the detail; this table exists so you can find
@@ -163,6 +167,7 @@ which migration introduced a shape without reading every file.
 | `0040`        | Creates the single-row `drive_connection` table (sealed refresh token, status `connected`/`broken`, CAS `revision`) for the association's Google Drive connection (#290 slice 2, ADR 0027). Additive and safe in either order with the deploy, but apply it **before** setting the `DRIVE_*` secrets: with the secrets set and no table, the Drive routes and keepalive would error instead of 404/skip.                                                                                                                                                                                                                                                                                                                                                                                        |
 | `0041`        | Creates `drive_imports` (`document_id` PK, `ON DELETE CASCADE` to `documents`; unique `(drive_file_id, drive_modified_time)`) for Google Drive import provenance (#290 slice 3). Additive and safe in either order with the deploy while the `DRIVE_*` secrets are unset; apply it **before** setting them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `0042`        | Adds `documents.tenant_visible INTEGER NOT NULL DEFAULT 0` with a CHECK that the mark is `0`/`1` and only ever set while `visibility = 'homeowner'` (#294 slice 1, ADR 0028). The default satisfies the CHECK for every existing row, so no rebuild. **Not safe in either order**: the document list, the `GET /api/files/[id]` download and the admin list all read the column, so apply before the merge/deploy, as with `0033` and `0039`.                                                                                                                                                                                                                                                                                                                                                   |
+| `0043`        | Creates `tenancies` (the Tenancy fact: tenant Person, Lot, basis Ownership, optional renewal self-FK, all `RESTRICT`; start / scheduled end / actual end days with CHECKs; `end_reason` paired with the actual end) (#294 slice 2, ADR 0028). **Rebuilds** `roster_change_subjects` (`__new` copy-and-rename) to add `tenancy_id` with the exactly-one-subject CHECK widened and `roster_change_subjects_tenancy_idx`, and drops and recreates `audit_event_subjects_v` (new `tenancy` subject kind) and `audit_entity_history_v`. **Not safe in either order**: apply before the merge/deploy, as with `0033`, `0039` and `0042`.                                                                                                                                                              |
 
 ### `0024`-`0029`: the table-rebuild migrations
 
@@ -228,15 +233,16 @@ reasoning deliberately when it recreates the three `proxy_id` FKs as actionless.
 
 ### Applied to production
 
-| Migrations     | Applied    | Note                                                                    |
-| -------------- | ---------- | ----------------------------------------------------------------------- |
-| through `0015` | 2026-08-05 |                                                                         |
-| `0016`-`0022`  | 2026-08-14 | Verified against the `d1_migrations` ledger, not assumed.               |
-| `0023`-`0027`  | 2026-08-17 | After sitting unapplied for days under deployed v0.12.0 code.           |
-| `0028`         | 2026-08-21 | Immediately after its change merged — the ordering hazard above.        |
-| `0029`         | 2026-08-21 | On the **second** attempt; the first was the stale-checkout trap above. |
-| `0030`         | 2026-09-09 | Before the dependent auth deploy, as its ordering note requires (#316). |
-| `0031`-`0032`  | 2026-09-09 | Batched: both additive, so they waited for one pass rather than two.    |
+| Migrations     | Applied    | Note                                                                                             |
+| -------------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| through `0015` | 2026-08-05 |                                                                                                  |
+| `0016`-`0022`  | 2026-08-14 | Verified against the `d1_migrations` ledger, not assumed.                                        |
+| `0023`-`0027`  | 2026-08-17 | After sitting unapplied for days under deployed v0.12.0 code.                                    |
+| `0028`         | 2026-08-21 | Immediately after its change merged — the ordering hazard above.                                 |
+| `0029`         | 2026-08-21 | On the **second** attempt; the first was the stale-checkout trap above.                          |
+| `0030`         | 2026-09-09 | Before the dependent auth deploy, as its ordering note requires (#316).                          |
+| `0031`-`0032`  | 2026-09-09 | Batched: both additive, so they waited for one pass rather than two.                             |
+| `0040`-`0042`  | 2026-10-21 | Together, before the v2.7.0 merge; `db:migrate:remote` cannot skip, so 0040–0041 went with 0042. |
 
 ## The drizzle-kit ALTER trap
 

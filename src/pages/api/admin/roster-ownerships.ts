@@ -27,6 +27,7 @@ import {
 } from '../../../server/roster/audit';
 import { lossConsequences } from '../../../server/roster/board-consequences';
 import { transferEffects } from '../../../server/roster/transfer-effects';
+import { tenancyLossStatements } from '../../../server/roster/tenancy';
 
 // ADR 0022 phase 3b (#218): the Ownership half of the roster's recorded-fact
 // surfaces. See docs/adr/0022-party-roster-derived-access.md and
@@ -304,9 +305,23 @@ async function endOwnership(
     affectedTermIds: consequences.affectedTermIds,
   });
 
+  // ADR 0028: a Tenancy whose basis this was ends on the same day.
+  const tenancyLoss = await tenancyLossStatements({
+    database: env.DATABASE,
+    nowMs,
+    ownershipIds: [ownershipId],
+    day: endDay,
+    reason: 'basis_ended',
+    rootGuard,
+    correlation,
+    cause: 'ownership_ended',
+    actorAccountId,
+  });
+
   const batch = [
     primary,
     ...consequences.statements,
+    ...tenancyLoss.statements,
     ...effects.statements,
     ...correlation.statements,
     ...effects.flagStatements,
@@ -416,9 +431,24 @@ async function voidOwnership(
     supersedes: { column: 'ownership_id', id: ownershipId },
   });
 
+  // ADR 0028: the basis never existed, but the tenant's access really ran
+  // until the error was found, so the Tenancy ends today rather than vanishing.
+  const tenancyLoss = await tenancyLossStatements({
+    database: env.DATABASE,
+    nowMs,
+    ownershipIds: [ownershipId],
+    day: associationDay,
+    reason: 'basis_ended',
+    rootGuard,
+    correlation,
+    cause: 'ownership_voided',
+    actorAccountId,
+  });
+
   const batch = [
     primary,
     ...consequences.statements,
+    ...tenancyLoss.statements,
     ...effects.statements,
     ...correlation.statements,
     ...effects.flagStatements,

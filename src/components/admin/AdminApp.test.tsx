@@ -175,7 +175,14 @@ describe('AdminApp', () => {
       isAdmin: true,
     });
     render(<AdminApp />);
-    for (const label of ['Roster', 'Board', 'Access', 'Review', 'Compliance']) {
+    for (const label of [
+      'Roster',
+      'Board',
+      'Tenants',
+      'Access',
+      'Review',
+      'Compliance',
+    ]) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     }
     // The legacy homes+owners editor is deleted (#212); its lot writes live

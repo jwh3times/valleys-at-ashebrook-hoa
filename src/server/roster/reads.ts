@@ -31,6 +31,7 @@ import {
   correctionRequests,
 } from '../db/roster-schema';
 import { personDisplayLabel } from '../../lib/format';
+import { tenancyCurrentSql } from './tenancy';
 
 export const OFFICES = [
   'president',
@@ -241,6 +242,84 @@ export async function fetchAdminRoster(
       ownerlessLotIds: lots.filter((l) => l.ownerless).map((l) => l.id),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Tenancies (ADR 0028)
+// ---------------------------------------------------------------------------
+
+export type TenancyStatus = 'current' | 'upcoming' | 'ended' | 'voided';
+
+export interface AdminTenancyRow {
+  id: string;
+  tenantPersonId: string;
+  tenantName: string;
+  lotId: string;
+  address: string;
+  startDay: string;
+  scheduledEndDay: string;
+  actualEndDay: string | null;
+  endReason: string | null;
+  renewsTenancyId: string | null;
+  status: TenancyStatus;
+}
+
+/**
+ * Every Tenancy, for the board's Tenants panel. Status comes from the one
+ * currency rule in SQL, so the panel and derivation cannot disagree about who
+ * is a tenant today. `upcoming` is the same rule asked on the start day: a
+ * Tenancy whose basis ends before it begins reads as ended, not upcoming.
+ *
+ * Board-only, reachable only from the `requireBoard`-gated route. The name
+ * passes through `personDisplayLabel` like every roster read.
+ */
+export async function fetchAdminTenancies(
+  env: Env,
+  associationDay: string,
+): Promise<AdminTenancyRow[]> {
+  const { results } = await env.DATABASE.prepare(
+    `SELECT t.id, t.tenant_person_id, p.full_name, t.lot_id, l.address,
+            t.start_day, t.scheduled_end_day, t.actual_end_day, t.end_reason,
+            t.renews_tenancy_id,
+            CASE
+              WHEN t.voided_at IS NOT NULL THEN 'voided'
+              WHEN ${tenancyCurrentSql('t', '?1')} THEN 'current'
+              WHEN t.start_day > ?1 AND ${tenancyCurrentSql('t', 't.start_day')}
+                THEN 'upcoming'
+              ELSE 'ended'
+            END AS status
+     FROM tenancies t
+     JOIN people p ON p.party_id = t.tenant_person_id
+     JOIN lots l ON l.id = t.lot_id
+     ORDER BY l.address, t.start_day DESC, t.id`,
+  )
+    .bind(associationDay)
+    .all<{
+      id: string;
+      tenant_person_id: string;
+      full_name: string | null;
+      lot_id: string;
+      address: string;
+      start_day: string;
+      scheduled_end_day: string;
+      actual_end_day: string | null;
+      end_reason: string | null;
+      renews_tenancy_id: string | null;
+      status: TenancyStatus;
+    }>();
+  return results.map((r) => ({
+    id: r.id,
+    tenantPersonId: r.tenant_person_id,
+    tenantName: personDisplayLabel(r.full_name, r.tenant_person_id),
+    lotId: r.lot_id,
+    address: r.address,
+    startDay: r.start_day,
+    scheduledEndDay: r.scheduled_end_day,
+    actualEndDay: r.actual_end_day,
+    endReason: r.end_reason,
+    renewsTenancyId: r.renews_tenancy_id,
+    status: r.status,
+  }));
 }
 
 // ---------------------------------------------------------------------------
