@@ -415,7 +415,7 @@ Astro SSR requests and the daily scheduled trigger.
 
 ## Scheduled Maintenance
 
-Wrangler config includes a daily cron trigger (`0 7 * * *`). It runs three jobs independently, so
+Wrangler config includes a daily cron trigger (`0 7 * * *`). It runs five jobs independently, so
 a failure in one does not hide or stop the others:
 
 - `cleanupVerificationState`, which keeps 30 days of consumed/expired property-verification rows
@@ -423,7 +423,8 @@ a failure in one does not hide or stop the others:
   phase 3c equivalents: pending Person Verification codes (`verification_codes`) age out after
   about a day past consumption/expiry, since a code is only ever useful for its ~10-minute TTL, and
   resolved (accepted/declined) verification review requests (`verification_review_requests`) age
-  out after 30 days — open requests are retained.
+  out after 30 days — open requests are retained. It also deletes Tenancy invitations
+  (`tenancy_invitations`, #294) that expired more than 30 days ago, and logs `tenancy_invitations=`.
 - `cleanupSavedReportContent`, which replaces de-anonymized report content, freeform-capable topics,
   and cited-source metadata with a fixed non-PII removal state after 90 days while retaining the
   report ID, template, creator, and timestamp. An authorized roster name/contact redaction performs
@@ -433,6 +434,12 @@ verify:invariants` runs) — added by #240 so the phase-4 soak isn't running wit
   drift detection. A violation is logged (IDs and codes only, never a personal value) and fails the
   cron invocation, which surfaces as a red run in Workers Logs/the Cloudflare dashboard; nothing is
   stored, and a real violation re-fires every day until it's fixed.
+- The Google Drive connection keepalive (`driveKeepalive`, #290), which keeps the association's
+  Drive refresh token and OAuth client inside Google's inactivity limit. A broken connection is
+  logged for a System Administrator to reconnect; only a transient failure fails the run.
+- The R2 orphan sweep (`sweepR2Orphans`, #442), which finds document files and search twins no row
+  points at. It only reports unless the `R2_SWEEP_DELETE` var is exactly `"true"`, never deletes
+  during the write freeze, and logs document IDs, never keys.
 
 No job's failure blocks another; if any fails, the invocation throws so the dashboard shows the run
 as failed.

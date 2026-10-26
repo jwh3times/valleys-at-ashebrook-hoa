@@ -4,8 +4,12 @@ import { LoginForm } from '../components/react/AuthForms';
 import { NEIGHBORHOOD } from '../lib/site';
 import { env } from 'cloudflare:workers';
 import { isGoogleSignInConfigured } from '../server/auth';
+import { invitationReturnPath } from '../lib/return-path';
 
 const googleEnabled = isGoogleSignInConfigured(env);
+// An invited tenant keeps their invitation across sign-in and registration.
+const invitation = invitationReturnPath(Astro.url.search);
+const keepNext = invitation ? `?next=${encodeURIComponent(invitation)}` : '';
 ---
 
 <BaseLayout
@@ -17,7 +21,7 @@ const googleEnabled = isGoogleSignInConfigured(env);
     <h1 class="page-title">Sign In</h1>
     <p class="page-lead">
       Sign in to access homeowner resources. New here?{' '}
-      <a href="/register">Create an account</a>.
+      <a href={`/register${keepNext}`}>Create an account</a>.
     </p>
     <LoginForm client:only="react" googleEnabled={googleEnabled} />
   </div>

@@ -173,7 +173,11 @@ export interface ApproveInput {
 }
 
 export type ApproveResult =
-  | { ok: true; tenancyId: string; personId: string }
+  | {
+      ok: true;
+      tenancyId: string;
+      personId: string;
+    }
   | { ok: false; status: 400 | 404; message: string }
   | { ok: false; status: 409; reason: ApprovalRefusal };
 
@@ -190,6 +194,7 @@ interface RequestRow {
   scheduled_end_day: string;
   renewed_person_id: string | null;
   renewed_end_day: string | null;
+  renewed_contact_method_id: string | null;
 }
 
 export async function approveTenancyRequest(
@@ -201,7 +206,8 @@ export async function approveTenancyRequest(
       `SELECT r.id, r.lot_id, r.basis_ownership_id, r.kind, r.renews_tenancy_id,
               r.tenant_name, r.channel, r.contact_value, r.contact_normalized,
               r.scheduled_end_day, rt.tenant_person_id AS renewed_person_id,
-              rt.scheduled_end_day AS renewed_end_day
+              rt.scheduled_end_day AS renewed_end_day,
+              rt.invite_contact_method_id AS renewed_contact_method_id
        FROM tenancy_requests r
        LEFT JOIN tenancies rt ON rt.id = r.renews_tenancy_id
        WHERE r.id = ?`,
@@ -251,18 +257,25 @@ export async function approveTenancyRequest(
   if (tenantPersonId === null)
     return { ok: false, status: 409, reason: 'renewed-ended' };
 
-  // A named Person gets the requested contact only if they lack it.
+  // A named Person gets the requested contact only if they lack it; either
+  // way, the Tenancy records it as the contact every invitation goes to. A
+  // renewal keeps the renewed Tenancy's.
   let addContact = createPerson;
+  let contactMethodId: string | null =
+    request.kind === 'new'
+      ? crypto.randomUUID()
+      : request.renewed_contact_method_id;
   if (request.kind === 'new' && !createPerson) {
     const held = await database
       .prepare(
-        `SELECT 1 FROM contact_methods
+        `SELECT id FROM contact_methods
          WHERE party_id = ? AND channel = ? AND value_normalized = ?
            AND end_day IS NULL AND voided_at IS NULL`,
       )
       .bind(tenantPersonId, request.channel, request.contact_normalized)
-      .first();
+      .first<{ id: string }>();
     addContact = !held;
+    if (held) contactMethodId = held.id;
   }
 
   const gate = approvalGuard(requestId, checks);
@@ -289,7 +302,7 @@ export async function approveTenancyRequest(
   if (addContact)
     statements.push(
       recordContactMethod(database, correlation, {
-        id: crypto.randomUUID(),
+        id: contactMethodId!,
         partyId: tenantPersonId,
         channel: request.channel!,
         value: request.contact_value!,
@@ -312,8 +325,9 @@ export async function approveTenancyRequest(
     database
       .prepare(
         `INSERT INTO tenancies (id, tenant_person_id, lot_id, basis_ownership_id,
-           start_day, scheduled_end_day, renews_tenancy_id, created_at, updated_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${gate.sql}`,
+           start_day, scheduled_end_day, renews_tenancy_id,
+           invite_contact_method_id, created_at, updated_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${gate.sql}`,
       )
       .bind(
         tenancyId,
@@ -323,6 +337,7 @@ export async function approveTenancyRequest(
         startDay,
         request.scheduled_end_day,
         request.renews_tenancy_id,
+        contactMethodId,
         nowMs,
         nowMs,
         ...gate.binds,

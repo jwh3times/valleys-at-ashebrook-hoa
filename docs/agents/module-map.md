@@ -308,12 +308,25 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
 - `roster/tenancy-approval.ts` (#294 slice 3): `approveTenancyRequest`, the board's approval as one
   batch; a single list of named checks builds both the in-batch gate and the diagnosis, so the `409`
   message cannot drift from the condition enforced (`APPROVAL_REFUSAL_MESSAGES`).
+- `roster/tenancy-invitation.ts` (#294 slice 4): `inviteTenant`, which issues and sends the claim link
+  (`<BETTER_AUTH_URL>/tenant-invite?token=…`, 256-bit token, stored only as an HMAC) through the existing
+  email/SMS senders. The insert re-checks both gates, Tenancy currency, an unclaimed tenant, the live
+  approved contact and the caller's authority (`scope`: an owner's Lot Authority or `boardAccessSql`);
+  3 sends a day per Tenancy (KV); earlier invitations are superseded only after a successful send, and
+  a failed send deletes the row. `reinviteResponse` and `approvalInvitation` map the result for the routes.
+- `roster/tenancy-claim.ts` (#294 slice 4): `claimTenantInvitation`, the one-batch claim behind
+  `/api/verify/tenant-claim`, `spendClaimAttempt` (5 a day per Account), and `invitationForDisplay`, the
+  read-only lookup `/tenant-invite` renders (a GET never consumes; mail scanners prefetch links).
 - `roster/builders.ts`: the shared statement builders `normalizedContactValue`, `recordPerson` and
   `recordContactMethod`, used by approval and the admin roster routes so a Person or Contact Method is
   recorded one way. `roster/authority.ts` gained `authorityBranches` and `lotAuthorityBasis` (which
   Ownership gives the caller authority over a Lot, direct wins). `roster/reads.ts` carries
   `fetchMemberTenancies` and `fetchAdminTenancyRequests`.
-- Client: `maskContact` and `dayAfter` in `src/lib/format.ts`; `src/components/react/modalKeyDown.ts`
+- Client: `src/lib/invitation-token.ts` (the 43-char base64url token shape) and `src/lib/return-path.ts`
+  (login, register and Google sign-in honour `next` only when it is exactly
+  `/tenant-invite?token=<token>`, so it is no open redirect); `src/lib/refusal-message.ts` (shows a
+  JSON refusal's `message`, else the plain text); member `TenantClaimButton` (the `/tenant-invite` island);
+  `maskContact` and `dayAfter` in `src/lib/format.ts`; `src/components/react/modalKeyDown.ts`
   (shared Escape/focus-trap handler for dialogs); admin `QueueDialog`/`RequestQueue` (the Tenants
   panel's approve/refuse queue); member `TenancyActions`, `TenancyRequestForm` and `useTenancyAction`
   (the `/tenants` page's islands).

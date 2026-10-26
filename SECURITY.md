@@ -392,7 +392,11 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   tree, which `npm run lint:fixtures` enforces in CI on every change.
   Contact data delivers the one-time verification code to the contact already on file and also
   contributes matching values to the AI pseudonymizer described below; it is never returned by the
-  proxy holder lookup. Names and opaque IDs of Persons who currently hold Lot Authority support
+  proxy holder lookup. A Tenancy invitation (ADR 0028, #294) is a 256-bit link token sent to the
+  contact the board approved; only its HMAC is stored, it lasts 14 days, and opening the link
+  (`/tenant-invite`) only displays it — an Account must sign in and `POST` to claim, rate-limited per
+  Account, with one indistinguishable refusal for any invalid token, and the page is `no-store`
+  with `Referrer-Policy: no-referrer`. Names and opaque IDs of Persons who currently hold Lot Authority support
   the official-mode proxy grant/holder workflow described above. Public docs describe the purpose
   and high-level handling; deployment-specific removal, erasure, backup, and retention runbooks
   live in the private operations companion repository (see `AGENTS.md`), never in this repo.

@@ -51,12 +51,14 @@ export function useAdminResource<T>(fetcher: () => Promise<T>, initial: T) {
     // oxlint-disable-next-line react/exhaustive-deps
   }, []);
 
-  async function run(action: () => Promise<void>, successMsg: string) {
+  /** Runs `action`, then shows `successMsg`, or the message the action
+   * returns when the outcome needs saying more exactly. */
+  async function run(action: () => Promise<string | void>, successMsg: string) {
     setBusy(true);
     setMsg('');
     try {
-      await action();
-      setMsg(successMsg);
+      const said = await action();
+      setMsg(typeof said === 'string' ? said : successMsg);
     } catch (err: unknown) {
       setMsg('Error: ' + messageOf(err, 'could not save.'));
     } finally {

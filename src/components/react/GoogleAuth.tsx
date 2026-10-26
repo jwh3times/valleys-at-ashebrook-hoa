@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
+import { invitationReturnPath } from '../../lib/return-path';
 
 /**
  * Individual Google sign-in (#415). Google is an optional way into a
@@ -63,10 +64,12 @@ export function GoogleSignInButton({ label }: { label: string }) {
     setBusy(true);
     try {
       // On success the client navigates to Google; this page does not return.
+      // An invited tenant comes back to the invitation either way (#294).
+      const invitation = invitationReturnPath(window.location.search);
       const result = await authClient.signIn.social({
         provider: 'google',
-        callbackURL: '/',
-        newUserCallbackURL: '/verify-property',
+        callbackURL: invitation ?? '/',
+        newUserCallbackURL: invitation ?? '/verify-property',
         errorCallbackURL: '/login',
       });
       if (result.error) {

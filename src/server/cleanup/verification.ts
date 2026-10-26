@@ -1,6 +1,7 @@
 import { and, inArray, lt, or } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import {
+  tenancyInvitations,
   verificationCodes,
   verificationReviewRequests,
 } from '../db/roster-schema';
@@ -19,6 +20,7 @@ export async function cleanupVerificationState(
 ): Promise<{
   verificationCodeRows: number;
   reviewRequestRows: number;
+  tenancyInvitationRows: number;
 }> {
   const cutoff = new Date(now.getTime() - RETENTION_DAYS * MS_PER_DAY);
   const codeCutoff = new Date(now.getTime() - CODE_RETENTION_MS);
@@ -48,8 +50,17 @@ export async function cleanupVerificationState(
     )
     .returning({ id: verificationReviewRequests.id });
 
+  // #294 slice 4: a Tenancy invitation lives 14 days. Once it has been
+  // expired for the retention window — consumed, superseded or never used —
+  // nothing needs it: the claim's Person Verification is the durable record.
+  const tenancyInvitationRows = await db
+    .delete(tenancyInvitations)
+    .where(lt(tenancyInvitations.expiresAt, cutoff))
+    .returning({ id: tenancyInvitations.id });
+
   return {
     verificationCodeRows: verificationCodeRows.length,
     reviewRequestRows: reviewRequestRows.length,
+    tenancyInvitationRows: tenancyInvitationRows.length,
   };
 }

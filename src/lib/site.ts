@@ -50,7 +50,8 @@ type ModeName = Pick<SiteSettings, 'officialMode' | 'siteName'>;
 export type VotingMode = Pick<
   SiteSettings,
   'officialMode' | 'liveVotingEnabled' | 'lotRecordsEnabled'
->;
+> &
+  Partial<Pick<SiteSettings, 'tenantAccessEnabled'>>;
 
 /** Primary nav links; the Dues link only appears in official mode. */
 export function navLinks(officialMode: boolean): NavLink[] {
@@ -84,6 +85,8 @@ export function aboutParagraphs(s: Pick<SiteSettings, 'aboutBody'>): string[] {
 export interface AccountNavAuth {
   contentTier: 'visitor' | 'homeowner' | 'board';
   lotIds: string[];
+  /** Absent reads as none. Only `tenant` is consulted. */
+  capabilities?: ReadonlySet<string>;
 }
 
 export interface AccountNav {
@@ -91,10 +94,12 @@ export interface AccountNav {
   links: NavLink[];
 }
 
+const TENANTS_LINK: NavLink = { href: '/tenants', label: 'Tenants' };
+
 /**
  * Account affordances for the public header, driven by the resolved caller:
- * anonymous → sign in / register; a signed-in user without a verified home →
- * verify property; a board member → the admin panel; a verified homeowner →
+ * anonymous → sign in / register; a tenant who owns nothing → documents and
+ * account (#294); a signed-in user without a verified home → verify property; a board member → the admin panel; a verified homeowner →
  * the proxy surface when official mode is on (the only homeowner-write
  * surface today; 404s when the mode is off, so the link must follow the
  * mode), else nothing extra.
@@ -107,6 +112,7 @@ export function accountNav(
     lotRecordsEnabled: false,
   },
 ): AccountNav {
+  const tenantsOpen = mode.officialMode && mode.tenantAccessEnabled === true;
   if (!auth)
     return {
       signedIn: false,
@@ -134,6 +140,22 @@ export function accountNav(
         mode.lotRecordsEnabled
           ? [{ href: '/lot-records', label: 'Lot records' }]
           : []),
+        // Likewise `/tenants` (#294), which needs both of its gates.
+        ...(auth.lotIds.length > 0 && tenantsOpen ? [TENANTS_LINK] : []),
+      ],
+    };
+  // A tenant who owns nothing (#294) reads the documents the board marks for
+  // tenants and keeps their account; "Verify your property" is not for them.
+  if (
+    auth.contentTier !== 'homeowner' &&
+    auth.lotIds.length === 0 &&
+    auth.capabilities?.has('tenant')
+  )
+    return {
+      signedIn: true,
+      links: [
+        { href: '/documents', label: 'Documents' },
+        { href: '/account', label: 'Account' },
       ],
     };
   if (auth.contentTier !== 'homeowner')
@@ -158,6 +180,9 @@ export function accountNav(
         ...(mode.lotRecordsEnabled
           ? [{ href: '/lot-records', label: 'Lot records' }]
           : []),
+        // #294: the owner's Tenants page, which needs both gates like the
+        // requests it makes.
+        ...(tenantsOpen ? [TENANTS_LINK] : []),
       ],
     };
   return { signedIn: true, links: [] };

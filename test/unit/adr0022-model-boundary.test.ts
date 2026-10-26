@@ -153,6 +153,10 @@ const NEW_MODEL_SURFACE = new Set([
   'pages/tenants.astro',
   'server/roster/tenancy-approval.ts',
   'server/roster/builders.ts',
+  // #294 slice 4: the invitation an approval sends, and the tenant's claim of
+  // it, which records a Person Verification and a Person Link.
+  'server/roster/tenancy-invitation.ts',
+  'server/roster/tenancy-claim.ts',
 ]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
@@ -182,6 +186,7 @@ const NEW_TABLES = [
   'cutover_shadow_mismatches',
   'tenancies',
   'tenancy_requests',
+  'tenancy_invitations',
 ];
 
 function sourceFiles(dir: string): string[] {

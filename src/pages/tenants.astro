@@ -67,6 +67,7 @@ const DONE: Record<string, string> = {
   renew: 'Renewal sent to the board.',
   withdraw: 'Request withdrawn.',
   end: 'Tenancy ended.',
+  reinvite: 'A new invitation is on its way to the tenant.',
 };
 const done = DONE[Astro.url.searchParams.get('done') ?? ''] ?? null;
 
@@ -138,6 +139,7 @@ function renewBounds(t: MemberTenancy) {
                   tenantName={t.tenantName}
                   address={l.address}
                   renew={renewBounds(t)}
+                  reinvite={gatesOn && !t.claimed}
                 />
               </li>
             ))}

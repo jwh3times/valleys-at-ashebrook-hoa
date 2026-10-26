@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { authClient } from '../../lib/auth-client';
 import { useLoginForm } from './useLoginForm';
+import { returnPathAfterSignIn } from '../../lib/return-path';
 import {
   GoogleSignInButton,
   googleSignInError,
@@ -23,14 +24,21 @@ export function RegisterForm({
   const [msg, setMsg] = useState('');
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await authClient.signUp.email({ email, password, name });
+    // An invited tenant's verification link brings them back to the invitation.
+    const callbackURL = returnPathAfterSignIn(window.location.search);
+    const { error } = await authClient.signUp.email({
+      email,
+      password,
+      name,
+      callbackURL,
+    });
     // An existing UNVERIFIED account gets a fresh verification link, so the
     // one message above is true for the person it most often belongs to: the
     // neighbour who registered, never clicked the link, and is trying again.
     // Fired and ignored — its outcome must not reach the page either.
     if (error) {
       try {
-        await authClient.sendVerificationEmail({ email, callbackURL: '/' });
+        await authClient.sendVerificationEmail({ email, callbackURL });
       } catch {
         // Deliberately empty: an already-verified account, an unknown address,
         // and a send failure must all look the same from here.
@@ -85,7 +93,10 @@ export function LoginForm({
     info,
     handleSubmit,
     handleReset,
-  } = useLoginForm({ onSignIn: () => (window.location.href = '/') });
+  } = useLoginForm({
+    onSignIn: () =>
+      window.location.assign(returnPathAfterSignIn(window.location.search)),
+  });
   const msg = error || info;
   return (
     <form onSubmit={handleSubmit}>

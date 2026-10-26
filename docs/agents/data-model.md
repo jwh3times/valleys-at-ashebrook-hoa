@@ -151,6 +151,17 @@ Paired CHECKs tie `decided_at`/`decided_by_account_id` to non-open, `refusal_rea
 `tenancy_id` to `approved`. Partial unique indexes allow one open new request per
 `(lot_id, contact_normalized)` and one open request per `renews_tenancy_id`.
 
+`tenancy_invitations` (migration `0045`, #294 slice 4, ADR 0028) is the claim credential, not a roster
+fact, and nothing references it. `tenancy_id` is a `RESTRICT` FK; the Person's Contact Method is the
+composite `(contact_method_id, contact_method_party_kind)` FK to `contact_methods(id, party_kind)`
+(the same reference `person_verifications` uses; CHECK `party_kind = 'person'`). Only the token's
+HMAC under `BETTER_AUTH_SECRET` is stored (`token_hash`, unique). `expires_at` is 14 days out (CHECK
+after `created_at`); an invitation ends by `consumed_at` + `consumed_by_account_id` (paired CHECK) or
+`superseded_at`, never both (`tenancy_invitations_single_end`). `tenancies.invite_contact_method_id`
+(nullable, FK `contact_methods(id)`) is the approved contact every invitation goes to: approval sets
+it, a renewal copies it from the renewed Tenancy, so a failed send or the daily cleanup (expired >30
+days) loses nothing; a Tenancy older than `0045` has none.
+
 ## Resolutions
 
 `resolutions` (the resolutions book — standing rules the board adopts, per

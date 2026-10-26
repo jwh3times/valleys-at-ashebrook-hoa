@@ -32,6 +32,7 @@ const tenancy = {
   tenantName: 'Tess Tenant',
   address: '100 Example Lane',
   renew: { minEndDay: '2027-01-02', maxEndDay: '2028-02-01' },
+  reinvite: true,
 } as const;
 
 describe('TenancyActions', () => {
@@ -97,6 +98,31 @@ describe('TenancyActions', () => {
         name: 'End tenancy: Tess Tenant, 100 Example Lane',
       }),
     ).toBeInTheDocument();
+  });
+
+  it('sends a fresh invitation to a tenant who has not claimed, then reloads saying so', async () => {
+    render(<TenancyActions {...tenancy} />);
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Re-invite tenant: Tess Tenant, 100 Example Lane',
+      }),
+    );
+    await waitFor(() =>
+      expect(mocked.tenancyAction).toHaveBeenCalledWith({
+        action: 'reinvite',
+        tenancyId: 'ten-1',
+      }),
+    );
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('/tenants?done=reinvite'),
+    );
+  });
+
+  it('offers no Re-invite once the tenant has claimed, or while tenant access is off', () => {
+    render(<TenancyActions {...tenancy} reinvite={false} />);
+    expect(
+      screen.queryByRole('button', { name: /Re-invite tenant/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('withdraws an open request', async () => {

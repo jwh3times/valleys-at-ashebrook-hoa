@@ -6,7 +6,11 @@ import TenantsPage from '../../src/pages/tenants.astro';
 import NotFoundPage from '../../src/pages/404.astro';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../src/lib/types';
 import type { AuthContext } from '../../src/server/authz/guards';
-import { resetTenancyWorld, seedTenancy } from './tenancy-fixtures';
+import {
+  resetTenancyWorld,
+  seedLinkedAccount,
+  seedTenancy,
+} from './tenancy-fixtures';
 
 // #294 slice 3 (spec decision 3): the owner's `/tenants` page. It sits outside
 // `/homeowner/*` so it can answer 404 (ADR 0024's reason), and it renders only
@@ -91,6 +95,9 @@ describe('/tenants', () => {
     expect(html).toContain('No lease on file');
     expect(html).not.toContain('ned@example.test');
     expect(html).toContain('Ask the board to approve a tenant');
+    expect(html).toContain(
+      'Re-invite tenant: Person tenant, lot Ashebrook Lane',
+    );
   });
 
   it('confirms the action the page was reloaded after', async () => {
@@ -113,7 +120,15 @@ describe('/tenants', () => {
     expect(html).toContain('Tenant access is switched off.');
     expect(html).toContain('End tenancy: Person tenant, lot Ashebrook Lane');
     expect(html).not.toContain('Renew tenancy:');
+    expect(html).not.toContain('Re-invite tenant:');
     expect(html).not.toContain('Ask the board to approve a tenant');
+  });
+
+  it('offers no Re-invite once the tenant has claimed', async () => {
+    await seedLinkedAccount('acct-tenant', 'tenant');
+    const html = await (await render(caller())).text();
+    expect(html).toContain('signed in');
+    expect(html).not.toContain('Re-invite tenant:');
   });
 
   it('is the 404 while officialMode is off, like every member surface', async () => {

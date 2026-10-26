@@ -142,9 +142,11 @@ export async function truncateAll() {
   // `lots` with RESTRICT — so it goes after every table citing a Person
   // and before both of its own parents.
   // A Tenancy (ADR 0028) cites a Person, a Lot and an Ownership, and a
-  // Tenancy request cites all of those plus the Tenancy.
+  // Tenancy request cites all of those plus the Tenancy, and an invitation
+  // cites the Tenancy and a Contact Method.
   // A renewal cites the Tenancy it renews with RESTRICT, enforced per row, so
   // the link is cleared before the table.
+  await env.DATABASE.prepare('DELETE FROM tenancy_invitations').run();
   await env.DATABASE.prepare('DELETE FROM tenancy_requests').run();
   await env.DATABASE.prepare(
     'UPDATE tenancies SET renews_tenancy_id = NULL',

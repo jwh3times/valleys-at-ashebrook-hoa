@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 /**
@@ -119,5 +119,71 @@ describe('LoginForm', () => {
 
     expect(onUnverified).toBe(onBadPassword);
     expect(screen.queryByText(/not verified/i)).toBeNull();
+  });
+});
+
+// #294 slice 4: a tenant who follows an invitation link while signed out is
+// sent to sign in or register with the link as `next`. Only an invitation
+// link is honoured, so `next` can never become an open redirect.
+describe('returning to a tenant invitation', () => {
+  const TOKEN = 'Ab3_-'.repeat(8) + 'xyz';
+  const INVITE = `/tenant-invite?token=${TOKEN}`;
+  const realLocation = window.location;
+  const assign = vi.fn();
+
+  function arriveWith(next: string) {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { assign, search: `?next=${encodeURIComponent(next)}` },
+    });
+  }
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: realLocation,
+    });
+  });
+
+  const LOGIN_FIELDS: [string, string][] = [
+    ['Email', 'someone@example.test'],
+    ['Password', 'a-long-enough-password'],
+  ];
+
+  it('goes back to the invitation after signing in', async () => {
+    arriveWith(INVITE);
+    auth.signIn.email.mockResolvedValue({ error: null });
+    render(<LoginForm />);
+    await fillAndSubmit('Sign in', LOGIN_FIELDS);
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(INVITE));
+  });
+
+  it('goes home for any other next', async () => {
+    for (const next of [
+      `//evil.example${INVITE}`,
+      `https://evil.example${INVITE}`,
+      '/admin',
+      `${INVITE}&extra=1`,
+      '/tenant-invite?token=short',
+    ]) {
+      assign.mockClear();
+      arriveWith(next);
+      auth.signIn.email.mockResolvedValue({ error: null });
+      const { unmount } = render(<LoginForm />);
+      await fillAndSubmit('Sign in', LOGIN_FIELDS);
+      await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
+      unmount();
+    }
+  });
+
+  it('sends the verification link back to the invitation on registering', async () => {
+    arriveWith(INVITE);
+    auth.signUp.email.mockResolvedValue({ error: null });
+    render(<RegisterForm />);
+    await fillAndSubmit('Create account', SIGN_UP_FIELDS);
+    await screen.findByText(/check your email/i);
+    expect(auth.signUp.email).toHaveBeenCalledWith(
+      expect.objectContaining({ callbackURL: INVITE }),
+    );
   });
 });

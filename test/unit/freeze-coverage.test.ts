@@ -143,6 +143,10 @@ describe('write-freeze coverage', () => {
     expect(freezePolicyFor('/api/verify/request')).toBe('mutations');
   });
 
+  it('freezes the tenant claim, which writes a Person Link (#294): no exemption', () => {
+    expect(freezePolicyFor('/api/verify/tenant-claim')).toBe('mutations');
+  });
+
   it('matches path segments rather than bare prefixes', () => {
     // /api/administrators is not under /api/admin, and /api/members is not
     // under /api/member — the same trap isAdminApi/isMemberApi guard against.

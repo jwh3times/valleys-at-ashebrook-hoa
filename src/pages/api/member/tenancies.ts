@@ -11,6 +11,10 @@ import {
 import { normalizedContactValue } from '../../../server/roster/builders';
 import { fetchMemberTenancies } from '../../../server/roster/reads';
 import {
+  inviteTenant,
+  reinviteResponse,
+} from '../../../server/roster/tenancy-invitation';
+import {
   AuditCorrelation,
   OPERATOR_OBSERVATION,
   operationKey,
@@ -35,7 +39,7 @@ import {
 // caller's Lot Authority inside its own statement. Anything outside the
 // caller's Lots answers the same masked 404 as a row that does not exist.
 //
-// The actions that grant something (request, renew) answer 404 while either
+// The actions that grant something (request, renew, reinvite) answer 404 while either
 // gate is off and re-check both inside their statement, so a race answers
 // 409. Withdraw and end, like the board's refuse, end and void, stay live with
 // `tenantAccessEnabled` off: ending access must not wait on a setting, and a
@@ -373,6 +377,29 @@ async function endTenancy(
   return new Response(null, { status: 204 });
 }
 
+/** Sends a fresh invitation for an approved Tenancy of the caller's Lot whose
+ * tenant has not claimed (spec review decision 2), to the contact the board
+ * approved. The insert re-checks the caller's Lot Authority with the rest. */
+async function reinvite(
+  body: unknown,
+  { personId, today }: Caller,
+): Promise<Response> {
+  const tenancyId = stringField(body, 'tenancyId');
+  if (!tenancyId) return new Response('tenancyId is required', { status: 400 });
+  if (!(await tenancyInScope(tenancyId, personId, today))) return NOT_FOUND();
+  return reinviteResponse(
+    await inviteTenant(env, {
+      tenancyId,
+      today,
+      scope: lotAuthorityExists(
+        { value: personId },
+        { column: 't.lot_id' },
+        today,
+      ),
+    }),
+  );
+}
+
 /** Each action, and whether it grants something and so needs both gates. */
 const ACTIONS: Record<
   string,
@@ -382,6 +409,7 @@ const ACTIONS: Record<
   renew: { gated: true, run: renewTenancy },
   withdraw: { gated: false, run: withdrawRequest },
   end: { gated: false, run: endTenancy },
+  reinvite: { gated: true, run: reinvite },
 };
 
 const FORBIDDEN = () => new Response('Forbidden', { status: 403 });

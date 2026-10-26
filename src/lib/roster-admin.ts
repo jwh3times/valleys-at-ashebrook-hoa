@@ -23,6 +23,8 @@
 //    `null` reads as an explicit clear. Do not "helpfully" default those
 //    fields.
 
+import { refusalMessage } from './refusal-message';
+
 /**
  * Every call goes through here, so a failure surfaces the server's own
  * plain-text message — these routes go to real trouble over them ("A current
@@ -1385,6 +1387,7 @@ export interface AdminTenancy {
   endReason: string | null;
   renewsTenancyId: string | null;
   status: TenancyStatus;
+  claimed: boolean;
 }
 
 /** Mirrors `AdminTenancyRequestRow`: one open request in the board's queue. */
@@ -1426,29 +1429,31 @@ export async function fetchTenantsPanel(): Promise<TenantsPanelData> {
   );
 }
 
+/** Mirrors `ApprovalInvitation` (`tenancy-invitation.ts`): what approval says
+ * about the tenant's invitation (#294 slice 4) — sent, failed at the
+ * provider, over the day's limit, or none to send. */
+export type ApprovalInvitation =
+  'sent' | 'send_failed' | 'rate_limited' | 'none';
+
 /**
  * Approves an owner's request, naming an existing Person or, with `null`,
- * recording the tenant as a new one. A refused approval answers 409 with
- * `{ reason, message }`; the thrown error carries the message.
+ * recording the tenant as a new one, and answers whether the invitation went
+ * out. A refused approval answers 409 with `{ reason, message }`; the thrown
+ * error carries the message.
  */
 export async function approveTenancyRequest(
   requestId: string,
   personId: string | null,
-): Promise<void> {
+): Promise<ApprovalInvitation> {
   const res = await fetch('/api/admin/tenancies', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action: 'approve', requestId, personId }),
   });
-  if (res.ok) return;
-  const text = await res.text();
-  let message = text;
-  try {
-    message = (JSON.parse(text) as { message?: string }).message ?? text;
-  } catch {
-    // A plain-text refusal (400/404) is already the message.
-  }
-  throw new Error(message || `Approve failed: ${res.status}`);
+  if (res.ok)
+    return ((await res.json()) as { invitation: ApprovalInvitation })
+      .invitation;
+  throw new Error(await refusalMessage(res, 'Approve failed'));
 }
 
 /** Refuses an owner's request with a reason the owner sees. */
@@ -1472,6 +1477,18 @@ export async function endTenancy(tenancyId: string): Promise<void> {
     { action: 'end', tenancyId },
     'End tenancy failed',
   );
+}
+
+/** Sends a fresh invitation to a tenant who has not claimed. A refusal
+ * answers 409 with `{ reason, message }`; the thrown error carries it. */
+export async function reinviteTenancy(tenancyId: string): Promise<void> {
+  const res = await fetch('/api/admin/tenancies', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'reinvite', tenancyId }),
+  });
+  if (res.ok) return;
+  throw new Error(await refusalMessage(res, 'Re-invite failed'));
 }
 
 /** Voids a Tenancy recorded in error. */

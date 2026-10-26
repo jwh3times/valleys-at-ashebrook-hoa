@@ -65,6 +65,7 @@ const q = (v: string | null | undefined) =>
   v === null || v === undefined ? 'NULL' : `'${v.replace(/'/g, "''")}'`;
 
 const NEW_TABLES = [
+  'tenancy_invitations',
   'tenancy_requests',
   'tenancies',
   'access_grants',

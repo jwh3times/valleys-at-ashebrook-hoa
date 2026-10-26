@@ -1,6 +1,6 @@
 # ADR 0028: Tenant Access Is a Tenancy Beside Lot Authority, Seeing Only Documents Marked for Tenants
 
-**Status:** Accepted 2026-10-20
+**Status:** Accepted 2026-10-20; amended 2026-10-26 (see [Amendments](#amendments))
 **Date:** 2026-10-20
 
 ## Context
@@ -89,12 +89,14 @@ then collects tenants' names and contact details.
    records the Person (when new), the Contact Method and the Tenancy as Roster Changes. The Tenancy
    starts on the approval's Association Day; there is no backdating, because a Tenancy grants
    nothing before the tenant can sign in.
-3. **The tenant claims.** Only after approval is a one-time code sent to the approved contact. The
-   tenant signs in to their own account, or creates one, and enters the code. That creates the
-   Person Link, recorded as an Identity Event with an automatic cause. The claim reuses the existing
-   code machinery (`src/server/verification/codes.ts`), Turnstile and send rate limits. It lives
-   beside the `/api/verify/*` routes, under their write-freeze guard. A code can be re-sent without
-   a new approval. An account already linked to a different Person cannot claim; an account already
+3. **The tenant claims.** Only after approval is a single-use invitation link sent to the approved
+   contact. The link carries a 256-bit random token, good for 14 days, stored only as an HMAC under
+   the same secret as the verification codes and sent through the same senders. The tenant signs in
+   to their own account, or creates one, and claims from the page the link opens; opening the page
+   never consumes the link. The claim creates the Person Link, recorded as an Identity Event. It
+   lives beside the `/api/verify/*` routes, under their write-freeze guard. A fresh link can be sent
+   without a new approval, by the board or any holder of Lot Authority over the Lot, at most three
+   a day per Tenancy. An account already linked to a different Person cannot claim; an account already
    linked to the tenant Person needs no claim, because the Tenancy applies to it at once.
 
 Nothing is sent to anyone the board has not approved. Automatic Person Verification is not used,
@@ -174,8 +176,10 @@ for tenants.
 
 Requests, approvals and claims need both gates on, re-checked inside their mutation SQL. While
 either gate is off, the document predicate's tenant clause does not apply, so no tenant sees
-anything beyond the public site. The board's actions to end or void a Tenancy stay available while
-the gates are off, because ending access must never wait on a gate.
+anything beyond the public site. Ending or voiding a Tenancy, refusing or withdrawing a request, and
+an owner ending a Tenancy stay available while the gates are off, because ending access must never
+wait on a gate, and a pending request's name and contact must always be clearable. None of them
+grants anything. The owner's actions still need official mode, like every homeowner write.
 
 ### What tenants never get
 
@@ -196,6 +200,25 @@ gains a tenant caller class asserted to be refused by every member and board rou
   is visible to a tenant until it has done the second.
 - Nothing ships to production use until the board adopts the site (#361) and separately turns on
   `tenantAccessEnabled`. Development proceeds against local D1 with synthetic data.
+
+## Amendments
+
+**2026-10-26 (#294 slice 4).** Two sentences changed, both recorded as departures in the
+[design spec](../specs/2026-10-20-tenant-access-design.md#departures-from-adr-0028) and accepted by
+the maintainer:
+
+1. **The claim uses a single-use link, not the 6-digit code.** A code is safe because it lives ten
+   minutes, allows five attempts and is bound to the account that asked for it. An invitation is
+   sent before the tenant has an account, must last days in an inbox, and is claimed by whichever
+   account the tenant signs in with, so a 6-digit code with that lifetime and no binding could be
+   guessed. The HMAC and its secret, and the email and SMS senders, are reused unchanged. The limits
+   are new KV counters of the same kind as the verification send limits, keyed by Tenancy (three
+   sends a day) and by account (five claim attempts a day). The claim has no Turnstile step: it is
+   reached only by following a link the board's approval sent, and a 256-bit token is not
+   guessable.
+2. **More actions stay live with the gates off.** The board's refusal and the owner's end and
+   withdrawal join the board's end and void, for the same reason, and so that a pending request's
+   name and contact can always be cleared.
 
 ## Related decisions
 

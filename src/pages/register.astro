@@ -4,8 +4,12 @@ import { RegisterForm } from '../components/react/AuthForms';
 import { NEIGHBORHOOD } from '../lib/site';
 import { env } from 'cloudflare:workers';
 import { isGoogleSignInConfigured } from '../server/auth';
+import { invitationReturnPath } from '../lib/return-path';
 
 const googleEnabled = isGoogleSignInConfigured(env);
+// An invited tenant keeps their invitation across sign-in and registration.
+const invitation = invitationReturnPath(Astro.url.search);
+const keepNext = invitation ? `?next=${encodeURIComponent(invitation)}` : '';
 ---
 
 <BaseLayout
@@ -16,8 +20,8 @@ const googleEnabled = isGoogleSignInConfigured(env);
     <p class="eyebrow">Member access</p>
     <h1 class="page-title">Create Account</h1>
     <p class="page-lead">
-      Already have an account? <a href="/login">Sign in</a>. After registering,
-      verify your property on the{' '}
+      Already have an account? <a href={`/login${keepNext}`}>Sign in</a>. After
+      registering, verify your property on the{' '}
       <a href="/verify-property">verify property page</a> to unlock homeowner
       access.
     </p>
