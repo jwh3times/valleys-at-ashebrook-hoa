@@ -34,6 +34,7 @@ const env = {} as Env;
 const CLEAN_SWEEP = {
   verificationCodeRows: 3,
   reviewRequestRows: 4,
+  tenancyInvitationRows: 2,
 };
 
 function run(overrides: Partial<InvariantRun> = {}): InvariantRun {

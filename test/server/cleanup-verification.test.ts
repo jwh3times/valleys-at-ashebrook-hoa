@@ -17,6 +17,9 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   const db = getDb(env);
+  await env.DATABASE.prepare('DELETE FROM tenancy_invitations').run();
+  await env.DATABASE.prepare('DELETE FROM tenancies').run();
+  await env.DATABASE.prepare('DELETE FROM ownerships').run();
   await db.delete(verificationCodes);
   await db.delete(verificationReviewRequests);
   await db.delete(contactMethods);
@@ -185,5 +188,51 @@ describe('cleanupVerificationState', () => {
       'old-open',
       'recent-accepted',
     ]);
+  });
+
+  // #294 slice 4 (spec decision 4): an invitation is good for 14 days; once
+  // it has been expired for 30, whatever happened to it, it is deleted.
+  it('deletes tenancy invitations that expired more than 30 days ago, keeps the rest', async () => {
+    const now = new Date('2026-07-08T12:00:00Z');
+    await env.DATABASE.batch([
+      env.DATABASE.prepare(
+        `INSERT INTO ownerships (id, owner_party_id, lot_id, start_day, created_at, updated_at)
+         VALUES ('own', 'party1', 'p1', '2025-01-01', 1, 1)`,
+      ),
+      env.DATABASE.prepare(
+        `INSERT INTO tenancies (id, tenant_person_id, lot_id, basis_ownership_id, start_day, scheduled_end_day, created_at, updated_at)
+         VALUES ('ten', 'party1', 'p1', 'own', '2026-01-01', '2027-01-01', 1, 1)`,
+      ),
+    ]);
+    const invite = (id: string, expiredDaysAgo: number, consumed = false) => {
+      const expiresAt = daysBefore(now, expiredDaysAgo).getTime();
+      return env.DATABASE.prepare(
+        `INSERT INTO tenancy_invitations (id, tenancy_id, contact_method_id,
+           channel, token_hash, expires_at, consumed_at, consumed_by_account_id,
+           created_at)
+         VALUES (?, 'ten', 'cm1', 'email', ?, ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        `hash-${id}`,
+        expiresAt,
+        consumed ? expiresAt - 1 : null,
+        consumed ? 'u1' : null,
+        expiresAt - 14 * 24 * 60 * 60 * 1000,
+      );
+    };
+    await env.DATABASE.batch([
+      invite('old-unused', 31),
+      invite('old-consumed', 31, true),
+      invite('recent', 29),
+      invite('live', -5),
+    ]);
+
+    const result = await cleanupVerificationState(env, now);
+
+    expect(result.tenancyInvitationRows).toBe(2);
+    const { results } = await env.DATABASE.prepare(
+      'SELECT id FROM tenancy_invitations ORDER BY id',
+    ).all<{ id: string }>();
+    expect(results.map((r) => r.id)).toEqual(['live', 'recent']);
   });
 });
