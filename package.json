@@ -45,7 +45,7 @@
     "verify:invariants": "node --experimental-strip-types scripts/verify-invariants.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.135.0",
+    "@anthropic-ai/sdk": "^1.2.0",
     "@astrojs/cloudflare": "^14.4.2",
     "@astrojs/react": "^7.1.1",
     "@better-auth/core": "^1.7.12",
