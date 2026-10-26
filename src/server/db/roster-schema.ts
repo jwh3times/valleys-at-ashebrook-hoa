@@ -951,3 +951,102 @@ export const tenancies = sqliteTable(
     index('tenancies_basis_idx').on(t.basisOwnershipId),
   ],
 );
+
+/** Mirrors `tenancy_requests_status_check` (0044). */
+export const TENANCY_REQUEST_STATUSES = [
+  'open',
+  'approved',
+  'refused',
+  'withdrawn',
+] as const;
+export type TenancyRequestStatus = (typeof TENANCY_REQUEST_STATUSES)[number];
+
+// An owner's request for a Tenancy, which the board approves or refuses. Not a
+// roster fact: the tenant's name and contact live here only while the request
+// is open (`tenancy_requests_contact_shape`). Approval moves them into `people`
+// and `contact_methods`; refusal and withdrawal clear them.
+export const tenancyRequests = sqliteTable(
+  'tenancy_requests',
+  {
+    id: text('id').primaryKey(),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => lots.id, { onDelete: 'restrict' }),
+    // Plain text, no FK, by the actor-column convention.
+    requestedByAccountId: text('requested_by_account_id').notNull(),
+    // Whose Lot Authority approval re-checks.
+    requestedByPersonId: text('requested_by_person_id')
+      .notNull()
+      .references(() => people.partyId, { onDelete: 'restrict' }),
+    // Resolved when the request is made; direct Ownership wins.
+    basisOwnershipId: text('basis_ownership_id')
+      .notNull()
+      .references(() => ownerships.id, { onDelete: 'restrict' }),
+    kind: text('kind', { enum: ['new', 'renewal'] }).notNull(),
+    renewsTenancyId: text('renews_tenancy_id').references(() => tenancies.id, {
+      onDelete: 'restrict',
+    }),
+    tenantName: text('tenant_name'),
+    channel: text('channel', { enum: ['email', 'sms'] }),
+    contactValue: text('contact_value'),
+    // The form `contact_methods.value_normalized` takes.
+    contactNormalized: text('contact_normalized'),
+    // Exclusive, like the Tenancy's.
+    scheduledEndDay: day('scheduled_end_day').notNull(),
+    status: text('status', { enum: TENANCY_REQUEST_STATUSES })
+      .notNull()
+      .default('open'),
+    createdAt: instant('created_at').notNull(),
+    decidedAt: instant('decided_at'),
+    // The board decider, or the Lot Authority holder who withdrew it.
+    decidedByAccountId: text('decided_by_account_id'),
+    // Shown to the requester.
+    refusalReason: text('refusal_reason'),
+    tenancyId: text('tenancy_id').references(() => tenancies.id, {
+      onDelete: 'restrict',
+    }),
+  },
+  (t) => [
+    check('tenancy_requests_kind_check', sql`"kind" IN ('new', 'renewal')`),
+    check(
+      'tenancy_requests_status_check',
+      sql`"status" IN ('open', 'approved', 'refused', 'withdrawn')`,
+    ),
+    check(
+      'tenancy_requests_channel_check',
+      sql`"channel" IS NULL OR "channel" IN ('email', 'sms')`,
+    ),
+    check(
+      'tenancy_requests_renewal_paired',
+      sql`("kind" = 'renewal') = ("renews_tenancy_id" IS NOT NULL)`,
+    ),
+    check(
+      'tenancy_requests_contact_shape',
+      sql`CASE WHEN "status" = 'open' AND "kind" = 'new' THEN "tenant_name" IS NOT NULL AND "channel" IS NOT NULL AND "contact_value" IS NOT NULL AND "contact_normalized" IS NOT NULL ELSE "tenant_name" IS NULL AND "channel" IS NULL AND "contact_value" IS NULL AND "contact_normalized" IS NULL END`,
+    ),
+    check(
+      'tenancy_requests_decision_paired',
+      sql`("status" = 'open') = ("decided_at" IS NULL)`,
+    ),
+    check(
+      'tenancy_requests_decider_paired',
+      sql`("decided_at" IS NULL) = ("decided_by_account_id" IS NULL)`,
+    ),
+    check(
+      'tenancy_requests_refusal_reason_paired',
+      sql`("status" = 'refused') = ("refusal_reason" IS NOT NULL)`,
+    ),
+    check(
+      'tenancy_requests_tenancy_paired',
+      sql`("status" = 'approved') = ("tenancy_id" IS NOT NULL)`,
+    ),
+    uniqueIndex('tenancy_requests_open_contact_idx')
+      .on(t.lotId, t.contactNormalized)
+      .where(sql`"status" = 'open' AND "kind" = 'new'`),
+    uniqueIndex('tenancy_requests_open_renewal_idx')
+      .on(t.renewsTenancyId)
+      .where(sql`"status" = 'open'`),
+    index('tenancy_requests_lot_status_idx').on(t.lotId, t.status),
+    index('tenancy_requests_status_idx').on(t.status),
+  ],
+);

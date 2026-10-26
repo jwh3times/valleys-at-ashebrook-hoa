@@ -121,7 +121,7 @@ An immutable account of opening or resolving a Review Flag, linked to the change
 _Avoid_: Review note, mutable status
 
 **Roster Change**:
-An immutable account of a creation, correction, consolidation, retirement, or ending involving a Lot, Person, Organization, Ownership, Representation, Tenancy, or Contact Method. Only a System Administrator or current Board Member with Board Access may accept such a fact, recording its Effective Day, reason, supporting reference, actor, and Recorded At; member-submitted information remains a request until accepted.
+An immutable account of a creation, correction, consolidation, retirement, or ending involving a Lot, Person, Organization, Ownership, Representation, Tenancy, or Contact Method. Only a System Administrator or current Board Member with Board Access may accept such a fact, recording its Effective Day, reason, supporting reference, actor, and Recorded At, except that a current holder of Lot Authority may end a Tenancy of that Lot; member-submitted information remains a request until accepted.
 _Avoid_: Ownership change, mutable audit row
 
 **Roster Redaction**:

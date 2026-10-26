@@ -85,7 +85,8 @@ export function insertedRowGuard(
     | 'person_verifications'
     | 'person_links'
     | 'verification_codes'
-    | 'system_admin_bootstrap',
+    | 'system_admin_bootstrap'
+    | 'tenancies',
   id: string,
 ): SqlGuard {
   // The bootstrap singleton has no `id`; its key column is the marker.
@@ -154,7 +155,9 @@ export type RosterChangeReason =
   | 'correction_request_accepted'
   | 'scope_correction'
   | 'recorded_in_error'
-  // Tenancy endings (ADR 0028). `lot_retired` above serves a Tenancy too.
+  // Tenancy facts (ADR 0028). `lot_retired` above serves a Tenancy too.
+  | 'tenancy_request_approved'
+  | 'owner_ended'
   | 'board_ended'
   | 'basis_ended';
 

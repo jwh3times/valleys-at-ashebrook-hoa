@@ -30,8 +30,10 @@ import {
   accessGrants,
   correctionRequests,
 } from '../db/roster-schema';
-import { personDisplayLabel } from '../../lib/format';
-import { tenancyCurrentSql } from './tenancy';
+import { maskContact, personDisplayLabel } from '../../lib/format';
+import type { MemberTenancyLot } from '../../lib/types';
+import { normalizeName } from './normalize';
+import { basisCurrentSql, tenancyCurrentSql } from './tenancy';
 
 export const OFFICES = [
   'president',
@@ -320,6 +322,294 @@ export async function fetchAdminTenancies(
     renewsTenancyId: r.renews_tenancy_id,
     status: r.status,
   }));
+}
+
+export interface AdminTenancyCandidate {
+  personId: string;
+  name: string;
+  /** `contact` when they already hold the requested contact, else `name`. */
+  matchedBy: 'contact' | 'name';
+}
+
+export interface AdminTenancyRequestRow {
+  id: string;
+  kind: 'new' | 'renewal';
+  lotId: string;
+  address: string;
+  requesterName: string;
+  /** A renewal names the renewed Tenancy's tenant. */
+  tenantName: string;
+  channel: 'email' | 'sms' | null;
+  /** Unmasked: the board approves the contact. Null on a renewal. */
+  contact: string | null;
+  scheduledEndDay: string;
+  renewsTenancyId: string | null;
+  createdAt: number;
+  /** The basis Ownership has ended or been voided, or its Lot retired, so
+   * approval would fail and the panel offers only Refuse. */
+  basisEnded: boolean;
+  candidates: AdminTenancyCandidate[];
+}
+
+/**
+ * The open-request queue of the board's Tenants panel, oldest first.
+ *
+ * For a `new` request it offers every unconsolidated Person whose normalized
+ * name matches, or who already holds the requested contact: a contact two
+ * identities share is not uniquely attributable, so the board sees both and
+ * decides. Nothing matches automatically (Duplicate Owner Consolidation).
+ *
+ * Board-only, reachable only from the `requireBoard`-gated route.
+ */
+export async function fetchAdminTenancyRequests(
+  env: Env,
+  associationDay: string,
+): Promise<AdminTenancyRequestRow[]> {
+  const { results } = await env.DATABASE.prepare(
+    `SELECT r.id, r.kind, r.lot_id, l.address, r.requested_by_person_id,
+            rp.full_name AS requester_name, r.tenant_name, r.channel,
+            r.contact_value, r.contact_normalized, r.scheduled_end_day,
+            r.renews_tenancy_id, r.created_at,
+            rt.tenant_person_id AS renewed_person_id,
+            tp.full_name AS renewed_name,
+            NOT ${basisCurrentSql('r.basis_ownership_id', 'r.lot_id', '?1')}
+              AS basis_ended
+     FROM tenancy_requests r
+     JOIN lots l ON l.id = r.lot_id
+     JOIN people rp ON rp.party_id = r.requested_by_person_id
+     LEFT JOIN tenancies rt ON rt.id = r.renews_tenancy_id
+     LEFT JOIN people tp ON tp.party_id = rt.tenant_person_id
+     WHERE r.status = 'open'
+     ORDER BY r.created_at, r.id`,
+  )
+    .bind(associationDay)
+    .all<{
+      id: string;
+      kind: 'new' | 'renewal';
+      lot_id: string;
+      address: string;
+      requested_by_person_id: string;
+      requester_name: string | null;
+      tenant_name: string | null;
+      channel: 'email' | 'sms' | null;
+      contact_value: string | null;
+      contact_normalized: string | null;
+      scheduled_end_day: string;
+      renews_tenancy_id: string | null;
+      created_at: number;
+      renewed_person_id: string | null;
+      renewed_name: string | null;
+      basis_ended: number;
+    }>();
+
+  const newRequests = results.filter((r) => r.kind === 'new');
+  const candidateResults =
+    newRequests.length === 0
+      ? []
+      : await env.DATABASE.batch(
+          newRequests.map((r) =>
+            env.DATABASE.prepare(
+              `SELECT p.party_id, p.full_name,
+                      EXISTS (
+                        SELECT 1 FROM contact_methods c
+                        WHERE c.party_id = p.party_id AND c.channel = ?1
+                          AND c.value_normalized = ?2
+                          AND c.end_day IS NULL AND c.voided_at IS NULL
+                      ) AS holds_contact
+               FROM people p
+               JOIN parties pa ON pa.id = p.party_id
+               WHERE pa.consolidated_into_party_id IS NULL
+                 AND (p.name_normalized = ?3 OR EXISTS (
+                   SELECT 1 FROM contact_methods c
+                   WHERE c.party_id = p.party_id AND c.channel = ?1
+                     AND c.value_normalized = ?2
+                     AND c.end_day IS NULL AND c.voided_at IS NULL
+                 ))
+               ORDER BY holds_contact DESC, p.full_name, p.party_id`,
+            ).bind(
+              r.channel,
+              r.contact_normalized,
+              normalizeName(r.tenant_name),
+            ),
+          ),
+        );
+  const candidatesById = new Map<string, AdminTenancyCandidate[]>();
+  newRequests.forEach((r, i) =>
+    candidatesById.set(
+      r.id,
+      (
+        candidateResults[i].results as {
+          party_id: string;
+          full_name: string | null;
+          holds_contact: number;
+        }[]
+      ).map((c) => ({
+        personId: c.party_id,
+        name: personDisplayLabel(c.full_name, c.party_id),
+        matchedBy: c.holds_contact === 1 ? 'contact' : 'name',
+      })),
+    ),
+  );
+
+  return results.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    lotId: r.lot_id,
+    address: r.address,
+    requesterName: personDisplayLabel(
+      r.requester_name,
+      r.requested_by_person_id,
+    ),
+    tenantName:
+      r.tenant_name ??
+      personDisplayLabel(r.renewed_name, r.renewed_person_id ?? r.id),
+    channel: r.channel,
+    contact: r.contact_value,
+    scheduledEndDay: r.scheduled_end_day,
+    renewsTenancyId: r.renews_tenancy_id,
+    createdAt: r.created_at,
+    basisEnded: r.basis_ended === 1,
+    candidates: candidatesById.get(r.id) ?? [],
+  }));
+}
+
+/** How long a refusal stays on the owner's page (spec decision 3). */
+const REFUSAL_SHOWN_MS = 90 * 86_400_000;
+
+/**
+ * The owner's `/tenants` view: for each Lot the caller holds today, its
+ * current and upcoming Tenancies, its open requests, and its refusals of the
+ * last 90 days with the board's reason.
+ *
+ * Authority-scoped: `lotIds` is the caller's derived Lot Authority, and every
+ * statement filters on it. A request's contact is masked, so the page shows no
+ * contact value beyond its last characters; a decided request holds none.
+ */
+export async function fetchMemberTenancies(
+  env: Env,
+  lotIds: string[],
+  associationDay: string,
+  nowMs: number = Date.now(),
+): Promise<MemberTenancyLot[]> {
+  if (lotIds.length === 0) return [];
+  const lotSet = JSON.stringify(lotIds);
+  const inLots = (column: string) =>
+    `${column} IN (SELECT value FROM json_each(?1))`;
+  const [lotRows, tenancyRows, openRows, refusedRows] =
+    await env.DATABASE.batch<Record<string, unknown>>([
+      env.DATABASE.prepare(
+        `SELECT id, address FROM lots WHERE ${inLots('id')} ORDER BY address, id`,
+      ).bind(lotSet),
+      env.DATABASE.prepare(
+        `SELECT t.id, t.lot_id, t.tenant_person_id, p.full_name, t.start_day,
+              t.scheduled_end_day,
+              CASE WHEN ${tenancyCurrentSql('t', '?2')} THEN 'current'
+                   ELSE 'upcoming' END AS status,
+              EXISTS (
+                SELECT 1 FROM person_links pl
+                WHERE pl.person_id = t.tenant_person_id AND pl.ended_at IS NULL
+              ) AS claimed
+       FROM tenancies t
+       JOIN people p ON p.party_id = t.tenant_person_id
+       WHERE ${inLots('t.lot_id')}
+         AND (${tenancyCurrentSql('t', '?2')}
+              OR (t.start_day > ?2 AND ${tenancyCurrentSql('t', 't.start_day')}))
+       ORDER BY t.start_day DESC, t.id`,
+      ).bind(lotSet, associationDay),
+      env.DATABASE.prepare(
+        `SELECT r.id, r.lot_id, r.kind, r.tenant_name, r.channel,
+              r.contact_value, r.scheduled_end_day, r.renews_tenancy_id,
+              r.created_at, rt.tenant_person_id AS renewed_person_id,
+              rp.full_name AS renewed_name
+       FROM tenancy_requests r
+       LEFT JOIN tenancies rt ON rt.id = r.renews_tenancy_id
+       LEFT JOIN people rp ON rp.party_id = rt.tenant_person_id
+       WHERE ${inLots('r.lot_id')} AND r.status = 'open'
+       ORDER BY r.created_at, r.id`,
+      ).bind(lotSet),
+      env.DATABASE.prepare(
+        `SELECT id, lot_id, kind, scheduled_end_day, decided_at, refusal_reason
+       FROM tenancy_requests
+       WHERE ${inLots('lot_id')} AND status = 'refused' AND decided_at >= ?2
+       ORDER BY decided_at DESC, id`,
+      ).bind(lotSet, nowMs - REFUSAL_SHOWN_MS),
+    ]);
+
+  const byLot = new Map<string, MemberTenancyLot>();
+  for (const row of lotRows.results as { id: string; address: string }[])
+    byLot.set(row.id, {
+      lotId: row.id,
+      address: row.address,
+      tenancies: [],
+      openRequests: [],
+      refusedRequests: [],
+    });
+
+  for (const r of tenancyRows.results as {
+    id: string;
+    lot_id: string;
+    tenant_person_id: string;
+    full_name: string | null;
+    start_day: string;
+    scheduled_end_day: string;
+    status: 'current' | 'upcoming';
+    claimed: number;
+  }[])
+    byLot.get(r.lot_id)?.tenancies.push({
+      id: r.id,
+      tenantName: personDisplayLabel(r.full_name, r.tenant_person_id),
+      startDay: r.start_day,
+      scheduledEndDay: r.scheduled_end_day,
+      status: r.status,
+      claimed: r.claimed === 1,
+    });
+
+  for (const r of openRows.results as {
+    id: string;
+    lot_id: string;
+    kind: 'new' | 'renewal';
+    tenant_name: string | null;
+    channel: 'email' | 'sms' | null;
+    contact_value: string | null;
+    scheduled_end_day: string;
+    renews_tenancy_id: string | null;
+    created_at: number;
+    renewed_person_id: string | null;
+    renewed_name: string | null;
+  }[])
+    byLot.get(r.lot_id)?.openRequests.push({
+      id: r.id,
+      kind: r.kind,
+      tenantName:
+        r.tenant_name ??
+        personDisplayLabel(r.renewed_name, r.renewed_person_id ?? r.id),
+      channel: r.channel,
+      contact:
+        r.contact_value === null || r.channel === null
+          ? null
+          : maskContact(r.channel, r.contact_value),
+      scheduledEndDay: r.scheduled_end_day,
+      renewsTenancyId: r.renews_tenancy_id,
+      createdAt: r.created_at,
+    });
+
+  for (const r of refusedRows.results as {
+    id: string;
+    lot_id: string;
+    kind: 'new' | 'renewal';
+    scheduled_end_day: string;
+    decided_at: number;
+    refusal_reason: string;
+  }[])
+    byLot.get(r.lot_id)?.refusedRequests.push({
+      id: r.id,
+      kind: r.kind,
+      scheduledEndDay: r.scheduled_end_day,
+      decidedAt: r.decided_at,
+      refusalReason: r.refusal_reason,
+    });
+
+  return [...byLot.values()];
 }
 
 // ---------------------------------------------------------------------------

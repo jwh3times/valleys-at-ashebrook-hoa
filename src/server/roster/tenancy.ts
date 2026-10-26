@@ -6,6 +6,8 @@
 // the gate, the one currency rule, and the consequences of losing a basis.
 
 import type { AuditCorrelation, SqlGuard } from './audit';
+import { getSiteSettings } from '../content/settings';
+import type { SiteSettings } from '../../lib/types';
 
 /**
  * Both gates, inside SQL: `officialMode` AND `tenantAccessEnabled`, each a
@@ -17,6 +19,8 @@ import type { AuditCorrelation, SqlGuard } from './audit';
  * document predicate embeds it, so a tenant stops seeing Tenant-Visible
  * documents on the first request after either gate turns off. Ending or
  * voiding a Tenancy never checks it: ending access must not wait on a gate.
+ * Nor does refusing or withdrawing a request, so a pending request's name and
+ * contact can always be cleared (review decision, 2026-10-25).
  */
 export const TENANT_ACCESS_ENABLED_SQL = `
   EXISTS (
@@ -29,6 +33,41 @@ export const TENANT_ACCESS_ENABLED_SQL = `
       END
   )
 ` as const;
+
+/**
+ * The read-time half of the same gate, for a route or page deciding whether a
+ * gated action exists at all; the mutation re-checks
+ * `TENANT_ACCESS_ENABLED_SQL` inside its own statement. A copy of
+ * `lotRecordsAvailable`, failing closed the same way.
+ */
+export async function tenantAccessAvailable(env: Env): Promise<boolean> {
+  return tenantAccessVisible(await getSiteSettings(env));
+}
+
+/** The same answer for a caller that already holds the settings. */
+export function tenantAccessVisible(
+  site: Pick<SiteSettings, 'officialMode' | 'tenantAccessEnabled'>,
+): boolean {
+  return site.officialMode && site.tenantAccessEnabled;
+}
+
+/**
+ * The longest a Tenancy may run: its scheduled end is at most this many
+ * months after its start. Checked in the mutation SQL, never a CHECK, because
+ * it is a policy number the board may change (spec decision 1).
+ */
+export const TENANCY_MAX_MONTHS = 13;
+
+/**
+ * The latest scheduled end day allowed for a Tenancy starting on `startDay`.
+ * `setUTCMonth` rolls an overflowing day forward exactly as SQLite's
+ * `date(d, '+13 months')` does, so this answer and the SQL re-check agree.
+ */
+export function latestTenancyEndDay(startDay: string): string {
+  const d = new Date(`${startDay}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + TENANCY_MAX_MONTHS);
+  return d.toISOString().slice(0, 10);
+}
 
 /**
  * The one definition of a current Tenancy, for every reader: the row aliased
@@ -48,18 +87,41 @@ export function tenancyCurrentSql(t: string, day: string): string {
   return `(${t}.voided_at IS NULL
     AND ${t}.start_day <= ${day}
     AND ${day} < COALESCE(${t}.actual_end_day, ${t}.scheduled_end_day)
-    AND EXISTS (
-      SELECT 1 FROM ownerships tb
-      WHERE tb.id = ${t}.basis_ownership_id
-        AND tb.lot_id = ${t}.lot_id
+    AND ${basisCurrentSql(`${t}.basis_ownership_id`, `${t}.lot_id`, day)})`;
+}
+
+/**
+ * The basis half of `tenancyCurrentSql`, for a request as well as a Tenancy:
+ * Ownership `ownership` is unvoided, on Lot `lot` and current on `day`, and
+ * that Lot is not retired.
+ *
+ * `day` appears twice: pass a numbered parameter or a column, or a bare `?`
+ * bound twice.
+ */
+export function basisCurrentSql(
+  ownership: string,
+  lot: string,
+  day: string,
+): string {
+  return `EXISTS (
+      SELECT 1 FROM ownerships tb JOIN lots tl ON tl.id = tb.lot_id
+      WHERE tb.id = ${ownership}
+        AND tb.lot_id = ${lot}
         AND tb.voided_at IS NULL
         AND (tb.start_day IS NULL OR tb.start_day <= ${day})
         AND (tb.end_day IS NULL OR ${day} < tb.end_day)
-    )
-    AND EXISTS (
-      SELECT 1 FROM lots tl WHERE tl.id = ${t}.lot_id AND tl.retired_at IS NULL
-    ))`;
+        AND tl.retired_at IS NULL
+    )`;
 }
+
+/**
+ * The SET clause that clears a request's tenant name and contact. A request
+ * holds them only while it is open (spec decision 3, and migration 0044's
+ * `contact_shape` CHECK), so every decision — approve, refuse, withdraw —
+ * carries this.
+ */
+export const CLEAR_REQUEST_CONTACT_SQL =
+  'tenant_name = NULL, channel = NULL, contact_value = NULL, contact_normalized = NULL';
 
 export interface TenancyLossInput {
   database: D1Database;

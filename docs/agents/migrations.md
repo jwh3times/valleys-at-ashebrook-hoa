@@ -233,6 +233,8 @@ reasoning deliberately when it recreates the three `proxy_id` FKs as actionless.
 
 ### Applied to production
 
+Dates are Association Days (America/New_York); `d1_migrations.applied_at` records UTC.
+
 | Migrations     | Applied    | Note                                                                                             |
 | -------------- | ---------- | ------------------------------------------------------------------------------------------------ |
 | through `0015` | 2026-08-05 |                                                                                                  |
@@ -242,7 +244,13 @@ reasoning deliberately when it recreates the three `proxy_id` FKs as actionless.
 | `0029`         | 2026-08-21 | On the **second** attempt; the first was the stale-checkout trap above.                          |
 | `0030`         | 2026-09-09 | Before the dependent auth deploy, as its ordering note requires (#316).                          |
 | `0031`-`0032`  | 2026-09-09 | Batched: both additive, so they waited for one pass rather than two.                             |
+| `0033`         | 2026-09-17 |                                                                                                  |
+| `0034`-`0036`  | 2026-09-21 | Together, in one pass.                                                                           |
+| `0037`         | 2026-09-26 | The Phase 4 contract above, under the write freeze.                                              |
+| `0038`         | 2026-09-27 | Before #413's dependent code, as its note above requires.                                        |
+| `0039`         | 2026-10-17 |                                                                                                  |
 | `0040`-`0042`  | 2026-10-21 | Together, before the v2.7.0 merge; `db:migrate:remote` cannot skip, so 0040–0041 went with 0042. |
+| `0043`         | 2026-10-21 | Before the v2.8.0 merge: `deriveAccess` reads `tenancies` on every signed-in request.            |
 
 ## The drizzle-kit ALTER trap
 

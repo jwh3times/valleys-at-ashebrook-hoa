@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { associationDateIso, formatDate, todayIso, maskEmail } from './format';
+import {
+  associationDateIso,
+  dayAfter,
+  formatDate,
+  todayIso,
+  maskContact,
+  maskEmail,
+} from './format';
 
 describe('formatDate', () => {
   it('formats an ISO date as a friendly long date', () => {
@@ -49,5 +56,27 @@ describe('maskEmail', () => {
     expect(maskEmail('@example.com')).toBe('***');
     expect(maskEmail('user@')).toBe('***');
     expect(maskEmail('')).toBe('***');
+  });
+});
+
+describe('maskContact', () => {
+  it('shows only the last four characters of an email address', () => {
+    expect(maskContact('email', 'ned@example.test')).toBe('***test');
+  });
+
+  it('shows only the last four digits of a phone number', () => {
+    expect(maskContact('sms', '(555) 555-0142')).toBe('***0142');
+  });
+
+  it('masks a value too short to hide anything entirely', () => {
+    expect(maskContact('email', 'a@bc')).toBe('***');
+    expect(maskContact('sms', '0142')).toBe('***');
+  });
+});
+
+describe('dayAfter', () => {
+  it('rolls over a month and a year end', () => {
+    expect(dayAfter('2026-10-31')).toBe('2026-11-01');
+    expect(dayAfter('2026-12-31')).toBe('2027-01-01');
   });
 });

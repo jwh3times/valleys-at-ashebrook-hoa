@@ -7,22 +7,38 @@ import {
 } from '../../../server/authz/api-guards';
 import { readJson, stringField } from '../../../server/http';
 import { getDb } from '../../../server/db/client';
+import { boardAccessSql } from '../../../server/authz/derive';
 import { associationDateIso } from '../../../lib/format';
 import { tenancies } from '../../../server/db/roster-schema';
-import { fetchAdminTenancies } from '../../../server/roster/reads';
+import {
+  fetchAdminTenancies,
+  fetchAdminTenancyRequests,
+} from '../../../server/roster/reads';
 import { parseEvidence } from '../../../server/roster/ownership-input';
+import {
+  APPROVAL_REFUSAL_MESSAGES,
+  approveTenancyRequest,
+} from '../../../server/roster/tenancy-approval';
 import {
   AuditCorrelation,
   operationKey,
   updatedRowGuard,
 } from '../../../server/roster/audit';
+import {
+  CLEAR_REQUEST_CONTACT_SQL,
+  tenantAccessAvailable,
+} from '../../../server/roster/tenancy';
 
-// The board's half of Tenant Access (ADR 0028, #294 slice 2): the Tenants
-// panel's list, and ending or voiding a Tenancy. Requests and approval join
-// this route in slice 3.
+// The board's half of Tenant Access (ADR 0028, #294): the Tenants panel's
+// list, approving or refusing an owner's request (slice 3), and ending or
+// voiding a Tenancy (slice 2).
 //
-// End and void never check the tenant-access gates: ending access must not
-// wait on a setting, so both stay live with the feature switched off.
+// Approve answers 404 while either gate is off, and re-checks both inside its
+// batch. Refuse, end and void never check the gates, so all three stay live
+// with the feature switched off: ending access must not wait on a setting, and
+// a pending request's name and contact can always be cleared (review decision,
+// 2026-10-25). The list says whether approval is open, so the panel can offer
+// only Refuse while it is not.
 //
 // Each mutation is one batch: the primary statement, which re-checks the
 // Tenancy's state in its own WHERE, then the audit correlation gated on it.
@@ -32,9 +48,16 @@ export const prerender = false;
 export const GET: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
-  return Response.json(await fetchAdminTenancies(env, associationDateIso()), {
-    headers: { 'cache-control': 'no-store' },
-  });
+  const today = associationDateIso();
+  const [tenancyRows, requests, approvalOpen] = await Promise.all([
+    fetchAdminTenancies(env, today),
+    fetchAdminTenancyRequests(env, today),
+    tenantAccessAvailable(env),
+  ]);
+  return Response.json(
+    { tenancies: tenancyRows, requests, approvalOpen },
+    { headers: { 'cache-control': 'no-store' } },
+  );
 };
 
 async function existingTenancy(id: string) {
@@ -152,6 +175,81 @@ async function voidTenancy(
   return new Response(null, { status: 204 });
 }
 
+const REFUSAL_REASON_MAX = 500;
+
+/** Records the Tenancy an owner asked for; see `tenancy-approval.ts`. */
+async function approveRequest(
+  body: unknown,
+  actorAccountId: string,
+  today: string,
+): Promise<Response> {
+  const requestId = stringField(body, 'requestId');
+  if (!requestId) return new Response('requestId is required', { status: 400 });
+  const personId = stringField(body, 'personId') || null;
+  const result = await approveTenancyRequest({
+    database: env.DATABASE,
+    requestId,
+    personId,
+    actorAccountId,
+    today,
+  });
+  if (result.ok)
+    return Response.json(
+      { tenancyId: result.tenancyId, personId: result.personId },
+      { status: 201 },
+    );
+  if (result.status === 409)
+    return Response.json(
+      {
+        reason: result.reason,
+        message: APPROVAL_REFUSAL_MESSAGES[result.reason],
+      },
+      { status: 409 },
+    );
+  return new Response(result.message, { status: result.status });
+}
+
+/** Refuses an open request with a reason the owner sees, clearing the
+ * tenant's name and contact. No ledger row: a request is not a roster fact.
+ * The UPDATE re-checks Board Access, as approval does. */
+async function refuseRequest(
+  body: unknown,
+  actorAccountId: string,
+  today: string,
+): Promise<Response> {
+  const requestId = stringField(body, 'requestId');
+  if (!requestId) return new Response('requestId is required', { status: 400 });
+  const reason = stringField(body, 'reason');
+  if (!reason) return new Response('reason is required', { status: 400 });
+  if (reason.length > REFUSAL_REASON_MAX)
+    return new Response(
+      `reason must be ${REFUSAL_REASON_MAX} characters or fewer`,
+      { status: 400 },
+    );
+  const board = boardAccessSql(actorAccountId, today);
+  const result = await env.DATABASE.prepare(
+    `UPDATE tenancy_requests
+     SET status = 'refused', refusal_reason = ?, decided_at = ?,
+         decided_by_account_id = ?, ${CLEAR_REQUEST_CONTACT_SQL}
+     WHERE id = ? AND status = 'open' AND ${board.sql}`,
+  )
+    .bind(reason, Date.now(), actorAccountId, requestId, ...board.binds)
+    .run();
+  if (result.meta.changes === 1) return new Response(null, { status: 204 });
+  const row = await env.DATABASE.prepare(
+    'SELECT status FROM tenancy_requests WHERE id = ?',
+  )
+    .bind(requestId)
+    .first<{ status: string }>();
+  if (!row) return new Response('Request not found', { status: 404 });
+  return new Response(
+    row.status === 'open'
+      ? 'You no longer have board access'
+      : 'This request has already been decided',
+    { status: 409 },
+  );
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
   const denied = await requireBoard(locals, request, env);
   if (denied) return denied;
@@ -160,6 +258,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const ctx = await resolveAuthContext(locals, request, env);
   const actorAccountId = ctx?.userId ?? 'unknown';
   switch (stringField(parsed.value, 'action')) {
+    case 'approve':
+      if (!(await tenantAccessAvailable(env)))
+        return new Response('Not found', { status: 404 });
+      return approveRequest(parsed.value, actorAccountId, associationDateIso());
+    case 'refuse':
+      return refuseRequest(parsed.value, actorAccountId, associationDateIso());
     case 'end':
       return endTenancy(parsed.value, actorAccountId, associationDateIso());
     case 'void':

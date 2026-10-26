@@ -11,14 +11,13 @@ import { associationDateIso } from '../../../lib/format';
 import { isoDateOrError } from '../../../lib/types';
 import { parties, contactMethods } from '../../../server/db/roster-schema';
 import {
-  normalizeEmail,
-  normalizePhone,
-} from '../../../server/roster/normalize';
+  normalizedContactValue,
+  recordContactMethod,
+} from '../../../server/roster/builders';
 import {
   AuditCorrelation,
   operationKey,
   updatedRowGuard,
-  insertedRowGuard,
   OPERATOR_OBSERVATION,
   type SensitiveCategory,
 } from '../../../server/roster/audit';
@@ -35,32 +34,6 @@ export const prerender = false;
 
 const CONSOLIDATED =
   'Party has been consolidated — record facts on the survivor';
-
-function normalizedValue(
-  channel: 'email' | 'sms',
-  value: string,
-): { ok: true; value: string } | { ok: false; error: string } {
-  // The shared normalizers deliberately do NOT validate — legacy values are
-  // accepted as recorded — so a light shape check lives here, where a board
-  // member is typing a NEW value and a typo should bounce rather than be
-  // enshrined.
-  const shapeOk =
-    channel === 'email'
-      ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)
-      : value.replace(/\D/g, '').length >= 10;
-  const normalized = shapeOk
-    ? channel === 'email'
-      ? normalizeEmail(value)
-      : normalizePhone(value)
-    : null;
-  if (!normalized)
-    return {
-      ok: false,
-      error:
-        channel === 'email' ? 'Invalid email address' : 'Invalid phone number',
-    };
-  return { ok: true, value: normalized };
-}
 
 const category = (channel: 'email' | 'sms'): SensitiveCategory =>
   channel === 'email' ? 'email' : 'phone';
@@ -109,7 +82,7 @@ async function addContactMethod(
     return new Response("channel must be 'email' or 'sms'", { status: 400 });
   const value = stringField(body, 'value');
   if (!value) return new Response('value is required', { status: 400 });
-  const normalized = normalizedValue(channel, value);
+  const normalized = normalizedContactValue(channel, value);
   if (!normalized.ok) return new Response(normalized.error, { status: 400 });
 
   let startDay: string | null = null;
@@ -132,46 +105,24 @@ async function addContactMethod(
     actorAccountId: await actor(locals, request),
     nowMs,
   });
-  correlation.event({
-    kind: 'contact_method_recorded',
-    guard: insertedRowGuard('contact_methods', id),
-    sensitive: [category(channel)],
-    detail: {
-      family: 'roster_change',
-      effective: { day: startDay ?? associationDay },
-      reason: 'board_recorded',
-      evidence: OPERATOR_OBSERVATION,
-      subjects: [
-        { column: 'contact_method_id', id, role: 'created' },
-        { column: 'party_id', id: partyId, role: 'related' },
-      ],
-    },
+  const insert = recordContactMethod(env.DATABASE, correlation, {
+    id,
+    partyId,
+    channel,
+    value,
+    valueNormalized: normalized.value,
+    isPreferred,
+    startDay,
+    nowMs,
+    effectiveDay: startDay ?? associationDay,
+    reason: 'board_recorded',
+    evidence: OPERATOR_OBSERVATION,
   });
 
   const statements: D1PreparedStatement[] = [];
   if (isPreferred)
     statements.push(clearPreferredStatement(partyId, channel, nowMs));
-  statements.push(
-    env.DATABASE.prepare(
-      // `party_kind` comes from the party row itself, so the denormalized
-      // discriminator (migration 0026) can never disagree with the party.
-      `INSERT INTO contact_methods (id, party_id, party_kind, channel, value, value_normalized, is_preferred, start_day, created_at, updated_at)
-       SELECT ?, ?, kind, ?, ?, ?, ?, ?, ?, ?
-       FROM parties WHERE id = ? AND consolidated_into_party_id IS NULL`,
-    ).bind(
-      id,
-      partyId,
-      channel,
-      value,
-      normalized.value,
-      isPreferred ? 1 : 0,
-      startDay,
-      nowMs,
-      nowMs,
-      partyId,
-    ),
-  );
-  statements.push(...correlation.statements);
+  statements.push(insert, ...correlation.statements);
 
   const results = await env.DATABASE.batch(statements);
   const primaryIndex = isPreferred ? 1 : 0;

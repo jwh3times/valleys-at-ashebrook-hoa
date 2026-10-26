@@ -220,9 +220,12 @@ SELECT EXISTS (
 
 ### 3. Requests and approval
 
-**Member API: `POST /api/member/tenancies`**, an action bus behind `requireMemberApi`, then
-`tenantAccessEnabled` (`404` when off), then `403` without a `personId`. Every action re-checks
-`TENANT_ACCESS_ENABLED_SQL` and `lotAuthorityExists` for the caller inside its own statement:
+**Member API: `POST /api/member/tenancies`**, an action bus behind `requireMemberApi` (which
+needs `officialMode`), then, for `request`, `renew` and `reinvite`, `tenantAccessEnabled` (`404`
+when off), then `403` without a `personId`. Every action re-checks `lotAuthorityExists` for the
+caller inside its own statement, and the gated ones re-check `TENANT_ACCESS_ENABLED_SQL` there too,
+so a race answers `409`. `withdraw` and `end` stay live with `tenantAccessEnabled` off (review
+decision 6):
 
 | Action     | Does                                                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------ |
@@ -235,7 +238,8 @@ SELECT EXISTS (
 A Tenancy or request outside the caller's Lots answers the masked `404`. The end day must be after
 today and at most 13 months out (`400`).
 
-**`GET`** on the same route lists, for each of the caller's Lots:
+**`GET`** on the same route, which also stays live with `tenantAccessEnabled` off, lists, for each
+of the caller's Lots:
 
 - current and upcoming Tenancies, with the tenant's name, the end day and whether the invitation
   has been claimed;
@@ -245,11 +249,14 @@ today and at most 13 months out (`400`).
 It shows no contact values beyond the masked last characters of the invited contact.
 
 **The owner page** is `/tenants`, outside `/homeowner/*` for ADR 0024's reason: it must be able to
-answer `404`. It renders only when both gates are on and the caller has `member`. A server-rendered
+answer `404`. It renders only when `officialMode` is on and the caller has `member`. With
+`tenantAccessEnabled` off it renders only when one of the caller's Lots has a Tenancy or an open
+request on file, and then offers End and Withdraw but no request form or Renew. A server-rendered
 list carries a small client form for the actions.
 
 **Admin API: `POST /api/admin/tenancies`.** It runs `requireBoard`, then checks the gates for every
-action except `end` and `void`, which stay live with the gates off (ADR 0028). It has a `GET` list.
+action except `refuse`, `end` and `void`, which stay live with the gates off (ADR 0028; review
+decision 6). It has a `GET` list, which says whether approval is open.
 
 | Action     | Does                                                                                                                                        |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -368,7 +375,7 @@ The outcomes:
   `LOT_RECORDS_ENABLED_SQL`, requiring `officialMode` and `tenantAccessEnabled` to be literal JSON
   `true`.
 - **Where it is checked.** The request, renew, reinvite, approve and claim mutations all check it,
-  and so does the document predicate. End and void don't.
+  and so does the document predicate. End, void, refuse and withdraw don't (review decision 6).
 
 ### 6. Documents
 
@@ -460,23 +467,29 @@ the invitation.
    sent through the same senders and limited by the same KV helpers. What changes is a 256-bit
    token and a 14-day life in place of a 6-digit code and 10 minutes, because the invitation is not
    bound to an Account and must last in an inbox (decision 4). Slice 4 amends the ADR's sentence.
+2. **More actions stay live with the gates off.** The ADR exempts the board's end and void. Refuse,
+   and the owner's end and withdraw, are exempt too (review decision 6), for the ADR's own reason
+   that ending access must never wait on a gate, and so that a pending request's name and contact
+   can always be cleared. None of them grants anything. Slice 4 amends the ADR's sentence.
 
 ## Failure and edge behavior
 
-| Situation                                        | Result                                                                               |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Either gate off                                  | Member routes and `/tenants` `404`; claim `404`; tenants see public only             |
-| Gates off, board ends or voids a Tenancy         | Allowed                                                                              |
-| Requester sold the Lot before approval           | Approve `409 basis-ended`; the panel offers Refuse only                              |
-| Two board admins approve the same request        | One succeeds; the other `409 already-decided`                                        |
-| Request whose end day has passed by approval     | `409 end-day-passed`; the owner submits a new one                                    |
-| Owner ends a Tenancy the board is ending         | First wins; the second `409 already-ended`                                           |
-| Invitation expired                               | Claim `400 invalid-invitation`; the owner or board re-invites                        |
-| Tenant claims after the Tenancy ended            | `409 tenancy-ended`                                                                  |
-| Tenant also owns another Lot                     | `member` and `tenant`; homeowner tier already includes every Tenant-Visible document |
-| Board demotes a document from homeowner to board | `tenant_visible` cleared in the same `UPDATE`                                        |
-| Ownership consolidated into a survivor           | Ownership rows do not move, so the basis stays valid                                 |
-| Tenant's Person consolidated into another        | The `me` CTE resolves the survivor, as for Lot Authority                             |
+| Situation                                          | Result                                                                               |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Either gate off                                    | Request, renew, approve and claim `404`; tenants see public only                     |
+| Gates off, board ends, voids or refuses            | Allowed                                                                              |
+| `tenantAccessEnabled` off, owner ends or withdraws | Allowed; `/tenants` shows what is on file, without the request form                  |
+| `officialMode` off                                 | The whole member API and `/tenants` `404` (ADR 0019); the board's actions remain     |
+| Requester sold the Lot before approval             | Approve `409 basis-ended`; the panel offers Refuse only                              |
+| Two board admins approve the same request          | One succeeds; the other `409 already-decided`                                        |
+| Request whose end day has passed by approval       | `409 end-day-passed`; the owner submits a new one                                    |
+| Owner ends a Tenancy the board is ending           | First wins; the second `409 already-ended`                                           |
+| Invitation expired                                 | Claim `400 invalid-invitation`; the owner or board re-invites                        |
+| Tenant claims after the Tenancy ended              | `409 tenancy-ended`                                                                  |
+| Tenant also owns another Lot                       | `member` and `tenant`; homeowner tier already includes every Tenant-Visible document |
+| Board demotes a document from homeowner to board   | `tenant_visible` cleared in the same `UPDATE`                                        |
+| Ownership consolidated into a survivor             | Ownership rows do not move, so the basis stays valid                                 |
+| Tenant's Person consolidated into another          | The `me` CTE resolves the survivor, as for Lot Authority                             |
 
 ## Tests
 
@@ -616,3 +629,11 @@ these answers.
 | 3   | A decided request keeps no tenant name or contact. A refusal leaves only its reason.                   |
 | 4   | Any Lot Authority holder over the Lot may withdraw an open request, whoever made it.                   |
 | 5   | The four slices ship in the order listed, each migration applied to production before its PR merges.   |
+
+## Review decisions (2026-10-25)
+
+From the slice 3 code review.
+
+| #   | Decision                                                                                                                                                                                                       |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 6   | Refuse, and the owner's end and withdraw, stay live with the gates off, so a pending request's name and contact can always be cleared. The owner's actions still need `officialMode`, like every member route. |

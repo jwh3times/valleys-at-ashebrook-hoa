@@ -101,8 +101,12 @@
       // implements Escape-to-cancel and the Tab focus trap itself — the
       // documented contract for this dialog, and the correct place for that
       // handler. The rule treats any keyboard listener on a non-interactive
-      // role as a mistake and cannot see the difference.
-      "files": ["src/components/member/VoteManager.tsx"],
+      // role as a mistake and cannot see the difference. The board's request
+      // queue dialog follows the same contract.
+      "files": [
+        "src/components/member/VoteManager.tsx",
+        "src/components/admin/QueueDialog.tsx",
+      ],
       "rules": {
         "jsx-a11y/no-noninteractive-element-interactions": "off",
       },

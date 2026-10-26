@@ -60,3 +60,26 @@ export async function lookupLotPersons(
     throw new Error((await res.text()) || `Lookup failed: ${res.status}`);
   return res.json();
 }
+
+export type TenancyAction =
+  | {
+      action: 'request';
+      lotId: string;
+      tenantName: string;
+      channel: 'email' | 'sms';
+      contact: string;
+      scheduledEndDay: string;
+    }
+  | { action: 'renew'; tenancyId: string; scheduledEndDay: string }
+  | { action: 'withdraw'; requestId: string }
+  | { action: 'end'; tenancyId: string };
+
+export async function tenancyAction(body: TenancyAction): Promise<void> {
+  const res = await fetch('/api/member/tenancies', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Request failed: ${res.status}`);
+}
