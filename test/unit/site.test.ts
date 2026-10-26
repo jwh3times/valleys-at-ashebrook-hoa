@@ -350,3 +350,65 @@ describe('normalizeSiteSettings', () => {
     expect(set.aboutBody).toBe('A\n\nB');
   });
 });
+
+// #294 slice 4 (spec decision 4): a tenant who owns nothing reads documents
+// and manages their account; an owner, with tenant access on, manages their
+// tenants.
+describe('accountNav for Tenant Access', () => {
+  const allOn = {
+    officialMode: true,
+    liveVotingEnabled: false,
+    lotRecordsEnabled: false,
+    tenantAccessEnabled: true,
+  };
+  const hrefs = (
+    auth: Parameters<typeof accountNav>[0],
+    mode: Parameters<typeof accountNav>[1] = allOn,
+  ) => accountNav(auth, mode).links.map((l) => l.href);
+
+  it('offers a tenant who owns nothing Documents and Account, not property verification', () => {
+    const tenant = {
+      contentTier: 'visitor' as const,
+      lotIds: [],
+      capabilities: new Set(['tenant'] as const),
+    };
+    expect(hrefs(tenant)).toEqual(['/documents', '/account']);
+    expect(accountNav(tenant, allOn).links.map((l) => l.label)).toEqual([
+      'Documents',
+      'Account',
+    ]);
+  });
+
+  it('offers an owner the Tenants link only while both gates are on', () => {
+    const owner = {
+      contentTier: 'homeowner' as const,
+      lotIds: ['p1'],
+      capabilities: new Set(['member'] as const),
+    };
+    expect(hrefs(owner)).toContain('/tenants');
+    expect(
+      hrefs(owner, { ...allOn, tenantAccessEnabled: false }),
+    ).not.toContain('/tenants');
+    expect(hrefs(owner, { ...allOn, officialMode: false })).not.toContain(
+      '/tenants',
+    );
+  });
+
+  it('offers a board admin the Tenants link only when they hold a Lot', () => {
+    expect(
+      hrefs({ contentTier: 'board', lotIds: ['p1'], capabilities: new Set() }),
+    ).toContain('/tenants');
+    expect(
+      hrefs({ contentTier: 'board', lotIds: [], capabilities: new Set() }),
+    ).not.toContain('/tenants');
+  });
+
+  it('keeps an owner who is also a tenant on the owner links', () => {
+    const both = {
+      contentTier: 'homeowner' as const,
+      lotIds: ['p1'],
+      capabilities: new Set(['member', 'tenant'] as const),
+    };
+    expect(hrefs(both)).toEqual(['/proxies', '/tenants']);
+  });
+});
