@@ -13,6 +13,7 @@
 // after a batch that wrote nothing, so the answer a race gets and the one a
 // plain refusal gets cannot drift apart.
 
+import { isInvitationToken } from '../../lib/invitation-token';
 import { AuditCorrelation, operationKey, type SqlGuard } from './audit';
 import { hashInvitationToken } from './tenancy-invitation';
 import {
@@ -23,7 +24,6 @@ import {
 
 export const CLAIM_DAILY_LIMIT = 5;
 const DAY_SECONDS = 86_400;
-const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
 
 export type ClaimRefusal =
   | 'gates-off'
@@ -77,7 +77,7 @@ type Assessment =
   | { refusal: null; invitation: Invitation; alreadyLinked: boolean };
 
 /** The invitation is unconsumed, unsuperseded and unexpired at `?1`. */
-const LIVE_SQL = (i: string) =>
+const liveInvitationSql = (i: string) =>
   `(${i}.consumed_at IS NULL AND ${i}.superseded_at IS NULL AND ${i}.expires_at > ?1)`;
 
 /** Decides the claim's outcome, in the order the refusals are listed in the
@@ -92,7 +92,7 @@ async function assess(
   if (!(await tenantAccessAvailable(env))) return { refusal: 'gates-off' };
   const row = await env.DATABASE.prepare(
     `SELECT i.id, i.contact_method_id, i.channel, t.tenant_person_id,
-            ${LIVE_SQL('i')} AS live,
+            ${liveInvitationSql('i')} AS live,
             ${tenancyCurrentOrUpcomingSql('t', '?2')} AS current
      FROM tenancy_invitations i JOIN tenancies t ON t.id = i.tenancy_id
      WHERE i.token_hash = ?3`,
@@ -142,7 +142,7 @@ export async function claimTenantInvitation(
   token: string,
   today: string,
 ): Promise<ClaimResult> {
-  if (!TOKEN_SHAPE.test(token))
+  if (!isInvitationToken(token))
     return { ok: false, reason: 'invalid-invitation' };
   const tokenHash = await hashInvitationToken(token, env.BETTER_AUTH_SECRET);
   const nowMs = Date.now();
@@ -155,7 +155,7 @@ export async function claimTenantInvitation(
   const primary = env.DATABASE.prepare(
     `UPDATE tenancy_invitations AS i
      SET consumed_at = ?1, consumed_by_account_id = ?4
-     WHERE i.id = ?3 AND ${LIVE_SQL('i')}
+     WHERE i.id = ?3 AND ${liveInvitationSql('i')}
        AND EXISTS (
          SELECT 1 FROM tenancies t
          WHERE t.id = i.tenancy_id AND ${tenancyCurrentOrUpcomingSql('t', '?2')}
@@ -231,21 +231,21 @@ export async function claimTenantInvitation(
     statements.push(...correlation.statements);
   }
 
-  let consumed = false;
+  let consumed: boolean;
   try {
     const results = await env.DATABASE.batch(statements);
     consumed = results[0].meta.changes === 1;
-  } catch {
+  } catch (err) {
+    // Only another link made since the assessment is a refusal; the
+    // reassessment below names it. Any other failure is a fault, and must not
+    // reach the tenant as a bad link.
+    if (!/UNIQUE constraint failed: person_links\./.test(String(err)))
+      throw err;
     consumed = false;
   }
   if (consumed) return { ok: true };
   const again = await assess(env, accountId, tokenHash, nowMs, today);
   return { ok: false, reason: again.refusal ?? 'invalid-invitation' };
-}
-
-/** Whether `token` has the shape of an invitation token at all. */
-export function isInvitationTokenShape(token: string): boolean {
-  return TOKEN_SHAPE.test(token);
 }
 
 /**
@@ -259,13 +259,13 @@ export async function invitationForDisplay(
   token: string,
   today: string,
 ): Promise<{ address: string } | null> {
-  if (!TOKEN_SHAPE.test(token)) return null;
+  if (!isInvitationToken(token)) return null;
   const row = await env.DATABASE.prepare(
     `SELECT l.address
      FROM tenancy_invitations i
      JOIN tenancies t ON t.id = i.tenancy_id
      JOIN lots l ON l.id = t.lot_id
-     WHERE i.token_hash = ?3 AND ${LIVE_SQL('i')}
+     WHERE i.token_hash = ?3 AND ${liveInvitationSql('i')}
        AND ${tenancyCurrentOrUpcomingSql('t', '?2')}`,
   )
     .bind(

@@ -2,6 +2,7 @@
 // fetch-and-throw-text shape as src/lib/admin.ts, so form components can
 // surface the server's readable error messages directly.
 import type { MemberProxyLists } from './types';
+import { refusalMessage } from './refusal-message';
 
 export interface GrantProxyInput {
   propertyId: string;
@@ -81,8 +82,7 @@ export async function tenancyAction(body: TenancyAction): Promise<void> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok)
-    throw new Error((await res.text()) || `Request failed: ${res.status}`);
+  if (!res.ok) throw new Error(await refusalMessage(res, 'Request failed'));
 }
 
 /** Claims a Tenancy invitation (#294 slice 4). Throws with the server's
@@ -94,19 +94,5 @@ export async function claimTenancy(token: string): Promise<void> {
     body: JSON.stringify({ token }),
   });
   if (res.ok) return;
-  const text = await res.text();
-  let message = text;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      'message' in parsed &&
-      typeof parsed.message === 'string'
-    )
-      message = parsed.message;
-  } catch {
-    // A plain-text answer: the 404, 429 or 503.
-  }
-  throw new Error(message || `Request failed: ${res.status}`);
+  throw new Error(await refusalMessage(res, 'Claim failed'));
 }

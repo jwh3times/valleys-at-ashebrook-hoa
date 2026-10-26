@@ -637,3 +637,14 @@ From the slice 3 code review.
 | #   | Decision                                                                                                                                                                                                       |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 6   | Refuse, and the owner's end and withdraw, stay live with the gates off, so a pending request's name and contact can always be cleared. The owner's actions still need `officialMode`, like every member route. |
+
+## Review decisions (2026-10-26)
+
+From slice 4, where this spec was silent. The maintainer accepted each.
+
+| #   | Decision                                                                                                                                                                                                                                            |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 7   | A re-invite goes to the Contact Method of the tenant's latest invitation for that Lot, never another contact on file, and answers `409` if that contact has since ended, been voided or been redacted.                                              |
+| 8   | Approving a renewal sends an invitation only while the tenant Person has no current Person Link, to that same contact. A tenant who has claimed needs none: the renewed Tenancy applies to their account at once.                                   |
+| 9   | Sign-in, registration and Google sign-in return to `next` only when it is exactly `/tenant-invite?token=<token>`, so it cannot become an open redirect. `/tenant-invite` offers both links to a signed-out visitor rather than redirecting.         |
+| 10  | An invitation may be sent and claimed while its Tenancy is current **or upcoming**, not only current as [§ 4](#4-the-invitation-and-the-claim) first said: decision 8 sends to an upcoming renewal, whose link must work before the renewal starts. |

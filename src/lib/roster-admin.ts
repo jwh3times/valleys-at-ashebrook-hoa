@@ -23,6 +23,8 @@
 //    `null` reads as an explicit clear. Do not "helpfully" default those
 //    fields.
 
+import { refusalMessage } from './refusal-message';
+
 /**
  * Every call goes through here, so a failure surfaces the server's own
  * plain-text message — these routes go to real trouble over them ("A current
@@ -1427,8 +1429,9 @@ export async function fetchTenantsPanel(): Promise<TenantsPanelData> {
   );
 }
 
-/** What approval says about the tenant's invitation (#294 slice 4): sent,
- * failed at the provider, over the day's limit, or none to send. */
+/** Mirrors `ApprovalInvitation` (`tenancy-invitation.ts`): what approval says
+ * about the tenant's invitation (#294 slice 4) — sent, failed at the
+ * provider, over the day's limit, or none to send. */
 export type ApprovalInvitation =
   'sent' | 'send_failed' | 'rate_limited' | 'none';
 
@@ -1450,14 +1453,7 @@ export async function approveTenancyRequest(
   if (res.ok)
     return ((await res.json()) as { invitation: ApprovalInvitation })
       .invitation;
-  const text = await res.text();
-  let message = text;
-  try {
-    message = (JSON.parse(text) as { message?: string }).message ?? text;
-  } catch {
-    // A plain-text refusal (400/404) is already the message.
-  }
-  throw new Error(message || `Approve failed: ${res.status}`);
+  throw new Error(await refusalMessage(res, 'Approve failed'));
 }
 
 /** Refuses an owner's request with a reason the owner sees. */
@@ -1492,14 +1488,7 @@ export async function reinviteTenancy(tenancyId: string): Promise<void> {
     body: JSON.stringify({ action: 'reinvite', tenancyId }),
   });
   if (res.ok) return;
-  const text = await res.text();
-  let message = text;
-  try {
-    message = (JSON.parse(text) as { message?: string }).message ?? text;
-  } catch {
-    // A plain-text refusal (404/429/502) is already the message.
-  }
-  throw new Error(message || `Re-invite failed: ${res.status}`);
+  throw new Error(await refusalMessage(res, 'Re-invite failed'));
 }
 
 /** Voids a Tenancy recorded in error. */

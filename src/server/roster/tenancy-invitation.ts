@@ -44,7 +44,11 @@ export async function hashInvitationToken(
 
 /** Why a Tenancy cannot be invited now; each is a 409. */
 export type InviteRefusal =
-  'gates-off' | 'tenancy-ended' | 'already-claimed' | 'no-contact';
+  | 'gates-off'
+  | 'tenancy-ended'
+  | 'already-claimed'
+  | 'no-contact'
+  | 'not-authorized';
 
 export const INVITE_REFUSAL_MESSAGES: Record<InviteRefusal, string> = {
   'gates-off': 'Tenant access is switched off.',
@@ -52,6 +56,7 @@ export const INVITE_REFUSAL_MESSAGES: Record<InviteRefusal, string> = {
   'already-claimed': 'The tenant has already claimed access.',
   'no-contact':
     'The contact the board approved is no longer on file. Contact the board.',
+  'not-authorized': 'You no longer hold the access a re-invite needs.',
 };
 
 export type InviteResult =
@@ -165,9 +170,9 @@ export interface InviteInput {
   /** The approved contact; null reuses the tenant's latest invitation's. */
   contactMethodId: string | null;
   today: string;
-  /** The caller's own condition over the Tenancy `t`, re-checked inside the
-   * insert: an owner's Lot Authority. A failure there answers
-   * `tenancy-ended`'s 409 unless another check names the cause. */
+  /** The caller's own authority, re-checked inside the insert: an owner's
+   * Lot Authority over the Tenancy `t`'s Lot, or the board's access. When
+   * only this fails, the refusal is `not-authorized`. */
   scope?: SqlGuard;
 }
 
@@ -232,7 +237,7 @@ export async function inviteTenant(
       contactMethodId,
       input.today,
     );
-    return { kind: 'refused', reason: again?.refusal ?? 'tenancy-ended' };
+    return { kind: 'refused', reason: again?.refusal ?? 'not-authorized' };
   }
 
   const link = `${origin}/tenant-invite?token=${token}`;

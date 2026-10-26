@@ -5,10 +5,8 @@ import { env } from 'cloudflare:workers';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 import { associationDateIso } from '../lib/format';
 import { tenantAccessVisible } from '../server/roster/tenancy';
-import {
-  invitationForDisplay,
-  isInvitationTokenShape,
-} from '../server/roster/tenancy-claim';
+import { isInvitationToken } from '../lib/invitation-token';
+import { invitationForDisplay } from '../server/roster/tenancy-claim';
 
 /**
  * A TENANT'S INVITATION (ADR 0028, #294 slice 4; spec decision 4).
@@ -37,7 +35,7 @@ Astro.response.headers.set('Referrer-Policy', 'no-referrer');
 
 const ctx = Astro.locals.authContext ?? null;
 const token = Astro.url.searchParams.get('token') ?? '';
-const wellFormed = isInvitationTokenShape(token);
+const wellFormed = isInvitationToken(token);
 const next = encodeURIComponent(`/tenant-invite?token=${token}`);
 const invitation =
   ctx !== null && wellFormed

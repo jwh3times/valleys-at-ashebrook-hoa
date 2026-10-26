@@ -4,7 +4,11 @@
 // well-formed token, nothing else — so `next` can never become an open
 // redirect or carry a visitor anywhere the site did not put it.
 
-const INVITATION_PATH = /^\/tenant-invite\?token=[A-Za-z0-9_-]{43}$/;
+import { INVITATION_TOKEN_PATTERN } from './invitation-token';
+
+const INVITATION_PATH = new RegExp(
+  `^/tenant-invite\\?token=${INVITATION_TOKEN_PATTERN}$`,
+);
 
 /** The invitation link named by `next` in `search`, or null. */
 export function invitationReturnPath(search: string): string | null {

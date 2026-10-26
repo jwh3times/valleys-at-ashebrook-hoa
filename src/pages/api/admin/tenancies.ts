@@ -206,6 +206,9 @@ async function approveRequest(
         tenancyId: result.tenancyId,
         contactMethodId: result.contactMethodId,
         today,
+        // A credential is a grant: the board's access is re-checked in the
+        // write, as approval's own batch re-checked it.
+        scope: boardAccessSql(actorAccountId, today),
       }),
     );
     return Response.json(
@@ -288,6 +291,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
           tenancyId,
           contactMethodId: null,
           today: associationDateIso(),
+          scope: boardAccessSql(actorAccountId, associationDateIso()),
         }),
       );
     }

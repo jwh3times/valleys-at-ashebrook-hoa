@@ -1,5 +1,5 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { POST } from '../../src/pages/api/verify/tenant-claim';
 import { associationDateIso } from '../../src/lib/format';
@@ -435,5 +435,21 @@ describe('the batch re-checks', () => {
     expect(await res.json()).toMatchObject({ reason: 'person-linked' });
     await nothingWritten();
     expect(await invitation('inv')).toMatchObject({ consumed_at: null });
+  });
+
+  it('lets a database fault surface as an error, never as an invalid invitation', async () => {
+    const token = await seedInvitation('inv');
+    const ctx = await caller('acct-tess');
+    const spy = vi
+      .spyOn(env.DATABASE, 'batch')
+      .mockRejectedValueOnce(new Error('D1_ERROR: storage unavailable'));
+    try {
+      await expect(claim(ctx, { token })).rejects.toThrow(
+        /storage unavailable/,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    await nothingWritten();
   });
 });

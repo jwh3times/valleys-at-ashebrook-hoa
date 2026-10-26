@@ -211,8 +211,11 @@ the maintainer:
    minutes, allows five attempts and is bound to the account that asked for it. An invitation is
    sent before the tenant has an account, must last days in an inbox, and is claimed by whichever
    account the tenant signs in with, so a 6-digit code with that lifetime and no binding could be
-   guessed. The HMAC storage, the senders and the KV send limits are reused unchanged; Turnstile is
-   not, because the claim is reached only by following a link the board's approval sent.
+   guessed. The HMAC and its secret, and the email and SMS senders, are reused unchanged. The limits
+   are new KV counters of the same kind as the verification send limits, keyed by Tenancy (three
+   sends a day) and by account (five claim attempts a day). The claim has no Turnstile step: it is
+   reached only by following a link the board's approval sent, and a 256-bit token is not
+   guessable.
 2. **More actions stay live with the gates off.** The board's refusal and the owner's end and
    withdrawal join the board's end and void, for the same reason, and so that a pending request's
    name and contact can always be cleared.

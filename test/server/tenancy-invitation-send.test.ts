@@ -389,6 +389,29 @@ describe('the board re-invites', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
+  it('re-checks Board Access inside the write, so an access ended mid-request sends nothing', async () => {
+    const paused = pauseNextBatch();
+    try {
+      const pending = act({ action: 'reinvite', tenancyId: 'ten' });
+      await paused.reached;
+      await env.DATABASE.prepare(
+        `UPDATE access_grants SET ended_at = ? WHERE id = 'operator-grant'`,
+      )
+        .bind(Date.now() - 1000)
+        .run();
+      paused.release();
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ reason: 'not-authorized' });
+    } finally {
+      paused.restore();
+    }
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(await invitations('ten')).toMatchObject([
+      { id: 'inv-1', superseded_at: null },
+    ]);
+  });
+
   it('answers 404 for an unknown Tenancy, or while either gate is off', async () => {
     expect((await act({ action: 'reinvite', tenancyId: 'nope' })).status).toBe(
       404,
