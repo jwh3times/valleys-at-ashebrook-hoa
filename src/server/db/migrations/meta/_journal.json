@@ -316,6 +316,13 @@
       "when": 1792299600000,
       "tag": "0044_tenancy_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1792303200000,
+      "tag": "0045_tenancy_invitations",
+      "breakpoints": true
     }
   ]
 }

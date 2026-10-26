@@ -1050,3 +1050,60 @@ export const tenancyRequests = sqliteTable(
     index('tenancy_requests_status_idx').on(t.status),
   ],
 );
+
+// The claim credential an approved tenant follows (#294 slice 4, spec decision
+// 4). Only the token's HMAC is stored. An invitation is consumed by the Account
+// that claims it or superseded by a newer one for the same Tenancy, never both.
+export const tenancyInvitations = sqliteTable(
+  'tenancy_invitations',
+  {
+    id: text('id').primaryKey(),
+    tenancyId: text('tenancy_id')
+      .notNull()
+      .references(() => tenancies.id, { onDelete: 'restrict' }),
+    // A Person's contact, by the composite reference `person_verifications`
+    // uses, because the claim records it there.
+    contactMethodId: text('contact_method_id').notNull(),
+    contactMethodPartyKind: text('contact_method_party_kind')
+      .notNull()
+      .default('person'),
+    channel: text('channel', { enum: ['email', 'sms'] }).notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: instant('expires_at').notNull(),
+    consumedAt: instant('consumed_at'),
+    // Plain text, no FK, by the actor-column convention.
+    consumedByAccountId: text('consumed_by_account_id'),
+    supersededAt: instant('superseded_at'),
+    createdAt: instant('created_at').notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.contactMethodId, t.contactMethodPartyKind],
+      foreignColumns: [contactMethods.id, contactMethods.partyKind],
+      name: 'tenancy_invitations_contact_method_fk',
+    }).onDelete('restrict'),
+    check(
+      'tenancy_invitations_party_kind_check',
+      sql`"contact_method_party_kind" = 'person'`,
+    ),
+    check(
+      'tenancy_invitations_channel_check',
+      sql`"channel" IN ('email', 'sms')`,
+    ),
+    check(
+      'tenancy_invitations_expiry_ordered',
+      sql`"expires_at" > "created_at"`,
+    ),
+    check(
+      'tenancy_invitations_consumer_paired',
+      sql`("consumed_at" IS NULL) = ("consumed_by_account_id" IS NULL)`,
+    ),
+    check(
+      'tenancy_invitations_single_end',
+      sql`"consumed_at" IS NULL OR "superseded_at" IS NULL`,
+    ),
+    uniqueIndex('tenancy_invitations_token_hash_unq').on(t.tokenHash),
+    index('tenancy_invitations_tenancy_idx').on(t.tenancyId),
+    index('tenancy_invitations_expires_idx').on(t.expiresAt),
+  ],
+);
