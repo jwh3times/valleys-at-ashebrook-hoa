@@ -46,12 +46,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
-    "@astrojs/cloudflare": "^14.4.0",
-    "@astrojs/react": "^7.1.0",
-    "@better-auth/core": "^1.7.10",
-    "@better-auth/drizzle-adapter": "^1.7.10",
-    "astro": "^7.3.8",
-    "better-auth": "^1.7.10",
+    "@astrojs/cloudflare": "^14.4.2",
+    "@astrojs/react": "^7.1.1",
+    "@better-auth/core": "^1.7.12",
+    "@better-auth/drizzle-adapter": "^1.7.12",
+    "astro": "^7.4.2",
+    "better-auth": "^1.7.12",
     "better-auth-cloudflare": "^0.4.1",
     "drizzle-orm": "^0.45.4",
     "react": "^19.3.1",
@@ -59,8 +59,8 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.23.0",
-    "@cloudflare/workers-types": "^5.20261016.1",
-    "@napi-rs/canvas": "^1.0.11",
+    "@cloudflare/workers-types": "^5.20261023.1",
+    "@napi-rs/canvas": "^1.0.13",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
@@ -78,7 +78,7 @@
     "prettier-plugin-astro": "^1.1.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.9",
-    "wrangler": "^4.151.1",
+    "wrangler": "^4.152.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "overrides": {
