@@ -167,7 +167,8 @@ export type RosterChangeReason =
  * recorded lesson that reason-code CHECKs become flip-blockers), so this
  * union IS the discipline — extend it here, never inline at a call site.
  * The first four mirror `person_verifications.reason`; the rest are the
- * Person Link ending reasons plus the review-queue decline.
+ * Person Link ending reasons, the review-queue decline, and a tenant's claim
+ * of a Tenancy invitation (whose Person Verification is contact proof).
  */
 export type IdentityReason =
   | 'automatic_contact_proof'
@@ -180,7 +181,8 @@ export type IdentityReason =
   | 'suspected_compromise'
   | 'recorded_in_error'
   | 'resident_request'
-  | 'verification_review_declined';
+  | 'verification_review_declined'
+  | 'tenant_invitation';
 
 /**
  * Review Flag resolution codes (#204/#220). Mirrors

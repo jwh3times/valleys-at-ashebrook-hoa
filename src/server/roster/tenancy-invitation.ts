@@ -17,7 +17,10 @@ import { OFFICIAL_ORG_NAME } from '../../lib/site';
 import { sendEmail, sendSms } from '../auth/senders';
 import { hashCode } from '../verification/codes';
 import type { SqlGuard } from './audit';
-import { TENANT_ACCESS_ENABLED_SQL, tenancyCurrentSql } from './tenancy';
+import {
+  TENANT_ACCESS_ENABLED_SQL,
+  tenancyCurrentOrUpcomingSql,
+} from './tenancy';
 
 export const INVITATION_TTL_MS = 14 * 86_400_000;
 export const INVITATION_DAILY_LIMIT = 3;
@@ -70,8 +73,7 @@ const CHECKS: Check[] = [
   { reason: 'gates-off', sql: TENANT_ACCESS_ENABLED_SQL },
   {
     reason: 'tenancy-ended',
-    sql: `(${tenancyCurrentSql('t', 'd.today')}
-      OR (t.start_day > d.today AND ${tenancyCurrentSql('t', 't.start_day')}))`,
+    sql: tenancyCurrentOrUpcomingSql('t', 'd.today'),
   },
   {
     reason: 'already-claimed',

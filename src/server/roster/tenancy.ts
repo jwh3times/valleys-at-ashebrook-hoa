@@ -91,6 +91,16 @@ export function tenancyCurrentSql(t: string, day: string): string {
 }
 
 /**
+ * A Tenancy that is current on `day`, or will be once it starts: the kind an
+ * invitation may be sent for and claimed. Pass `day` as for
+ * `tenancyCurrentSql`.
+ */
+export function tenancyCurrentOrUpcomingSql(t: string, day: string): string {
+  return `(${tenancyCurrentSql(t, day)}
+    OR (${t}.start_day > ${day} AND ${tenancyCurrentSql(t, `${t}.start_day`)}))`;
+}
+
+/**
  * The basis half of `tenancyCurrentSql`, for a request as well as a Tenancy:
  * Ownership `ownership` is unvoided, on Lot `lot` and current on `day`, and
  * that Lot is not retired.
