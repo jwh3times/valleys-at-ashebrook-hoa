@@ -7,13 +7,16 @@
 import { INVITATION_TOKEN_PATTERN } from './invitation-token';
 
 const INVITATION_PATH = new RegExp(
-  `^/tenant-invite\\?token=${INVITATION_TOKEN_PATTERN}$`,
+  `^/tenant-invite\\?token=(${INVITATION_TOKEN_PATTERN})$`,
 );
 
-/** The invitation link named by `next` in `search`, or null. */
+/** The invitation link named by `next` in `search`, or null. The link is
+ * rebuilt from a constant prefix and the validated token, so the destination
+ * never begins with anything the visitor supplied. */
 export function invitationReturnPath(search: string): string | null {
   const next = new URLSearchParams(search).get('next');
-  return next !== null && INVITATION_PATH.test(next) ? next : null;
+  const token = next === null ? undefined : INVITATION_PATH.exec(next)?.[1];
+  return token === undefined ? null : `/tenant-invite?token=${token}`;
 }
 
 /** Where to go after signing in: the invitation, else home. */
