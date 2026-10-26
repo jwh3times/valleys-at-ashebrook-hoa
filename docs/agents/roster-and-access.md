@@ -296,6 +296,16 @@ board `end` and `void` do not, so access and a pending request's name and contac
 cleared. The `/tenants` page is 404 unless `officialMode` is on and the caller holds a Lot (with
 tenant access off, only if something is on file) and is sent `Cache-Control: private, no-store`.
 
+**Invitation and claim (slice 4, `tenancy_invitations`, migration `0045`).** Approval sets
+`tenancies.invite_contact_method_id` and sends the tenant a one-time link; the board or any holder of
+Lot Authority can `reinvite`. Claiming it (`/tenant-invite`, then `POST /api/verify/tenant-claim`) is a
+third way to create a Person Link besides the OTP flow and board `manualVerify`: the same batch writes
+`person_verifications` (`automatic_contact_proof`), the `person_links` row and a `person_verified`
+Identity Event with reason `tenant_invitation`, so possession of the approved contact is the proof. It
+refuses (`409`) when the Account is linked to another Person or the tenant Person is linked to another
+Account, and links nothing to a Lot. In the header a tenant who owns nothing sees Documents and Account
+(`accountNav`), not "Verify your property"; a member sees Tenants when both gates are on.
+
 ## The invariant gate
 
 19 queries in `src/server/db/invariants.ts` (`INVARIANT_CHECKS`) — interval non-overlap on

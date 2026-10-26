@@ -553,6 +553,12 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     otherwise), re-checks board access in its own `UPDATE`, clears the request's name and contact
     (`CLEAR_REQUEST_CONTACT_SQL`), and answers `204`, `404` for an unknown request, `409` if it is no
     longer open.
+  - Slice 4 (invitation): `approve` now also sends the tenant's invitation (`inviteTenant`,
+    `roster/tenancy-invitation.ts`) and answers `201 {tenancyId, personId, invitation}` where
+    `invitation` is `sent`, `send_failed`, `rate_limited` or `none`; a failed send never fails the
+    approval. New `reinvite` action (`tenancyId`): gated like `approve` (`404` while a gate is off),
+    `204` sent, `404` unknown, `409 {reason, message}` (`INVITE_REFUSAL_MESSAGES`), `429` past 3
+    sends a day per Tenancy, `502` send failed. `GET` rows gain `claimed`.
   - `GET`+`POST /api/member/tenancies` (#294 slice 3) — the owner's half. `requireMemberApi` first
     (so the whole route is `404` while `officialMode` is off, ADR 0019), then the caller's Person is
     resolved; anything outside the caller's own Lots answers the same masked `404` as a missing row.
@@ -566,7 +572,19 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     the insert (race or duplicate open request: `409`); `withdraw` (`requestId`, clears name and
     contact, `204`) and `end` (`tenancyId`, reason `owner_ended`, `204`, `409` if already ended or
     voided), neither tied to the tenant-access gate. Every action re-checks the caller's Lot
-    Authority in its own statement.
+    Authority in its own statement. Slice 4 adds `reinvite` (`tenancyId`): gated on both gates,
+    masked `404` out of the caller's scope, Lot Authority re-checked inside the invitation insert,
+    same `204`/`409`/`429`/`502` answers as the board's.
+  - `POST /api/verify/tenant-claim` (#294 slice 4) — a tenant claims an invitation. Guard order:
+    write freeze (`503`; **not** exempt) → `401` → both gates (`404`) → per-Account limit of 5
+    attempts a day (`429`, KV) → body `{token}`. `claimTenantInvitation` (`roster/tenancy-claim.ts`)
+    is one batch that consumes the invitation, re-checking it is live and its contact still on
+    file, the Tenancy current or upcoming, and both gates, then writes `person_verifications`
+    (`otp_email`/`otp_sms`, `automatic_contact_proof`), the `person_links` row and a
+    `person_verified` Identity Event with reason `tenant_invitation`. `200 {ok:true}`; `400
+invalid-invitation` for every unknown, expired, used, superseded or contact-gone token (no
+    oracle); `409 {reason, message}` for `tenancy-ended`, `linked-elsewhere`, `person-linked`. An
+    Account already linked to that tenant just consumes it.
   - `/api/admin/roster-ownerships` `end`/`void`/`transfer` and `/api/admin/roster-lots` retire also
     end the affected Tenancies in the same batch (`tenancyLossStatements`); the transfer preview
     lists them as `tenanciesEnding`.
@@ -727,7 +745,7 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
   `requireBoard`-gated, fail-closed. Saved de-anonymized text and source metadata are purged after 90
   days and atomically with any roster name/contact redaction; the row's ID, template, creator, and
   timestamp remain. See SECURITY.md for the privacy model shared with the chat assistant.
-- Homeowner verification: `/api/verify/{request,confirm,review,unlink}` — see the ADR 0022 phase
+- Homeowner verification: `/api/verify/{request,confirm,review,unlink}` (and `tenant-claim`, above) — see the ADR 0022 phase
   3c entry above for the full contract.
 - First-System-Administrator bootstrap: `POST /api/bootstrap/board` (rewritten by #219; see
   `src/server/roster/bootstrap.ts`), permanently fail-closed and checked in this order: the

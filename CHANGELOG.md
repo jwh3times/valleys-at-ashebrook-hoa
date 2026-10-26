@@ -7,6 +7,57 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-26
+
+### Added
+
+- **An approved tenant is invited, and claims access with their own account (#294, slice 4 of
+  tenant access).** Approving a request now emails or texts the tenant a single-use link, good for
+  14 days, at the contact the board approved. The link opens `/tenant-invite`, which only displays:
+  a signed-out tenant is offered sign-in or registration and comes back to the link afterwards,
+  and a signed-in tenant sees the Lot's address and a Claim button. Claiming links their account
+  to their roster record, recorded like an owner's verification, and they can then read the
+  documents the board marks for tenants. Opening the link never uses it up, because mail scanners
+  open links on their own.
+- **Owners and the board can send a fresh invitation** to a tenant who has not claimed yet, from
+  a Re-invite action on `/tenants` and in the Tenants panel, at most three a day for one Tenancy.
+  A new link replaces the old one only once it has actually been sent. After approving, the panel
+  says whether the invitation went out, and points to Re-invite if it could not be sent.
+- A tenant who owns nothing sees Documents and Account in the header instead of "Verify your
+  property", and an owner sees a Tenants link while tenant access is on.
+
+### Changed
+
+- A claim is refused if the link has expired, been used or been replaced, or if the contact it
+  was sent to is no longer on file, all with the same answer. It is also refused once the Tenancy
+  has ended, for an account already linked to someone else, and when another account has already
+  claimed. Each account may try five claims a day. Sign-in returns to an invitation link only
+  when `next` is exactly that link, so it cannot redirect anywhere else.
+- The daily cleanup deletes invitations 30 days after they expire. The site keeps only a one-way
+  fingerprint of each link, never the link itself. The privacy policy describes both.
+- ADR 0028 is amended: the claim uses the single-use link instead of a 6-digit code, and refusing
+  a request or an owner ending or withdrawing stay available with tenant access off.
+- Migration `0045` adds the `tenancy_invitations` table and the Tenancy's approved contact. It
+  must be applied to production **before** this release deploys, because approval now writes
+  both.
+
+## [2.9.2] - 2026-10-25
+
+### Changed
+
+- Dependency updates (Dependabot, #469): `astro` 7.3.8 → 7.4.2, `@astrojs/cloudflare` 14.4.0 →
+  14.4.2, `@astrojs/react` 7.1.0 → 7.1.1, `better-auth`, `@better-auth/core` and
+  `@better-auth/drizzle-adapter` 1.7.10 → 1.7.12, `wrangler` 4.151.1 → 4.152.0,
+  `@cloudflare/workers-types` 5.20261016.1 → 5.20261023.1 and `@napi-rs/canvas` 1.0.11 → 1.0.13.
+  The generated Worker types were regenerated for the new `wrangler`.
+
+## [2.9.1] - 2026-10-25
+
+### Changed
+
+- Development dependency update (Dependabot, #467): `oxlint` 1.88.0 → 1.89.0 and `oxlint-tsgolint`
+  7.0.2004 → 7.0.2005.
+
 ## [2.9.0] - 2026-10-25
 
 ### Added
@@ -4292,7 +4343,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.2...v2.10.0
+[2.9.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.1...v2.9.2
+[2.9.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.0...v2.9.1
 [2.9.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.9...v2.7.0
