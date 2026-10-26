@@ -248,11 +248,28 @@ describe('approving a new request', () => {
   });
 });
 
+describe('recovering a failed approval send', () => {
+  it('lets the board re-invite once the provider is back', async () => {
+    vi.mocked(sendEmail).mockRejectedValueOnce(new Error('provider down'));
+    await seedRequest('req');
+    const approved = await act({ action: 'approve', requestId: 'req' });
+    const { tenancyId } = (await approved.json()) as { tenancyId: string };
+    const res = await act({ action: 'reinvite', tenancyId });
+    expect(res.status).toBe(204);
+    expect(vi.mocked(sendEmail).mock.calls.at(-1)?.[1]).toBe(
+      'Tess@Example.test',
+    );
+    expect(await invitations(tenancyId)).toHaveLength(1);
+  });
+});
+
 describe('approving a renewal', () => {
   beforeEach(async () => {
     await seedContact('cm-tess', 'tenant', 'email', 'tess@example.test');
-    await seedTenancy('old', { scheduledEndDay: monthsOut(1) });
-    await seedInvitation('inv-old', 'old', 'cm-tess');
+    await seedTenancy('old', {
+      scheduledEndDay: monthsOut(1),
+      inviteContactMethodId: 'cm-tess',
+    });
     await seedRequest('ren', {
       kind: 'renewal',
       renews_tenancy_id: 'old',
@@ -264,7 +281,7 @@ describe('approving a renewal', () => {
     });
   });
 
-  it("invites a tenant who never claimed, at their latest invitation's contact", async () => {
+  it('invites a tenant who never claimed, at the contact the board approved for the renewed Tenancy', async () => {
     const res = await act({ action: 'approve', requestId: 'ren' });
     const { tenancyId, invitation } = (await res.json()) as {
       tenancyId: string;
@@ -291,11 +308,11 @@ describe('approving a renewal', () => {
 describe('the board re-invites', () => {
   beforeEach(async () => {
     await seedContact('cm-tess', 'tenant', 'email', 'tess@example.test');
-    await seedTenancy('ten');
+    await seedTenancy('ten', { inviteContactMethodId: 'cm-tess' });
     await seedInvitation('inv-1', 'ten', 'cm-tess');
   });
 
-  it("sends a fresh link to the latest invitation's contact and supersedes the earlier one", async () => {
+  it('sends a fresh link to the approved contact and supersedes the earlier one', async () => {
     const res = await act({ action: 'reinvite', tenancyId: 'ten' });
     expect(res.status).toBe(204);
     expect(sentEmail().to).toBe('tess@example.test');
@@ -319,6 +336,69 @@ describe('the board re-invites', () => {
     ]);
   });
 
+  it('re-invites a Tenancy that has no invitation left, after the cleanup or a failed send', async () => {
+    await env.DATABASE.prepare('DELETE FROM tenancy_invitations').run();
+    const res = await act({ action: 'reinvite', tenancyId: 'ten' });
+    expect(res.status).toBe(204);
+    expect(sentEmail().to).toBe('tess@example.test');
+    expect(await invitations('ten')).toHaveLength(1);
+  });
+
+  it('answers 409 no-contact for a Tenancy recorded with no approved contact', async () => {
+    await seedTenancy('legacy', {
+      tenantPersonId: 'tenant',
+      startDay: '2025-07-01',
+      scheduledEndDay: monthsOut(1),
+    });
+    const res = await act({ action: 'reinvite', tenancyId: 'legacy' });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ reason: 'no-contact' });
+  });
+
+  it('leaves exactly one live link when two re-invites in the same millisecond race', async () => {
+    const original = env.DATABASE.batch.bind(env.DATABASE);
+    let calls = 0;
+    const spy = vi
+      .spyOn(env.DATABASE, 'batch')
+      .mockImplementation(async (statements) => {
+        calls += 1;
+        // Our supersede is the second batch. Just before it, a rival re-invite
+        // made in the same millisecond lands its own supersede: ours and the
+        // earlier link are superseded, the rival's link is live.
+        if (calls === 2) {
+          const mine = await env.DATABASE.prepare(
+            `SELECT id, created_at FROM tenancy_invitations
+             WHERE tenancy_id = 'ten' AND id <> 'inv-1'`,
+          ).first<{ id: string; created_at: number }>();
+          await env.DATABASE.prepare(
+            `INSERT INTO tenancy_invitations (id, tenancy_id, contact_method_id,
+               channel, token_hash, expires_at, created_at)
+             VALUES ('rival', 'ten', 'cm-tess', 'email', 'hash-rival', ?, ?)`,
+          )
+            .bind(mine!.created_at + 14 * DAY_MS, mine!.created_at)
+            .run();
+          await env.DATABASE.prepare(
+            `UPDATE tenancy_invitations SET superseded_at = ?
+             WHERE id IN (?, 'inv-1')`,
+          )
+            .bind(mine!.created_at, mine!.id)
+            .run();
+        }
+        return original(statements);
+      });
+    try {
+      expect((await act({ action: 'reinvite', tenancyId: 'ten' })).status).toBe(
+        204,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    const live = (await invitations('ten')).filter(
+      (r) => r.superseded_at === null && r.consumed_at === null,
+    );
+    expect(live.map((r) => r.id)).toEqual(['rival']);
+  });
+
   it('allows three sends a day per Tenancy', async () => {
     for (let i = 0; i < 3; i++)
       expect((await act({ action: 'reinvite', tenancyId: 'ten' })).status).toBe(
@@ -337,16 +417,20 @@ describe('the board re-invites', () => {
   });
 
   it('refuses for an ended or voided Tenancy', async () => {
-    await seedTenancy('ended', { actualEndDay: today });
-    await seedInvitation('inv-e', 'ended', 'cm-tess');
-    await seedTenancy('voided', { voided: true });
-    await seedInvitation('inv-v', 'voided', 'cm-tess');
+    await seedTenancy('ended', {
+      actualEndDay: today,
+      inviteContactMethodId: 'cm-tess',
+    });
+    await seedTenancy('voided', {
+      voided: true,
+      inviteContactMethodId: 'cm-tess',
+    });
     for (const tenancyId of ['ended', 'voided'])
       expect((await act({ action: 'reinvite', tenancyId })).status).toBe(409);
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it('refuses when the contact it would reuse is no longer on file', async () => {
+  it('refuses when the approved contact is no longer on file', async () => {
     await env.DATABASE.prepare(
       `UPDATE contact_methods SET voided_at = 1 WHERE id = 'cm-tess'`,
     ).run();
@@ -372,7 +456,7 @@ describe('the board re-invites', () => {
       await resetTenancyWorld();
       await setGates(true, true);
       await seedContact('cm-tess', 'tenant', 'email', 'tess@example.test');
-      await seedTenancy('ten');
+      await seedTenancy('ten', { inviteContactMethodId: 'cm-tess' });
       await seedInvitation('inv-1', 'ten', 'cm-tess');
       const paused = pauseNextBatch();
       const pending = act({ action: 'reinvite', tenancyId: 'ten' });

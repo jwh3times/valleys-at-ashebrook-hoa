@@ -390,7 +390,6 @@ async function reinvite(
   return reinviteResponse(
     await inviteTenant(env, {
       tenancyId,
-      contactMethodId: null,
       today,
       scope: lotAuthorityExists(
         { value: personId },

@@ -291,6 +291,29 @@ describe('a refused claim writes nothing', () => {
     expect(await rows('identity_events')).toEqual([]);
   });
 
+  it('answers 400 invalid-invitation once its contact has been voided, ended or redacted', async () => {
+    const changes = [
+      `UPDATE contact_methods SET voided_at = 1 WHERE id = 'cm-email'`,
+      `UPDATE contact_methods SET start_day = '2025-01-01', end_day = '${today}' WHERE id = 'cm-email'`,
+      `UPDATE contact_methods SET value = NULL, value_normalized = NULL, redacted_at = 1 WHERE id = 'cm-email'`,
+    ];
+    for (const [n, change] of changes.entries()) {
+      await env.DATABASE.prepare(
+        `UPDATE contact_methods SET value = 'tess@example.test',
+           value_normalized = 'tess@example.test', redacted_at = NULL,
+           voided_at = NULL, start_day = NULL, end_day = NULL
+         WHERE id = 'cm-email'`,
+      ).run();
+      const token = await seedInvitation(`inv-${n}`);
+      await env.DATABASE.prepare(change).run();
+      await clearClaimLimits();
+      const res = await claim(await caller('acct-tess'), { token });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ reason: 'invalid-invitation' });
+      await unchanged(`inv-${n}`);
+    }
+  });
+
   it('answers 409 tenancy-ended once the Tenancy has ended or been voided', async () => {
     await seedTenancy('ended', {
       startDay: '2025-06-01',
@@ -409,6 +432,17 @@ describe('the batch re-checks', () => {
     );
     expect(res.status).toBe(400);
     await nothingWritten();
+  });
+
+  it('that the invited contact is still on file', async () => {
+    const res = await raced(() =>
+      env.DATABASE.prepare(
+        `UPDATE contact_methods SET voided_at = 1 WHERE id = 'cm-email'`,
+      ).run(),
+    );
+    expect(res.status).toBe(400);
+    await nothingWritten();
+    expect(await invitation('inv')).toMatchObject({ consumed_at: null });
   });
 
   it('that the Tenancy is still current', async () => {

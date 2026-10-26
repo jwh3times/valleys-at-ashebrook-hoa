@@ -43,6 +43,10 @@ const LEDGER = [
 
 export async function resetTenancyWorld(): Promise<void> {
   await env.DATABASE.prepare('DELETE FROM cutover_settings').run();
+  // A Tenancy cites its approved contact, and contacts go before Tenancies.
+  await env.DATABASE.prepare(
+    'UPDATE tenancies SET invite_contact_method_id = NULL',
+  ).run();
   for (const table of LEDGER) {
     // A caused event cites its root, so the roots go last.
     if (table === 'audit_events')
@@ -100,13 +104,15 @@ export async function seedTenancy(
     scheduledEndDay?: string;
     actualEndDay?: string;
     voided?: boolean;
+    /** The contact the board approved; seed it first. */
+    inviteContactMethodId?: string;
   } = {},
 ): Promise<void> {
   await env.DATABASE.prepare(
     `INSERT INTO tenancies (id, tenant_person_id, lot_id, basis_ownership_id,
        start_day, scheduled_end_day, actual_end_day, end_reason, voided_at,
-       created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
+       invite_contact_method_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
   )
     .bind(
       id,
@@ -118,6 +124,7 @@ export async function seedTenancy(
       overrides.actualEndDay ?? null,
       overrides.actualEndDay ? 'board_ended' : null,
       overrides.voided ? 1 : null,
+      overrides.inviteContactMethodId ?? null,
     )
     .run();
 }

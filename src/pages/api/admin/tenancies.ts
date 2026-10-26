@@ -204,7 +204,6 @@ async function approveRequest(
     const invitation = approvalInvitation(
       await inviteTenant(env, {
         tenancyId: result.tenancyId,
-        contactMethodId: result.contactMethodId,
         today,
         // A credential is a grant: the board's access is re-checked in the
         // write, as approval's own batch re-checked it.
@@ -289,7 +288,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return reinviteResponse(
         await inviteTenant(env, {
           tenancyId,
-          contactMethodId: null,
           today: associationDateIso(),
           scope: boardAccessSql(actorAccountId, associationDateIso()),
         }),

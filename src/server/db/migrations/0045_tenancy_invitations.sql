@@ -10,8 +10,13 @@
 -- The contact is a Person's, by the same composite reference
 -- `person_verifications` uses, because the claim records it there.
 --
--- The daily cleanup job deletes invitations that expired more than 30 days
--- ago; nothing references this table.
+-- The contact the board approved is a fact about the Tenancy, not about any
+-- one invitation, so it lives on `tenancies.invite_contact_method_id`: approval
+-- sets it, a renewal copies it, and every re-invite reads it. An invitation is
+-- then only a credential: a failed send can drop its row, and the daily cleanup
+-- can delete invitations that expired more than 30 days ago, without losing
+-- where the next one goes. Nothing references this table. The column is
+-- nullable, because a Tenancy recorded before this migration has none.
 --
 -- Apply BEFORE merging the code that uses it: approval writes this table.
 CREATE TABLE IF NOT EXISTS `tenancy_invitations` (
@@ -37,4 +42,5 @@ CREATE TABLE IF NOT EXISTS `tenancy_invitations` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS `tenancy_invitations_token_hash_unq` ON `tenancy_invitations` (`token_hash`);--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `tenancy_invitations_tenancy_idx` ON `tenancy_invitations` (`tenancy_id`);--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS `tenancy_invitations_expires_idx` ON `tenancy_invitations` (`expires_at`);
+CREATE INDEX IF NOT EXISTS `tenancy_invitations_expires_idx` ON `tenancy_invitations` (`expires_at`);--> statement-breakpoint
+ALTER TABLE `tenancies` ADD `invite_contact_method_id` text REFERENCES contact_methods(id);

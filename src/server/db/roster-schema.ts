@@ -924,6 +924,11 @@ export const tenancies = sqliteTable(
     voidedAt: instant('voided_at'),
     createdAt: instant('created_at').notNull(),
     updatedAt: instant('updated_at').notNull(),
+    // The contact the board approved, where every invitation goes (0045).
+    // Null for a Tenancy recorded before it.
+    inviteContactMethodId: text('invite_contact_method_id').references(
+      () => contactMethods.id,
+    ),
   },
   (t) => [
     check(

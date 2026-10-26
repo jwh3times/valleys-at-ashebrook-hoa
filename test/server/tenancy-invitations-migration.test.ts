@@ -140,3 +140,24 @@ describe('tenancy_invitations', () => {
     );
   });
 });
+
+describe('tenancies.invite_contact_method_id', () => {
+  it('records the contact the board approved, or none', async () => {
+    await env.DATABASE.prepare(
+      `UPDATE tenancies SET invite_contact_method_id = 'cm-tenant' WHERE id = 'ten'`,
+    ).run();
+    expect(
+      await env.DATABASE.prepare(
+        `SELECT invite_contact_method_id FROM tenancies WHERE id = 'ten'`,
+      ).first(),
+    ).toEqual({ invite_contact_method_id: 'cm-tenant' });
+  });
+
+  it('names only a Contact Method that exists', async () => {
+    await expect(
+      env.DATABASE.prepare(
+        `UPDATE tenancies SET invite_contact_method_id = 'no-such' WHERE id = 'ten'`,
+      ).run(),
+    ).rejects.toThrow(/FOREIGN KEY constraint failed/);
+  });
+});

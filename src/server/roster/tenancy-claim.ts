@@ -76,9 +76,22 @@ type Assessment =
   | { refusal: ClaimRefusal }
   | { refusal: null; invitation: Invitation; alreadyLinked: boolean };
 
-/** The invitation is unconsumed, unsuperseded and unexpired at `?1`. */
+/**
+ * The invitation is unconsumed, unsuperseded and unexpired at `?1`, and the
+ * contact it was sent to is still on file on the Association Day `?2`:
+ * unvoided, unredacted and current. Voiding a mistyped contact therefore kills
+ * the link sent to it, and a claim never records proof of a contact the
+ * roster no longer holds.
+ */
 const liveInvitationSql = (i: string) =>
-  `(${i}.consumed_at IS NULL AND ${i}.superseded_at IS NULL AND ${i}.expires_at > ?1)`;
+  `(${i}.consumed_at IS NULL AND ${i}.superseded_at IS NULL AND ${i}.expires_at > ?1
+    AND EXISTS (
+      SELECT 1 FROM contact_methods ic
+      WHERE ic.id = ${i}.contact_method_id
+        AND ic.voided_at IS NULL AND ic.redacted_at IS NULL
+        AND (ic.start_day IS NULL OR ic.start_day <= ?2)
+        AND (ic.end_day IS NULL OR ?2 < ic.end_day)
+    ))`;
 
 /** Decides the claim's outcome, in the order the refusals are listed in the
  * spec's outcome table. */

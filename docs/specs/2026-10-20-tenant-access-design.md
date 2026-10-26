@@ -128,20 +128,21 @@ One migration per slice; see [Delivery slices](#delivery-slices).
 
 **`tenancies`** holds the roster fact:
 
-| Column                     | Type                                  | Notes                                             |
-| -------------------------- | ------------------------------------- | ------------------------------------------------- |
-| `id`                       | text PK                               |                                                   |
-| `tenant_person_id`         | text, FK `people(party_id)`, restrict | the tenant                                        |
-| `lot_id`                   | text, FK `lots(id)`, restrict         |                                                   |
-| `basis_ownership_id`       | text, FK `ownerships(id)`, restrict   | the owning party's Ownership (ADR 0028)           |
-| `start_day`                | day, NOT NULL                         | the approval's Association Day                    |
-| `scheduled_end_day`        | day, NOT NULL                         | exclusive; at most 13 months after `start_day`    |
-| `actual_end_day`           | day                                   | exclusive; an early end                           |
-| `end_reason`               | text                                  | paired with `actual_end_day`                      |
-| `ended_by_account_id`      | text                                  | plain text, no FK, by the actor-column convention |
-| `renews_tenancy_id`        | text, FK `tenancies(id)`              | the Tenancy this one renews, or null              |
-| `voided_at`                | instant                               | a Tenancy recorded in error                       |
-| `created_at`, `updated_at` | instant, NOT NULL                     |                                                   |
+| Column                     | Type                                  | Notes                                                  |
+| -------------------------- | ------------------------------------- | ------------------------------------------------------ |
+| `id`                       | text PK                               |                                                        |
+| `tenant_person_id`         | text, FK `people(party_id)`, restrict | the tenant                                             |
+| `lot_id`                   | text, FK `lots(id)`, restrict         |                                                        |
+| `basis_ownership_id`       | text, FK `ownerships(id)`, restrict   | the owning party's Ownership (ADR 0028)                |
+| `start_day`                | day, NOT NULL                         | the approval's Association Day                         |
+| `scheduled_end_day`        | day, NOT NULL                         | exclusive; at most 13 months after `start_day`         |
+| `actual_end_day`           | day                                   | exclusive; an early end                                |
+| `end_reason`               | text                                  | paired with `actual_end_day`                           |
+| `ended_by_account_id`      | text                                  | plain text, no FK, by the actor-column convention      |
+| `renews_tenancy_id`        | text, FK `tenancies(id)`              | the Tenancy this one renews, or null                   |
+| `voided_at`                | instant                               | a Tenancy recorded in error                            |
+| `invite_contact_method_id` | text, FK `contact_methods(id)`        | the approved contact every invitation goes to (`0045`) |
+| `created_at`, `updated_at` | instant, NOT NULL                     |                                                        |
 
 The names follow `board_terms`, so `COALESCE(actual_end_day, scheduled_end_day)` means the same thing
 in both. The CHECKs are:
@@ -642,9 +643,10 @@ From the slice 3 code review.
 
 From slice 4, where this spec was silent. The maintainer accepted each.
 
-| #   | Decision                                                                                                                                                                                                                                            |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 7   | A re-invite goes to the Contact Method of the tenant's latest invitation for that Lot, never another contact on file, and answers `409` if that contact has since ended, been voided or been redacted.                                              |
-| 8   | Approving a renewal sends an invitation only while the tenant Person has no current Person Link, to that same contact. A tenant who has claimed needs none: the renewed Tenancy applies to their account at once.                                   |
-| 9   | Sign-in, registration and Google sign-in return to `next` only when it is exactly `/tenant-invite?token=<token>`, so it cannot become an open redirect. `/tenant-invite` offers both links to a signed-out visitor rather than redirecting.         |
-| 10  | An invitation may be sent and claimed while its Tenancy is current **or upcoming**, not only current as [§ 4](#4-the-invitation-and-the-claim) first said: decision 8 sends to an upcoming renewal, whose link must work before the renewal starts. |
+| #   | Decision                                                                                                                                                                                                                                                                                                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 7   | Every invitation goes to the contact the board approved, which the Tenancy records (`invite_contact_method_id`, added by `0045`): approval sets it and a renewal copies it. A re-invite answers `409` if that contact has since ended, been voided or been redacted, or if the Tenancy predates the column. |
+| 8   | Approving a renewal sends an invitation only while the tenant Person has no current Person Link, to the renewed Tenancy's approved contact. A tenant who has claimed needs none: the renewed Tenancy applies to their account at once.                                                                      |
+| 9   | Sign-in, registration and Google sign-in return to `next` only when it is exactly `/tenant-invite?token=<token>`, so it cannot become an open redirect. `/tenant-invite` offers both links to a signed-out visitor rather than redirecting.                                                                 |
+| 10  | An invitation may be sent and claimed while its Tenancy is current **or upcoming**, not only current as [§ 4](#4-the-invitation-and-the-claim) first said: decision 8 sends to an upcoming renewal, whose link must work before the renewal starts.                                                         |
+| 11  | A claim also requires the invited contact to still be on file (unvoided, unredacted, current), so voiding a mistyped contact kills the link sent to it.                                                                                                                                                     |

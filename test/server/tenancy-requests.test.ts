@@ -802,12 +802,15 @@ describe('reinvite', () => {
     vi.mocked(sendEmail).mockClear();
     const { keys } = await env.KV.list({ prefix: 'tenant-invite:' });
     for (const key of keys) await env.KV.delete(key.name);
-    await seedTenancy('ten', { scheduledEndDay: monthsOut(6) });
     await getDb(env).run(sql`
       INSERT INTO contact_methods (id, party_id, party_kind, channel, value,
         value_normalized, created_at, updated_at)
       VALUES ('cm-tess', 'tenant', 'person', 'email', 'tess@example.test',
         'tess@example.test', 1, 1)`);
+    await seedTenancy('ten', {
+      scheduledEndDay: monthsOut(6),
+      inviteContactMethodId: 'cm-tess',
+    });
     await getDb(env).run(sql`
       INSERT INTO tenancy_invitations (id, tenancy_id, contact_method_id,
         channel, token_hash, expires_at, created_at)

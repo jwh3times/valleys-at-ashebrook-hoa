@@ -6,11 +6,13 @@
 // so nothing binds it to an Account the way a code is bound. Only the token's
 // HMAC under BETTER_AUTH_SECRET is stored, with the codes' hash.
 //
-// It is sent only to a contact the board approved: the request's contact on
-// approval, and on a re-invite or a renewal, the contact of the tenant's
-// latest invitation for that Lot. A new invitation supersedes the Tenancy's
-// earlier unconsumed ones only once it has been sent, so a failed send never
-// kills a link the tenant already holds. Sends are limited to three a day per
+// It is sent only to the contact the board approved, which the Tenancy itself
+// records (`invite_contact_method_id`): approval sets it, and a renewal copies
+// it from the Tenancy it renews. An invitation is therefore only a credential,
+// and losing one — a failed send, the cleanup — never loses where the next one
+// goes. A new invitation supersedes the Tenancy's earlier unconsumed ones only
+// once it has been sent, so a failed send never kills a link the tenant
+// already holds. Sends are limited to three a day per
 // Tenancy, in KV, like the verification sends.
 
 import { OFFICIAL_ORG_NAME } from '../../lib/site';
@@ -97,32 +99,12 @@ const CHECKS: Check[] = [
   },
 ];
 
-/** The Tenancy `t`, the contact `c` (bound by id, possibly none) and today. */
+/** The Tenancy `t`, its approved contact `c` (possibly none) and today. */
 const SOURCE = `tenancies t
   CROSS JOIN (SELECT ? AS today) d
-  LEFT JOIN contact_methods c ON c.id = ?`;
+  LEFT JOIN contact_methods c ON c.id = t.invite_contact_method_id`;
 
 const ALL_CHECKS = CHECKS.map((c) => `(${c.sql})`).join(' AND ');
-
-/** The contact of the tenant's latest invitation for the Tenancy's Lot. */
-async function latestInvitationContact(
-  database: D1Database,
-  tenancyId: string,
-): Promise<string | null> {
-  const row = await database
-    .prepare(
-      `SELECT i.contact_method_id AS id
-       FROM tenancies t
-       JOIN tenancies t2
-         ON t2.tenant_person_id = t.tenant_person_id AND t2.lot_id = t.lot_id
-       JOIN tenancy_invitations i ON i.tenancy_id = t2.id
-       WHERE t.id = ?
-       ORDER BY i.created_at DESC, i.id DESC LIMIT 1`,
-    )
-    .bind(tenancyId)
-    .first<{ id: string }>();
-  return row?.id ?? null;
-}
 
 interface Invitable {
   channel: 'email' | 'sms' | null;
@@ -136,7 +118,6 @@ interface Invitable {
 async function readInvitable(
   database: D1Database,
   tenancyId: string,
-  contactMethodId: string | null,
   today: string,
 ): Promise<Invitable | null> {
   return database
@@ -146,7 +127,7 @@ async function readInvitable(
          ELSE NULL END AS refusal
        FROM ${SOURCE} WHERE t.id = ?`,
     )
-    .bind(today, contactMethodId, tenancyId)
+    .bind(today, tenancyId)
     .first<Invitable>();
 }
 
@@ -167,8 +148,6 @@ function invitationMessage(link: string): { subject: string; text: string } {
 
 export interface InviteInput {
   tenancyId: string;
-  /** The approved contact; null reuses the tenant's latest invitation's. */
-  contactMethodId: string | null;
   today: string;
   /** The caller's own authority, re-checked inside the insert: an owner's
    * Lot Authority over the Tenancy `t`'s Lot, or the board's access. When
@@ -186,16 +165,7 @@ export async function inviteTenant(
   input: InviteInput,
 ): Promise<InviteResult> {
   const database = env.DATABASE;
-  const contactMethodId =
-    input.contactMethodId ??
-    (await latestInvitationContact(database, input.tenancyId));
-
-  const found = await readInvitable(
-    database,
-    input.tenancyId,
-    contactMethodId,
-    input.today,
-  );
+  const found = await readInvitable(database, input.tenancyId, input.today);
   if (!found) return { kind: 'not_found' };
   if (found.refusal) return { kind: 'refused', reason: found.refusal };
   if ((await sendsToday(env, input.tenancyId)) >= INVITATION_DAILY_LIMIT)
@@ -225,18 +195,12 @@ export async function inviteTenant(
         nowMs + INVITATION_TTL_MS,
         nowMs,
         input.today,
-        contactMethodId,
         input.tenancyId,
         ...(input.scope?.binds ?? []),
       ),
   ]);
   if (inserted.meta.changes !== 1) {
-    const again = await readInvitable(
-      database,
-      input.tenancyId,
-      contactMethodId,
-      input.today,
-    );
+    const again = await readInvitable(database, input.tenancyId, input.today);
     return { kind: 'refused', reason: again?.refusal ?? 'not-authorized' };
   }
 
@@ -255,14 +219,20 @@ export async function inviteTenant(
     return { kind: 'send_failed' };
   }
 
-  await database
-    .prepare(
-      `UPDATE tenancy_invitations SET superseded_at = ?
-       WHERE tenancy_id = ? AND id <> ? AND created_at <= ?
-         AND consumed_at IS NULL AND superseded_at IS NULL`,
-    )
-    .bind(nowMs, input.tenancyId, id, nowMs)
-    .run();
+  // Only a still-live invitation supersedes the others, so two re-invites
+  // sent in the same millisecond cannot supersede each other: whichever runs
+  // first wins, and the second finds itself superseded and does nothing.
+  await database.batch([
+    database
+      .prepare(
+        `UPDATE tenancy_invitations SET superseded_at = ?
+         WHERE tenancy_id = ? AND id <> ? AND created_at <= ?
+           AND consumed_at IS NULL AND superseded_at IS NULL
+           AND EXISTS (SELECT 1 FROM tenancy_invitations me
+                       WHERE me.id = ? AND me.superseded_at IS NULL)`,
+      )
+      .bind(nowMs, input.tenancyId, id, nowMs, id),
+  ]);
   await env.KV.put(
     sendLimitKey(input.tenancyId),
     String((await sendsToday(env, input.tenancyId)) + 1),
