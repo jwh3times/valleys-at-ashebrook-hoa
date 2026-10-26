@@ -337,6 +337,35 @@ function buildAuthoritySql(
   day: string,
   effectiveDay?: SqlRef,
 ): AuthoritySql {
+  const { owned, represented, binds } = authorityBranches(
+    person,
+    lot,
+    day,
+    { owned: '1', represented: '1' },
+    effectiveDay,
+  );
+  return {
+    sql: `(
+        EXISTS (${owned})
+        OR EXISTS (${represented})
+      )`,
+    binds,
+  };
+}
+
+/**
+ * The two branches of Lot Authority as SELECTs, each projecting `select`:
+ * direct Ownership (`authority_own`) and Representation of an owning
+ * Organization (`authority_org_own`). Every reader in this module that is
+ * written in SQL builds on these, so there is one copy of the rule.
+ */
+function authorityBranches(
+  person: SqlRef,
+  lot: SqlRef,
+  day: string,
+  select: { owned: string; represented: string },
+  effectiveDay?: SqlRef,
+): { owned: string; represented: string; binds: unknown[] } {
   const binds: unknown[] = [];
   const ref = (operand: SqlRef): string => {
     if ('column' in operand) return operand.column;
@@ -349,10 +378,10 @@ function buildAuthoritySql(
   };
   // Every operand is interpolated exactly where its placeholder appears, and
   // template literals evaluate left to right, so `binds` ends up in placeholder
-  // order without a separate ordering step to keep in sync.
-  const text = `(
-        EXISTS (
-          SELECT 1 FROM ownerships authority_own
+  // order without a separate ordering step to keep in sync. The owned branch
+  // is built first, so its binds precede the represented branch's.
+  const owned = `
+          SELECT ${select.owned} FROM ownerships authority_own
           WHERE authority_own.owner_party_id = ${ref(person)}
             AND authority_own.lot_id = ${ref(lot)}
             AND authority_own.voided_at IS NULL
@@ -363,9 +392,9 @@ function buildAuthoritySql(
                 : `
             AND (authority_own.start_day IS NULL OR ${ref(effectiveDay)} >= authority_own.start_day)`
             }
-        )
-        OR EXISTS (
-          SELECT 1 FROM representations authority_rep
+        `;
+  const represented = `
+          SELECT ${select.represented} FROM representations authority_rep
           INNER JOIN ownerships authority_org_own
             ON authority_org_own.owner_party_id = authority_rep.organization_party_id
            AND authority_org_own.lot_id = ${ref(lot)}
@@ -390,7 +419,41 @@ function buildAuthoritySql(
                 : `
             AND ${ref(effectiveDay)} >= MAX(COALESCE(authority_org_own.start_day, ''), authority_rep.start_day)`
             }
-        )
-      )`;
-  return { sql: text, binds };
+        `;
+  return { owned, represented, binds };
+}
+
+/**
+ * The Ownership that gives this Person Lot Authority over this Lot on `day`,
+ * or null when they hold none: the basis of a Tenancy they request (ADR 0028,
+ * spec decision 1).
+ *
+ * The same branches as `lotAuthorityExists`, projecting the granting
+ * Ownership instead of testing for one. A Person who both owns the Lot and
+ * represents an Organization that owns it gets their own Ownership: direct
+ * Ownership wins.
+ */
+export async function lotAuthorityBasis(
+  database: D1Database,
+  personId: string,
+  lotId: string,
+  day: string,
+): Promise<string | null> {
+  const { owned, represented, binds } = authorityBranches(
+    { value: personId },
+    { value: lotId },
+    day,
+    {
+      owned: 'authority_own.id, 0 AS rank',
+      represented: 'authority_org_own.id, 1 AS rank',
+    },
+  );
+  const row = await database
+    .prepare(
+      `SELECT id FROM (${owned} UNION ALL ${represented})
+       ORDER BY rank, id LIMIT 1`,
+    )
+    .bind(...binds)
+    .first<{ id: string }>();
+  return row?.id ?? null;
 }

@@ -63,6 +63,25 @@ export function maskEmail(email: string): string {
   return `${email[0]}***@${domain}`;
 }
 
+/**
+ * Mask a contact for display to a third party: only its last four characters,
+ * so an owner can tell which contact they gave without the page repeating it
+ * (`555-555-0142` → `***0142`, `ned@example.test` → `***test`). A phone
+ * number counts digits only. Anything shorter than five characters masks
+ * entirely to `***`, so the mask never shows the whole value.
+ */
+export function maskContact(channel: 'email' | 'sms', value: string): string {
+  const shown = channel === 'sms' ? value.replace(/\D/g, '') : value;
+  return shown.length <= 4 ? '***' : `***${shown.slice(-4)}`;
+}
+
+/** The Association Day after `day` (`YYYY-MM-DD`). */
+export function dayAfter(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** Human-readable Lot reference; the caller continues to use its internal ID. */
 export function formatLotLabel(lot: {
   address: string;

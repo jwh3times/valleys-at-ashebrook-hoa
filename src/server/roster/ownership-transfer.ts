@@ -15,7 +15,7 @@ import { reviewFlags } from '../db/audit-schema';
 import { personDisplayLabel } from '../../lib/format';
 import { isoDateOrError } from '../../lib/types';
 import { stringField } from '../http';
-import { CAPABILITY_SQL, LOT_SQL } from '../authz/derive';
+import { LOT_SQL, boardAccessSql } from '../authz/derive';
 import { lotAuthorityExists } from './authority';
 import { lossConsequences, qualifiesGuard } from './board-consequences';
 import { transferEffects } from './transfer-effects';
@@ -573,19 +573,12 @@ export async function ownershipTransfer(
     const database = env.DATABASE;
     // Revalidate the caller and freeze in the transaction, including a loss
     // that happened before planTransfer captured its state.
-    const capabilityBinds: string[] = [];
-    const capabilitySql = CAPABILITY_SQL.replace(
-      /\?([12])/g,
-      (_, index: string) => {
-        capabilityBinds.push(index === '1' ? actorAccountId : today);
-        return '?';
-      },
-    );
+    const boardAccess = boardAccessSql(actorAccountId, today);
     const statements = [
       assertInBatch(database, {
-        sql: `EXISTS (SELECT 1 FROM (${capabilitySql}) WHERE has_board = 1 OR has_system_admin = 1)
+        sql: `${boardAccess.sql}
           AND NOT EXISTS (SELECT 1 FROM cutover_settings WHERE key = 'write_freeze' AND value <> 'off')`,
-        binds: capabilityBinds,
+        binds: boardAccess.binds,
       }),
       assertInBatch(database, {
         sql: `(${snapshotSql}) = ?`,

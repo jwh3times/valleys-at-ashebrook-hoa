@@ -44,7 +44,8 @@ async function act(body: Record<string, unknown>): Promise<Response> {
 async function listed(): Promise<Record<string, unknown>[]> {
   const res = await GET(req(URL, 'GET'));
   expect(res.status).toBe(200);
-  return res.json();
+  return ((await res.json()) as { tenancies: Record<string, unknown>[] })
+    .tenancies;
 }
 
 describe('the Tenancies list', () => {
@@ -214,5 +215,5 @@ describe('voiding a Tenancy', () => {
 });
 
 it('refuses an unknown action', async () => {
-  expect((await act({ action: 'approve' })).status).toBe(400);
+  expect((await act({ action: 'transfer' })).status).toBe(400);
 });

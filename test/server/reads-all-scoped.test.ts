@@ -1,6 +1,7 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import * as reads from '../../src/server/content/reads';
+import * as rosterReads from '../../src/server/roster/reads';
 import {
   truncateAll,
   seedProperty,
@@ -192,5 +193,87 @@ describe('the fixture is real', () => {
     expect(await reads.fetchAdminResolutions(env)).toHaveLength(1);
     expect(await reads.fetchAdminProxies(env)).toHaveLength(1);
     expect(await reads.fetchAdminDocuments(env)).toHaveLength(1);
+  });
+});
+
+/**
+ * The same discipline over `roster/reads.ts`, which grew its first
+ * authority-scoped read with Tenant Access (#294 slice 3). Its older board
+ * reads predate the naming convention, so they are classified with a reason
+ * rather than renamed.
+ */
+describe('every roster/reads.ts export declares a scoping shape', () => {
+  const ROSTER_ADMIN_UNSCOPED = [
+    'fetchAdminRoster',
+    'fetchAdminTenancies',
+    'fetchAdminTenancyRequests',
+  ];
+  const ROSTER_AUTHORITY_SCOPED = ['fetchMemberTenancies'];
+  const ROSTER_UNCLASSIFIED: Record<string, string> = {
+    fetchBoardService:
+      'board-only; read solely by the requireBoard-gated board-service route',
+    fetchAccessGrantsDetail:
+      'board-only; read solely by the requireBoard-gated access-grants route',
+    fetchMemberRosterSelf:
+      "scoped to the caller's own linked Person, not to Lots (#205)",
+  };
+
+  const exported = Object.entries(rosterReads)
+    .filter(([, v]) => typeof v === 'function')
+    .map(([k]) => k);
+
+  it('every export is classified', () => {
+    const classified = new Set([
+      ...ROSTER_ADMIN_UNSCOPED,
+      ...ROSTER_AUTHORITY_SCOPED,
+      ...Object.keys(ROSTER_UNCLASSIFIED),
+    ]);
+    expect(exported.filter((name) => !classified.has(name))).toEqual([]);
+  });
+
+  it('classification matches the naming convention, and names only real exports', () => {
+    for (const name of ROSTER_ADMIN_UNSCOPED)
+      expect(name.startsWith('fetchAdmin')).toBe(true);
+    for (const name of ROSTER_AUTHORITY_SCOPED)
+      expect(name.startsWith('fetchMember')).toBe(true);
+    const stale = [
+      ...ROSTER_ADMIN_UNSCOPED,
+      ...ROSTER_AUTHORITY_SCOPED,
+      ...Object.keys(ROSTER_UNCLASSIFIED),
+    ].filter((name) => !exported.includes(name));
+    expect(stale).toEqual([]);
+  });
+
+  it('fetchMemberTenancies reads nothing for a caller with no Lots, and only the named Lots', async () => {
+    await seedProperty('p2');
+    await seedLotAuthority('o2', 'p2');
+    await env.DATABASE.prepare(
+      `INSERT INTO parties (id, kind, created_at, updated_at) VALUES ('t2', 'person', 1, 1)`,
+    ).run();
+    await env.DATABASE.prepare(
+      `INSERT INTO people (party_id, party_kind, full_name, name_normalized, updated_at)
+       VALUES ('t2', 'person', 'Tia Two', 'tia two', 1)`,
+    ).run();
+    await env.DATABASE.prepare(
+      `INSERT INTO tenancies (id, tenant_person_id, lot_id, basis_ownership_id,
+         start_day, scheduled_end_day, created_at, updated_at)
+       VALUES ('ten-2', 't2', 'p2', 'o2-p2-own', '2020-01-01', '2099-01-01', 1, 1)`,
+    ).run();
+    expect(
+      await rosterReads.fetchMemberTenancies(env, [], '2026-10-22'),
+    ).toEqual([]);
+    const own = await rosterReads.fetchMemberTenancies(
+      env,
+      ['p1'],
+      '2026-10-22',
+    );
+    expect(own.map((l) => l.lotId)).toEqual(['p1']);
+    expect(JSON.stringify(own)).not.toContain('Tia Two');
+    // The positive control: the same read does see the Tenancy for its Lot.
+    expect(
+      JSON.stringify(
+        await rosterReads.fetchMemberTenancies(env, ['p2'], '2026-10-22'),
+      ),
+    ).toContain('Tia Two');
   });
 });

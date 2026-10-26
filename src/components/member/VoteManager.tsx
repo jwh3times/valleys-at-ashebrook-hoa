@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import ReportMarkdown from '../react/ReportMarkdown';
+import { handleModalKeyDown } from '../react/modalKeyDown';
 import { castBallot, castMotionVote } from '../../lib/voting';
 import type {
   OpenElectionVotingItem,
@@ -465,29 +466,8 @@ function FinalityDialog({
     return () => returnFocusButton?.focus();
   }, [returnFocusRef]);
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Escape' && !busy) {
-      event.preventDefault();
-      onCancel();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-    const focusable = Array.from(
-      dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled)',
-      ) ?? [],
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) =>
+    handleModalKeyDown(event, dialogRef.current, busy, onCancel);
 
   return (
     <div className="vote-dialog-backdrop" role="presentation">

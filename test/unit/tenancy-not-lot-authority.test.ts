@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOT_SQL, TENANCY_SQL } from '../../src/server/authz/derive';
-import { tablesReferencedIn } from './table-references';
+import { sourceFiles, tablesReferencedIn } from './table-references';
 
 /**
  * A Tenancy grants no Lot Authority (ADR 0028). Tenants live on the Lot but
@@ -64,5 +64,49 @@ describe('Lot Authority never reads a Tenancy', () => {
     expect("import { tenancyCurrentSql } from '../roster/tenancy';").toMatch(
       TENANCY_MODULE_IMPORT,
     );
+  });
+});
+
+/**
+ * A request and an invitation hold a tenant's name and contact before the
+ * roster does, where neither Roster Redaction nor the AI pseudonymizer
+ * reaches them (spec decision 3). The AI surfaces must therefore never read
+ * them: `src/server/ai/` feeds the assistant, the report generator and the
+ * pseudonymizer's dictionary.
+ */
+const REQUEST_TABLES: Record<string, string> = {
+  tenancyRequests: 'tenancy_requests',
+  tenancyInvitations: 'tenancy_invitations',
+};
+
+describe('the AI surfaces never read a tenancy request or invitation', () => {
+  const AI_DIR = join(process.cwd(), 'src', 'server', 'ai');
+
+  it('scans a real directory, so a rename fails loudly instead of quietly', () => {
+    expect(sourceFiles(AI_DIR).length).toBeGreaterThan(0);
+  });
+
+  it('names neither table in any file under src/server/ai', () => {
+    const offenders = sourceFiles(AI_DIR).flatMap((file) =>
+      tablesReferencedIn(readFileSync(file, 'utf8'), REQUEST_TABLES).map(
+        (table) => `${file.slice(process.cwd().length + 1)}: ${table}`,
+      ),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('would catch one, by table name or Drizzle import', () => {
+    expect(
+      tablesReferencedIn(
+        'SELECT tenant_name FROM tenancy_requests',
+        REQUEST_TABLES,
+      ),
+    ).toEqual(['tenancy_requests']);
+    expect(
+      tablesReferencedIn(
+        "import { tenancyRequests } from '../db/roster-schema';",
+        REQUEST_TABLES,
+      ),
+    ).toEqual(['tenancy_requests']);
   });
 });

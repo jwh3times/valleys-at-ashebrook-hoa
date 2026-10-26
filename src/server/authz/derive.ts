@@ -121,6 +121,27 @@ export const CAPABILITY_SQL = `
 `;
 
 /**
+ * "This Account holds Board Access on `day`" as a predicate a mutation embeds
+ * in its own batch, so a board write re-checks its caller inside the
+ * transaction rather than trusting the guard that ran a round trip earlier.
+ * `CAPABILITY_SQL`'s numbered parameters become plain `?`s, bound in order.
+ */
+export function boardAccessSql(
+  accountId: string,
+  day: string,
+): { sql: string; binds: unknown[] } {
+  const binds: unknown[] = [];
+  const capabilitySql = CAPABILITY_SQL.replace(/\?([12])/g, (_, i: string) => {
+    binds.push(i === '1' ? accountId : day);
+    return '?';
+  });
+  return {
+    sql: `EXISTS (SELECT 1 FROM (${capabilitySql}) WHERE has_board = 1 OR has_system_admin = 1)`,
+    binds,
+  };
+}
+
+/**
  * The caller's Lots.
  *
  * `me` canonicalizes a consolidated duplicate one hop, so a Party that was

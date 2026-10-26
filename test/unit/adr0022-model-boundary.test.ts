@@ -146,6 +146,13 @@ const NEW_MODEL_SURFACE = new Set([
   // Tenancy grants no Lot Authority; `tenancy-not-lot-authority` pins that.
   'pages/api/admin/tenancies.ts',
   'server/roster/tenancy.ts',
+  // #294 slice 3: an owner's requests (the member route and its page), the
+  // board's approval, and the Person and Contact Method builders that the
+  // roster routes and approval share.
+  'pages/api/member/tenancies.ts',
+  'pages/tenants.astro',
+  'server/roster/tenancy-approval.ts',
+  'server/roster/builders.ts',
 ]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
@@ -174,6 +181,7 @@ const NEW_TABLES = [
   'cutover_settings',
   'cutover_shadow_mismatches',
   'tenancies',
+  'tenancy_requests',
 ];
 
 function sourceFiles(dir: string): string[] {

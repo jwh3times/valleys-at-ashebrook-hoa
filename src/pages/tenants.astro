@@ -1,0 +1,189 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import TenancyActions from '../components/member/TenancyActions.tsx';
+import TenancyRequestForm from '../components/member/TenancyRequestForm.tsx';
+import { env } from 'cloudflare:workers';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import type { MemberTenancy } from '../lib/types';
+import { associationDateIso, dayAfter } from '../lib/format';
+import { fetchMemberTenancies } from '../server/roster/reads';
+import {
+  latestTenancyEndDay,
+  tenantAccessVisible,
+} from '../server/roster/tenancy';
+
+/**
+ * AN OWNER'S TENANTS (ADR 0028, #294 slice 3; spec decision 3).
+ *
+ * Any current holder of Lot Authority over a Lot may ask the board to approve
+ * a tenant, renew or end a Tenancy, and withdraw an open request. The page
+ * lives outside `/homeowner/*` for ADR 0024's reason: it must be able to
+ * answer 404. To anyone who holds no Lot it is the generic 404, so the surface
+ * is not advertised.
+ *
+ * Like every member surface it is the 404 while `officialMode` is off (ADR
+ * 0019). With `tenantAccessEnabled` off it is the 404 too, unless one of the
+ * caller's Lots has a Tenancy or an open request on file: ending access must
+ * not wait on a setting, and a pending request's name and contact can always
+ * be cleared (review decision, 2026-10-25). It then offers End and Withdraw
+ * only.
+ *
+ * The list is server-rendered markup, scoped by the caller's derived Lot
+ * Authority; the islands carry only the actions, and each success reloads
+ * the page with `?done=` naming what it did.
+ */
+
+// Astro.locals.site is set by middleware on every real request; fall back to
+// the default so this page is renderable via the Astro Container API too.
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+const ctx = Astro.locals.authContext ?? null;
+
+// A capability question: requesting a tenant needs Lot Authority (`member`),
+// which neither a tenant nor a board member who owns no Lot has.
+if (
+  !site.officialMode ||
+  ctx === null ||
+  !ctx.capabilities.has('member') ||
+  ctx.personId === null
+) {
+  return Astro.rewrite('/404');
+}
+
+// Caller-specific: tenant names, masked contacts and the board's reasons.
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+const today = associationDateIso();
+const lots = await fetchMemberTenancies(env, ctx.lotIds, today);
+const gatesOn = tenantAccessVisible(site);
+const onFile = lots.some(
+  (l) => l.tenancies.length > 0 || l.openRequests.length > 0,
+);
+if (!gatesOn && !onFile) {
+  return Astro.rewrite('/404');
+}
+
+const DONE: Record<string, string> = {
+  request: 'Request sent to the board.',
+  renew: 'Renewal sent to the board.',
+  withdraw: 'Request withdrawn.',
+  end: 'Tenancy ended.',
+};
+const done = DONE[Astro.url.searchParams.get('done') ?? ''] ?? null;
+
+function describeTenancy(t: MemberTenancy): string {
+  const signedIn = t.claimed ? 'signed in' : 'not yet signed in';
+  return t.status === 'current'
+    ? `Current until ${t.scheduledEndDay} · ${signedIn}`
+    : `Starts ${t.startDay}, ends ${t.scheduledEndDay} · ${signedIn}`;
+}
+
+/** A renewal starts where the Tenancy ends, so its bounds count from there. */
+function renewBounds(t: MemberTenancy) {
+  if (!gatesOn || t.status !== 'current') return null;
+  return {
+    minEndDay: dayAfter(t.scheduledEndDay),
+    maxEndDay: latestTenancyEndDay(t.scheduledEndDay),
+  };
+}
+---
+
+<BaseLayout
+  title="Tenants"
+  description="Ask the board to give a tenant access to the documents marked for tenants."
+>
+  <div class="page-section">
+    <p class="eyebrow">Members</p>
+    <h1 class="page-title" style="margin-bottom: 36px;">
+      Tenants
+    </h1>
+    <p class="page-lead">
+      A tenant the board approves can read the documents the board marks for
+      tenants, until the end day you choose or until your ownership ends. Any
+      owner of the lot can end a tenancy or withdraw a request.
+    </p>
+    {!gatesOn && (
+      <p class="muted">
+        Tenant access is switched off. You can still end a tenancy or withdraw a
+        request; new requests and renewals wait until the board switches it back
+        on.
+      </p>
+    )}
+    {done && (
+      <div class="form-message form-message--success" role="status">
+        {done}
+      </div>
+    )}
+
+    {lots.map((l) => (
+      <section
+        aria-labelledby={`tenants-${l.lotId}`}
+        class="panel-card"
+        style="margin-bottom: 24px;"
+      >
+        <h2 id={`tenants-${l.lotId}`}>{l.address}</h2>
+        {l.tenancies.length === 0 && l.openRequests.length === 0 ? (
+          <p class="muted">No tenants or requests.</p>
+        ) : (
+          <ul class="plain-list">
+            {l.tenancies.map((t) => (
+              <li class="list-row">
+                <div>
+                  <div>{t.tenantName}</div>
+                  <div class="muted">{describeTenancy(t)}</div>
+                </div>
+                <TenancyActions
+                  client:load
+                  kind="tenancy"
+                  tenancyId={t.id}
+                  tenantName={t.tenantName}
+                  address={l.address}
+                  renew={renewBounds(t)}
+                />
+              </li>
+            ))}
+            {l.openRequests.map((r) => (
+              <li class="list-row">
+                <div>
+                  <div>{r.tenantName}</div>
+                  <div class="muted">
+                    {[
+                      r.kind === 'renewal'
+                        ? 'Renewal awaiting the board'
+                        : 'Awaiting the board',
+                      r.contact,
+                      `until ${r.scheduledEndDay}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                </div>
+                <TenancyActions
+                  client:load
+                  kind="request"
+                  requestId={r.id}
+                  tenantName={r.tenantName}
+                  address={l.address}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        {l.refusedRequests.map((r) => (
+          <p class="muted">
+            Refused {associationDateIso(new Date(r.decidedAt))}:{' '}
+            {r.refusalReason}
+          </p>
+        ))}
+      </section>
+    ))}
+
+    {gatesOn && lots.length > 0 && (
+      <TenancyRequestForm
+        client:load
+        lots={lots.map((l) => ({ lotId: l.lotId, address: l.address }))}
+        minEndDay={dayAfter(today)}
+        maxEndDay={latestTenancyEndDay(today)}
+      />
+    )}
+  </div>
+</BaseLayout>

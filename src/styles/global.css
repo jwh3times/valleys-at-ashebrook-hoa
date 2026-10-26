@@ -2219,7 +2219,8 @@ body.body--bare {
 .vote-card__review {
   margin-top: 6px;
 }
-.vote-dialog-backdrop {
+.vote-dialog-backdrop,
+.queue-dialog-backdrop {
   align-items: center;
   background: rgb(14 29 45 / 58%);
   display: flex;
@@ -2229,7 +2230,8 @@ body.body--bare {
   position: fixed;
   z-index: 30;
 }
-.vote-dialog {
+.vote-dialog,
+.queue-dialog {
   background: #fff;
   border-top: 5px solid var(--navy, #163a5f);
   box-shadow: 0 20px 60px rgb(0 0 0 / 30%);
@@ -2237,7 +2239,8 @@ body.body--bare {
   padding: 28px;
   width: 100%;
 }
-.vote-dialog h3 {
+.vote-dialog h3,
+.queue-dialog h3 {
   margin-top: 0;
 }
 .vote-receipt {
@@ -2270,10 +2273,12 @@ body.body--bare {
 }
 @media (max-width: 560px) {
   .vote-card,
-  .vote-dialog {
+  .vote-dialog,
+  .queue-dialog {
     padding: 18px;
   }
-  .vote-dialog-backdrop {
+  .vote-dialog-backdrop,
+  .queue-dialog-backdrop {
     align-items: end;
     padding: 10px;
   }

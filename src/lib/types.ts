@@ -1595,3 +1595,45 @@ export interface MemberLot {
   /** Persons currently holding Lot Authority — Ownership or Representation. */
   persons: { id: string; fullName: string }[];
 }
+
+// Tenant Access, the owner's view (ADR 0028, #294 slice 3). Read by
+// `fetchMemberTenancies` and the `/tenants` island.
+
+export interface MemberTenancy {
+  id: string;
+  tenantName: string;
+  startDay: string;
+  scheduledEndDay: string;
+  status: 'current' | 'upcoming';
+  /** The tenant's Person has a linked Account, so the Tenancy applies. */
+  claimed: boolean;
+}
+
+export interface MemberOpenTenancyRequest {
+  id: string;
+  kind: 'new' | 'renewal';
+  /** A renewal names the renewed Tenancy's tenant. */
+  tenantName: string;
+  channel: 'email' | 'sms' | null;
+  /** Masked; null for a renewal, which names no contact. */
+  contact: string | null;
+  scheduledEndDay: string;
+  renewsTenancyId: string | null;
+  createdAt: number;
+}
+
+export interface MemberRefusedTenancyRequest {
+  id: string;
+  kind: 'new' | 'renewal';
+  scheduledEndDay: string;
+  decidedAt: number;
+  refusalReason: string;
+}
+
+export interface MemberTenancyLot {
+  lotId: string;
+  address: string;
+  tenancies: MemberTenancy[];
+  openRequests: MemberOpenTenancyRequest[];
+  refusedRequests: MemberRefusedTenancyRequest[];
+}

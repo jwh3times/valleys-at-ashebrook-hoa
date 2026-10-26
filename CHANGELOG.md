@@ -7,6 +7,31 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-25
+
+### Added
+
+- **Owners can ask the board to approve a tenant (#294, slice 3 of tenant access).** A new
+  `/tenants` page lets anyone who currently holds a Lot ask the board to give a tenant access, until
+  an end day up to 13 months out, and later renew that Tenancy, end it, or withdraw a pending
+  request, whoever on the Lot made it. The page lists each of the owner's Lots with its Tenancies,
+  pending requests and recent refusals with the board's reason. It shows a tenant's contact only
+  as its last few characters, and it is a 404 to anyone who holds no Lot.
+- **The board approves or refuses requests from the Tenants panel.** Requests wait in a queue
+  above the Tenancies list. Approving one records the tenant as a new person or, after a roster
+  search by name or contact, as someone already on the roster, then records the Tenancy, all in
+  one step that re-checks the request against the roster as it stands. Refusing one needs a
+  reason the owner sees. Either way the request's tenant name and contact are cleared.
+- The privacy policy describes what a request collects and how long it keeps it.
+
+### Changed
+
+- New requests, renewals and approvals need tenant access switched on. Refusing, withdrawing and
+  an owner ending a Tenancy do not, so access can always be ended and a pending name and contact
+  always cleared. With tenant access off, `/tenants` shows only what is already on file.
+- Migration `0044` adds the `tenancy_requests` table. It must be applied to production **before**
+  this release deploys, because the board's Tenants panel now reads it.
+
 ## [2.8.0] - 2026-10-21
 
 ### Added
@@ -4267,7 +4292,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.0...HEAD
+[2.9.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.9...v2.7.0
 [2.6.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.6.8...v2.6.9

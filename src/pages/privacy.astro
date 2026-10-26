@@ -13,7 +13,7 @@ const name = displayName(site);
 const operator = official
   ? `the ${OFFICIAL_ORG_NAME} board`
   : 'the resident who maintains this site';
-const EFFECTIVE = '18 October 2026';
+const EFFECTIVE = '25 October 2026';
 ---
 
 <BaseLayout
@@ -112,6 +112,19 @@ const EFFECTIVE = '18 October 2026';
           them. Lot records, such as covenant matters and dues balances, are
           visible only to that lot's owners and the board.
         </p>
+
+        <h3>Tenants</h3>
+        <p>
+          When this feature is turned on, an owner can ask the board to let a
+          tenant read the documents the board marks for tenants. The owner gives
+          the tenant's name and one email address or mobile number, and the
+          lot's owners and the board can see the request while it waits; owners
+          see only the last characters of the contact. If the board refuses the
+          request, or an owner withdraws it, the name and contact are deleted
+          from it, and only the board's reason is kept. If the board approves
+          it, the tenant joins the association's roster with that name and
+          contact, the same way an owner's record is kept.
+        </p>
       </>
     )}
 
@@ -191,6 +204,13 @@ const EFFECTIVE = '18 October 2026';
         Accounts, association records, and meeting and voting records: for as
         long as the site serves the association.
       </li>
+      {official && (
+        <li>
+          A tenant's name and contact on an owner's request: until the board
+          decides it or an owner withdraws it. The request itself, without them,
+          is kept with the association's records.
+        </li>
+      )}
       <li>The administrative change log: permanently.</li>
       <li>
         The association's Google Drive credential: until a system administrator

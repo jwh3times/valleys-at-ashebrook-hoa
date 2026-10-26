@@ -14,6 +14,7 @@ import {
   organizations,
 } from '../../../server/db/roster-schema';
 import { normalizeName } from '../../../server/roster/normalize';
+import { recordPerson } from '../../../server/roster/builders';
 import {
   AuditCorrelation,
   operationKey,
@@ -121,29 +122,15 @@ async function createPerson(
     actorAccountId: await actor(locals, request),
     nowMs,
   });
-  correlation.event({
-    kind: 'person_created',
-    guard: insertedRowGuard('parties', id),
-    sensitive: ['person_name'],
-    detail: {
-      family: 'roster_change',
-      effective: { day: associationDateIso() },
-      reason: 'board_recorded',
-      evidence: evidenceResult.value,
-      subjects: [{ column: 'party_id', id, role: 'created' }],
-    },
+  const statements = recordPerson(env.DATABASE, correlation, {
+    id,
+    fullName: name.value,
+    nowMs,
+    effectiveDay: associationDateIso(),
+    reason: 'board_recorded',
+    evidence: evidenceResult.value,
   });
-
-  await env.DATABASE.batch([
-    env.DATABASE.prepare(
-      `INSERT INTO parties (id, kind, created_at, updated_at) VALUES (?, 'person', ?, ?)`,
-    ).bind(id, nowMs, nowMs),
-    env.DATABASE.prepare(
-      `INSERT INTO people (party_id, party_kind, full_name, name_normalized, updated_at)
-       VALUES (?, 'person', ?, ?, ?)`,
-    ).bind(id, name.value, normalized(name.value), nowMs),
-    ...correlation.statements,
-  ]);
+  await env.DATABASE.batch([...statements, ...correlation.statements]);
   return Response.json({ id }, { status: 201 });
 }
 

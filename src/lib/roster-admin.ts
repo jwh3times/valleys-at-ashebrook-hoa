@@ -1387,12 +1387,80 @@ export interface AdminTenancy {
   status: TenancyStatus;
 }
 
-export async function fetchTenancies(): Promise<AdminTenancy[]> {
-  return rosterRequest<AdminTenancy[]>(
+/** Mirrors `AdminTenancyRequestRow`: one open request in the board's queue. */
+export interface AdminTenancyRequest {
+  id: string;
+  kind: 'new' | 'renewal';
+  lotId: string;
+  address: string;
+  requesterName: string;
+  tenantName: string;
+  channel: 'email' | 'sms' | null;
+  contact: string | null;
+  scheduledEndDay: string;
+  renewsTenancyId: string | null;
+  createdAt: number;
+  basisEnded: boolean;
+  candidates: {
+    personId: string;
+    name: string;
+    matchedBy: 'contact' | 'name';
+  }[];
+}
+
+/** `GET /api/admin/tenancies`: every Tenancy and the open-request queue. */
+export interface TenantsPanelData {
+  tenancies: AdminTenancy[];
+  requests: AdminTenancyRequest[];
+  /** Both gates are on, so a request can be approved; refusing one, and
+   * ending or voiding a Tenancy, never waits on them. */
+  approvalOpen: boolean;
+}
+
+export async function fetchTenantsPanel(): Promise<TenantsPanelData> {
+  return rosterRequest<TenantsPanelData>(
     '/api/admin/tenancies',
     'GET',
     undefined,
     'Load tenancies failed',
+  );
+}
+
+/**
+ * Approves an owner's request, naming an existing Person or, with `null`,
+ * recording the tenant as a new one. A refused approval answers 409 with
+ * `{ reason, message }`; the thrown error carries the message.
+ */
+export async function approveTenancyRequest(
+  requestId: string,
+  personId: string | null,
+): Promise<void> {
+  const res = await fetch('/api/admin/tenancies', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'approve', requestId, personId }),
+  });
+  if (res.ok) return;
+  const text = await res.text();
+  let message = text;
+  try {
+    message = (JSON.parse(text) as { message?: string }).message ?? text;
+  } catch {
+    // A plain-text refusal (400/404) is already the message.
+  }
+  throw new Error(message || `Approve failed: ${res.status}`);
+}
+
+/** Refuses an owner's request with a reason the owner sees. */
+export async function refuseTenancyRequest(
+  requestId: string,
+  reason: string,
+): Promise<void> {
+  return rosterRequest(
+    '/api/admin/tenancies',
+    'POST',
+    { action: 'refuse', requestId, reason },
+    'Refuse failed',
   );
 }
 
