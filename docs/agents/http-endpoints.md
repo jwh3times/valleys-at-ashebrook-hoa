@@ -541,6 +541,32 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     the other roster routes. Deliberately **not** gated on `officialMode`/`tenantAccessEnabled`:
     ending access must not wait on a gate. The write freeze covers it by default. Both actions write
     `tenancy_ended`/`tenancy_voided` roster-change events.
+  - Slice 3 (requests and approval): `GET` now returns `{tenancies, requests, approvalOpen}` (the
+    request queue with full tenant contact for the board, and whether approval is currently open).
+    `POST` adds `approve` and `refuse` (`requestId`). `approve` is gated: `404` while `officialMode`
+    or `tenantAccessEnabled` is off. It runs `approveTenancyRequest` (`roster/tenancy-approval.ts`),
+    one batch that records the tenant Person and Contact Method when needed, then the Tenancy, then
+    marks the request approved, each write re-checking open status, both gates, the board's own
+    access, the basis Ownership, the requester's Lot Authority, the end-day bounds (13-month cap),
+    consolidation and overlap; success is `201 {tenancyId, personId}`, a failed re-check is `409` naming which
+    check (`APPROVAL_REFUSAL_MESSAGES`). `refuse` is **not** gated (`reason` required, `400`
+    otherwise), re-checks board access in its own `UPDATE`, clears the request's name and contact
+    (`CLEAR_REQUEST_CONTACT_SQL`), and answers `204`, `404` for an unknown request, `409` if it is no
+    longer open.
+  - `GET`+`POST /api/member/tenancies` (#294 slice 3) — the owner's half. `requireMemberApi` first
+    (so the whole route is `404` while `officialMode` is off, ADR 0019), then the caller's Person is
+    resolved; anything outside the caller's own Lots answers the same masked `404` as a missing row.
+    `GET` returns the caller's Lots with their Tenancies, open requests with the tenant contact
+    **masked** (`maskContact`), and recent refusals with the reason; it stays live with
+    `tenantAccessEnabled` off so the page can offer withdraw and end. `POST` actions: `request` (new
+    Tenancy: `lotId`, `tenantName`, `channel` `email`/`sms`, contact, `scheduledEndDay`; `400` for a
+    bad field or an end day not after the start or beyond 13 months) and `renew` (`tenancyId`,
+    `scheduledEndDay`), both `404` unless `officialMode` AND `tenantAccessEnabled` are literal `true`,
+    both answering `201 {id}` and re-checking the gates, Lot Authority and the basis Ownership inside
+    the insert (race or duplicate open request: `409`); `withdraw` (`requestId`, clears name and
+    contact, `204`) and `end` (`tenancyId`, reason `owner_ended`, `204`, `409` if already ended or
+    voided), neither tied to the tenant-access gate. Every action re-checks the caller's Lot
+    Authority in its own statement.
   - `/api/admin/roster-ownerships` `end`/`void`/`transfer` and `/api/admin/roster-lots` retire also
     end the affected Tenancies in the same batch (`tenancyLossStatements`); the transfer preview
     lists them as `tenanciesEnding`.

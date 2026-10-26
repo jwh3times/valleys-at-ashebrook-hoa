@@ -138,6 +138,19 @@ text, no FK; `voided_at` voids. `roster_change_subjects` gained a `tenancy_id` s
 (exactly one subject per row) and `audit_event_subjects_v` a `tenancy` subject kind. Currency and
 authority rules are in [`roster-and-access.md`](./roster-and-access.md#tenancies).
 
+`tenancy_requests` (migration `0044`, #294 slice 3, ADR 0028) is an owner's request for a Tenancy,
+deliberately not a roster fact: `lot_id`, `requested_by_person_id`, `basis_ownership_id`,
+`renews_tenancy_id` and `tenancy_id` (set on approval) are `RESTRICT` FKs; `requested_by_account_id`
+and `decided_by_account_id` are plain text. `kind` is `new` or `renewal` (CHECK that `renews_tenancy_id`
+is set exactly for a renewal); `status` is `open`, `approved`, `refused` or `withdrawn`. The tenant's
+`tenant_name`, `channel`, `contact_value` and `contact_normalized` (the form
+`contact_methods.value_normalized` takes) live on the row **only while a new-kind request is open**
+(`tenancy_requests_contact_shape`); approval moves them into `people`/`contact_methods`, and refusal
+and withdrawal null them, so Roster Redaction and the pseudonymizer never have a second copy to miss.
+Paired CHECKs tie `decided_at`/`decided_by_account_id` to non-open, `refusal_reason` to `refused`, and
+`tenancy_id` to `approved`. Partial unique indexes allow one open new request per
+`(lot_id, contact_normalized)` and one open request per `renews_tenancy_id`.
+
 ## Resolutions
 
 `resolutions` (the resolutions book — standing rules the board adopts, per

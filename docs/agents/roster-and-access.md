@@ -273,7 +273,7 @@ Ownership unvoided, on the same Lot and current on `day`; the Lot not retired.
 
 `deriveAccess` runs it as a third batch statement (`TENANCY_SQL`, sharing the one-hop `me` CTE) and
 sets the read-only `tenant` capability. `contentTier` is unchanged: a tenant who owns nothing stays
-`visitor`. Nothing in this slice creates a Tenancy through the API.
+`visitor`.
 
 **Losing the basis ends the Tenancy.** `tenancyLossStatements` ends every current or upcoming
 Tenancy of a lost basis Ownership at `MAX(start_day, day)` with `end_reason` `basis_ended` (or
@@ -284,6 +284,17 @@ Ownership end and void (void ends at today), the reviewed transfer (the preview 
 `/api/admin/tenancies` lets the board `end` (`board_ended`) or `void` (`recorded_in_error`) a
 Tenancy, deliberately not gated on `officialMode`/`tenantAccessEnabled` so ending access never waits
 on a gate; see [`http-endpoints.md`](./http-endpoints.md).
+
+**Requests and approval (slice 3, `tenancy_requests`, migration `0044`).** Any current holder of Lot
+Authority over a Lot (`authorityBranches`/`lotAuthorityBasis` in `roster/authority.ts`; direct
+Ownership wins as the basis) may request a Tenancy, renew or end one, and withdraw an open request,
+whoever made it, through `/api/member/tenancies`. Creating a Tenancy still takes the board:
+`approve` re-checks everything in one batch (including that the requester still holds Lot Authority
+and the basis Ownership is current, `basisCurrentSql`), and a Tenancy is at most 13 months
+(`TENANCY_MAX_MONTHS`). `request`/`renew`/`approve` need both gates; `withdraw`, `end`, `refuse`,
+board `end` and `void` do not, so access and a pending request's name and contact can always be
+cleared. The `/tenants` page is 404 unless `officialMode` is on and the caller holds a Lot (with
+tenant access off, only if something is on file) and is sent `Cache-Control: private, no-store`.
 
 ## The invariant gate
 

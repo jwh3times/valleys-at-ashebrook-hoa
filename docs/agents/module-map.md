@@ -55,7 +55,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   create/correct/consolidate, ownership create/end/void, representation
   create/end/void/correctScope, contact-method add/end/void/setPreferred, `exportRoster`), Board
   (`fetchBoardService` plus the nine create/end/cancel/void-term, substitute-qualifying-lot,
-  correct-term, and assign/end/void-office actions), Tenants (`fetchTenancies`/`endTenancy`/`voidTenancy`,
+  correct-term, and assign/end/void-office actions), Tenants (`fetchTenancies`/`endTenancy`/`voidTenancy`/`approveTenancyRequest`/`refuseTenancyRequest`,
   `AdminTenancy`), Access
   (`fetchAccessGrants`/`grantAccess`/`revokeAccess`,
   `fetchPersonLinks`/`manualVerifyPersonLink`/`unlinkPersonLink`, and the
@@ -301,7 +301,22 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   (`documentVisibleTo` embeds it, so turning either gate off takes effect on the next request);
   `tenancyCurrentSql(alias, day)`, the one Tenancy currency rule; and `tenancyLossStatements`, the
   statements that end Tenancies when their basis Ownership or Lot is lost. Never a Lot Authority
-  reader.
+  reader. Slice 3 adds `tenantAccessAvailable(env)` (both gates, read in route code) and
+  `tenantAccessVisible` (the `/tenants` page rule), `basisCurrentSql` (basis Ownership still current),
+  `TENANCY_MAX_MONTHS`/`latestTenancyEndDay`, and `CLEAR_REQUEST_CONTACT_SQL` (the one statement that
+  nulls a decided or withdrawn request's name and contact).
+- `roster/tenancy-approval.ts` (#294 slice 3): `approveTenancyRequest`, the board's approval as one
+  batch; a single list of named checks builds both the in-batch gate and the diagnosis, so the `409`
+  message cannot drift from the condition enforced (`APPROVAL_REFUSAL_MESSAGES`).
+- `roster/builders.ts`: the shared statement builders `normalizedContactValue`, `recordPerson` and
+  `recordContactMethod`, used by approval and the admin roster routes so a Person or Contact Method is
+  recorded one way. `roster/authority.ts` gained `authorityBranches` and `lotAuthorityBasis` (which
+  Ownership gives the caller authority over a Lot, direct wins). `roster/reads.ts` carries
+  `fetchMemberTenancies` and `fetchAdminTenancyRequests`.
+- Client: `maskContact` and `dayAfter` in `src/lib/format.ts`; `src/components/react/modalKeyDown.ts`
+  (shared Escape/focus-trap handler for dialogs); admin `QueueDialog`/`RequestQueue` (the Tenants
+  panel's approve/refuse queue); member `TenancyActions`, `TenancyRequestForm` and `useTenancyAction`
+  (the `/tenants` page's islands).
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
   shared Person Link creation/ending machinery behind `/api/verify/unlink` and
