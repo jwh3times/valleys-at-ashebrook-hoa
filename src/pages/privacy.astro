@@ -125,6 +125,16 @@ const EFFECTIVE = '25 October 2026';
           it, the tenant joins the association's roster with that name and
           contact, the same way an owner's record is kept.
         </p>
+        <p>
+          The approval sends the tenant an invitation link at that contact,
+          through the same email and text-message providers that send
+          verification codes. An owner or the board can send a new link until
+          the tenant claims it. The site keeps only a one-way fingerprint of the
+          link, never the link itself. When the tenant follows it and claims
+          access from their own account, the site records which contact the link
+          was sent to and links that account to the tenant's roster record, just
+          as an owner's verification is recorded.
+        </p>
       </>
     )}
 
@@ -209,6 +219,12 @@ const EFFECTIVE = '25 October 2026';
           A tenant's name and contact on an owner's request: until the board
           decides it or an owner withdraws it. The request itself, without them,
           is kept with the association's records.
+        </li>
+      )}
+      {official && (
+        <li>
+          Tenant invitation links: good for 14 days, and deleted 30 days after
+          they expire.
         </li>
       )}
       <li>The administrative change log: permanently.</li>
