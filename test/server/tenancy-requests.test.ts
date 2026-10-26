@@ -1,7 +1,8 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { GET, POST } from '../../src/pages/api/member/tenancies';
+import { sendEmail } from '../../src/server/auth/senders';
 import { associationDateIso } from '../../src/lib/format';
 import { deriveAccess } from '../../src/server/authz/derive';
 import type { AuthContext } from '../../src/server/authz/guards';
@@ -23,6 +24,12 @@ import { resetTenancyWorld, seedTenancy, tenancy } from './tenancy-fixtures';
 //
 // Callers are derived from the seeded roster, never supplied, so these tests
 // exercise the real Lot Authority the route scopes by.
+
+// Re-invite sends the invitation (slice 4). Never reach a provider.
+vi.mock('../../src/server/auth/senders', () => ({
+  sendEmail: vi.fn().mockResolvedValue(undefined),
+  sendSms: vi.fn().mockResolvedValue(undefined),
+}));
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
@@ -170,7 +177,7 @@ beforeEach(async () => {
 });
 
 describe('the gates', () => {
-  it('answers 404 to request and renew when either gate is off', async () => {
+  it('answers 404 to request, renew and reinvite when either gate is off', async () => {
     await seedTenancy('ten', {
       startDay: '2025-06-01',
       scheduledEndDay: monthsOut(2),
@@ -187,6 +194,14 @@ describe('the gates', () => {
             action: 'renew',
             tenancyId: 'ten',
             scheduledEndDay: monthsOut(14),
+          })
+        ).status,
+      ).toBe(404);
+      expect(
+        (
+          await call('acct-owner', 'POST', {
+            action: 'reinvite',
+            tenancyId: 'ten',
           })
         ).status,
       ).toBe(404);
@@ -779,6 +794,78 @@ describe('end', () => {
     }
     expect(await tenancy('ten')).toMatchObject({ actual_end_day: null });
     expect(await ledger('ten')).toEqual([]);
+  });
+});
+
+describe('reinvite', () => {
+  beforeEach(async () => {
+    vi.mocked(sendEmail).mockClear();
+    const { keys } = await env.KV.list({ prefix: 'tenant-invite:' });
+    for (const key of keys) await env.KV.delete(key.name);
+    await seedTenancy('ten', { scheduledEndDay: monthsOut(6) });
+    await getDb(env).run(sql`
+      INSERT INTO contact_methods (id, party_id, party_kind, channel, value,
+        value_normalized, created_at, updated_at)
+      VALUES ('cm-tess', 'tenant', 'person', 'email', 'tess@example.test',
+        'tess@example.test', 1, 1)`);
+    await getDb(env).run(sql`
+      INSERT INTO tenancy_invitations (id, tenancy_id, contact_method_id,
+        channel, token_hash, expires_at, created_at)
+      VALUES ('inv-1', 'ten', 'cm-tess', 'email', 'hash-1',
+        ${Date.now() + 86_400_000}, ${Date.now() - 86_400_000})`);
+  });
+
+  const reinvite = { action: 'reinvite', tenancyId: 'ten' };
+
+  async function live(): Promise<string[]> {
+    const { results } = await env.DATABASE.prepare(
+      `SELECT id FROM tenancy_invitations
+       WHERE superseded_at IS NULL AND consumed_at IS NULL ORDER BY created_at`,
+    ).all<{ id: string }>();
+    return results.map((r) => r.id);
+  }
+
+  it("sends a fresh link to the tenant's approved contact, superseding the earlier one", async () => {
+    const res = await call('acct-owner', 'POST', reinvite);
+    expect(res.status).toBe(204);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendEmail).mock.calls[0][1]).toBe('tess@example.test');
+    const ids = await live();
+    expect(ids).toHaveLength(1);
+    expect(ids[0]).not.toBe('inv-1');
+  });
+
+  it('answers the masked 404 for a Tenancy of a Lot the caller does not hold, or none at all', async () => {
+    expect((await call('acct-neighbour', 'POST', reinvite)).status).toBe(404);
+    expect(
+      (await call('acct-owner', 'POST', { ...reinvite, tenancyId: 'nope' }))
+        .status,
+    ).toBe(404);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('answers 409 once the tenant has claimed', async () => {
+    await account('acct-tenant', 'tenant');
+    expect((await call('acct-owner', 'POST', reinvite)).status).toBe(409);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('re-checks Lot Authority inside the insert, so an Ownership ended mid-request sends nothing', async () => {
+    const owner = await deriveAccess(env, 'acct-owner', today);
+    const paused = pauseNextBatch();
+    try {
+      const pending = send(owner, 'POST', reinvite);
+      await paused.reached;
+      await getDb(env).run(
+        sql`UPDATE ownerships SET end_day = ${today} WHERE id = 'owner-lot-own'`,
+      );
+      paused.release();
+      expect((await pending).status).toBe(409);
+    } finally {
+      paused.restore();
+    }
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(await live()).toEqual(['inv-1']);
   });
 });
 

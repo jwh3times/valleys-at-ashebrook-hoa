@@ -16,6 +16,7 @@
 import { OFFICIAL_ORG_NAME } from '../../lib/site';
 import { sendEmail, sendSms } from '../auth/senders';
 import { hashCode } from '../verification/codes';
+import type { SqlGuard } from './audit';
 import { TENANT_ACCESS_ENABLED_SQL, tenancyCurrentSql } from './tenancy';
 
 export const INVITATION_TTL_MS = 14 * 86_400_000;
@@ -162,6 +163,10 @@ export interface InviteInput {
   /** The approved contact; null reuses the tenant's latest invitation's. */
   contactMethodId: string | null;
   today: string;
+  /** The caller's own condition over the Tenancy `t`, re-checked inside the
+   * insert: an owner's Lot Authority. A failure there answers
+   * `tenancy-ended`'s 409 unless another check names the cause. */
+  scope?: SqlGuard;
 }
 
 /**
@@ -204,7 +209,8 @@ export async function inviteTenant(
         `INSERT INTO tenancy_invitations (id, tenancy_id, contact_method_id,
          channel, token_hash, expires_at, created_at)
        SELECT ?, t.id, c.id, c.channel, ?, ?, ?
-       FROM ${SOURCE} WHERE t.id = ? AND ${ALL_CHECKS}`,
+       FROM ${SOURCE} WHERE t.id = ? AND ${ALL_CHECKS}
+         AND ${input.scope?.sql ?? '1'}`,
       )
       .bind(
         id,
@@ -214,6 +220,7 @@ export async function inviteTenant(
         input.today,
         contactMethodId,
         input.tenancyId,
+        ...(input.scope?.binds ?? []),
       ),
   ]);
   if (inserted.meta.changes !== 1) {
