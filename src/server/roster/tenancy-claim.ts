@@ -242,3 +242,37 @@ export async function claimTenantInvitation(
   const again = await assess(env, accountId, tokenHash, nowMs, today);
   return { ok: false, reason: again.refusal ?? 'invalid-invitation' };
 }
+
+/** Whether `token` has the shape of an invitation token at all. */
+export function isInvitationTokenShape(token: string): boolean {
+  return TOKEN_SHAPE.test(token);
+}
+
+/**
+ * What `/tenant-invite` shows a signed-in visitor: the Lot's address while
+ * the invitation is live and its Tenancy current or upcoming, else null.
+ * Reads only: a GET never consumes an invitation, because mail scanners
+ * prefetch links.
+ */
+export async function invitationForDisplay(
+  env: Env,
+  token: string,
+  today: string,
+): Promise<{ address: string } | null> {
+  if (!TOKEN_SHAPE.test(token)) return null;
+  const row = await env.DATABASE.prepare(
+    `SELECT l.address
+     FROM tenancy_invitations i
+     JOIN tenancies t ON t.id = i.tenancy_id
+     JOIN lots l ON l.id = t.lot_id
+     WHERE i.token_hash = ?3 AND ${LIVE_SQL('i')}
+       AND ${tenancyCurrentOrUpcomingSql('t', '?2')}`,
+  )
+    .bind(
+      Date.now(),
+      today,
+      await hashInvitationToken(token, env.BETTER_AUTH_SECRET),
+    )
+    .first<{ address: string }>();
+  return row ?? null;
+}

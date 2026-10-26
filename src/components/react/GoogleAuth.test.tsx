@@ -43,6 +43,26 @@ describe('GoogleSignInButton', () => {
     });
   });
 
+  it('returns an invited tenant to their invitation, new account or not', async () => {
+    const invite = `/tenant-invite?token=${'Ab3_-'.repeat(8)}xyz`;
+    window.history.replaceState(
+      {},
+      '',
+      `/login?next=${encodeURIComponent(invite)}`,
+    );
+    auth.signIn.social.mockResolvedValue({ error: null });
+    render(<GoogleSignInButton label="Sign in with Google" />);
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Sign in with Google' }),
+    );
+    expect(auth.signIn.social).toHaveBeenCalledWith({
+      provider: 'google',
+      callbackURL: invite,
+      newUserCallbackURL: invite,
+      errorCallbackURL: '/login',
+    });
+  });
+
   it('shows an actionable message when Google cannot be started', async () => {
     auth.signIn.social.mockResolvedValue({
       error: { code: 'PROVIDER_NOT_FOUND', message: 'Provider not found' },

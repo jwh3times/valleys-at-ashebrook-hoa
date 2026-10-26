@@ -1,0 +1,94 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import TenantClaimButton from '../components/member/TenantClaimButton.tsx';
+import { env } from 'cloudflare:workers';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
+import { associationDateIso } from '../lib/format';
+import { tenantAccessVisible } from '../server/roster/tenancy';
+import {
+  invitationForDisplay,
+  isInvitationTokenShape,
+} from '../server/roster/tenancy-claim';
+
+/**
+ * A TENANT'S INVITATION (ADR 0028, #294 slice 4; spec decision 4).
+ *
+ * The link the board's approval sends opens this page, which ONLY DISPLAYS:
+ * mail scanners prefetch links, so a GET must never consume the invitation.
+ * The Claim button's POST to `/api/verify/tenant-claim` is the only thing
+ * that does.
+ *
+ * A signed-out visitor is offered sign-in and registration, each carrying the
+ * link back here as `next`. A signed-in visitor sees the Lot's address and the
+ * Claim button while the invitation is live, and the same "not valid" answer
+ * for every other case. The page is the 404 while either gate is off.
+ *
+ * The token is in the URL, so the page is never cached and never sent on as
+ * a referrer.
+ */
+
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+if (!tenantAccessVisible(site)) {
+  return Astro.rewrite('/404');
+}
+
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+Astro.response.headers.set('Referrer-Policy', 'no-referrer');
+
+const ctx = Astro.locals.authContext ?? null;
+const token = Astro.url.searchParams.get('token') ?? '';
+const wellFormed = isInvitationTokenShape(token);
+const next = encodeURIComponent(`/tenant-invite?token=${token}`);
+const invitation =
+  ctx !== null && wellFormed
+    ? await invitationForDisplay(env, token, associationDateIso())
+    : null;
+---
+
+<BaseLayout
+  title="Tenant invitation"
+  description="Claim the tenant access the board approved for you."
+>
+  <div class="page-section">
+    <p class="eyebrow">Tenants</p>
+    <h1 class="page-title" style="margin-bottom: 36px;">
+      Tenant invitation
+    </h1>
+    {!wellFormed || (ctx !== null && invitation === null) ? (
+      <p class="page-lead">
+        This invitation link is not valid. It may have expired, been used, or
+        been replaced by a newer one. Ask the owner or the board to send you a
+        new invitation.
+      </p>
+    ) : ctx === null ? (
+      <>
+        <p class="page-lead">
+          The board has approved tenant access for you. Sign in, or create an
+          account, to claim it with your own account.
+        </p>
+        <p>
+          <a class="btn btn-primary" href={`/login?next=${next}`}>
+            Sign in
+          </a>{' '}
+          <a class="btn" href={`/register?next=${next}`}>
+            Create an account
+          </a>
+        </p>
+      </>
+    ) : (
+      <>
+        <p class="page-lead">
+          The board has approved tenant access for you at{' '}
+          <strong>{invitation!.address}</strong>. Claiming it links this account
+          to you, so you can read the documents the board marks for tenants
+          until the tenancy ends.
+        </p>
+        <TenantClaimButton
+          client:load
+          token={token}
+          address={invitation!.address}
+        />
+      </>
+    )}
+  </div>
+</BaseLayout>

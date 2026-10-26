@@ -83,3 +83,29 @@ export async function tenancyAction(body: TenancyAction): Promise<void> {
   if (!res.ok)
     throw new Error((await res.text()) || `Request failed: ${res.status}`);
 }
+
+/** Claims a Tenancy invitation (#294 slice 4). Throws with the server's
+ * message on a refusal. */
+export async function claimTenancy(token: string): Promise<void> {
+  const res = await fetch('/api/verify/tenant-claim', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (res.ok) return;
+  const text = await res.text();
+  let message = text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'message' in parsed &&
+      typeof parsed.message === 'string'
+    )
+      message = parsed.message;
+  } catch {
+    // A plain-text answer: the 404, 429 or 503.
+  }
+  throw new Error(message || `Request failed: ${res.status}`);
+}
