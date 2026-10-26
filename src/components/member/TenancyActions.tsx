@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useTenancyAction } from './useTenancyAction';
 
-// The row actions of one Tenancy or open request on `/tenants` (#294 slice 3).
-// The row itself is server-rendered markup; this island carries only its
-// buttons and the renewal's end-day form.
+// The row actions of one Tenancy or open request on `/tenants` (#294 slices 3
+// and 4). The row itself is server-rendered markup; this island carries only
+// its buttons and the renewal's end-day form.
 
 type Props =
   | {
@@ -13,6 +13,9 @@ type Props =
       address: string;
       /** The renewal's end-day bounds; null when it cannot be renewed. */
       renew: { minEndDay: string; maxEndDay: string } | null;
+      /** Whether a fresh invitation may be sent: the tenant has not claimed
+       * and tenant access is on (#294 slice 4). */
+      reinvite: boolean;
     }
   | { kind: 'request'; requestId: string; tenantName: string; address: string };
 
@@ -46,6 +49,22 @@ export default function TenancyActions(props: Props) {
                 onClick={() => setRenewing(true)}
               >
                 Renew
+              </button>
+            )}
+            {props.reinvite && (
+              <button
+                type="button"
+                className="row-link"
+                aria-label={`Re-invite tenant: ${subject}`}
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    { action: 'reinvite', tenancyId: props.tenancyId },
+                    'reinvite',
+                  )
+                }
+              >
+                Re-invite
               </button>
             )}
             <button

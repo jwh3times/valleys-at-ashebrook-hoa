@@ -5,10 +5,12 @@ import {
   fetchRoster,
   fetchTenantsPanel,
   refuseTenancyRequest,
+  reinviteTenancy,
   voidTenancy,
   type AdminRoster,
   type AdminTenancy,
   type AdminTenancyRequest,
+  type ApprovalInvitation,
   type TenantsPanelData,
 } from '../../lib/roster-admin';
 import QueueDialog from './QueueDialog';
@@ -17,10 +19,11 @@ import { useAdminResource } from './useAdminResource';
 
 // The board's Tenants panel (ADR 0028, #294). Its queue holds owners' open
 // requests, each approved or refused through a dialog (slice 3), and its list
-// holds every Tenancy, which the board can end or void (slice 2). Refuse, end
-// and void take effect whether or not tenant access is switched on, because
-// ending access, or clearing a pending request, must never wait on a setting;
-// only Approve waits for it.
+// holds every Tenancy, which the board can end or void (slice 2), and
+// re-invite while its tenant has not claimed (slice 4). Refuse, end and void
+// take effect whether or not tenant access is switched on, because ending
+// access, or clearing a pending request, must never wait on a setting; only
+// Approve and Re-invite wait for it.
 
 const MATCH_LABELS = {
   contact: 'already holds this contact',
@@ -114,6 +117,17 @@ function describe(t: AdminTenancy): string {
   }
 }
 
+/** What the board is told after approving, by what happened to the
+ * invitation (#294 slice 4). */
+const APPROVED: Record<ApprovalInvitation, string> = {
+  sent: 'Tenancy approved. The invitation is on its way to the tenant.',
+  send_failed:
+    'Tenancy approved, but the invitation could not be sent. Use Re-invite to try again.',
+  rate_limited:
+    "Tenancy approved, but today's invitation limit for it is reached. Use Re-invite tomorrow.",
+  none: 'Tenancy approved.',
+};
+
 export default function TenantsPanel() {
   const {
     data: { tenancies, requests, approvalOpen },
@@ -175,9 +189,13 @@ export default function TenantsPanel() {
     if (!r) return;
     setApproving(null);
     void run(async () => {
-      await approveTenancyRequest(r.id, chosen?.personId ?? null);
+      const invitation = await approveTenancyRequest(
+        r.id,
+        chosen?.personId ?? null,
+      );
       await reload();
-    }, 'Tenancy approved.');
+      return APPROVED[invitation];
+    }, APPROVED.none);
   }
 
   function refuse() {
@@ -202,6 +220,13 @@ export default function TenantsPanel() {
       await endTenancy(t.id);
       await reload();
     }, 'Tenancy ended.');
+  }
+
+  function reinvite(t: AdminTenancy) {
+    void run(async () => {
+      await reinviteTenancy(t.id);
+      await reload();
+    }, 'Invitation sent.');
   }
 
   function voidOne(t: AdminTenancy) {
@@ -394,6 +419,18 @@ export default function TenantsPanel() {
                   <div className="muted">{describe(t)}</div>
                 </div>
                 <div className="row-actions">
+                  {approvalOpen &&
+                    !t.claimed &&
+                    (t.status === 'current' || t.status === 'upcoming') && (
+                      <button
+                        className="row-link"
+                        aria-label={`Re-invite tenant: ${t.tenantName}, ${t.address}`}
+                        disabled={busy}
+                        onClick={() => reinvite(t)}
+                      >
+                        Re-invite
+                      </button>
+                    )}
                   {(t.status === 'current' || t.status === 'upcoming') && (
                     <button
                       className="row-link"

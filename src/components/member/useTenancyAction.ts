@@ -6,7 +6,7 @@ import { tenancyAction, type TenancyAction } from '../../lib/member';
 // action succeeded for the page's confirmation; a refused one stays put and
 // shows the server's reason.
 
-export type TenancyDone = 'request' | 'renew' | 'withdraw' | 'end';
+export type TenancyDone = 'request' | 'renew' | 'withdraw' | 'end' | 'reinvite';
 
 export function useTenancyAction() {
   const [busy, setBusy] = useState(false);

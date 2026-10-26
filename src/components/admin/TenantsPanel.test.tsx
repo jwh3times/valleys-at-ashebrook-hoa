@@ -27,6 +27,7 @@ function tenancy(overrides: Partial<AdminTenancy> = {}): AdminTenancy {
     endReason: null,
     renewsTenancyId: null,
     status: 'current',
+    claimed: false,
     ...overrides,
   };
 }
@@ -276,7 +277,7 @@ describe('TenantsPanel request queue', () => {
 
   it('approves a new request as a new Person by default', async () => {
     mocked.fetchTenantsPanel.mockResolvedValue(panel([], [request()]));
-    mocked.approveTenancyRequest.mockResolvedValue(undefined);
+    mocked.approveTenancyRequest.mockResolvedValue('none');
     render(<TenantsPanel />);
     const user = userEvent.setup();
     await user.click(
@@ -310,7 +311,7 @@ describe('TenantsPanel request queue', () => {
         ],
       ),
     );
-    mocked.approveTenancyRequest.mockResolvedValue(undefined);
+    mocked.approveTenancyRequest.mockResolvedValue('none');
     render(<TenantsPanel />);
     const user = userEvent.setup();
     await user.click(
@@ -417,7 +418,7 @@ describe('TenantsPanel request queue', () => {
   it('searches the roster by name, and approves naming the Person found', async () => {
     mocked.fetchTenantsPanel.mockResolvedValue(panel([], [request()]));
     mocked.fetchRoster.mockResolvedValue(roster());
-    mocked.approveTenancyRequest.mockResolvedValue(undefined);
+    mocked.approveTenancyRequest.mockResolvedValue('none');
     render(<TenantsPanel />);
     const user = userEvent.setup();
     const dialog = await openApproveDialog(user);
@@ -477,5 +478,75 @@ describe('TenantsPanel request queue', () => {
         name: 'Refuse tenancy request: Ned Next, 100 Example Lane',
       }),
     ).toBeInTheDocument();
+  });
+});
+
+// #294 slice 4: approval sends the tenant's invitation, and the board can
+// send a fresh one to a tenant who has not claimed.
+describe('TenantsPanel invitations', () => {
+  async function approveNed(result: rosterAdmin.ApprovalInvitation) {
+    mocked.fetchTenantsPanel.mockResolvedValue(panel([], [request()]));
+    mocked.approveTenancyRequest.mockResolvedValue(result);
+    render(<TenantsPanel />);
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Approve tenancy request: Ned Next, 100 Example Lane',
+      }),
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Approve tenancy' });
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
+  }
+
+  it('says the invitation is on its way after approving', async () => {
+    await approveNed('sent');
+    expect(
+      await screen.findByText(
+        'Tenancy approved. The invitation is on its way to the tenant.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('says so when the invitation could not be sent, pointing to Re-invite', async () => {
+    await approveNed('send_failed');
+    expect(
+      await screen.findByText(
+        'Tenancy approved, but the invitation could not be sent. Use Re-invite to try again.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('re-invites a tenant who has not claimed, and reloads the list', async () => {
+    mocked.fetchTenantsPanel.mockResolvedValue(panel([tenancy()]));
+    mocked.reinviteTenancy.mockResolvedValue(undefined);
+    render(<TenantsPanel />);
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: 'Re-invite tenant: Tess Tenant, 100 Example Lane',
+      }),
+    );
+    await waitFor(() =>
+      expect(mocked.reinviteTenancy).toHaveBeenCalledWith('ten-1'),
+    );
+    expect(await screen.findByText('Invitation sent.')).toBeInTheDocument();
+    expect(mocked.fetchTenantsPanel).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers no Re-invite for a claimed, ended or voided tenancy, or while tenant access is off', async () => {
+    const cases: TenantsPanelData[] = [
+      panel([tenancy({ claimed: true })]),
+      panel([tenancy({ status: 'ended' })]),
+      panel([tenancy({ status: 'voided' })]),
+      panel([tenancy()], [], false),
+    ];
+    for (const data of cases) {
+      mocked.fetchTenantsPanel.mockResolvedValue(data);
+      const { unmount } = render(<TenantsPanel />);
+      await screen.findByText(/Tess Tenant/);
+      expect(
+        screen.queryByRole('button', { name: /Re-invite tenant/ }),
+      ).not.toBeInTheDocument();
+      unmount();
+    }
   });
 });

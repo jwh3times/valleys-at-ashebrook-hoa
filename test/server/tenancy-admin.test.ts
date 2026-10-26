@@ -14,6 +14,7 @@ import { callerContext } from './caller-context';
 import { pauseNextBatch, req, seedPerson } from './fixtures';
 import {
   resetTenancyWorld,
+  seedLinkedAccount,
   seedTenancy,
   tenancy,
   tenancyEvents,
@@ -86,6 +87,13 @@ describe('the Tenancies list', () => {
       scheduledEndDay: '2099-01-01',
       actualEndDay: null,
     });
+  });
+
+  it('marks a Tenancy claimed once its tenant has a linked Account', async () => {
+    await seedTenancy('current');
+    expect((await listed())[0]).toMatchObject({ claimed: false });
+    await seedLinkedAccount('acct-tenant', 'tenant');
+    expect((await listed())[0]).toMatchObject({ claimed: true });
   });
 
   it('shows a Tenancy whose basis has ended as ended, before any end is recorded on it', async () => {

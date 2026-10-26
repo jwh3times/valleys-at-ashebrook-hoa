@@ -72,7 +72,8 @@ export type TenancyAction =
     }
   | { action: 'renew'; tenancyId: string; scheduledEndDay: string }
   | { action: 'withdraw'; requestId: string }
-  | { action: 'end'; tenancyId: string };
+  | { action: 'end'; tenancyId: string }
+  | { action: 'reinvite'; tenancyId: string };
 
 export async function tenancyAction(body: TenancyAction): Promise<void> {
   const res = await fetch('/api/member/tenancies', {

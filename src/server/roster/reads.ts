@@ -264,6 +264,8 @@ export interface AdminTenancyRow {
   endReason: string | null;
   renewsTenancyId: string | null;
   status: TenancyStatus;
+  /** Whether the tenant Person has a current Person Link (#294 slice 4). */
+  claimed: boolean;
 }
 
 /**
@@ -289,7 +291,11 @@ export async function fetchAdminTenancies(
               WHEN t.start_day > ?1 AND ${tenancyCurrentSql('t', 't.start_day')}
                 THEN 'upcoming'
               ELSE 'ended'
-            END AS status
+            END AS status,
+            EXISTS (
+              SELECT 1 FROM person_links pl
+              WHERE pl.person_id = t.tenant_person_id AND pl.ended_at IS NULL
+            ) AS claimed
      FROM tenancies t
      JOIN people p ON p.party_id = t.tenant_person_id
      JOIN lots l ON l.id = t.lot_id
@@ -308,6 +314,7 @@ export async function fetchAdminTenancies(
       end_reason: string | null;
       renews_tenancy_id: string | null;
       status: TenancyStatus;
+      claimed: number;
     }>();
   return results.map((r) => ({
     id: r.id,
@@ -321,6 +328,7 @@ export async function fetchAdminTenancies(
     endReason: r.end_reason,
     renewsTenancyId: r.renews_tenancy_id,
     status: r.status,
+    claimed: r.claimed === 1,
   }));
 }
 
