@@ -108,5 +108,17 @@ describe('the AI surfaces never read a tenancy request or invitation', () => {
         REQUEST_TABLES,
       ),
     ).toEqual(['tenancy_requests']);
+    expect(
+      tablesReferencedIn(
+        'SELECT token_hash FROM tenancy_invitations',
+        REQUEST_TABLES,
+      ),
+    ).toEqual(['tenancy_invitations']);
+    expect(
+      tablesReferencedIn(
+        "import { tenancyInvitations } from '../db/roster-schema';",
+        REQUEST_TABLES,
+      ),
+    ).toEqual(['tenancy_invitations']);
   });
 });
