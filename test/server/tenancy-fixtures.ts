@@ -16,6 +16,7 @@ import { seedAccountLink } from './roster-fixtures';
 // `owner-lot-own`), and a tenant Person who owns nothing.
 
 const LEDGER = [
+  'tenancy_invitations',
   'audit_scalar_changes',
   'audit_sensitive_field_changes',
   'board_service_change_subjects',
@@ -147,4 +148,28 @@ export async function tenancyEvents(id: string) {
     .bind(id)
     .all();
   return results;
+}
+
+/** A site Account, with no Person Link. */
+export async function seedAccount(id: string): Promise<void> {
+  await getDb(env)
+    .insert(users)
+    .values({
+      id,
+      name: id,
+      email: `${id}@example.test`,
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+}
+
+/** An Account linked to `personId`: a tenant who has claimed. */
+export async function seedLinkedAccount(
+  accountId: string,
+  personId: string,
+): Promise<void> {
+  await seedAccount(accountId);
+  await seedAccountLink(accountId, personId);
 }

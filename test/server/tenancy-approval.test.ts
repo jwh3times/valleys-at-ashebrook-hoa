@@ -26,6 +26,12 @@ vi.mock('../../src/server/authz/context', async (importActual) => ({
   ...(await importActual<typeof import('../../src/server/authz/context')>()),
   getAuthContext: async () => callerContext('board', 'board', []),
 }));
+// Approval sends the invitation (slice 4); `tenancy-invitation-send.test.ts`
+// covers it. Never reach a provider from here.
+vi.mock('../../src/server/auth/senders', () => ({
+  sendEmail: vi.fn().mockResolvedValue(undefined),
+  sendSms: vi.fn().mockResolvedValue(undefined),
+}));
 afterEach(() => vi.restoreAllMocks());
 
 beforeAll(async () => {

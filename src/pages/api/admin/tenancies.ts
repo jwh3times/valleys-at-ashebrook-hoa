@@ -28,13 +28,20 @@ import {
   CLEAR_REQUEST_CONTACT_SQL,
   tenantAccessAvailable,
 } from '../../../server/roster/tenancy';
+import {
+  approvalInvitation,
+  inviteTenant,
+  reinviteResponse,
+} from '../../../server/roster/tenancy-invitation';
 
 // The board's half of Tenant Access (ADR 0028, #294): the Tenants panel's
-// list, approving or refusing an owner's request (slice 3), and ending or
-// voiding a Tenancy (slice 2).
+// list, approving or refusing an owner's request (slice 3), ending or voiding
+// a Tenancy (slice 2), and re-inviting a tenant who has not claimed (slice 4).
 //
-// Approve answers 404 while either gate is off, and re-checks both inside its
-// batch. Refuse, end and void never check the gates, so all three stay live
+// Approve and reinvite answer 404 while either gate is off, and re-check both
+// inside their writes. Approval sends the tenant's invitation once its batch
+// has landed; a failed send leaves the approval standing, and the panel
+// offers a re-invite. Refuse, end and void never check the gates, so all three stay live
 // with the feature switched off: ending access must not wait on a setting, and
 // a pending request's name and contact can always be cleared (review decision,
 // 2026-10-25). The list says whether approval is open, so the panel can offer
@@ -193,11 +200,19 @@ async function approveRequest(
     actorAccountId,
     today,
   });
-  if (result.ok)
+  if (result.ok) {
+    const invitation = approvalInvitation(
+      await inviteTenant(env, {
+        tenancyId: result.tenancyId,
+        contactMethodId: result.contactMethodId,
+        today,
+      }),
+    );
     return Response.json(
-      { tenancyId: result.tenancyId, personId: result.personId },
+      { tenancyId: result.tenancyId, personId: result.personId, invitation },
       { status: 201 },
     );
+  }
   if (result.status === 409)
     return Response.json(
       {
@@ -262,6 +277,20 @@ export const POST: APIRoute = async ({ request, locals }) => {
       if (!(await tenantAccessAvailable(env)))
         return new Response('Not found', { status: 404 });
       return approveRequest(parsed.value, actorAccountId, associationDateIso());
+    case 'reinvite': {
+      if (!(await tenantAccessAvailable(env)))
+        return new Response('Not found', { status: 404 });
+      const tenancyId = stringField(parsed.value, 'tenancyId');
+      if (!tenancyId)
+        return new Response('tenancyId is required', { status: 400 });
+      return reinviteResponse(
+        await inviteTenant(env, {
+          tenancyId,
+          contactMethodId: null,
+          today: associationDateIso(),
+        }),
+      );
+    }
     case 'refuse':
       return refuseRequest(parsed.value, actorAccountId, associationDateIso());
     case 'end':

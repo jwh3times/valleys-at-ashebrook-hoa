@@ -173,7 +173,14 @@ export interface ApproveInput {
 }
 
 export type ApproveResult =
-  | { ok: true; tenancyId: string; personId: string }
+  | {
+      ok: true;
+      tenancyId: string;
+      personId: string;
+      /** The approved contact the invitation goes to; null for a renewal,
+       * which reuses the tenant's latest invitation's. */
+      contactMethodId: string | null;
+    }
   | { ok: false; status: 400 | 404; message: string }
   | { ok: false; status: 409; reason: ApprovalRefusal };
 
@@ -251,18 +258,22 @@ export async function approveTenancyRequest(
   if (tenantPersonId === null)
     return { ok: false, status: 409, reason: 'renewed-ended' };
 
-  // A named Person gets the requested contact only if they lack it.
+  // A named Person gets the requested contact only if they lack it; either
+  // way, it is the one the invitation goes to.
   let addContact = createPerson;
+  let contactMethodId: string | null =
+    request.kind === 'new' ? crypto.randomUUID() : null;
   if (request.kind === 'new' && !createPerson) {
     const held = await database
       .prepare(
-        `SELECT 1 FROM contact_methods
+        `SELECT id FROM contact_methods
          WHERE party_id = ? AND channel = ? AND value_normalized = ?
            AND end_day IS NULL AND voided_at IS NULL`,
       )
       .bind(tenantPersonId, request.channel, request.contact_normalized)
-      .first();
+      .first<{ id: string }>();
     addContact = !held;
+    if (held) contactMethodId = held.id;
   }
 
   const gate = approvalGuard(requestId, checks);
@@ -289,7 +300,7 @@ export async function approveTenancyRequest(
   if (addContact)
     statements.push(
       recordContactMethod(database, correlation, {
-        id: crypto.randomUUID(),
+        id: contactMethodId!,
         partyId: tenantPersonId,
         channel: request.channel!,
         value: request.contact_value!,
@@ -367,5 +378,5 @@ export async function approveTenancyRequest(
       reason:
         (await firstFailure(database, requestId, checks)) ?? 'already-decided',
     };
-  return { ok: true, tenancyId, personId: tenantPersonId };
+  return { ok: true, tenancyId, personId: tenantPersonId, contactMethodId };
 }
