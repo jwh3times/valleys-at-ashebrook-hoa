@@ -7,6 +7,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.10.2] - 2026-10-26
+
+### Changed
+
+- **The skill flow is now the binding development process for agents.** Every code change starts
+  from a ready issue: a `ready-for-agent` spec, ticket, or triage brief, or a bug worked through
+  `/diagnosing-bugs`. When there is none, the agent stops before editing and names the flow command
+  to run next (`/grill-with-docs`, `/wayfinder`, `/triage`, or `/implement`). The flow skills stay
+  user-invoked, so the human starts every phase. Dependency bumps, docs-only changes, release prep,
+  and an explicit, recorded user waiver are exempt. The routing, exemptions, and the branch and PR
+  links that tie work to its issue are in `docs/agents/dev-flow.md`.
+
+## [2.10.1] - 2026-10-26
+
+### Changed
+
+- Dependency update (Dependabot, #470): `@anthropic-ai/sdk` 0.135.0 → 1.2.0. The package's
+  license changed from MIT to Apache-2.0 with this release.
+
 ## [2.10.0] - 2026-10-26
 
 ### Added
@@ -4343,7 +4362,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.2...HEAD
+[2.10.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.1...v2.10.2
+[2.10.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.2...v2.10.0
 [2.9.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.1...v2.9.2
 [2.9.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.0...v2.9.1
