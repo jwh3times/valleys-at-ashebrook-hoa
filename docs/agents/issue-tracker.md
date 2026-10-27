@@ -4,7 +4,9 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 The decisions behind the arrangement below — two trackers routed by body, the board as a view, and
 the Gate vocabulary — are recorded in
-[ADR 0023](../adr/0023-two-trackers-routed-by-body.md). This file is the how-to.
+[ADR 0023](../adr/0023-two-trackers-routed-by-body.md). This file is the how-to. Which issue a code
+change must trace to before its first edit, and how branches and PRs link back, is in
+[`dev-flow.md`](./dev-flow.md).
 
 ## Which repository an issue goes in
 
