@@ -18,6 +18,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   user-invoked, so the human starts every phase. Dependency bumps, docs-only changes, release prep,
   and an explicit, recorded user waiver are exempt. The routing, exemptions, and the branch and PR
   links that tie work to its issue are in `docs/agents/dev-flow.md`.
+- `CONTRIBUTING.md` now asks contributors to name the branch for its issue and open the PR
+  description with `Closes #N` or `Part of #N`.
+
+### Fixed
+
+- `CONTRIBUTING.md` no longer tells contributors to run `npm run db:generate` for a schema change.
+  Its output replays old table rebuilds, so it now describes the hand-authored migration workflow
+  and points to `docs/agents/migrations.md`.
 
 ## [2.10.1] - 2026-10-26
 
