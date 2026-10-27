@@ -36,23 +36,34 @@ rule ([ADR 0023](./docs/adr/0023-two-trackers-routed-by-body.md) records why it 
 rather than the topic). Durable architecture decisions live in `docs/adr/`; the association's domain vocabulary in
 `CONTEXT.md`.
 
+## Development flow
+
+Work runs through the Matt Pocock skill flow, and **every code change starts from a ready issue**:
+a `ready-for-agent` issue whose body is a `/to-spec` spec, a `/to-tickets` ticket, or a `/triage`
+brief — or a bug issue worked through `/diagnosing-bugs`. When there is none, stop before the first
+edit and name the one flow command the user should run next. The flow skills are user-invoked, so
+the human starts every phase. Dependency bumps, docs-and-agent-config-only changes, and release
+prep are exempt. Routing, exemptions, and the branch and PR links that trace the work to its issue
+are in [`dev-flow.md`](./docs/agents/dev-flow.md).
+
 ## Where to look next
 
 This file carries what binds every change. Detail lives in `docs/agents/`, one file per surface —
 load the one your task touches.
 
-| Load this                                                      | When you are                                                                      |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.      |
-| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                                |
-| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.                   |
-| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze.     |
-| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.       |
-| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.               |
-| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                         |
-| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions); filing human follow-ups. |
-| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                          |
-| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                         |
+| Load this                                                      | When you are                                                                        |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [`dev-flow.md`](./docs/agents/dev-flow.md)                     | Starting any change — whether it needs an issue, and which flow command comes next. |
+| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.        |
+| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                                  |
+| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.                     |
+| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze.       |
+| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.         |
+| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.                 |
+| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                           |
+| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions); filing human follow-ups.   |
+| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                            |
+| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                           |
 
 `docs/adr/` records the decisions behind all of it; [`docs/adr/README.md`](./docs/adr/README.md)
 indexes every ADR with a one-line title.
