@@ -566,12 +566,21 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     **masked** (`maskContact`), and recent refusals with the reason; it stays live with
     `tenantAccessEnabled` off so the page can offer withdraw and end. `POST` actions: `request` (new
     Tenancy: `lotId`, `tenantName`, `channel` `email`/`sms`, contact, `scheduledEndDay`; `400` for a
-    bad field or an end day not after the start or beyond 13 months) and `renew` (`tenancyId`,
-    `scheduledEndDay`), both `404` unless `officialMode` AND `tenantAccessEnabled` are literal `true`,
-    both answering `201 {id}` and re-checking the gates, Lot Authority and the basis Ownership inside
-    the insert (race or duplicate open request: `409`); `withdraw` (`requestId`, clears name and
-    contact, `204`) and `end` (`tenancyId`, reason `owner_ended`, `204`, `409` if already ended or
-    voided), neither tied to the tenant-access gate. Every action re-checks the caller's Lot
+    bad field or an end day not after the start or beyond 13 months, and `400` "contact must be N
+    characters or fewer" past the channel's `CONTACT_INPUT_LIMITS` cap — 320 for `email`, 32 for
+    `sms` — checked before the contact's shape) and `renew` (`tenancyId`, `scheduledEndDay`), both
+    `404` unless `officialMode` AND `tenantAccessEnabled` are literal `true`, both answering
+    `201 {id}` and re-checking the gates, Lot Authority and the basis Ownership inside the insert
+    (race or duplicate open request: `409`). A Lot holds at most 10 open requests for a new tenant
+    (`kind = 'new'`; renewals do not count): `request` checks it after the Lot Authority scope check,
+    so it never answers for a Lot outside the caller's scope, with `409` "This Lot already has 10
+    open requests for a new tenant; withdraw one first", and re-checks it inside the insert, where a
+    racing request answers the generic `409` "This Lot can no longer take a request". `withdraw`
+    (`requestId`, clears name and contact, `204`) and `end` (`tenancyId`, reason `owner_ended`, `204`;
+    `409` "Tenancy already ended or voided", then `409` "Tenancy has already reached its end day"
+    for an unended Tenancy whose scheduled end day is today or earlier, the board route's wording;
+    the `UPDATE` re-checks the state, so one the board ends or voids first answers the ended `409`)
+    are not tied to the tenant-access gate. Every action re-checks the caller's Lot
     Authority in its own statement. Slice 4 adds `reinvite` (`tenancyId`): gated on both gates,
     masked `404` out of the caller's scope, Lot Authority re-checked inside the invitation insert,
     same `204`/`409`/`429`/`502` answers as the board's.

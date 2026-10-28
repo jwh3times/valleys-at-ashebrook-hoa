@@ -31,6 +31,27 @@ const lots = [
 ];
 
 describe('TenancyRequestForm', () => {
+  it('limits the contact to the roster’s length for the chosen channel', async () => {
+    render(
+      <TenancyRequestForm
+        lots={lots}
+        minEndDay="2026-10-26"
+        maxEndDay="2027-11-25"
+      />,
+    );
+    expect(screen.getByLabelText('Email address')).toHaveAttribute(
+      'maxLength',
+      '320',
+    );
+    await userEvent
+      .setup()
+      .selectOptions(screen.getByLabelText('Contact by'), 'sms');
+    expect(screen.getByLabelText('Mobile number')).toHaveAttribute(
+      'maxLength',
+      '32',
+    );
+  });
+
   it('requests a tenant for the chosen Lot, then reloads the page saying so', async () => {
     render(
       <TenancyRequestForm
