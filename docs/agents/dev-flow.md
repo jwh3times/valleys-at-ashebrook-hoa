@@ -49,8 +49,8 @@ These skip the gate:
 - **Docs and agent config only** — the diff touches nothing outside `docs/`, root `*.md` files,
   `.agents/`, and `.claude/`. Any line of `src/`, `test/`, `scripts/`, `public/`, or config
   makes it a code change.
-- **Release prep** — the `docs: prepare release vX.Y.Z` commit `/ship` adds to a branch, and a
-  release-only branch that carries nothing else.
+- **Release prep** — the `docs: update docs and changelog for vX.Y.Z` commit `/ship` adds to a
+  branch, and a release-only branch that carries nothing else.
 - **An explicit waiver** — the user says to skip the flow for this change. Proceed, and record it in
   the PR body as `Flow waived by the user: <reason>`.
 

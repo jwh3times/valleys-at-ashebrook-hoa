@@ -33,15 +33,7 @@ only when the release level is ambiguous
 
 `bash scripts/next-version.sh`
 
-## Unreleased placeholder
-
-none — `## [Unreleased]` stays empty.
-
 ## Changelog check
 
 `grep -qF "## [$(bash scripts/next-version.sh)]" CHANGELOG.md` — the test the `Changelog Version`
 job (`.github/workflows/changelog.yml`) runs.
-
-## Release commit message
-
-`docs: prepare release v<version>` — the release prep `docs/agents/dev-flow.md` exempts.

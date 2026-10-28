@@ -18,11 +18,12 @@ All from the repository root, in the order `.github/workflows/build.yml` runs th
 - `npm run lint:migrations`
 - `npm run lint:fixtures`
 - `npm run check`
+- only when `src/`, `test/`, `vitest.config.ts`, `vitest.shared.ts` or `package.json` changed:
+  `npm test` (Vitest; about 13 seconds locally)
 - `npm run types:worker:check`, fixed by `npm run types:worker` and committing
   `worker-configuration.d.ts`
 
-`test`, `test:server`, `build` and `deploy:check` run in CI, not here: this repository leaves the
-full suites to CI.
+CI-only: `test:server` (the workerd/Miniflare suite), `build` and `deploy:check`.
 
 ## Issue link
 
@@ -34,5 +35,5 @@ full suites to CI.
 - **Exempt:**
   - dependency bumps (Dependabot, `chore(deps)`)
   - changes touching only `docs/`, root `*.md`, `.agents/` and `.claude/`
-  - release prep (the `docs: prepare release vX.Y.Z` commit, a release-only branch)
+  - release prep (the `docs: update docs and changelog for vX.Y.Z` commit, a release-only branch)
 - **Defined in:** `docs/agents/dev-flow.md`.
