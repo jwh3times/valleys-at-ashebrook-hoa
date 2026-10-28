@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CONTACT_INPUT_LIMITS } from '../../lib/types';
 import { useTenancyAction } from './useTenancyAction';
 
 // The request form on `/tenants` (#294 slice 3): ask the board to approve a
@@ -86,6 +87,7 @@ export default function TenancyRequestForm({
         <input
           required
           type={channel === 'email' ? 'email' : 'tel'}
+          maxLength={CONTACT_INPUT_LIMITS[channel]}
           value={contact}
           onChange={(e) => setContact(e.target.value)}
         />

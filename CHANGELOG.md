@@ -9,6 +9,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.6] - 2026-10-28
+
+### Fixed
+
+- **An owner's tenant request is capped.** The contact is limited to the same lengths as other
+  board-entered contacts: 320 characters for an email address and 32 for a phone number. The form's
+  contact field enforces the same limit. A Lot may also hold at most 10 open requests for a new
+  tenant at once, and an eleventh answers "This Lot already has 10 open requests for a new tenant;
+  withdraw one first". Renewals do not count toward that limit. The limit is checked again inside
+  the write, so two requests racing for the last place cannot both land (#468).
+- **Ending a lapsed Tenancy says why it can't be ended.** When an owner tries to end a Tenancy that
+  is past its end day but was never ended, `/tenants` now answers "Tenancy has already reached its
+  end day", as the board's screen does, instead of "Tenancy already ended or voided" (#468).
+- The `maskEmail` doc comment and its unit test use a reserved example address (#468).
+
 ## [2.10.5] - 2026-10-28
 
 ### Changed
@@ -4407,7 +4422,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.6...HEAD
+[2.10.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...v2.10.6
 [2.10.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.4...v2.10.5
 [2.10.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.3...v2.10.4
 [2.10.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.2...v2.10.3
