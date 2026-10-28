@@ -9,6 +9,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.6] - 2026-10-28
+
+### Changed
+
+- The shared agent skills are refreshed from `jwh3times/skills`: code spans that broke across a
+  line in the skills and their settings now stay on one line. No behavior changes.
+
 ## [2.10.5] - 2026-10-28
 
 ### Changed
