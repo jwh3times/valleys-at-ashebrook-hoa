@@ -7,6 +7,19 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [2.10.5] - 2026-10-28
+
+### Changed
+
+- **The shared agent skills take their new defaults.** `ship`'s release commit is now
+  `docs: update docs and changelog for v<version>`, which `docs/agents/dev-flow.md` exempts as
+  release prep, and an empty `Unreleased` section holds the line `No unreleased changes.` `ship` now
+  runs the Vitest suite (`npm test`) before it pushes a branch that changes `src/`, `test/`, the
+  Vitest config or `package.json`; `test:server`, `build` and `deploy:check` stay in CI. New
+  follow-up wiki pages are named `<Topic>-<YYYY-MM-DD>`; existing pages keep their names.
+
 ## [2.10.4] - 2026-10-28
 
 ### Changed
@@ -4394,7 +4407,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.4...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...HEAD
+[2.10.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.4...v2.10.5
 [2.10.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.3...v2.10.4
 [2.10.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.2...v2.10.3
 [2.10.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.1...v2.10.2
