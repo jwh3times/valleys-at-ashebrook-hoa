@@ -1,258 +1,225 @@
 ---
 # GENERATED — do not edit. Source: .agents/skills/end-session/SKILL.md — regenerate with 'node scripts/sync-agents.mjs'.
 name: end-session
-description: End the day's work session cleanly — capture what was learned into memory, bring GitHub issues and private/ docs up to date, and clean the local workspace. Use when the user says "end session", "wrap up", "done for the day", or asks to clean things up before stopping.
+description: Close out a work session — capture what was learned into memory, bring GitHub issues, the board, human follow-ups and docs up to date, and clean the local workspace. Use when the user says "end session", "wrap up" or "done for the day", or when the handoff skill reaches its end-session step.
+metadata:
+  settings: workspace issue-tracker human-follow-up docs
 ---
 
 # End session
 
-The charter, verbatim:
-
-> clean up the local workspace, update any private/ docs and/or github issues that need it from
-> this session.
+Close out the session so the next one starts from an accurate picture instead of reconstructing
+one. A session's durable output is more than its diff: what it **learned** (memory), what it
+**moved** (issues and the board), what a **human** must now do (follow-ups), what its **docs** now
+get wrong, and what it **left behind** (the workspace). Sweep those, in that order.
 
 **Announce at start:** "I'm using the end-session skill to close out this session."
 
-## Why this exists
+Run shell snippets in bash (Git Bash on Windows). Where `gh` is unavailable, use the equivalent
+GitHub MCP operation: a missing CLI changes the interface, not the step.
 
-A session's durable output is not just the diff. It also produces things that live in four places
-outside the tracked tree, each of which rots silently if nobody writes to it: **memory** (what you
-now know about this project that the code doesn't say), **GitHub issues and the project board**
-(two trackers and the ordered view across them — decisions, follow-ups, closures, and
-gates), **the private companion and `private/`** (operator procedures, evidence, and
-anything resident-data-derived, which is gitignored and therefore invisible to every code review),
-and the **local workspace** (scratch files, stale worktrees, generated-tree drift that fails the
-next session's CI for reasons that have nothing to do with it).
+This skill leaves shipping to the `ship` skill: no version bump, changelog section, source push,
+or PR. A finished branch is shipped first, then this runs; a mid-flight branch stays mid-flight,
+recorded where it stands.
 
-This skill is a sweep over those four, in that order, at the end of a work session.
+Three rules hold throughout:
 
-## Ground rules
+- **Evidence, not recollection.** An empty bucket is a valid outcome; say so and move on. An
+  invented memory, comment, or entry is worse than none.
+- **List before deleting.** Every deletion — file, branch, worktree, container — is shown as a list
+  and waits for a yes.
+- **Ask before committing or discarding**, except where a setting pre-authorizes it.
 
-- **Nothing invented.** If a lane has nothing to record, say "nothing to record" for that lane and
-  move on. A speculative memory or a filler issue comment is worse than silence.
-- **Nothing destroyed without a yes.** Every deletion or discard is shown as a list first.
-- This skill does **not** write the handoff document — `handoff` owns that, and runs this skill as
-  its last step — does **not** push,
-  merge, or open PRs — `/ship` owns that — and does **not** rewrite `AGENTS.md`, `README.md`,
-  `SETUP.md`, `SECURITY.md`, or `CHANGELOG.md`, which belong to `/ship`'s `docs-updater` pass.
+## 0. Settings
 
-## Steps
+This skill reads `docs/agents/workspace.md`, `docs/agents/issue-tracker.md`,
+`docs/agents/human-follow-up.md` and `docs/agents/docs.md`. Follow
+`.agents/skills/end-session/settings/README.md` to read them and complete any that are missing; the
+definitions sit beside it. Resolve each `discover:` value once, here, and reuse it below.
 
-### 1. Scope the session
+**Invoked by handoff:** when the arguments say `invoked by handoff; document at <path>`, the
+handoff document is already written and registered. Carry its path into the report, and treat the
+user's work as continuing on the other machine, not in this checkout.
 
-Establish what actually happened before writing anything. Read the conversation, and confirm it
-against the repo:
+## 1. Take stock
+
+Establish what the session did before writing anything:
 
 ```bash
-git status --porcelain
+git status --short --branch
 git branch --show-current
-git log --oneline main..HEAD          # this branch's commits
-git log --oneline --since=midnight    # anything landed today, any branch
-gh pr list --author @me --state all --limit 5
+git log --oneline origin/main..HEAD
+gh pr list --author @me --state open --json number,title,headRefName
 ```
 
-Then name, out loud, the session's four buckets: what was **learned**, what **issue** work it
-touched, what **operational/private** state it changed, and what **files** it left behind. The rest
-of the skill works that list.
+Then run the `Workspace status command`. Sort what the session produced into the buckets below;
+each routes to a later step.
 
-### 2. Update memory
+| Bucket | Step |
+| --- | --- |
+| Durable facts about how to work in this repository or environment | 2. Memory |
+| Work started, finished, blocked, discovered, or understood differently | 3. Issues |
+| Actions only a human can now take | 4. Human follow-ups |
+| Decisions, findings, and state changes the docs should hold | 5. Docs |
+| Files, branches, worktrees, containers left behind | 6. Workspace |
 
-Locate the project's memory directory from the active harness's session instructions first.
-For Claude Code, if no directory is supplied, list existing candidates with
-`ls -d ~/.claude/projects/*ashebrook*/memory/` in Bash or
-`Get-Item -Path ~/.claude/projects/*ashebrook*/memory/` in PowerShell.
-The directory is machine-local and keyed by checkout path; a worktree may use the main
-checkout's memory. Confirm the candidate belongs to this project from its `MEMORY.md` and
-session context before writing. If several candidates remain ambiguous, ask which one to use
-and continue the other lanes; if none exists, report memory unavailable and continue.
+## 2. Memory
 
-Read `MEMORY.md` first, then follow its pointers to the relevant existing files. Preserve the
-directory's established file format and add an index pointer when creating a new memory.
+Memory lives outside the repository, one fact per file, in the memory directory the harness names
+in its instructions. Use that path exactly as given: a path derived from the checkout location
+differs per machine and per tool, and writes to a wrong one succeed silently and are never read. If
+the harness names no memory directory, skip this step and say so in the report. `MEMORY.md` there
+is the index: one line per memory, never content.
 
-- **Prefer updating an existing file to creating a new one.** Choose the landing spot from
-  the index and file contents on this machine. Keep each machine's memory independent.
-- **Don't save what the repo already records.** `AGENTS.md`, `CONTEXT.md`, `docs/adr/`, the
-  changelog, and git history are already durable — this repo's `AGENTS.md` in particular is
-  extremely detailed. Memory is for what _isn't_ written down: a trap that cost an hour, a
-  preference the user stated, a constraint discovered in production.
-- Convert relative dates to absolute (`today` → `2026-08-20`), and link related memories with
-  `[[slug]]`.
-- **Delete or correct memories this session falsified.** A memory that is now wrong is worse than a
-  missing one — the deploys-don't-apply-migrations correction is the standing example.
+Save a candidate only when **a fresh session here would get it wrong without the note** and the
+repository does not already record it. `AGENTS.md`, the docs, the issue tracker, the changelog,
+and Git history are durable; a memory restating them goes stale the moment they change. Memory is
+for what is written nowhere: a trap that cost time, a preference the user stated, the state of
+half-decided work.
 
-### 3. Update GitHub issues and the project board
+- Read `MEMORY.md` first, and update a matching memory rather than adding a near-duplicate.
+- Correct or delete a memory this session proved wrong.
+- Write absolute dates, link related memories with `[[slug]]`, and keep every `MEMORY.md` pointer
+  in step with the files.
+- Keep an unpatched security weakness out of memory bodies; point at where it is tracked instead.
 
-Issues are the tracker (`docs/agents/issue-tracker.md`); labels are in
-`docs/agents/triage-labels.md`. Use `gh`, which infers the repo from the clone.
+## 3. Issues and the board
 
-**There are two trackers.** Inferring the repo from this clone gives you the public one, which is
-right for almost everything. Work whose _body_ cannot be public — production identifiers, resident
-data, operator procedure detail, unfixed security specifics — belongs in the private operations
-repository instead (`--repo jwh3times/valleys-at-ashebrook-hoa-ops`, or run from `private/`). The
-routing rule is in `docs/agents/issue-tracker.md`.
+Issues carry the work; the `Board` carries its state. Labels come from the repository's triage
+label vocabulary: `docs/agents/triage-labels.md`, or the section of `docs/agents/issue-tracker.md`
+that holds it.
 
-For each issue this session touched:
+Board writes need the `gh` token's `project` scope, and fail silently without it. Check
+`gh auth status` for `project` (not just `read:project`). If it is missing, report it and skip board
+writes; the fix (`gh auth refresh -h github.com -s project`) needs a real terminal.
 
-- **Record decisions where the code cites them.** This codebase cites issue numbers as the durable
-  record of a decision (`#202`/`#204`/`#206` are quoted throughout `AGENTS.md`). A decision reached
-  in conversation and never commented onto its issue is effectively lost:
-  `gh issue comment <n> --body "..."`.
-- **Close what shipped**, with a comment saying what landed and where:
-  `gh issue close <n> --comment "..."`. If the work is merged but a follow-up remains, close it and
-  open the follow-up rather than leaving a half-done issue open.
-- **Open issues for deferred work discovered this session** — the thing you noticed and decided not
-  to do now: `gh issue create --title "..." --body "..."` with a heredoc for the body.
-- **File every human-only step the session's completed work produced** — a dashboard, DNS, or zone
-  setting, a production migration or secret, a force-push, a sign-off, a decision — as a
-  `ready-for-human` follow-up on the **private** tracker, added to the project board, per
-  `docs/agents/issue-tracker.md` § "Human follow-ups from agent work". The closing report is not
-  where those steps live. Where a private issue already tracks the work, add the step there as a
-  checklist line and a comment instead of a duplicate. Each one also needs its wiki page (step 4).
-- **Fix labels** so the next AFK pass sees the truth — `gh issue edit <n> --add-label ...` and
-  `--remove-label ...`, using the strings in `docs/agents/triage-labels.md` (`needs-triage`,
-  `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`).
-- If the session used a wayfinder map, append to its Decisions-so-far and close resolved children
-  per the wayfinding section of `docs/agents/issue-tracker.md`.
+Start from what is open, in the `Public repository` and again in the `Private issue repository`
+when there is one — always selected explicitly with `-R`:
 
-Then update the **board** — [Ashebrook](https://github.com/users/jwh3times/projects/6), the private
-ordered view across both trackers. The issue stays the record; these fields are only what makes the
-next session cheap to start:
+```bash
+gh issue list -R <repository> --state open --json number,title,labels \
+  --jq '[.[] | {number, title, labels: [.labels[].name]}]'
+```
 
-- **Move what changed.** `Status` for items that started or finished. `Gate` only for an item whose
-  blocker genuinely opened or closed — a board decision taken, an upstream release, a spec written.
-  Do not re-gate an item because it feels stuck.
-- **Refresh `Next Action` and `Blocking Item`** on anything this session touched. A stale Next
-  Action is worse than an empty one, because it will be believed.
-- **Add any issue you opened above.** A new issue does not join the board on its own.
+For each issue the session touched:
 
-`gh project` writes need the `project` token scope and **fail silently without it** — the
-`gh project` call errors, nothing else does, and the session still looks clean. That is how the
-previous board drifted for weeks. Check `gh auth status` for `project` (not `read:project`); if it
-is missing, say so in the report rather than skipping this lane quietly. The fix
-(`gh auth refresh -h github.com -s project`) needs a real terminal and cannot be done from an agent
-shell.
+- **Shipped** — comment the outcome and what changed about the understanding of the problem. Close
+  it once its PR has merged; while the PR is open, leave it open and name the PR.
+- **Advanced but unfinished** — comment where it stands and the next concrete step, written for a
+  reader arriving cold.
+- **Blocked** — comment the blocker, and set the `Board fields` that record it.
+- **Understanding changed** — correct the body, or comment the correction. An issue describing the
+  wrong problem costs more than a missing one.
+- **Newly discovered work** — record it as `New work` says: an issue, labelled and added to the
+  `Board`; or a `Board` draft item (`gh project item-create`), left for the work's commitment to
+  turn into an issue. Set its board fields either way. Work that never reaches the board is
+  invisible to the next session.
 
-### 4. Update the private companion and `private/`
+A security finding follows the `Security findings` route, never a public issue before its fix
+ships. Keep private-repository links and content out of public issues, PRs, and commits. Leave
+issues the session never touched to the `triage` skill.
 
-Durable private TEXT lives in the private companion repository, cloned into the gitignored `private/` by
-`npm run bootstrap:private` (its locator comes from 1Password and is never committed here). It is versioned: commit and push it before ending the session. Resident-derived
-artifacts, generated import SQL/manifests, and other records also live under `private/` (the
-default `ASHEBROOK_PRIVATE_ROOT`) but are ignored by the companion's `.gitignore` and must never be
-committed to it — check `git -C private status` shows none of them.
+## 4. Human follow-ups
 
-What lives in the companion and what changes it:
+Run the `## Procedure` in `.agents/skills/end-session/settings/human-follow-up.md` for every
+required human action left by the session's completed work, including ones other skills
+already started (docs-updater, `ship`): reconcile those rather than duplicating them.
 
-- **`operations/OPERATIONS.md`** — production identity, roster import, and the post-flip
-  removal/erasure procedure. Update it when the session changed an operator procedure, a resource
-  name, or a bootstrap/backup step.
-- **`operations/recovery.md`** and **`operations/cross-computer-portability-plan.md`** — the
-  fresh-workstation runbook and the portability plan's "Resume Here" checkpoint. Update the
-  checkpoint (last checkpoint, current work item, status table, execution log) whenever a phase's
-  state changed.
-- **`operations/history/`** — cutover execution records (`RUNBOOK.md`, `EVIDENCE-LOG.md`,
-  `ALLOW-LIST.md`). Append evidence when the session produced any (an invariant run, a sweep
-  result, a measurement).
-- **`session-history/`** — history only, and nothing new belongs in it. **This skill does not write
-  a handoff**; the `handoff` skill owns that, and it saves to the user's Proton Drive `Handoffs`
-  folder, outside both repositories. Move a superseded note in here if one turns up elsewhere, and otherwise leave it
-  alone. Called `handoffs/` until 2026-09-12, when the name itself caused the mistake below.
-  See [Hand off](#hand-off) below.
-- **`incidents/`**, **`research/`**, **`design-history/`**, **`inventories/`** — private analyses,
-  research, reviewed plans/specs, and non-resident migration manifests.
-- **`config/1password/`** — unresolved `op://` templates only. Add a variable there (and in the
-  matching Ashebrook item) when the session introduced a new secret or binding.
-- **The wiki** (`Human-TODO` and the step-by-step operator pages behind it) — the second half of
-  every human follow-up filed in step 3. Each needs a page with exact commands and their working
-  directory, dashboard paths, order, verification, and rollback, values-free, linked from `Home`
-  and from a terse line in `Human-TODO`. Clone
-  `https://github.com/jwh3times/valleys-at-ashebrook-hoa-ops.wiki.git` (branch `master`) into the
-  session scratchpad with `git -c credential.helper='!gh auth git-credential'`, edit, run the
-  contact-value scan from `docs/agents/issue-tracker.md` over the changed pages, push.
+## 5. Docs
 
-Before committing the companion, inspect the staged diff for credentials, personal data, sensitive
-filenames, production identifiers, and undisclosed vulnerabilities — its `.gitignore` rejects the
-obvious file types, not their contents. Dumps and backups go to encrypted records storage per the
-portability plan, never to either Git repository.
+Run the `docs-updater` skill on the session's work, in a subagent where the harness has one, told to
+follow `.agents/skills/docs-updater/SKILL.md`; otherwise follow it yourself. A subagent cannot ask
+the user, so complete its settings first, here, by following its step 0. Use `fix` mode for work not
+yet merged, and `check` mode for work `ship` already refreshed and merged, recording any drift it
+reports as new work, as step 3 does. Merged work whose `ship` report owed a wiki search gets one
+more run in `fix` mode, limited to the wikis: those stale references are fixed, not filed.
+Tell it this is `end-session`, and give it the session's discoveries as a list of changes beside
+the diff: decisions and findings land in the `Doc map`
+documents whose **when** they match, honoring each one's marker. Run step 4's procedure for any
+human actions it returns. Its edits come back uncommitted, and join step 6's question about
+uncommitted work.
 
-Also sweep the other direction: if this session left a scratchpad, security review, runbook, or
-anything resident-data-derived **in the tracked tree**, move it to the companion (text) or under
-`private/` (records), or delete it now. That rule is in `AGENTS.md` and a gitignored file can't be
-caught by review.
+- **Companion.** When the `Private companion` is set and its checkout exists, inspect it from its
+  own root: the outer repository's `git log`, `git show` and `git diff` cannot see inside it. When
+  the checkout is absent, report that companion docs could not be reconciled, and create no
+  directory in its place. Commit companion changes as the `Companion commit policy` says, as their
+  own commit in the companion repository.
+- **Changelog debt.** A behavior change committed this session without its `Unreleased` entry is
+  debt to report; `ship` writes the changelog.
+- **One tracker.** A backlog, roadmap, or TODO file the session added to the tree duplicates the
+  issue tracker; offer to move its content into issues.
 
-### 5. Note (don't write) public-doc debt
+## 6. Workspace
 
-If the session made a durable architectural decision with no ADR, or introduced vocabulary missing
-from `CONTEXT.md`, say so and record it as an issue — `/domain-modeling` writes `docs/adr/` and
-`CONTEXT.md`, and `/ship` refreshes `AGENTS.md` and friends. Don't do either job here.
+**Uncommitted work first** — it is the one thing cleanup can lose for good:
 
-### 6. Clean the local workspace
+```bash
+git status --short
+git stash list
+```
 
-Show findings before acting. Work through:
+Run the same in the companion when it exists. For each change, ask: commit it on its branch, stash
+it with a named message, or leave it. Leaving it is a valid answer; say so in the report.
 
-- **Uncommitted work** — `git status --porcelain`. Ask what to do with it; never commit silently and
-  never discard. If it's mid-flight work the user is returning to, leaving it dirty is a valid
-  answer, but say so in the report.
-- **Untracked strays** — `git status --porcelain --untracked-files=all` and `git clean -nd`
-  (dry run). Show the list and get a yes before `git clean -fd`. **Never `git clean -x`**: the
-  ignored set here includes `private/`, `.dev.vars`, `.env`, `.wrangler/`, and `node_modules/`.
-- **Scratch areas this repo declares** — `.scratch/`, `.superpowers/`, `docs/superpowers/`, and the
-  OS temp scratchpad for this session. Clear finished scratch; keep anything a live branch depends
-  on.
-- **Stale worktrees and branches** — `git worktree list`, then `git worktree remove <path>` and
-  `git worktree prune` for finished ones; `git branch --merged main` to spot local branches whose
-  PR already merged (`gh pr merge --merge --delete-branch` removes the remote side at merge time,
-  not the local one).
-- **Generated-tree and formatting drift** — leaving it red makes the next session's CI fail for
-  unrelated reasons:
+**Branches.** A branch is finished when its PR merged at or after the branch's local tip — true for
+squash and merge commits alike, where `git branch --merged` misses every squashed branch:
 
-  ```bash
-  npm run sync:agents:check        # .claude/skills + .codex/agents match .agents/skills + .claude/agents
-  npm run format:check             # Prettier over the whole repo
-  npm run types:worker:check       # generated Cloudflare types match wrangler.toml + .env.example
-  ```
+```bash
+git fetch --prune origin
+for branch in $(git for-each-ref --format='%(refname:short)' refs/heads | grep -vx main); do
+  tip=$(git rev-parse "$branch")
+  pr=$(gh pr list --state all --head "$branch" --json number,state,headRefOid \
+    --jq 'sort_by(.number) | last | select(.) | "\(.number) \(.state) \(.headRefOid)"')
+  read -r number state head <<< "$pr"
+  verdict=unfinished
+  if [ "$state" = MERGED ]; then
+    git cat-file -e "$head^{commit}" 2>/dev/null || git fetch -q origin "pull/$number/head"
+    git merge-base --is-ancestor "$tip" "$head" && verdict=finished
+  elif [ -z "$number" ] && git merge-base --is-ancestor "$tip" origin/main; then
+    verdict=finished
+  fi
+  echo "$branch ${number:-no-pr} ${state:-none} $verdict"
+done
+git worktree list
+```
 
-  Fix with `npm run sync:agents`, `npm run format`, `npm run types:worker`. Never hand-edit
-  `.claude/skills/` or `.codex/agents/` — they are generated (ADR 0021).
+Delete finished branches with `git branch -D` once the user agrees (`-d` refuses squashed ones). A
+branch with an open PR, no PR and commits of its own, or commits after its merged head holds work:
+keep it, and name `ship` in the report when it is ready. A remote branch still listed after the
+prune gets the same check before `git push origin --delete`. Remove a finished worktree with
+`git worktree remove <path>`, then `git worktree prune`.
 
-- **Nothing staged that must never be committed** — `git diff --cached --name-only` must contain no
-  `private/`, `.env`, `.dev.vars`, `dist/`, `.wrangler/`, roster/dump SQL, or any file with real
-  resident data.
+**Return to `main`** last, after the tidying below, unless the tree has uncommitted tracked changes
+or the user is continuing on this branch in this checkout. Run `git switch main`, then `Sync with
+main`, then `Hook: after sync` from `docs/agents/workspace.md`. If the sync refuses to
+fast-forward, local `main` has commits of its own: report it and leave `main` as it is.
 
-### 7. Hand off
+**Files.** Delete `Safe-to-remove paths`, and stray scratch files the session left in the tree, by
+explicit path after listing them. `Never-remove paths` stay unless the user explicitly asks;
+blanket deletes such as `git clean -x` would take them too, so delete only by path.
 
-**When `handoff` invoked you** (its arguments say so and give the document's path), the document is
-already written to Proton Drive and registered in the handoff map. Carry the path into the report
-and move on.
+**Then:**
 
-**Otherwise**, the `handoff` skill still owns the document: its content, its Proton Drive location,
-and the `handoff_map.json` entry `/lets-go` reads on the other computer. A handoff written from here
-drifts from that — on 2026-09-12 an end-session pass wrote one into `private/session-history/` (then
-called `private/handoffs/`) while `handoff` pointed elsewhere.
+- `Dev stack` — report what is running and ask before stopping it; a running database may be
+  deliberate. Never run its **Never run** commands here.
+- `Generated-config check` — when it applies and reports drift, regenerate, and commit both sides.
+- `Hook: end-session cleanup` from `docs/agents/workspace.md`.
+- `Final portability check`, last. Name the exact state of each repository rather than calling the
+  checkout synchronized.
 
-Ask whether the user wants a handoff for their other computer. `handoff` is user-invoked only
-(`disable-model-invocation: true`), so the Skill tool cannot reach it: when they want one, they run
-`/handoff` after this report. Its closing end-session pass finds these lanes already swept and
-reports nothing to record.
+## 7. Report
 
-### 8. Report
+Close with a short, honest account:
 
-One short paragraph per lane — memory, issues and board, private companion, workspace — naming what
-changed and what was deliberately left alone, plus one line giving the handoff's Proton Drive path,
-or saying none was written. Say explicitly if the board lane was skipped for a
-missing `project` scope; that is the one failure that otherwise looks identical to success. List
-the human follow-ups filed this session with their issue and wiki links, or say there were none. End
-with **what's still open**: the branch mid-flight, the unanswered question, the issue awaiting a reply.
-That paragraph is what makes the next session cheap to start.
+- Memories added, updated, or deleted, each with its one-line reason.
+- Issues commented, closed, labelled, or opened, by number.
+- Human follow-ups: verified issue and wiki links, what is unpublished and why, or that none
+  remain.
+- Docs updated; companion changes and their commit state, or that the companion was absent.
+- Settings files written in step 0.
+- Workspace: what was deleted, what was deliberately kept and why.
+- **Still open:** uncommitted changes, unpushed branches, PRs awaiting review, running containers,
+  decisions the user owes, and — when handoff invoked this skill — the handoff document's path.
 
-## Do not
-
-- Push, merge, or open PRs — that's `/ship`.
-- Write the handoff document from this skill — that's `handoff`, and it saves to Proton Drive,
-  not the private companion.
-- Run anything that touches production data: `npm run db:migrate:remote`, `npm run roster:backfill
---write`, or any `wrangler ... --remote` write. Post-flip these
-  reach live resident data; a cleanup pass has no business there. (`npm run verify:invariants
---remote` is read-only and fine if the user asks.)
-- Move anything out of `private/` into the tracked tree.
-- Delete uncommitted or untracked files without showing the list first.
-- Invent memories, issue comments, or `private/` entries to make a lane look productive.
+Name plainly what was not done. An accurate "these three things are still open" is the point of the
+skill.

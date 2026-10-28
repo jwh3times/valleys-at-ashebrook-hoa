@@ -74,11 +74,11 @@ correctness bug, not a preference):
     their authored sources (`.agents/skills/`, `.claude/agents/`).
 13. **Operator steps are filed, not implied.** If the diff leaves a step only a human can
     take after merge — a migration that is not safe in either order, a new secret or binding,
-    a `wrangler.toml`, DNS, or zone dependency, a force-push, a sign-off — the PR must link
-    the `ready-for-human` follow-up issue on the private tracker and the step-by-step page on
-    the private wiki (`docs/agents/issue-tracker.md` § "Human follow-ups from agent work").
-    Absent links are a finding; a description that says "the operator must then…" is not a
-    substitute.
+    a `wrangler.toml`, DNS, or zone dependency, a force-push, a sign-off — the
+    `ready-for-human` follow-up issue on the private tracker and the step-by-step page on the
+    private wiki must exist (`docs/agents/human-follow-up.md`). The public PR body says only that
+    a human follow-up remains; the private links go in the closing report. A missing follow-up
+    is a finding; a description that says "the operator must then…" is not a substitute.
 
 Read the diff (`git diff main...HEAD` or the staged changes), then the touched files for
 context. Be specific and cite the rule; do not raise generic style nits. If the diff is clean

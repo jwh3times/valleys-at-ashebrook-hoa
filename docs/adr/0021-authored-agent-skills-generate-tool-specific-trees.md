@@ -32,3 +32,10 @@ authored sources generate the same trees, links in authored trees are still reje
 names the regenerate command, `developer_instructions` as a TOML multi-line literal, and
 `sandbox_mode = "read-only"` for agents whose tool list cannot write — and drift comparison now
 tolerates CRLF line endings.
+
+## Update (2026-10-28): shared skills
+
+[ADR 0029](./0029-workflow-skills-install-from-a-shared-repository.md) installs `ship`,
+`end-session`, `handoff`, `lets-go` and `docs-updater` from `jwh3times/skills`. Those five
+`.agents/skills/` directories are not formatted here, and `docs-updater` is no longer a custom
+agent. The generation decision above is unchanged.

@@ -29,7 +29,8 @@ file with the configuration change.
    npm run format:check   # Prettier (fix with: npm run format)
    npm run lint           # type-aware Oxlint correctness and React Hooks checks
    npm run sync:agents:check # generated agent trees match authored inputs
-   node --test scripts/sync-agents.test.mjs # the shared agent synchronizer's own tests
+   node --test scripts/sync-agents.test.mjs scripts/lint-agent-neutrality.test.mjs # the shared scripts' own tests
+   npm run lint:agents    # agent and skill sources stay tool-neutral
    npm run lint:coercions # reject blank/zero numeric coercion bugs
    npm run lint:migrations # validate the hand-authored migration sequence
    npm run check          # TypeScript 7 + Astro type checks
