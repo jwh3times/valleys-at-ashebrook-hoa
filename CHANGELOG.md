@@ -4414,7 +4414,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.6...HEAD
+[2.10.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...v2.10.6
 [2.10.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.4...v2.10.5
 [2.10.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.3...v2.10.4
 [2.10.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.2...v2.10.3
