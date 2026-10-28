@@ -438,7 +438,9 @@ describe('request', () => {
     await seedOpenRequests(10);
     const full = await call('acct-owner', 'POST', newRequest());
     expect(full.status).toBe(409);
-    expect(await full.text()).toMatch(/already has 10 open requests/);
+    expect(await full.text()).toMatch(
+      /already has 10 open requests for a new tenant/,
+    );
     expect(await requests()).toHaveLength(10);
 
     await call('acct-owner', 'POST', {

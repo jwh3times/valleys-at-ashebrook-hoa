@@ -42,7 +42,7 @@ describe('associationDateIso', () => {
 
 describe('maskEmail', () => {
   it('keeps the first local-part character and the full domain', () => {
-    expect(maskEmail('jerryholland00@gmail.com')).toBe('j***@gmail.com');
+    expect(maskEmail('ned@example.test')).toBe('n***@example.test');
   });
 
   it('does not leak the local-part length', () => {

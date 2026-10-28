@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { requireMemberApi } from '../../../server/authz/member-guards';
 import { readJson, stringField } from '../../../server/http';
 import { associationDateIso } from '../../../lib/format';
-import { INPUT_LIMITS, isoDateOrError } from '../../../lib/types';
+import { CONTACT_INPUT_LIMITS, isoDateOrError } from '../../../lib/types';
 import {
   lotAuthorityBasis,
   lotAuthorityExists,
@@ -52,9 +52,6 @@ export const prerender = false;
 
 const NOT_FOUND = () => new Response('Not found', { status: 404 });
 const TENANT_NAME_MAX = 200;
-/** The roster's contact lengths, so a request cannot hold a contact the
- * board could not record. */
-const CONTACT_MAX = { email: INPUT_LIMITS.email, sms: INPUT_LIMITS.phone };
 /** Open requests for a new tenant one Lot may hold at once. Each names a
  * different contact; a renewal is one per Tenancy and does not count. */
 const OPEN_REQUESTS_MAX = 10;
@@ -129,9 +126,9 @@ async function requestTenancy(
   if (channel !== 'email' && channel !== 'sms')
     return new Response("channel must be 'email' or 'sms'", { status: 400 });
   const contact = stringField(body, 'contact');
-  if (contact.length > CONTACT_MAX[channel])
+  if (contact.length > CONTACT_INPUT_LIMITS[channel])
     return new Response(
-      `contact must be ${CONTACT_MAX[channel]} characters or fewer`,
+      `contact must be ${CONTACT_INPUT_LIMITS[channel]} characters or fewer`,
       { status: 400 },
     );
   const normalized = normalizedContactValue(channel, contact);
@@ -152,7 +149,7 @@ async function requestTenancy(
     .first<{ ok: number }>();
   if (belowMax?.ok !== 1)
     return new Response(
-      `This Lot already has ${OPEN_REQUESTS_MAX} open requests; withdraw one first`,
+      `This Lot already has ${OPEN_REQUESTS_MAX} open requests for a new tenant; withdraw one first`,
       { status: 409 },
     );
 
@@ -227,13 +224,13 @@ async function tenancyInScope(
   lotId: string;
   scheduledEndDay: string;
   tenantPersonId: string;
-  open: boolean;
+  unended: boolean;
   renewable: boolean;
   basis: string;
 } | null> {
   const row = await env.DATABASE.prepare(
     `SELECT t.lot_id, t.scheduled_end_day, t.tenant_person_id,
-            (t.voided_at IS NULL AND t.actual_end_day IS NULL) AS open,
+            (t.voided_at IS NULL AND t.actual_end_day IS NULL) AS unended,
             (${renewableSql('t')}) AS renewable
      FROM tenancies t, ${TODAY_SOURCE} WHERE t.id = ?`,
   )
@@ -242,7 +239,7 @@ async function tenancyInScope(
       lot_id: string;
       scheduled_end_day: string;
       tenant_person_id: string;
-      open: number;
+      unended: number;
       renewable: number;
     }>();
   if (!row) return null;
@@ -257,7 +254,7 @@ async function tenancyInScope(
     lotId: row.lot_id,
     scheduledEndDay: row.scheduled_end_day,
     tenantPersonId: row.tenant_person_id,
-    open: row.open === 1,
+    unended: row.unended === 1,
     renewable: row.renewable === 1,
     basis,
   };
@@ -370,7 +367,7 @@ async function endTenancy(
   if (!tenancyId) return new Response('tenancyId is required', { status: 400 });
   const tenancy = await tenancyInScope(tenancyId, personId, today);
   if (!tenancy) return NOT_FOUND();
-  if (!tenancy.open) return ALREADY_ENDED();
+  if (!tenancy.unended) return ALREADY_ENDED();
   // Unended but past its end day: it has lapsed, with nothing left to end.
   // The board's route answers this case in the same words.
   if (tenancy.scheduledEndDay <= today)
