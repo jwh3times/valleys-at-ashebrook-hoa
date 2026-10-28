@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { requireMemberApi } from '../../../server/authz/member-guards';
 import { readJson, stringField } from '../../../server/http';
 import { associationDateIso } from '../../../lib/format';
-import { isoDateOrError } from '../../../lib/types';
+import { INPUT_LIMITS, isoDateOrError } from '../../../lib/types';
 import {
   lotAuthorityBasis,
   lotAuthorityExists,
@@ -52,6 +52,17 @@ export const prerender = false;
 
 const NOT_FOUND = () => new Response('Not found', { status: 404 });
 const TENANT_NAME_MAX = 200;
+/** The roster's contact lengths, so a request cannot hold a contact the
+ * board could not record. */
+const CONTACT_MAX = { email: INPUT_LIMITS.email, sms: INPUT_LIMITS.phone };
+/** Open requests for a new tenant one Lot may hold at once. Each names a
+ * different contact; a renewal is one per Tenancy and does not count. */
+const OPEN_REQUESTS_MAX = 10;
+
+/** Fewer than `OPEN_REQUESTS_MAX` open new-tenant requests on the Lot bound
+ * here. */
+const OPEN_REQUESTS_BELOW_MAX_SQL = `(SELECT COUNT(*) FROM tenancy_requests
+  WHERE lot_id = ? AND status = 'open' AND kind = 'new') < ${OPEN_REQUESTS_MAX}`;
 
 /** Who is acting, resolved once per request. */
 interface Caller {
@@ -118,6 +129,11 @@ async function requestTenancy(
   if (channel !== 'email' && channel !== 'sms')
     return new Response("channel must be 'email' or 'sms'", { status: 400 });
   const contact = stringField(body, 'contact');
+  if (contact.length > CONTACT_MAX[channel])
+    return new Response(
+      `contact must be ${CONTACT_MAX[channel]} characters or fewer`,
+      { status: 400 },
+    );
   const normalized = normalizedContactValue(channel, contact);
   if (!normalized.ok) return new Response(normalized.error, { status: 400 });
   const endDay = endDayOrError(body, today);
@@ -127,6 +143,18 @@ async function requestTenancy(
   // answer as a Lot that does not exist.
   const basis = await lotAuthorityBasis(env.DATABASE, personId, lotId, today);
   if (!basis) return NOT_FOUND();
+
+  // Checked after scope, so the count never answers for a Lot outside it.
+  const belowMax = await env.DATABASE.prepare(
+    `SELECT ${OPEN_REQUESTS_BELOW_MAX_SQL} AS ok`,
+  )
+    .bind(lotId)
+    .first<{ ok: number }>();
+  if (belowMax?.ok !== 1)
+    return new Response(
+      `This Lot already has ${OPEN_REQUESTS_MAX} open requests; withdraw one first`,
+      { status: 409 },
+    );
 
   const authority = lotAuthorityExists(
     { value: personId },
@@ -143,7 +171,8 @@ async function requestTenancy(
        SELECT ?, ?, ?, ?, ?, 'new', ?, ?, ?, ?, ?, ?
        FROM ${TODAY_SOURCE}
        WHERE ${TENANT_ACCESS_ENABLED_SQL} AND ${authority.sql}
-         AND ${basisCurrentSql('?', '?', 'd.today')}`,
+         AND ${basisCurrentSql('?', '?', 'd.today')}
+         AND ${OPEN_REQUESTS_BELOW_MAX_SQL}`,
       ).bind(
         id,
         lotId,
@@ -160,10 +189,12 @@ async function requestTenancy(
         ...authority.binds,
         basis,
         lotId,
+        lotId,
       ),
     ]);
-    // The preflight found Lot Authority, its basis and the gates; losing any
-    // since is a race. A retired Lot keeps Lot Authority but is no basis.
+    // The preflight found Lot Authority, its basis, the gates and room under
+    // the cap; losing any since is a race. A retired Lot keeps Lot Authority
+    // but is no basis.
     if (result.meta.changes !== 1)
       return new Response('This Lot can no longer take a request', {
         status: 409,
@@ -186,7 +217,8 @@ function renewableSql(t: string): string {
 }
 
 /** The Tenancy, if the caller holds Lot Authority over its Lot today, with
- * whether it is current and unended; null is the masked 404. */
+ * whether it is unended and unvoided, and whether it is also current; null is
+ * the masked 404. */
 async function tenancyInScope(
   tenancyId: string,
   personId: string,
@@ -195,11 +227,13 @@ async function tenancyInScope(
   lotId: string;
   scheduledEndDay: string;
   tenantPersonId: string;
+  open: boolean;
   renewable: boolean;
   basis: string;
 } | null> {
   const row = await env.DATABASE.prepare(
     `SELECT t.lot_id, t.scheduled_end_day, t.tenant_person_id,
+            (t.voided_at IS NULL AND t.actual_end_day IS NULL) AS open,
             (${renewableSql('t')}) AS renewable
      FROM tenancies t, ${TODAY_SOURCE} WHERE t.id = ?`,
   )
@@ -208,6 +242,7 @@ async function tenancyInScope(
       lot_id: string;
       scheduled_end_day: string;
       tenant_person_id: string;
+      open: number;
       renewable: number;
     }>();
   if (!row) return null;
@@ -222,6 +257,7 @@ async function tenancyInScope(
     lotId: row.lot_id,
     scheduledEndDay: row.scheduled_end_day,
     tenantPersonId: row.tenant_person_id,
+    open: row.open === 1,
     renewable: row.renewable === 1,
     basis,
   };
@@ -315,6 +351,9 @@ async function withdrawRequest(
   return new Response(null, { status: 204 });
 }
 
+const ALREADY_ENDED = () =>
+  new Response('Tenancy already ended or voided', { status: 409 });
+
 /**
  * Ends a Tenancy of the caller's Lot today, with `owner_ended`. One that has
  * not begun ends on its start day, so it never runs.
@@ -331,9 +370,16 @@ async function endTenancy(
   if (!tenancyId) return new Response('tenancyId is required', { status: 400 });
   const tenancy = await tenancyInScope(tenancyId, personId, today);
   if (!tenancy) return NOT_FOUND();
+  if (!tenancy.open) return ALREADY_ENDED();
+  // Unended but past its end day: it has lapsed, with nothing left to end.
+  // The board's route answers this case in the same words.
+  if (tenancy.scheduledEndDay <= today)
+    return new Response('Tenancy has already reached its end day', {
+      status: 409,
+    });
 
-  // The UPDATE re-checks the Tenancy's state, so an ended or voided one, or
-  // one the board ends first, answers the same 409.
+  // The UPDATE re-checks the Tenancy's state, so one the board ends or voids
+  // first answers the ended 409.
   const authority = lotAuthorityExists(
     { value: personId },
     { column: 'tenancies.lot_id' },
@@ -372,8 +418,7 @@ async function endTenancy(
     primary,
     ...correlation.statements,
   ]);
-  if (result.meta.changes !== 1)
-    return new Response('Tenancy already ended or voided', { status: 409 });
+  if (result.meta.changes !== 1) return ALREADY_ENDED();
   return new Response(null, { status: 204 });
 }
 

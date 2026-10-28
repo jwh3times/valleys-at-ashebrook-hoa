@@ -390,6 +390,104 @@ describe('request', () => {
     expect(await requests()).toEqual([]);
   });
 
+  it('caps the contact at the roster’s length for its channel', async () => {
+    // Each is well-formed, so only the cap can refuse it.
+    const local = (n: number) => 'a'.repeat(n - '@example.test'.length);
+    for (const overrides of [
+      { contact: `${local(321)}@example.test` },
+      { channel: 'sms', contact: `555${' '.repeat(25)}555-0142` },
+    ]) {
+      const res = await call('acct-owner', 'POST', newRequest(overrides));
+      expect(res.status).toBe(400);
+      expect(await res.text()).toMatch(/characters or fewer/);
+    }
+    expect(await requests()).toEqual([]);
+    expect(
+      (
+        await call(
+          'acct-owner',
+          'POST',
+          newRequest({ contact: `${local(320)}@example.test` }),
+        )
+      ).status,
+    ).toBe(201);
+  });
+
+  /** Opens new requests `from`..`to - 1` on `lot`, each for a different
+   * contact. */
+  async function seedOpenRequests(to: number, from = 0) {
+    for (let i = from; i < to; i++)
+      await env.DATABASE.prepare(
+        `INSERT INTO tenancy_requests (id, lot_id, requested_by_account_id,
+           requested_by_person_id, basis_ownership_id, kind, tenant_name,
+           channel, contact_value, contact_normalized, scheduled_end_day,
+           created_at)
+         VALUES (?, 'lot', 'acct-owner', 'owner', 'owner-lot-own', 'new',
+           'Tess Tenant', 'email', ?, ?, ?, 1)`,
+      )
+        .bind(
+          `seeded-${i}`,
+          `t${i}@example.test`,
+          `t${i}@example.test`,
+          monthsOut(6),
+        )
+        .run();
+  }
+
+  it('holds a Lot to ten open requests, and takes another once one is withdrawn', async () => {
+    await seedOpenRequests(10);
+    const full = await call('acct-owner', 'POST', newRequest());
+    expect(full.status).toBe(409);
+    expect(await full.text()).toMatch(/already has 10 open requests/);
+    expect(await requests()).toHaveLength(10);
+
+    await call('acct-owner', 'POST', {
+      action: 'withdraw',
+      requestId: 'seeded-0',
+    });
+    expect((await call('acct-owner', 'POST', newRequest())).status).toBe(201);
+  });
+
+  it('counts only open requests for a new tenant, and only on this Lot', async () => {
+    await seedOpenRequests(9);
+    await seedTenancy('ten', { scheduledEndDay: monthsOut(6) });
+    expect(
+      (
+        await call('acct-owner', 'POST', {
+          action: 'renew',
+          tenancyId: 'ten',
+          scheduledEndDay: monthsOut(12),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await call(
+          'acct-neighbour',
+          'POST',
+          newRequest({ lotId: 'other-lot', contact: 'other@example.test' }),
+        )
+      ).status,
+    ).toBe(201);
+    expect((await call('acct-owner', 'POST', newRequest())).status).toBe(201);
+  });
+
+  it('re-checks the open-request cap inside the insert, so a request racing past it writes nothing', async () => {
+    await seedOpenRequests(9);
+    const owner = await deriveAccess(env, 'acct-owner', today);
+    const paused = pauseNextBatch();
+    try {
+      const pending = send(owner, 'POST', newRequest());
+      await paused.reached;
+      await seedOpenRequests(10, 9);
+      paused.release();
+      expect((await pending).status).toBe(409);
+    } finally {
+      paused.restore();
+    }
+    expect(await requests()).toHaveLength(10);
+  });
+
   it('re-checks Lot Authority inside the insert, so an Ownership ended mid-request writes nothing', async () => {
     const owner = await deriveAccess(env, 'acct-owner', today);
     const paused = pauseNextBatch();
@@ -747,12 +845,40 @@ describe('end', () => {
   it('answers 409 for a Tenancy already ended or voided', async () => {
     await seedPerson('p-voided');
     await seedTenancy('voided', { tenantPersonId: 'p-voided', voided: true });
+    // Ended early, and since past its end day too: it is the end that answers.
+    await seedPerson('p-ended');
+    await seedTenancy('ended', {
+      tenantPersonId: 'p-ended',
+      scheduledEndDay: '2025-12-01',
+      actualEndDay: '2025-08-01',
+    });
     await call('acct-owner', 'POST', { action: 'end', tenancyId: 'ten' });
-    for (const tenancyId of ['ten', 'voided'])
-      expect(
-        (await call('acct-owner', 'POST', { action: 'end', tenancyId })).status,
-      ).toBe(409);
+    for (const tenancyId of ['ten', 'voided', 'ended']) {
+      const res = await call('acct-owner', 'POST', {
+        action: 'end',
+        tenancyId,
+      });
+      expect(res.status).toBe(409);
+      expect(await res.text()).toBe('Tenancy already ended or voided');
+    }
     expect(await ledger('voided')).toEqual([]);
+  });
+
+  it('answers 409 for a Tenancy past its end day, saying so, as the board’s route does', async () => {
+    await seedPerson('p-lapsed');
+    await seedTenancy('lapsed', {
+      tenantPersonId: 'p-lapsed',
+      startDay: '2025-06-01',
+      scheduledEndDay: today,
+    });
+    const res = await call('acct-owner', 'POST', {
+      action: 'end',
+      tenancyId: 'lapsed',
+    });
+    expect(res.status).toBe(409);
+    expect(await res.text()).toBe('Tenancy has already reached its end day');
+    expect(await tenancy('lapsed')).toMatchObject({ actual_end_day: null });
+    expect(await ledger('lapsed')).toEqual([]);
   });
 
   it('loses to the board ending the same Tenancy first, writing nothing of its own', async () => {

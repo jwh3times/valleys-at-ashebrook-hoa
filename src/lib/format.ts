@@ -51,7 +51,7 @@ export function personDisplayLabel(
 
 /**
  * Mask an email for display to a third party: keep the first character of the
- * local part and the full domain (`jerryholland00@gmail.com` → `j***@gmail.com`).
+ * local part and the full domain (`ned@example.test` → `n***@example.test`).
  * The `***` is fixed-width so it never leaks the local-part length. Anything
  * without a usable local part and domain masks entirely to `***`.
  */
