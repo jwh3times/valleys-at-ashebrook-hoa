@@ -9,3 +9,11 @@ worker-configuration.d.ts
 # Shared byte-for-byte across repositories; formatting it here would fork it.
 scripts/sync-agents.mjs
 scripts/sync-agents.test.mjs
+scripts/lint-agent-neutrality.mjs
+scripts/lint-agent-neutrality.test.mjs
+# Installed from jwh3times/skills (ADR 0029); reinstalling must reproduce them byte for byte.
+.agents/skills/docs-updater/
+.agents/skills/end-session/
+.agents/skills/handoff/
+.agents/skills/lets-go/
+.agents/skills/ship/

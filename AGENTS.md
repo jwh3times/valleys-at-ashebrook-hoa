@@ -61,7 +61,8 @@ load the one your task touches.
 | [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.         |
 | [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.                 |
 | [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                           |
-| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions); filing human follow-ups.   |
+| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                            |
+| [`human-follow-up.md`](./docs/agents/human-follow-up.md)       | Filing a step only a human can take — the private issue and the wiki page.          |
 | [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                            |
 | [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                           |
 
@@ -88,6 +89,7 @@ npm run lint              # type-aware Oxlint
 npm run lint:fix          # apply Oxlint's safe fixes
 npm run sync:agents       # regenerate the Claude skills and Codex agents
 npm run sync:agents:check # fail if generated agent trees drifted, enforced by CI
+npm run lint:agents       # agent and skill sources stay tool-neutral, enforced by CI
 node --test scripts/sync-agents.test.mjs # the synchronizer's own node:test suite, enforced by CI
 npm run lint:coercions    # fail on `Number(x) || <default>`, enforced by CI
 npm run lint:migrations   # migrations directory is well-formed and contiguous, enforced by CI
@@ -399,21 +401,49 @@ including the AI pseudonymization guarantees and their limits.
 
 ## Agents & Docs Automation
 
-Project subagents live in `.claude/agents/`: **`docs-updater`** keeps `AGENTS.md`, `docs/agents/`,
-`README.md`, `SETUP.md`, `SECURITY.md`, and `CHANGELOG.md` in sync with the code;
-**`code-reviewer`** reviews diffs against tier-enforcement, two-layer API gating, transition-only
-fields, ballot secrecy, numeric-coercion, D1 write-integrity, and Drizzle FK-trap rules before
-merging.
+The project subagent **`code-reviewer`** lives in `.claude/agents/`: it reviews diffs against
+tier-enforcement, two-layer API gating, transition-only fields, ballot secrecy, numeric-coercion, D1
+write-integrity, and Drizzle FK-trap rules before merging.
+
+**Five workflow skills install from the shared `jwh3times/skills` repository** (ADR 0029): `ship`,
+`end-session`, `docs-updater`, `handoff`, and `lets-go`. Their bodies are identical in every
+repository that installs them; what is particular to this one is in the settings files under
+`docs/agents/` — `workspace.md`, `issue-tracker.md`, `human-follow-up.md`, `docs.md`,
+`releases.md`, `ship.md`, and `handoffs.md` — which each skill's first step reads and, when one is
+missing, proposes. Change behavior by editing a setting; fix a skill body upstream, then reinstall:
+
+```bash
+npx skills add jwh3times/skills -s end-session -s handoff -s lets-go -s ship -s docs-updater -a codex --copy -y
+npm run sync:agents
+```
+
+Never run `npx skills update`. The five directories are Prettier-ignored, so a reinstall reproduces
+them byte for byte.
+
+- **`ship`** takes a branch from code-complete to an open PR: it classifies the release impact,
+  writes the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts (backfilling
+  Dependabot builds), runs `docs-updater` on the branch's diff, runs the `Fast checks` in
+  `docs/agents/ship.md`, pushes, and opens or updates the PR.
+- **`end-session`** closes out a work session: memory, issues and the board, human follow-ups,
+  docs, the private companion, and the local workspace. It never pushes the public repository,
+  never runs a remote-D1 write, and shows every deletion as a list before acting.
+- **`docs-updater`** finds where the docs and the code disagree and fixes the docs, following the
+  `Doc map` in `docs/agents/docs.md`. It runs from `ship` and `end-session`, so there is no per-turn
+  docs hook.
+- **`handoff`** and **`lets-go`** (user-invoked) carry a session between the user's machines through
+  a shared Handoffs folder: `/handoff` audits for work not merged to `main`, writes a handoff
+  document, registers it in the folder's handoff map, and closes out with `end-session`; `/lets-go`
+  resumes from it and clears the entry. How the folder reaches a machine is that machine's config
+  (`~/.config/handoffs/config`), not this repository's.
 
 **Human follow-ups from agent work are filed, not narrated.** When completed agent work leaves a
 step only a human can take — a dashboard, DNS, or zone setting, a production migration or secret, a
 force-push, a named sign-off, an association decision — the closing report is not where it lives.
 File a `ready-for-human` follow-up issue on the **private** tracker and add it to the project
 board, write step-by-step instructions on the private wiki linked from its `Human-TODO` page, then
-report both links. `/ship` files them before it reports, `end-session` audits that every human-only
-step from the session has both, `docs-updater` treats a missing pair as drift, and `code-reviewer`
-flags a diff that introduces an operator step without them. The procedure is in
-[`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
+report both links — never in the public PR body. `ship`, `end-session`, and `docs-updater` follow
+[`docs/agents/human-follow-up.md`](./docs/agents/human-follow-up.md), and `code-reviewer` flags a
+diff that introduces an operator step without them.
 
 **One source of truth, two CLIs.** `.agents/skills` is the authored source for complete skill
 directories. Run `npm run format` before `npm run sync:agents`; the latter regenerates
@@ -425,32 +455,9 @@ TOML file, preserving its name, description, and developer instructions. The `Po
 `npm run sync:agents:check` to reject generated-tree drift. See
 [ADR 0021](./docs/adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
 
-`scripts/sync-agents.mjs` and its `node:test` suite `scripts/sync-agents.test.mjs` are the one
-exception to TypeScript-only `scripts/`: the pair is shared **byte-for-byte** with other
-repositories, so it is plain `.mjs`, Prettier-ignored, outside the TypeScript programs and Vitest,
-and must never be edited here — change it in the canonical copy and copy it to every repository.
-
-The user-invokable **`ship`** skill takes a branch from code-complete to an open PR: it classifies
-the complete branch diff as a major, minor, or build release, applies any major/minor
-package-version change idempotently, invokes `docs-updater` scoped to that branch's diff, writes
-the `CHANGELOG.md` section for the version `scripts/next-version.sh` predicts, runs the fast
-`sync:agents:check` / `format:check` / `lint` / `lint:coercions` / `lint:fixtures` / `check`
-gates, pushes and opens or updates the PR, then files any human follow-up the merge will leave
-and links it from the PR body. Documentation is kept in sync at ship time through that
-`docs-updater` pass, so there is no per-turn docs hook.
-
-The user-invokable **`end-session`** skill closes out a work session across the four stores that
-live outside the tracked tree and therefore rot silently: project memory, GitHub issues, the
-private companion repository and `private/`, and the local workspace — and it audits that every
-human-only step the session produced has its follow-up issue and wiki page. It is a maintainer
-routine, not a build step: it never pushes, merges, or opens PRs (that is `/ship`), never rewrites
-the docs `docs-updater` owns, never runs a remote-D1 write, and shows every deletion as a list
-before acting. It is also the last step the **`handoff`** skill runs.
-
-The user-invokable **`handoff`** and **`lets-go`** skills carry a session between the user's
-machines. `/handoff` audits for work not yet merged to `main`, writes a handoff document to the
-user's cloud drive, registers it in that drive's handoff map (one active handoff per repository),
-then closes out with `end-session`. `/lets-go`, run on the other machine, reads the map, resumes
-from the document, and clears the entry. On a machine with no Proton Drive desktop client,
-`HANDOFFS_DIR` is a local mirror and both skills pull and push it through the `proton-drive` CLI
-against `/my-files/Documents/Handoffs`.
+`scripts/sync-agents.mjs` and `scripts/lint-agent-neutrality.mjs`, each with its `node:test` suite,
+are the one exception to TypeScript-only `scripts/`: they are shared **byte-for-byte** with other
+repositories, so they are plain `.mjs`, Prettier-ignored, outside the TypeScript programs and
+Vitest, and must never be edited here — change the canonical copy in `jwh3times/skills` and copy it
+to every repository. `npm run lint:agents` runs the second in CI: it rejects agent or skill wording
+one tool cannot follow and links that break once a skill is mirrored.

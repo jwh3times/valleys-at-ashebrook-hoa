@@ -34,3 +34,4 @@ include resident data, private runbooks, or exploit-level security analysis.
 - [ADR 0026: A Lot's Own Holders May See Whether Its Paper Ballot Was Recorded](./0026-paper-ballot-receipt-for-own-lot.md)
 - [ADR 0027: The Association's Google Drive Connection Is One Sealed Server-Held Credential](./0027-association-drive-connection.md)
 - [ADR 0028: Tenant Access Is a Tenancy Beside Lot Authority, Seeing Only Documents Marked for Tenants](./0028-tenant-access.md)
+- [ADR 0029: The Workflow Skills Install from a Shared Repository](./0029-workflow-skills-install-from-a-shared-repository.md)

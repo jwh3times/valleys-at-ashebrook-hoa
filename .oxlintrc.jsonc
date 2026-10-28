@@ -75,9 +75,12 @@
   },
   "overrides": [
     {
-      // The shared node:test suite is copied byte-for-byte from other repositories; node:test
+      // The shared node:test suites are copied byte-for-byte from other repositories; node:test
       // awaits the promises its top-level test() calls return.
-      "files": ["scripts/sync-agents.test.mjs"],
+      "files": [
+        "scripts/sync-agents.test.mjs",
+        "scripts/lint-agent-neutrality.test.mjs",
+      ],
       "rules": {
         "typescript/no-floating-promises": "off",
       },

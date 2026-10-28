@@ -7,6 +7,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+## [2.10.4] - 2026-10-28
+
+### Changed
+
+- **The agent workflow skills install from a shared repository.** `ship`, `end-session`,
+  `handoff` and `lets-go` are now the shared versions from `jwh3times/skills`, and the
+  `docs-updater` subagent became a `docs-updater` skill from the same place (ADR 0029). Their bodies
+  are identical in every repository that installs them; what is particular to this one moved into
+  settings files under `docs/agents/`: the new `workspace.md`, `docs.md`, `releases.md`, `ship.md`,
+  `handoffs.md` and `human-follow-up.md`, and settings sections in `issue-tracker.md`. Human
+  follow-ups are filed as before, but their private links now go in the closing report rather than
+  the public PR body. `AGENTS.md` gives the reinstall command; `npx skills update` is not used.
+- The `build` check also runs `npm run lint:agents`, which fails on agent or skill wording one tool
+  cannot follow and on links that break once a skill is mirrored, and tests it.
+  `scripts/sync-agents.mjs` takes the shared copy, which replaces a mirrored skill directory that an
+  installer left as a link.
+
+## [2.10.3] - 2026-10-27
+
+### Changed
+
+- Dependency updates (Dependabot, #475): `@anthropic-ai/sdk` 1.2.0 → 1.3.0,
+  `@cloudflare/workers-types` 5.20261023.1 → 5.20261024.1 and `prettier-plugin-astro` 1.1.1 → 1.1.2.
+
 ## [2.10.2] - 2026-10-26
 
 ### Changed
@@ -4370,7 +4394,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.2...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.4...HEAD
+[2.10.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.3...v2.10.4
+[2.10.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.2...v2.10.3
 [2.10.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.1...v2.10.2
 [2.10.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.9.2...v2.10.0

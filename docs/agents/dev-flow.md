@@ -6,6 +6,9 @@ its on-ramps, phase boundaries, and context hygiene — is
 path. This file holds only what this repo adds on top: the gate, the exemptions, and how the work
 traces back to its issue.
 
+`/handoff` here is the machine handoff (ADR 0029), not the portable-file handoff `ask-matt` routes
+through: for a prototype or a side task in another directory, write the brief by hand.
+
 ## Who starts a phase
 
 The flow skills — `/wayfinder`, `/grill-with-docs`, `/to-spec`, `/to-tickets`, `/implement`,
