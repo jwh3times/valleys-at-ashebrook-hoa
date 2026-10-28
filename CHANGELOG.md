@@ -9,6 +9,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.7] - 2026-10-28
+
+### Changed
+
+- The shared agent skills are refreshed from `jwh3times/skills`: code spans that broke across a
+  line in the skills and their settings now stay on one line. No behavior changes.
+
 ## [2.10.6] - 2026-10-28
 
 ### Fixed
@@ -4422,7 +4429,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.6...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.7...HEAD
+[2.10.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.6...v2.10.7
 [2.10.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...v2.10.6
 [2.10.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.4...v2.10.5
 [2.10.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.3...v2.10.4
