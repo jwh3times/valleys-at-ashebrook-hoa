@@ -350,7 +350,9 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   start of the caller's own period of authority — the read condition Lot Records need and Lot
   Authority itself does not; see the `lot-records/` entry below.
   `verification/rate-limit.ts` holds the KV verification throttles, including per-Person and
-  distinct-claimed-name limits. Person verification lives in `roster/verification.ts`.
+  distinct-claimed-name limits, and the keyed daily counter (`dailyCount` /
+  `incrementDailyCount`) that the roster's Tenancy invitation and claim caps share. Person
+  verification lives in `roster/verification.ts`.
 - `roster/ownership-transfer.ts` (#411) owns the read-only projected Ownership preview and
   atomic transfer command behind the existing roster-ownerships API. It reuses authority SQL,
   `board-consequences.ts`, `transfer-effects.ts`, and `AuditCorrelation`; it does not define a

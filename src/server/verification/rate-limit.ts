@@ -8,9 +8,8 @@ const COOLDOWN_SECONDS = 120; // 1 request / 2 min per user
 export const DAILY_LIMIT = 5; // per user AND per property, rolling ~24h
 const DAY_SECONDS = 86_400;
 
-/** Today's count under `key` — every daily cap's counter, whatever it
- * counts: verification sends here, Tenancy invitation sends and tenant claim
- * attempts in the roster. Zero for a key never counted or already expired. */
+/** Today's count under `key`: the counter behind every KV daily cap, here and
+ * in the roster. Zero for a key never counted or already expired. */
 export async function dailyCount(env: Env, key: string): Promise<number> {
   return Number((await env.KV.get(key)) ?? '0');
 }
@@ -56,14 +55,8 @@ export async function recordVerificationSend(
   userId: string,
   propertyId: string,
 ): Promise<void> {
-  const userKey = `verif:day:user:${userId}`;
-  const propKey = `verif:day:prop:${propertyId}`;
-  await env.KV.put(userKey, String((await dailyCount(env, userKey)) + 1), {
-    expirationTtl: DAY_SECONDS,
-  });
-  await env.KV.put(propKey, String((await dailyCount(env, propKey)) + 1), {
-    expirationTtl: DAY_SECONDS,
-  });
+  await incrementDailyCount(env, `verif:day:user:${userId}`);
+  await incrementDailyCount(env, `verif:day:prop:${propertyId}`);
 }
 
 // ADR 0022 phase 3c (#219) additions — the derived-mode Person matcher's
@@ -86,10 +79,7 @@ export async function recordPersonSend(
   env: Env,
   partyId: string,
 ): Promise<void> {
-  const key = `verif:day:person:${partyId}`;
-  await env.KV.put(key, String((await dailyCount(env, key)) + 1), {
-    expirationTtl: DAY_SECONDS,
-  });
+  await incrementDailyCount(env, `verif:day:person:${partyId}`);
 }
 
 /** The distinct-claimed-names-per-Lot-per-account cap (both modes): the
