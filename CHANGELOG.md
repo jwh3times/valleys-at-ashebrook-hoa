@@ -9,6 +9,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.10] - 2026-10-28
+
+### Changed
+
+- ADR 0028 records the limit of 10 open requests for a new tenant per Lot as a decision, with its
+  reason: each open request holds an unapproved person's contact for the board to review. The limit
+  shipped in 2.10.6 (#468) and is unchanged.
+
+## [2.10.9] - 2026-10-28
+
+### Changed
+
+- Dependency updates (#478): `better-auth`, `@better-auth/core` and `@better-auth/drizzle-adapter`
+  1.7.12 → 1.7.13, and `@cloudflare/workers-types` 5.20261024.1 → 5.20261025.1.
+
 ## [2.10.8] - 2026-10-28
 
 ### Changed
@@ -4436,7 +4451,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.8...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.10...HEAD
+[2.10.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.9...v2.10.10
+[2.10.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.8...v2.10.9
 [2.10.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.7...v2.10.8
 [2.10.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.6...v2.10.7
 [2.10.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...v2.10.6
