@@ -18,6 +18,7 @@
 import { OFFICIAL_ORG_NAME } from '../../lib/site';
 import { sendEmail, sendSms } from '../auth/senders';
 import { hashCode } from '../verification/codes';
+import { dailyCount, incrementDailyCount } from '../verification/rate-limit';
 import type { SqlGuard } from './audit';
 import {
   TENANT_ACCESS_ENABLED_SQL,
@@ -26,7 +27,6 @@ import {
 
 export const INVITATION_TTL_MS = 14 * 86_400_000;
 export const INVITATION_DAILY_LIMIT = 3;
-const DAY_SECONDS = 86_400;
 
 /** 32 random bytes, base64url without padding: 43 characters. */
 export function generateInvitationToken(): string {
@@ -37,6 +37,8 @@ export function generateInvitationToken(): string {
     .replace(/=+$/, '');
 }
 
+/** The one hash an invitation token is stored and looked up under, so the
+ * send and the claim cannot drift apart; it is the codes' HMAC. */
 export async function hashInvitationToken(
   token: string,
   secret: string,
@@ -135,10 +137,6 @@ function sendLimitKey(tenancyId: string): string {
   return `tenant-invite:day:${tenancyId}`;
 }
 
-async function sendsToday(env: Env, tenancyId: string): Promise<number> {
-  return Number((await env.KV.get(sendLimitKey(tenancyId))) ?? '0');
-}
-
 function invitationMessage(link: string): { subject: string; text: string } {
   return {
     subject: `Your tenant access invitation — ${OFFICIAL_ORG_NAME}`,
@@ -168,7 +166,10 @@ export async function inviteTenant(
   const found = await readInvitable(database, input.tenancyId, input.today);
   if (!found) return { kind: 'not_found' };
   if (found.refusal) return { kind: 'refused', reason: found.refusal };
-  if ((await sendsToday(env, input.tenancyId)) >= INVITATION_DAILY_LIMIT)
+  if (
+    (await dailyCount(env, sendLimitKey(input.tenancyId))) >=
+    INVITATION_DAILY_LIMIT
+  )
     return { kind: 'rate_limited' };
 
   const origin = env.BETTER_AUTH_URL?.replace(/\/+$/, '');
@@ -233,11 +234,7 @@ export async function inviteTenant(
       )
       .bind(nowMs, input.tenancyId, id, nowMs, id),
   ]);
-  await env.KV.put(
-    sendLimitKey(input.tenancyId),
-    String((await sendsToday(env, input.tenancyId)) + 1),
-    { expirationTtl: DAY_SECONDS },
-  );
+  await incrementDailyCount(env, sendLimitKey(input.tenancyId));
   return { kind: 'sent' };
 }
 

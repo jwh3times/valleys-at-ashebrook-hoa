@@ -14,6 +14,7 @@
 // plain refusal gets cannot drift apart.
 
 import { isInvitationToken } from '../../lib/invitation-token';
+import { dailyCount, incrementDailyCount } from '../verification/rate-limit';
 import { AuditCorrelation, operationKey, type SqlGuard } from './audit';
 import { hashInvitationToken } from './tenancy-invitation';
 import {
@@ -23,7 +24,6 @@ import {
 } from './tenancy';
 
 export const CLAIM_DAILY_LIMIT = 5;
-const DAY_SECONDS = 86_400;
 
 export type ClaimRefusal =
   | 'gates-off'
@@ -32,8 +32,12 @@ export type ClaimRefusal =
   | 'linked-elsewhere'
   | 'person-linked';
 
-export const CLAIM_REFUSAL_MESSAGES: Record<ClaimRefusal, string> = {
-  'gates-off': 'Not found',
+/** What a refused claim tells the tenant. `gates-off` has no message: the
+ * route answers it with the masked 404, so nothing about tenant access leaks. */
+export const CLAIM_REFUSAL_MESSAGES: Record<
+  Exclude<ClaimRefusal, 'gates-off'>,
+  string
+> = {
   'invalid-invitation':
     'This invitation link is not valid. It may have expired, been used, or been replaced by a newer one. Ask the owner or the board to send a new invitation.',
   'tenancy-ended': 'This tenancy has ended. Contact the owner or the board.',
@@ -59,9 +63,8 @@ export async function spendClaimAttempt(
   accountId: string,
 ): Promise<boolean> {
   const key = claimLimitKey(accountId);
-  const count = Number((await env.KV.get(key)) ?? '0');
-  if (count >= CLAIM_DAILY_LIMIT) return false;
-  await env.KV.put(key, String(count + 1), { expirationTtl: DAY_SECONDS });
+  if ((await dailyCount(env, key)) >= CLAIM_DAILY_LIMIT) return false;
+  await incrementDailyCount(env, key);
   return true;
 }
 

@@ -8,8 +8,21 @@ const COOLDOWN_SECONDS = 120; // 1 request / 2 min per user
 export const DAILY_LIMIT = 5; // per user AND per property, rolling ~24h
 const DAY_SECONDS = 86_400;
 
-async function count(env: Env, key: string): Promise<number> {
+/** Today's count under `key` — every daily cap's counter, whatever it
+ * counts: verification sends here, Tenancy invitation sends and tenant claim
+ * attempts in the roster. Zero for a key never counted or already expired. */
+export async function dailyCount(env: Env, key: string): Promise<number> {
   return Number((await env.KV.get(key)) ?? '0');
+}
+
+/** Counts one more under `key`, restarting its ~24h expiry. */
+export async function incrementDailyCount(
+  env: Env,
+  key: string,
+): Promise<void> {
+  await env.KV.put(key, String((await dailyCount(env, key)) + 1), {
+    expirationTtl: DAY_SECONDS,
+  });
 }
 
 export async function checkUserRateLimit(
@@ -18,7 +31,7 @@ export async function checkUserRateLimit(
 ): Promise<{ ok: true } | { ok: false; reason: 'cooldown' | 'daily' }> {
   if (await env.KV.get(`verif:cooldown:${userId}`))
     return { ok: false, reason: 'cooldown' };
-  if ((await count(env, `verif:day:user:${userId}`)) >= DAILY_LIMIT)
+  if ((await dailyCount(env, `verif:day:user:${userId}`)) >= DAILY_LIMIT)
     return { ok: false, reason: 'daily' };
   return { ok: true };
 }
@@ -27,7 +40,7 @@ export async function checkPropertyRateLimit(
   env: Env,
   propertyId: string,
 ): Promise<{ ok: true } | { ok: false; reason: 'daily' }> {
-  if ((await count(env, `verif:day:prop:${propertyId}`)) >= DAILY_LIMIT)
+  if ((await dailyCount(env, `verif:day:prop:${propertyId}`)) >= DAILY_LIMIT)
     return { ok: false, reason: 'daily' };
   return { ok: true };
 }
@@ -45,10 +58,10 @@ export async function recordVerificationSend(
 ): Promise<void> {
   const userKey = `verif:day:user:${userId}`;
   const propKey = `verif:day:prop:${propertyId}`;
-  await env.KV.put(userKey, String((await count(env, userKey)) + 1), {
+  await env.KV.put(userKey, String((await dailyCount(env, userKey)) + 1), {
     expirationTtl: DAY_SECONDS,
   });
-  await env.KV.put(propKey, String((await count(env, propKey)) + 1), {
+  await env.KV.put(propKey, String((await dailyCount(env, propKey)) + 1), {
     expirationTtl: DAY_SECONDS,
   });
 }
@@ -64,7 +77,7 @@ export async function checkPersonRateLimit(
   env: Env,
   partyId: string,
 ): Promise<{ ok: true } | { ok: false; reason: 'daily' }> {
-  if ((await count(env, `verif:day:person:${partyId}`)) >= DAILY_LIMIT)
+  if ((await dailyCount(env, `verif:day:person:${partyId}`)) >= DAILY_LIMIT)
     return { ok: false, reason: 'daily' };
   return { ok: true };
 }
@@ -74,7 +87,7 @@ export async function recordPersonSend(
   partyId: string,
 ): Promise<void> {
   const key = `verif:day:person:${partyId}`;
-  await env.KV.put(key, String((await count(env, key)) + 1), {
+  await env.KV.put(key, String((await dailyCount(env, key)) + 1), {
     expirationTtl: DAY_SECONDS,
   });
 }
