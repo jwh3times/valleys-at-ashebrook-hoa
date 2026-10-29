@@ -9,6 +9,13 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.8] - 2026-10-28
+
+### Changed
+
+- A change to `skills-lock.json` counts as agent config in the development flow, as `.agents/` and
+  `.claude/` do, so refreshing the shared skills no longer needs an issue or a waiver.
+
 ## [2.10.7] - 2026-10-28
 
 ### Changed
@@ -4429,7 +4436,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.7...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.8...HEAD
+[2.10.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.7...v2.10.8
 [2.10.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.6...v2.10.7
 [2.10.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.5...v2.10.6
 [2.10.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.4...v2.10.5
