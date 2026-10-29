@@ -1,6 +1,6 @@
 # ADR 0028: Tenant Access Is a Tenancy Beside Lot Authority, Seeing Only Documents Marked for Tenants
 
-**Status:** Accepted 2026-10-20; amended 2026-10-26 (see [Amendments](#amendments))
+**Status:** Accepted 2026-10-20; amended 2026-10-26 and 2026-10-28 (see [Amendments](#amendments))
 **Date:** 2026-10-20
 
 ## Context
@@ -219,6 +219,14 @@ the maintainer:
 2. **More actions stay live with the gates off.** The board's refusal and the owner's end and
    withdrawal join the board's end and void, for the same reason, and so that a pending request's
    name and contact can always be cleared.
+
+**2026-10-28 (#468).** A Lot holds at most **10 open requests for a new tenant** at once; one more
+is refused until the owner withdraws one or the board decides one. Each open request carries a
+named stranger's contact that the board must review, so the cap bounds that queue and the personal
+data waiting in it, while staying well above any real household. A renewal request is one per
+Tenancy and does not count. The cap shipped in v2.10.6 as an implementation choice and was confirmed
+by the maintainer here; it is the one constant `OPEN_REQUESTS_MAX` in
+`src/pages/api/member/tenancies.ts`.
 
 ## Related decisions
 
