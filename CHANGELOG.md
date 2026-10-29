@@ -9,6 +9,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.11] - 2026-10-29
+
+### Fixed
+
+- A sign-in form test no longer times out in a full local `npm test` run (#485). It signed in five
+  times inside one 5-second test, which took about 4 seconds on its own. Each of the five rejected
+  return links is now its own test. No site behavior changes.
+
 ## [2.10.10] - 2026-10-28
 
 ### Changed
@@ -4451,7 +4459,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.10...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.11...HEAD
+[2.10.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.10...v2.10.11
 [2.10.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.9...v2.10.10
 [2.10.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.8...v2.10.9
 [2.10.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.7...v2.10.8
