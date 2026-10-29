@@ -6,6 +6,8 @@ import {
   setCooldown,
   recordVerificationSend,
   DAILY_LIMIT,
+  dailyCount,
+  incrementDailyCount,
 } from '../../src/server/verification/rate-limit';
 
 beforeAll(async () => {
@@ -41,5 +43,19 @@ describe('verification rate limiting', () => {
     }
     const res = await checkPropertyRateLimit(env, 'prop-hot');
     expect(res.ok).toBe(false);
+  });
+});
+
+describe('keyed daily counter', () => {
+  it('reads zero for a key never counted', async () => {
+    expect(await dailyCount(env, 'rl-counter:fresh')).toBe(0);
+  });
+
+  it('counts each increment under its own key', async () => {
+    await incrementDailyCount(env, 'rl-counter:a');
+    await incrementDailyCount(env, 'rl-counter:a');
+    await incrementDailyCount(env, 'rl-counter:b');
+    expect(await dailyCount(env, 'rl-counter:a')).toBe(2);
+    expect(await dailyCount(env, 'rl-counter:b')).toBe(1);
   });
 });
