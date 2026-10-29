@@ -33,11 +33,10 @@ same as Board — `Status` `Todo`; `Gate` the human gate that applies (`Operator
 
 The private tracker's wiki, `https://github.com/jwh3times/valleys-at-ashebrook-hoa-ops.wiki.git`
 (branch `master`), cloned into the session scratchpad with
-`git -c credential.helper='!gh auth git-credential'`. Name a page for its task
-(`Operator-<topic>-<date>`, or a checklist name), link it from `Home`, and add one terse line to
-`Human-TODO`, the operator's tickable list. A long procedure may live as a runbook in the companion's
-`operations/`; the wiki page may summarise and link it, but must be enough to start from. Pages are
-values-free: no resident value, no secret, no `op read` output.
+`git -c credential.helper='!gh auth git-credential'`. Link each new page from `Home`, and add one
+terse line to `Human-TODO`, the operator's tickable list. A long procedure may live as a runbook in
+the companion's `operations/`; the wiki page may summarise and link it, but must be enough to start
+from. Pages are values-free: no resident value, no secret, no `op read` output.
 
 Before pushing, scan the changed pages for contact values with the CI gate's classifier, and fix
 any hit:

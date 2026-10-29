@@ -81,7 +81,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
 - `src/lib/types.ts` contains shared shapes, `DEFAULT_*` fallbacks, `DOCUMENT_CATEGORIES`, the
   `Visibility` type, fail-closed `SiteSettings.liveVotingEnabled`, admin-write input normalizers
   (`normalize{Announcement,Property,Owner,Resolution,Election,Candidate,Proxy}Input`,
-  `INPUT_LIMITS`) that trim, cap, validate, and reject on write, the resolution shapes
+  `INPUT_LIMITS`, and the per-channel `CONTACT_INPUT_LIMITS` built from it) that trim, cap,
+  validate, and reject on write, the resolution shapes
   (`ResolutionStatus`, `RESOLUTION_STATUSES`, `ResolutionSummary`, `ResolutionDetail`,
   `ResolutionChainLink`, `ResolutionInput`), the elections shapes (`ElectionStatus`,
   `ElectionSource`, `ELECTION_STATUSES`, `ELECTION_SOURCES`, `ElectionSummary`, `ElectionDetail`,

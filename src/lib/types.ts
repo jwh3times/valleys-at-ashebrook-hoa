@@ -479,6 +479,12 @@ export const INPUT_LIMITS = {
   electionTitle: 200,
 } as const;
 
+/** Max length of a contact value, by the channel it is sent on. */
+export const CONTACT_INPUT_LIMITS = {
+  email: INPUT_LIMITS.email,
+  sms: INPUT_LIMITS.phone,
+} as const;
+
 export type InputResult<T> =
   { ok: true; value: T } | { ok: false; error: string };
 
