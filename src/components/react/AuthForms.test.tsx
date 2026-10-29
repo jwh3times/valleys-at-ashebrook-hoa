@@ -158,22 +158,20 @@ describe('returning to a tenant invitation', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(INVITE));
   });
 
-  it('goes home for any other next', async () => {
-    for (const next of [
-      `//evil.example${INVITE}`,
-      `https://evil.example${INVITE}`,
-      '/admin',
-      `${INVITE}&extra=1`,
-      '/tenant-invite?token=short',
-    ]) {
-      assign.mockClear();
-      arriveWith(next);
-      auth.signIn.email.mockResolvedValue({ error: null });
-      const { unmount } = render(<LoginForm />);
-      await fillAndSubmit('Sign in', LOGIN_FIELDS);
-      await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
-      unmount();
-    }
+  // One test per value: each sign-in types about 40 characters, ~800 ms
+  // under jsdom, so five in one test sat near the 5 s timeout (#485).
+  it.each([
+    `//evil.example${INVITE}`,
+    `https://evil.example${INVITE}`,
+    '/admin',
+    `${INVITE}&extra=1`,
+    '/tenant-invite?token=short',
+  ])('goes home for next=%s', async (next) => {
+    arriveWith(next);
+    auth.signIn.email.mockResolvedValue({ error: null });
+    render(<LoginForm />);
+    await fillAndSubmit('Sign in', LOGIN_FIELDS);
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/'));
   });
 
   it('sends the verification link back to the invitation on registering', async () => {
