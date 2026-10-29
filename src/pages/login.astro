@@ -4,12 +4,11 @@ import { LoginForm } from '../components/react/AuthForms';
 import { NEIGHBORHOOD } from '../lib/site';
 import { env } from 'cloudflare:workers';
 import { isGoogleSignInConfigured } from '../server/auth';
-import { invitationReturnPath } from '../lib/return-path';
+import { invitationNextQuery } from '../lib/return-path';
 
 const googleEnabled = isGoogleSignInConfigured(env);
 // An invited tenant keeps their invitation across sign-in and registration.
-const invitation = invitationReturnPath(Astro.url.search);
-const keepNext = invitation ? `?next=${encodeURIComponent(invitation)}` : '';
+const keepNext = invitationNextQuery(Astro.url.search);
 ---
 
 <BaseLayout

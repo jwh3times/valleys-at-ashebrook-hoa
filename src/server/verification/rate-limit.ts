@@ -8,8 +8,20 @@ const COOLDOWN_SECONDS = 120; // 1 request / 2 min per user
 export const DAILY_LIMIT = 5; // per user AND per property, rolling ~24h
 const DAY_SECONDS = 86_400;
 
-async function count(env: Env, key: string): Promise<number> {
+/** Today's count under `key`: the counter behind every KV daily cap, here and
+ * in the roster. Zero for a key never counted or already expired. */
+export async function dailyCount(env: Env, key: string): Promise<number> {
   return Number((await env.KV.get(key)) ?? '0');
+}
+
+/** Counts one more under `key`, restarting its ~24h expiry. */
+export async function incrementDailyCount(
+  env: Env,
+  key: string,
+): Promise<void> {
+  await env.KV.put(key, String((await dailyCount(env, key)) + 1), {
+    expirationTtl: DAY_SECONDS,
+  });
 }
 
 export async function checkUserRateLimit(
@@ -18,7 +30,7 @@ export async function checkUserRateLimit(
 ): Promise<{ ok: true } | { ok: false; reason: 'cooldown' | 'daily' }> {
   if (await env.KV.get(`verif:cooldown:${userId}`))
     return { ok: false, reason: 'cooldown' };
-  if ((await count(env, `verif:day:user:${userId}`)) >= DAILY_LIMIT)
+  if ((await dailyCount(env, `verif:day:user:${userId}`)) >= DAILY_LIMIT)
     return { ok: false, reason: 'daily' };
   return { ok: true };
 }
@@ -27,7 +39,7 @@ export async function checkPropertyRateLimit(
   env: Env,
   propertyId: string,
 ): Promise<{ ok: true } | { ok: false; reason: 'daily' }> {
-  if ((await count(env, `verif:day:prop:${propertyId}`)) >= DAILY_LIMIT)
+  if ((await dailyCount(env, `verif:day:prop:${propertyId}`)) >= DAILY_LIMIT)
     return { ok: false, reason: 'daily' };
   return { ok: true };
 }
@@ -43,14 +55,8 @@ export async function recordVerificationSend(
   userId: string,
   propertyId: string,
 ): Promise<void> {
-  const userKey = `verif:day:user:${userId}`;
-  const propKey = `verif:day:prop:${propertyId}`;
-  await env.KV.put(userKey, String((await count(env, userKey)) + 1), {
-    expirationTtl: DAY_SECONDS,
-  });
-  await env.KV.put(propKey, String((await count(env, propKey)) + 1), {
-    expirationTtl: DAY_SECONDS,
-  });
+  await incrementDailyCount(env, `verif:day:user:${userId}`);
+  await incrementDailyCount(env, `verif:day:prop:${propertyId}`);
 }
 
 // ADR 0022 phase 3c (#219) additions — the derived-mode Person matcher's
@@ -64,7 +70,7 @@ export async function checkPersonRateLimit(
   env: Env,
   partyId: string,
 ): Promise<{ ok: true } | { ok: false; reason: 'daily' }> {
-  if ((await count(env, `verif:day:person:${partyId}`)) >= DAILY_LIMIT)
+  if ((await dailyCount(env, `verif:day:person:${partyId}`)) >= DAILY_LIMIT)
     return { ok: false, reason: 'daily' };
   return { ok: true };
 }
@@ -73,10 +79,7 @@ export async function recordPersonSend(
   env: Env,
   partyId: string,
 ): Promise<void> {
-  const key = `verif:day:person:${partyId}`;
-  await env.KV.put(key, String((await count(env, key)) + 1), {
-    expirationTtl: DAY_SECONDS,
-  });
+  await incrementDailyCount(env, `verif:day:person:${partyId}`);
 }
 
 /** The distinct-claimed-names-per-Lot-per-account cap (both modes): the

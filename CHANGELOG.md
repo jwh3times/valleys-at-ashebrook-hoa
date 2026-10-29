@@ -9,6 +9,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.12] - 2026-10-29
+
+### Changed
+
+- Internal cleanup from the tenant-invitation review (#472), with no change in behavior:
+  - The daily limits on Tenancy invitation sends and tenant claim attempts now use the same KV
+    counter as the verification send limits.
+  - Sign-in and registration build the link that carries a tenant's invitation from one shared
+    helper.
+  - An error message for a refusal that is always answered with a plain "Not found" has been
+    removed.
+
 ## [2.10.11] - 2026-10-29
 
 ### Fixed
@@ -4459,7 +4471,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.11...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.12...HEAD
+[2.10.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.11...v2.10.12
 [2.10.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.10...v2.10.11
 [2.10.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.9...v2.10.10
 [2.10.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.8...v2.10.9

@@ -19,6 +19,13 @@ export function invitationReturnPath(search: string): string | null {
   return token === undefined ? null : `/tenant-invite?token=${token}`;
 }
 
+/** The `?next=` query that carries the invitation named in `search` from
+ * sign-in to registration and back, or empty when there is none. */
+export function invitationNextQuery(search: string): string {
+  const invitation = invitationReturnPath(search);
+  return invitation ? `?next=${encodeURIComponent(invitation)}` : '';
+}
+
 /** Where to go after signing in: the invitation, else home. */
 export function returnPathAfterSignIn(search: string): string {
   return invitationReturnPath(search) ?? '/';
