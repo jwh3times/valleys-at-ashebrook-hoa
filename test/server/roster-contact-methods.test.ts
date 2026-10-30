@@ -134,6 +134,34 @@ describe('add', () => {
     expect(missing.status).toBe(404);
   });
 
+  it('caps the value at the roster’s length for its channel', async () => {
+    // Each is well-formed, so only the cap can refuse it.
+    const local = (n: number) => 'a'.repeat(n - '@example.test'.length);
+    for (const [channel, value] of [
+      ['email', `${local(321)}@example.test`],
+      ['sms', `555${' '.repeat(22)}555-0142`],
+    ]) {
+      const res = await POST(
+        req({ action: 'add', partyId: 'per-1', channel, value }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toMatch(/characters or fewer/);
+    }
+    const db = getDb(env);
+    expect(await db.select().from(contactMethods)).toEqual([]);
+    expect(await db.all(sql`SELECT * FROM roster_changes`)).toEqual([]);
+
+    for (const [channel, value] of [
+      ['email', `${local(320)}@example.test`],
+      ['sms', `555${' '.repeat(21)}555-0142`],
+    ]) {
+      const res = await POST(
+        req({ action: 'add', partyId: 'per-1', channel, value }),
+      );
+      expect(res.status).toBe(201);
+    }
+  });
+
   it('a second preferred method displaces the first inside one batch', async () => {
     const first = await POST(
       req({

@@ -2,6 +2,7 @@
 // approval both record People and Contact Methods; these are the one copy of
 // each so the two paths cannot drift.
 
+import { CONTACT_INPUT_LIMITS } from '../../lib/types';
 import { normalizeEmail, normalizeName, normalizePhone } from './normalize';
 import {
   insertedRowGuard,
@@ -15,13 +16,18 @@ import {
  * A NEW contact value's normalized form, or why it was refused.
  *
  * The shared normalizers deliberately do NOT validate — legacy values are
- * accepted as recorded — so a light shape check lives here, where someone is
- * typing a new value and a typo should bounce rather than be enshrined.
+ * accepted as recorded — so a light shape check and the channel's length cap
+ * live here, where someone is typing a new value and a typo should bounce
+ * rather than be enshrined. Only new values pass through, so the cap never
+ * refuses a value already on file.
  */
 export function normalizedContactValue(
   channel: 'email' | 'sms',
   value: string,
 ): { ok: true; value: string } | { ok: false; error: string } {
+  const limit = CONTACT_INPUT_LIMITS[channel];
+  if (value.length > limit)
+    return { ok: false, error: `value must be ${limit} characters or fewer` };
   const shapeOk =
     channel === 'email'
       ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)
