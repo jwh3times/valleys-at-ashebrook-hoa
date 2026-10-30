@@ -2,7 +2,7 @@
 // approval both record People and Contact Methods; these are the one copy of
 // each so the two paths cannot drift.
 
-import { CONTACT_INPUT_LIMITS } from '../../lib/types';
+import { CONTACT_INPUT_LIMITS, type InputResult } from '../../lib/types';
 import { normalizeEmail, normalizeName, normalizePhone } from './normalize';
 import {
   insertedRowGuard,
@@ -22,12 +22,14 @@ import {
  * refuses a value already on file.
  */
 export function normalizedContactValue(
-  channel: 'email' | 'sms',
+  channel: keyof typeof CONTACT_INPUT_LIMITS,
   value: string,
-): { ok: true; value: string } | { ok: false; error: string } {
+): InputResult<string> {
   const limit = CONTACT_INPUT_LIMITS[channel];
+  // Worded without either route's field name: the board sends `value`, the
+  // tenant request `contact`.
   if (value.length > limit)
-    return { ok: false, error: `value must be ${limit} characters or fewer` };
+    return { ok: false, error: `Contact must be ${limit} characters or fewer` };
   const shapeOk =
     channel === 'email'
       ? /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)

@@ -23,13 +23,13 @@ describe('normalizedContactValue', () => {
       normalizedContactValue('email', email(CONTACT_INPUT_LIMITS.email + 1)),
     ).toEqual({
       ok: false,
-      error: `value must be ${CONTACT_INPUT_LIMITS.email} characters or fewer`,
+      error: `Contact must be ${CONTACT_INPUT_LIMITS.email} characters or fewer`,
     });
     expect(
       normalizedContactValue('sms', phone(CONTACT_INPUT_LIMITS.sms + 1)),
     ).toEqual({
       ok: false,
-      error: `value must be ${CONTACT_INPUT_LIMITS.sms} characters or fewer`,
+      error: `Contact must be ${CONTACT_INPUT_LIMITS.sms} characters or fewer`,
     });
   });
 
