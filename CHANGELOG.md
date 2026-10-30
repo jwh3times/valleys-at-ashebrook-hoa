@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.16] - 2026-10-30
+
+### Changed
+
+- The shared agent skills are refreshed from `jwh3times/skills`, which now give most settings a
+  default, so the ones that matched leave `docs/agents/`. `/end-session` ends by proving both
+  repositories clean and pushed, and `/handoff` names `npm run bootstrap:private` for a machine
+  without `private/`, which `/lets-go` offers.
+
 ## [2.10.15] - 2026-10-30
 
 ### Fixed
@@ -4498,7 +4507,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.15...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.16...HEAD
+[2.10.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.15...v2.10.16
 [2.10.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.14...v2.10.15
 [2.10.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.13...v2.10.14
 [2.10.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.12...v2.10.13
