@@ -9,6 +9,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.17] - 2026-10-30
+
+### Fixed
+
+- A dues ledger test no longer times out in a full local `npm test` run (#494). The bulk-assessment
+  key test typed its form keystroke by keystroke three times, about 75 simulated keystrokes that each
+  re-rendered the whole panel. That took about 2.4 seconds on its own. Its fields are now filled in
+  one step each, and it takes about half a second. The "fresh key after a post succeeds" test, which
+  typed the same way, gets the same change. Both still assert which key each submit sends. No site
+  behavior changes.
+
 ## [2.10.16] - 2026-10-30
 
 ### Changed
@@ -4507,7 +4518,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.16...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.17...HEAD
+[2.10.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.16...v2.10.17
 [2.10.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.15...v2.10.16
 [2.10.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.14...v2.10.15
 [2.10.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.13...v2.10.14
