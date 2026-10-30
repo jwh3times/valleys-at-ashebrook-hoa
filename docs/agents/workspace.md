@@ -12,11 +12,6 @@ Settings the shared `end-session`, `handoff`, `lets-go`, `ship` and `docs-update
 and manifests also live under `private/` (the default `ASHEBROOK_PRIVATE_ROOT`) but are ignored by
 the companion's own `.gitignore` and are never committed to it.
 
-## Workspace status command
-
-`git status --short --branch`, then, when `private/.git` exists, `git -C private fetch -q origin` and
-`git -C private status --short --branch`.
-
 ## Companion commit checks
 
 - The staged diff holds no personal data, sensitive filename, production identifier or undisclosed
@@ -58,7 +53,3 @@ none — `npm run dev` runs in the foreground and leaves nothing behind.
 
 `npm run sync:agents:check`; regenerate with `npm run format`, then `npm run sync:agents` — in that
 order (ADR 0021). Run it always: the required `build` check runs it.
-
-## Final portability check
-
-none
