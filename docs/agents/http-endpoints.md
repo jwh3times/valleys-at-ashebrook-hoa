@@ -606,7 +606,9 @@ invalid-invitation` for every unknown, expired, used, superseded or contact-gone
     is persisted server-side.
   - `GET`+`POST /api/admin/correction-requests` — the board review queue for member correction
     requests; `accept` applies the fact as an ordinary Roster Change citing the request id as
-    opaque evidence (`evidence_request_id`); `decline` writes no ledger row.
+    opaque evidence (`evidence_request_id`); `decline` writes no ledger row. A contact request's
+    stored value is checked again by `normalizedContactValue` before `accept` writes (#491): a
+    value that fails answers `400`, writes nothing, and leaves the request open.
   - The three System-Administrator-only surfaces, gated by `requireApiCapability` on the four
     technical capabilities (#205/#217): `/api/admin/redactions` (`redactPersonName`/
     `redactContactMethod` under `redactionAuthorize` — value and marker nulled together, at least
@@ -618,7 +620,9 @@ invalid-invitation` for every unknown, expired, used, superseded or contact-gone
     Ownerships, Representations, open requests — never the ledger, never another party's data)
     and `GET`/`POST`/`DELETE /api/member/correction-requests` (own name and own Contact Methods
     only; requests are operational rows whose free text NEVER enters the ledger; withdrawal and
-    out-of-scope ids mask as `404`). Both use `requireMemberApi` and then answer the deliberate
+    out-of-scope ids mask as `404`; a contact `POST`'s value passes `normalizedContactValue` for
+    the method's channel, after that masked scope check, or answers `400` — #491). Both use
+    `requireMemberApi` and then answer the deliberate
     no-Person-Link `403` pointing at verification when the account is unlinked.
 - ADR 0022 phase 3c Person Verification / Person Link routes (#219; decided by #201, amended by
   #202). `/api/verify/{request,confirm}` use the Person flow in `src/server/roster/verification.ts`.
