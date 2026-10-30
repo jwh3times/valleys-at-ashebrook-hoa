@@ -8,6 +8,7 @@ import {
   correctionRequests,
   contactMethods,
 } from '../../../server/db/roster-schema';
+import { normalizedContactValue } from '../../../server/roster/builders';
 
 // ADR 0022 phase 3b (#218): members submit correction REQUESTS, never facts
 // (#205's resolution). This route only ever writes `correction_requests` —
@@ -119,11 +120,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const db = getDb(env);
 
+  let valueChannel = channel;
   if (contactMethodId !== null) {
     const [target] = await db
       .select({
         id: contactMethods.id,
         partyId: contactMethods.partyId,
+        channel: contactMethods.channel,
         voidedAt: contactMethods.voidedAt,
       })
       .from(contactMethods)
@@ -134,6 +137,15 @@ export const POST: APIRoute = async ({ request, locals }) => {
     // which would confirm the id names a real row.
     if (!target || target.partyId !== ctx.personId || target.voidedAt !== null)
       return new Response('Not found', { status: 404 });
+    valueChannel = target.channel;
+  }
+
+  // A proposed contact is a newly typed value, so it gets the same shape and
+  // length check as any other (#491) — after the scope check above, so a bad
+  // value aimed at someone else's method still answers the masked 404.
+  if (valueChannel !== null) {
+    const checked = normalizedContactValue(valueChannel, proposedValue);
+    if (!checked.ok) return new Response(checked.error, { status: 400 });
   }
 
   // One open request per (kind, contactMethodId) — null-equal, so a caller
