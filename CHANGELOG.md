@@ -9,6 +9,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.14] - 2026-10-30
+
+### Changed
+
+- The shared agent skills are refreshed from `jwh3times/skills`. Agents now commit in `private/`
+  only after asking, by one procedure every repository shares, which also confirms the companion is
+  private before pushing; until now they committed it without asking. `docs/agents/workspace.md`
+  keeps this repository's own checks under `Companion commit checks`. `/ship` reports an open PR
+  that claims the same version again, and `/lets-go` installs from a changed lockfile.
+
+## [2.10.13] - 2026-10-29
+
+### Changed
+
+- Dependency update (#486): `@cloudflare/workers-types` 5.20261025.1 → 5.20261026.1.
+
 ## [2.10.12] - 2026-10-29
 
 ### Changed
@@ -4471,7 +4487,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.12...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.14...HEAD
+[2.10.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.13...v2.10.14
+[2.10.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.12...v2.10.13
 [2.10.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.11...v2.10.12
 [2.10.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.10...v2.10.11
 [2.10.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.9...v2.10.10
