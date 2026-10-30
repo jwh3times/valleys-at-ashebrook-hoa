@@ -11,6 +11,7 @@ import {
   correctionRequests,
 } from '../../src/server/db/roster-schema';
 import { callerContext } from './caller-context';
+import { CONTACT_INPUT_LIMITS } from '../../src/lib/types';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
   GET as memberList,
@@ -315,6 +316,9 @@ describe('contact correction values (#491)', () => {
       });
   }
 
+  /** Ten digits, so only the length cap can refuse it. */
+  const tooLongPhone = `555${' '.repeat(CONTACT_INPUT_LIMITS.sms + 1 - '555555-0142'.length)}555-0142`;
+
   beforeEach(async () => {
     await seedAccount('mem-1');
     await seedPerson('per-1', 'Jamie Resident');
@@ -322,13 +326,15 @@ describe('contact correction values (#491)', () => {
   });
 
   it('refuses a malformed or over-length contact value at submission', async () => {
-    const tooLong = `${'a'.repeat(321 - '@example.test'.length)}@example.test`;
+    // Only the sms cap (32) sits under the route's own 200-character
+    // proposedValue cap, so it is the length the new check adds here. Pinning
+    // the message keeps the older cap's wording from satisfying the test.
     for (const [body, pattern] of [
       [{ contactMethodId: 'cm-1', proposedValue: 'not-an-email' }, /email/i],
       [{ channel: 'sms', proposedValue: '555-01' }, /phone/i],
       [
-        { contactMethodId: 'cm-1', proposedValue: tooLong },
-        /characters or fewer/,
+        { channel: 'sms', proposedValue: tooLongPhone },
+        /^Contact must be 32 characters or fewer$/,
       ],
     ] as const) {
       const res = await memberSubmit(
@@ -377,11 +383,12 @@ describe('contact correction values (#491)', () => {
   it('refuses to apply a stored value that fails the check, leaving the request open', async () => {
     await seedOpenRequest('req-bad-email', { contactMethodId: 'cm-1' }, 'x');
     await seedOpenRequest('req-bad-sms', { channel: 'sms' }, '12');
+    await seedOpenRequest('req-long-sms', { channel: 'sms' }, tooLongPhone);
     const before = await ledgerCounts();
     const db = getDb(env);
     const methodsBefore = await db.select().from(contactMethods);
 
-    for (const requestId of ['req-bad-email', 'req-bad-sms']) {
+    for (const requestId of ['req-bad-email', 'req-bad-sms', 'req-long-sms']) {
       const res = await adminDecide(
         adminReq('POST', { action: 'accept', requestId }),
       );
@@ -393,7 +400,7 @@ describe('contact correction values (#491)', () => {
     const statuses = await db
       .select({ status: correctionRequests.status })
       .from(correctionRequests);
-    expect(statuses.map((r) => r.status)).toEqual(['open', 'open']);
+    expect(statuses.map((r) => r.status)).toEqual(['open', 'open', 'open']);
   });
 });
 
