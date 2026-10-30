@@ -17,17 +17,12 @@ the companion's own `.gitignore` and are never committed to it.
 `git status --short --branch`, then, when `private/.git` exists, `git -C private fetch -q origin` and
 `git -C private status --short --branch`.
 
-## Companion commit policy
+## Companion commit checks
 
-commit — commit and push the companion's text before ending the session; it is versioned so the
-next machine has it.
-
-- **Before committing:**
-  - inspect the staged diff for credentials, personal data, sensitive filenames, production
-    identifiers and undisclosed vulnerabilities — the companion's `.gitignore` rejects the obvious
-    file types, not their contents;
-  - `git -C private status` shows no resident-derived record, dump or backup staged; those go to
-    encrypted records storage per the portability plan, never to either Git repository.
+- The staged diff holds no personal data, sensitive filename, production identifier or undisclosed
+  vulnerability: the companion's `.gitignore` rejects the obvious file types, not their contents.
+- `git -C private status` shows no resident-derived record, dump or backup staged; those go to
+  encrypted records storage per the portability plan, never to either Git repository.
 
 ## Sync with main
 
