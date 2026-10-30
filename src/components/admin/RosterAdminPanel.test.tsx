@@ -351,3 +351,17 @@ it('allows a supplied plat number on creation without inventing one for a blank 
     ),
   );
 });
+
+describe('RosterAdminPanel contact methods', () => {
+  it('caps the typed value at the roster’s length for the chosen channel', async () => {
+    const user = userEvent.setup();
+    render(<RosterAdminPanel />);
+    await user.click(
+      await screen.findByRole('button', { name: 'Contact methods' }),
+    );
+    const value = screen.getByLabelText('Value');
+    expect(value).toHaveAttribute('maxLength', '320');
+    await user.selectOptions(screen.getByLabelText('Channel'), 'sms');
+    expect(value).toHaveAttribute('maxLength', '32');
+  });
+});

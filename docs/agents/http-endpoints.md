@@ -510,7 +510,10 @@ roster-parties` (`createPerson`/`createOrganization` — party+subtype in one ba
     `void`; `correctScope` — scope rows void, never delete; `end`/`void`/`correctScope` each also
     run the phase 3d transfer-effects engine, discovery-only), and `/api/admin/
 roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on write and
-    reach the ledger as sensitive-field CATEGORIES only).
+    reach the ledger as sensitive-field CATEGORIES only; `add` answers `400` "Contact must be N
+    characters or fewer" past the channel's `CONTACT_INPUT_LIMITS` cap, #483, from the same
+    `normalizedContactValue` check the tenant request uses — the other actions take stored values
+    and are never capped).
   - Lot `create` / `update` also accept optional `platLotNumber` (#413): trimmed text,
     1-6 digits starting nonzero with an optional letter suffix, normalized uppercase.
     Blank or null clears the number; omission preserves it on update. Malformed
@@ -566,9 +569,9 @@ roster-contact-methods` (`add`/`end`/`void`/`setPreferred`; values normalize on 
     **masked** (`maskContact`), and recent refusals with the reason; it stays live with
     `tenantAccessEnabled` off so the page can offer withdraw and end. `POST` actions: `request` (new
     Tenancy: `lotId`, `tenantName`, `channel` `email`/`sms`, contact, `scheduledEndDay`; `400` for a
-    bad field or an end day not after the start or beyond 13 months, and `400` "contact must be N
+    bad field or an end day not after the start or beyond 13 months, and `400` "Contact must be N
     characters or fewer" past the channel's `CONTACT_INPUT_LIMITS` cap — 320 for `email`, 32 for
-    `sms` — checked before the contact's shape) and `renew` (`tenancyId`, `scheduledEndDay`), both
+    `sms` — checked inside `normalizedContactValue` before the contact's shape) and `renew` (`tenancyId`, `scheduledEndDay`), both
     `404` unless `officialMode` AND `tenantAccessEnabled` are literal `true`, both answering
     `201 {id}` and re-checking the gates, Lot Authority and the basis Ownership inside the insert
     (race or duplicate open request: `409`). A Lot holds at most 10 open requests for a new tenant

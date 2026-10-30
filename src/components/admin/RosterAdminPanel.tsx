@@ -47,6 +47,7 @@ import {
   formatDate,
   formatLotLabel,
 } from '../../lib/format';
+import { CONTACT_INPUT_LIMITS } from '../../lib/types';
 import { useAdminResource } from './useAdminResource';
 
 // ADR 0022 phase 3e (#221): the writable Roster surface — Lots, Parties,
@@ -2280,6 +2281,7 @@ export default function RosterAdminPanel() {
                     <input
                       id="contact-value"
                       type="text"
+                      maxLength={CONTACT_INPUT_LIMITS[contactForm.channel]}
                       value={contactForm.value}
                       onChange={(e) =>
                         setContactForm({

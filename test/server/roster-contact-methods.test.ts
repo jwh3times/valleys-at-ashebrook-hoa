@@ -9,6 +9,7 @@ import {
   contactMethods,
 } from '../../src/server/db/roster-schema';
 import { POST } from '../../src/pages/api/admin/roster-contact-methods';
+import { CONTACT_INPUT_LIMITS } from '../../src/lib/types';
 
 /**
  * #218's board-recorded Contact Methods: normalized values, the one-preferred
@@ -132,6 +133,37 @@ describe('add', () => {
       }),
     );
     expect(missing.status).toBe(404);
+  });
+
+  it('caps the value at the roster’s length for its channel', async () => {
+    // Each is well-formed, so only the cap can refuse it.
+    const email = (length: number) =>
+      `${'a'.repeat(length - '@example.test'.length)}@example.test`;
+    const phone = (length: number) =>
+      `555${' '.repeat(length - '555555-0142'.length)}555-0142`;
+    for (const [channel, value] of [
+      ['email', email(CONTACT_INPUT_LIMITS.email + 1)],
+      ['sms', phone(CONTACT_INPUT_LIMITS.sms + 1)],
+    ]) {
+      const res = await POST(
+        req({ action: 'add', partyId: 'per-1', channel, value }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toMatch(/characters or fewer/);
+    }
+    const db = getDb(env);
+    expect(await db.select().from(contactMethods)).toEqual([]);
+    expect(await db.all(sql`SELECT * FROM roster_changes`)).toEqual([]);
+
+    for (const [channel, value] of [
+      ['email', email(CONTACT_INPUT_LIMITS.email)],
+      ['sms', phone(CONTACT_INPUT_LIMITS.sms)],
+    ]) {
+      const res = await POST(
+        req({ action: 'add', partyId: 'per-1', channel, value }),
+      );
+      expect(res.status).toBe(201);
+    }
   });
 
   it('a second preferred method displaces the first inside one batch', async () => {

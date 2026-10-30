@@ -320,7 +320,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   read-only lookup `/tenant-invite` renders (a GET never consumes; mail scanners prefetch links).
 - `roster/builders.ts`: the shared statement builders `normalizedContactValue`, `recordPerson` and
   `recordContactMethod`, used by approval and the admin roster routes so a Person or Contact Method is
-  recorded one way. `roster/authority.ts` gained `authorityBranches` and `lotAuthorityBasis` (which
+  recorded one way. `normalizedContactValue` is for newly typed values only: it caps the length at
+  `CONTACT_INPUT_LIMITS` (#483) and checks the shape, so it must never be run over a stored value. `roster/authority.ts` gained `authorityBranches` and `lotAuthorityBasis` (which
   Ownership gives the caller authority over a Lot, direct wins). `roster/reads.ts` carries
   `fetchMemberTenancies` and `fetchAdminTenancyRequests`.
 - Client: `src/lib/invitation-token.ts` (the 43-char base64url token shape) and `src/lib/return-path.ts`

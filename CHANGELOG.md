@@ -9,6 +9,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.15] - 2026-10-30
+
+### Fixed
+
+- The board's roster can no longer record a contact method of any length (#483). Adding one now
+  refuses an email address over 320 characters or a phone number over 32, the same limits the
+  tenant-request form already enforced, with "Contact must be N characters or fewer". The board
+  panel's Value field stops typing at the limit for the chosen channel. Contact methods already on
+  file are not checked, so none of them is refused. The tenant-request form's message changes from
+  "contact must be…" to "Contact must be…".
+
 ## [2.10.14] - 2026-10-30
 
 ### Changed
@@ -4487,7 +4498,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.14...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.15...HEAD
+[2.10.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.14...v2.10.15
 [2.10.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.13...v2.10.14
 [2.10.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.12...v2.10.13
 [2.10.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.11...v2.10.12

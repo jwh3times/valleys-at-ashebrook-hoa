@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { requireMemberApi } from '../../../server/authz/member-guards';
 import { readJson, stringField } from '../../../server/http';
 import { associationDateIso } from '../../../lib/format';
-import { CONTACT_INPUT_LIMITS, isoDateOrError } from '../../../lib/types';
+import { isoDateOrError } from '../../../lib/types';
 import {
   lotAuthorityBasis,
   lotAuthorityExists,
@@ -126,11 +126,6 @@ async function requestTenancy(
   if (channel !== 'email' && channel !== 'sms')
     return new Response("channel must be 'email' or 'sms'", { status: 400 });
   const contact = stringField(body, 'contact');
-  if (contact.length > CONTACT_INPUT_LIMITS[channel])
-    return new Response(
-      `contact must be ${CONTACT_INPUT_LIMITS[channel]} characters or fewer`,
-      { status: 400 },
-    );
   const normalized = normalizedContactValue(channel, contact);
   if (!normalized.ok) return new Response(normalized.error, { status: 400 });
   const endDay = endDayOrError(body, today);
