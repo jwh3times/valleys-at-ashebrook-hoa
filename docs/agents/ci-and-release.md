@@ -77,6 +77,14 @@ those entries as **caret ranges from the patched floor** (`"undici": "^7.29.1"`,
 advisories landed. When an advisory needs a newer release, **raise the floor** and refresh
 `package-lock.json`, then confirm with `npm audit`.
 
+`overrides.zod` is the same kind of floor, for a different reason. `@cloudflare/vitest-pool-workers`
+0.23 pins `zod` to exactly `4.4.3`, a test-only dependency, but npm hoisted that copy to the root of
+the tree, where `better-call`, `better-auth-cloudflare` and the Anthropic SDK resolved it too, so a
+vulnerable zod shipped in the Worker's auth code. A lockfile refresh cannot move an exact pin, and
+Dependabot reports `security_update_not_possible` for it. The override gives the whole tree one
+patched copy. Re-check it when #313 replaces the pool: `@cloudflare/vitest-plugin` pins its own exact
+zod, so remove the override only if `npm audit` stays clean without it.
+
 ## Actions are pinned to commit SHAs
 
 Every `uses:` in `.github/workflows/` names a full 40-character commit SHA, with the version it
