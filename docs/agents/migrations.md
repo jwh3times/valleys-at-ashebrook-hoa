@@ -258,6 +258,7 @@ Dates are Association Days (America/New_York); `d1_migrations.applied_at` record
 | `0040`-`0042`  | 2026-10-21 | Together, before the v2.7.0 merge; `db:migrate:remote` cannot skip, so 0040–0041 went with 0042. |
 | `0043`         | 2026-10-21 | Before the v2.8.0 merge: `deriveAccess` reads `tenancies` on every signed-in request.            |
 | `0044`         | 2026-10-25 | Before the v2.9.0 merge: the member route and the Tenants panel read `tenancy_requests`.         |
+| `0045`         | 2026-10-26 | Before the v2.10.0 merge: it creates `tenancy_invitations`, which the invitation and claim need. |
 
 ## The drizzle-kit ALTER trap
 
