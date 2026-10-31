@@ -72,7 +72,7 @@ A third grouped PR failed earlier still, at `npm ci`, and is held by a second ig
 
 Every Cloudflare tool pins `miniflare` to exact `undici` and `sharp` versions, so a patched
 transitive release only reaches the tree through `overrides.miniflare` in `package.json`. Write
-those entries as **caret ranges from the patched floor** (`"undici": "^7.29.1"`,
+those entries as **caret ranges from the patched floor** (`"undici": "^7.30.1"`,
 `"sharp": "^0.35.5"`), never exact pins: exact pins held vulnerable versions in place once newer
 advisories landed. When an advisory needs a newer release, **raise the floor** and refresh
 `package-lock.json`, then confirm with `npm audit`.
