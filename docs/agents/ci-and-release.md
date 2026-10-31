@@ -72,10 +72,18 @@ A third grouped PR failed earlier still, at `npm ci`, and is held by a second ig
 
 Every Cloudflare tool pins `miniflare` to exact `undici` and `sharp` versions, so a patched
 transitive release only reaches the tree through `overrides.miniflare` in `package.json`. Write
-those entries as **caret ranges from the patched floor** (`"undici": "^7.29.1"`,
+those entries as **caret ranges from the patched floor** (`"undici": "^7.30.1"`,
 `"sharp": "^0.35.5"`), never exact pins: exact pins held vulnerable versions in place once newer
 advisories landed. When an advisory needs a newer release, **raise the floor** and refresh
 `package-lock.json`, then confirm with `npm audit`.
+
+`overrides.zod` is the same kind of floor, for a different reason. `@cloudflare/vitest-pool-workers`
+0.23 pins `zod` to exactly `4.4.3`, a test-only dependency, but npm hoisted that copy to the root of
+the tree, where `better-call`, `better-auth-cloudflare` and the Anthropic SDK resolved it too, so a
+vulnerable zod shipped in the Worker's auth code. A lockfile refresh cannot move an exact pin, and
+Dependabot reports `security_update_not_possible` for it. The override gives the whole tree one
+patched copy. Re-check it when #313 replaces the pool: `@cloudflare/vitest-plugin` pins its own exact
+zod, so remove the override only if `npm audit` stays clean without it.
 
 ## Actions are pinned to commit SHAs
 

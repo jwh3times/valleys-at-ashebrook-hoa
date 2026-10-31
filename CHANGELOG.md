@@ -9,6 +9,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.22] - 2026-10-31
+
+### Security
+
+- **Patched the 14 open Dependabot alerts** (9 high, 5 moderate) in `zod` and `undici`. `npm audit`
+  now reports no vulnerabilities.
+  - `zod`: the deployed Worker's auth code carried `zod` 4.4.3 and 4.5.4, both open to a
+    memory-exhaustion advisory on oversized collections. `@cloudflare/vitest-pool-workers` pins
+    4.4.3 exactly, and that copy sat at the root of the tree where production packages resolved it
+    too. A new `overrides.zod` floor of `^4.6.6` gives the whole tree a single copy, 4.6.7.
+  - `undici`: none of it ships in the Worker; these are build, local-development and test tooling.
+    The miniflare override's floor goes to `^7.30.1`, which moves 7.30.0 to 7.30.1, and jsdom's copy
+    goes from 8.12.1 to 8.12.3.
+
+## [2.10.21] - 2026-10-30
+
+### Changed
+
+- Dependency update (#490): `better-auth`, `@better-auth/core` and `@better-auth/drizzle-adapter`
+  1.7.13 → 1.7.14, `@cloudflare/workers-types` 5.20261026.1 → 5.20261027.1, and `wrangler` 4.152.0 →
+  4.154.0, with `worker-configuration.d.ts` regenerated.
+
+## [2.10.20] - 2026-10-30
+
+### Changed
+
+- Dependency update (#489): `oxlint` 1.89.0 → 1.90.0.
+
 ## [2.10.19] - 2026-10-30
 
 ### Changed
@@ -4541,7 +4569,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.19...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.22...HEAD
+[2.10.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.21...v2.10.22
+[2.10.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.20...v2.10.21
+[2.10.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.19...v2.10.20
 [2.10.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.18...v2.10.19
 [2.10.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.17...v2.10.18
 [2.10.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.16...v2.10.17
