@@ -9,8 +9,8 @@ All from the repository root, in the order `.github/workflows/build.yml` runs th
 
 - `npm run format:check`, fixed by `npm run format`
 - `npm run lint`
-- only when `scripts/` changed:
-  `node --test scripts/sync-agents.test.mjs scripts/lint-agent-neutrality.test.mjs`
+- `node scripts/check-docs.mjs`
+- only when `scripts/` changed: `node --test "scripts/*.test.mjs"`
 - `npm run sync:agents:check`, fixed by `npm run format` then `npm run sync:agents`, committing the
   regenerated trees
 - `npm run lint:agents`

@@ -58,16 +58,10 @@ jobs:
             next="${tag#v${line}.}"
             tag_created=false
           else
-            last=$(git tag --list "v${line}.*" | grep -E "^v${major}\.${minor}\.(0|[1-9][0-9]*)$" | sed -E "s/^v${major}\.${minor}\.//" | sort -n | tail -1 || true)
-            if [ -z "$last" ]; then
-              next="$build"
-            else
-              next=$(( last + 1 ))
-              if [ "$next" -lt "$build" ]; then
-                next="$build"
-              fi
-            fi
-            tag="v${line}.${next}"
+            # scripts/next-version.mjs is the same computation the changelog check and ship make.
+            version=$(node scripts/next-version.mjs)
+            next="${version##*.}"
+            tag="v${version}"
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git tag -a "$tag" -m "Release ${tag}"

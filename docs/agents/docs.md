@@ -27,8 +27,8 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   those changes.
 - `docs/agents/ci-and-release.md` — the pipeline, versioning, the changelog guard, Dependabot.
   **When:** CI, Dependabot, versioning or the changelog workflow changes.
-- `docs/agents/dev-flow.md`, `issue-tracker.md`, `triage-labels.md`, `domain.md` — the conventions
-  the flow skills read. **When:** a convention or route changes.
+- `docs/agents/dev-flow.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`,
+  `docs/agents/domain.md` — the conventions the flow skills read. **When:** a convention or route changes.
 - `docs/agents/` settings (`workspace`, `human-follow-up`, `docs`, `releases`, `ship`, `handoffs`,
   and the settings sections of `issue-tracker`) — what the shared skills read. **When:** a setting
   changes.
@@ -97,4 +97,5 @@ detail, the specifics of an unfixed security problem, secret values; historical 
 
 ## Docs validation
 
-`npm run format:check` — Prettier over the whole repository, Markdown included.
+- `node scripts/check-docs.mjs`
+- `npm run format:check` — Prettier over the whole repository, Markdown included.
