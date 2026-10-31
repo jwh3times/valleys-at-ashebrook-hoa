@@ -53,7 +53,7 @@ declare namespace Cloudflare {
      */
     BOOTSTRAP_SECRET?: string;
     /** Test-only binding: D1 migrations applied via applyD1Migrations in Workers tests. */
-    MIGRATIONS?: import('@cloudflare/vitest-pool-workers').D1Migration[];
+    MIGRATIONS?: import('@cloudflare/vitest-plugin').D1Migration[];
   }
 }
 

@@ -24,20 +24,6 @@ updates:
     labels:
       - 'dependencies'
       - 'npm'
-    ignore:
-      # vitest is held below 5 (see #313). @cloudflare/vitest-pool-workers 0.22
-      # declares `peer vitest@"^4.1.0"`, so `npm ci` failed on the 5.0.0 bump
-      # (#308) before a single gate ran — and the pool is what runs
-      # test/server/** against a real workerd + D1, so it can be neither
-      # dropped nor forced. Majors ONLY: 4.x minors and patches still come
-      # through. Remove both entries when the pool's peer range includes
-      # vitest 5, then take the bump as its own PR with the full test:server run.
-      - dependency-name: 'vitest'
-        update-types:
-          - 'version-update:semver-major'
-      - dependency-name: '@vitest/*'
-        update-types:
-          - 'version-update:semver-major'
     groups:
       # --- Peer-locked families — majors only. All minor/patch bumps land in the
       #     catch-all group at the bottom. ---
