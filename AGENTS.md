@@ -82,7 +82,7 @@ npm run types:worker      # regenerate Cloudflare runtime/binding types
 npm run types:worker:check # fail if generated Worker types drifted, enforced by CI
 npm test                  # jsdom component/unit tests (Vitest)
 npm run test:watch        # Vitest in watch mode
-npm run test:server       # Worker/D1 integration tests (vitest-pool-workers)
+npm run test:server       # Worker/D1 integration tests (vitest-plugin)
 npm run format            # Prettier write
 npm run format:check      # Prettier check, enforced by CI
 npm run lint              # type-aware Oxlint
@@ -311,7 +311,7 @@ example `shows an empty state`. Prefer small focused tests over broad snapshots 
 intentionally static.
 
 - **`npm test`** uses `vitest.config.ts` and covers `test/unit/**` plus component `*.test.tsx`.
-- **`npm run test:server`** uses `@cloudflare/vitest-pool-workers` with `vitest.workers.config.ts`
+- **`npm run test:server`** uses `@cloudflare/vitest-plugin` with `vitest.workers.config.ts`
   for `test/server/**`; these import `{ env, applyD1Migrations }` from `cloudflare:test` and
   mostly invoke handlers directly.
 
@@ -319,8 +319,12 @@ This split matches the type-checking split above: `test/unit/**` is checked by
 `tsconfig.node.json`, while `test/server/**` — which imports `cloudflare:test` — stays in
 `tsconfig.json`.
 
-Pool 0.21 takes Miniflare's config-based `WorkerOptions` through `cloudflareTest({ miniflare: … })`;
+The plugin takes Miniflare's config-based `WorkerOptions` through `cloudflareTest({ miniflare: … })`;
 supported overrides there merge over `wrangler.test.toml`.
+
+`readD1Migrations` keeps each statement's leading comments in `queries`, so a test that matches a
+statement's first keyword must strip comment lines first; otherwise an anchored filter skips nearly
+every statement and still passes (see `test/server/adr0022-phase1-schema.test.ts`).
 
 Keep `vitest.workers.config.ts`'s `es-module-lexer` alias and its Astro Vite plugin graph: it
 merges Astro's plugins into the Workers test pool, so `.astro` pages can be rendered directly

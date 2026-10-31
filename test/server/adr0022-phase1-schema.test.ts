@@ -117,8 +117,17 @@ const PHASE_1_FILES = new Set([
   '0022_adr0022_lot_retirement_columns.sql',
 ]);
 
+// readD1Migrations keeps each statement's leading comments, and these files
+// open most statements with one. The discipline tests below anchor on the
+// statement's first keyword, so they read the SQL with comment lines removed;
+// otherwise a `^\s*CREATE` filter skips nearly everything and still passes.
 function phase1Migrations() {
-  return env.MIGRATIONS!.filter((m) => PHASE_1_FILES.has(m.name));
+  return env
+    .MIGRATIONS!.filter((m) => PHASE_1_FILES.has(m.name))
+    .map((m) => ({
+      ...m,
+      queries: m.queries.map((q) => q.replace(/^\s*--.*$/gm, '').trim()),
+    }));
 }
 
 describe('ADR 0022 phase 1 migrations', () => {
@@ -151,14 +160,19 @@ describe('ADR 0022 phase 1 migrations', () => {
   it('makes every CREATE re-runnable with IF NOT EXISTS', () => {
     // A half-applied file must be fixable by running it forward again:
     // Cloudflare does not document per-file atomicity and there is no un-apply.
+    let creates = 0;
     for (const migration of phase1Migrations()) {
       for (const query of migration.queries) {
         if (!/^\s*CREATE/i.test(query)) continue;
+        creates += 1;
         expect(query, `${migration.name}: ${query.slice(0, 60)}`).toMatch(
           /IF NOT EXISTS/i,
         );
       }
     }
+    // Every phase 1 table has a CREATE, so fewer means the filter stopped
+    // matching and the loop above checked nothing.
+    expect(creates).toBeGreaterThanOrEqual(PHASE_1_TABLES.length);
   });
 
   it('isolates the two non-re-runnable ALTER statements in their own file', () => {

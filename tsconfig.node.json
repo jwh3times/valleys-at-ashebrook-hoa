@@ -22,7 +22,7 @@
     "types": [
       "./worker-configuration.d.ts",
       "node",
-      "@testing-library/jest-dom"
+      "@testing-library/jest-dom/vitest"
     ]
   }
 }

@@ -81,7 +81,7 @@ jobs:
       - run: npm run lint:fixtures
       - run: npm run check
       - run: npm test
-      # Worker/D1 integration tests (vitest-pool-workers) — exercises the API
+      # Worker/D1 integration tests (vitest-plugin) — exercises the API
       # handlers against a real workerd + D1 with migrations applied.
       - run: npm run test:server
       - run: npm run build
