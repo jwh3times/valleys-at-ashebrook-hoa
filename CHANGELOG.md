@@ -9,6 +9,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.27] - 2026-10-31
+
+### Changed
+
+- **The daily R2 orphan sweep now deletes what it finds** (#442). A document file or search twin that
+  no `documents` row points at, and that is more than 7 days old, is removed instead of only being
+  logged. The report-only runs were reviewed against production and found none, so nothing is
+  deleted today; this covers future leftovers, such as a file whose delete fails after its row is
+  gone. Deleted objects can't be restored, because the bucket has no versioning.
+- The sweep's sanity threshold goes from a provisional 200 to 50: a run finding more than 50 orphans
+  deletes nothing and fails.
+
 ## [2.10.26] - 2026-10-31
 
 ### Changed
@@ -4616,7 +4628,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.26...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.27...HEAD
+[2.10.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.26...v2.10.27
 [2.10.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.25...v2.10.26
 [2.10.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...v2.10.25
 [2.10.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.23...v2.10.24
