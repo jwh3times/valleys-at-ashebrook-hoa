@@ -9,6 +9,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.23] - 2026-10-31
+
+### Changed
+
+- **Worker tests moved to `@cloudflare/vitest-plugin`, and Vitest to 5** (#313). The plugin 1.4.11
+  replaces the deprecated `@cloudflare/vitest-pool-workers`, and its peer range accepts Vitest 5, so
+  `vitest` and `@vitest/coverage-v8` go from 4.1.12 to 5.0.5. Dependabot no longer ignores their
+  major updates. No production dependency changes; `wrangler` moves from 4.154.0 to 4.156.0.
+- `overrides.zod` is gone. The plugin keeps its own patched copy of `zod` 4.6.6 and the rest of the
+  tree, including the Worker, resolves 4.6.7, with `npm audit` still clean.
+
+### Fixed
+
+- **The ADR 0022 phase 1 migration tests read the SQL statements again.** The plugin's migration
+  reader keeps each statement's leading comments, so the check that every `CREATE` is re-runnable
+  would have passed while skipping nearly every statement, and the check that only one file holds
+  `ALTER`s failed. Both now read comment-free SQL, and the `CREATE` check fails if it finds fewer
+  statements than there are phase 1 tables.
+
 ## [2.10.22] - 2026-10-31
 
 ### Security
@@ -4569,7 +4588,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.22...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.23...HEAD
+[2.10.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.22...v2.10.23
 [2.10.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.21...v2.10.22
 [2.10.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.20...v2.10.21
 [2.10.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.19...v2.10.20
