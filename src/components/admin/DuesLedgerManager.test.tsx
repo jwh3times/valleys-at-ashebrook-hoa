@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DuesLedgerManager from './DuesLedgerManager';
 import * as admin from '../../lib/admin';
@@ -193,16 +193,22 @@ describe('the operation key', () => {
     render(<DuesLedgerManager />);
     await loaded();
 
+    // One change per field, as in the bulk form's key test (#494): this is
+    // about the key, not about typing.
     async function postOne(description: string) {
       await user.selectOptions(
         screen.getByLabelText(/^lot$/i),
         '1 Ashebrook Lane',
       );
-      await user.clear(screen.getByLabelText(/^amount/i));
-      await user.type(screen.getByLabelText(/^amount/i), '450');
-      await user.type(screen.getByLabelText(/^date$/i), '2026-02-01');
-      await user.clear(screen.getByLabelText(/description/i));
-      await user.type(screen.getByLabelText(/description/i), description);
+      fireEvent.change(screen.getByLabelText(/^amount/i), {
+        target: { value: '450' },
+      });
+      fireEvent.change(screen.getByLabelText(/^date$/i), {
+        target: { value: '2026-02-01' },
+      });
+      fireEvent.change(screen.getByLabelText(/description/i), {
+        target: { value: description },
+      });
       await user.click(screen.getByRole('button', { name: /^post entry$/i }));
     }
 
@@ -640,17 +646,21 @@ describe('the bulk form key', () => {
     render(<DuesLedgerManager />);
     await loaded();
 
+    // Filled with one change per field: the test is about the key each submit
+    // sends, and typing these values keystroke by keystroke cost about 75
+    // re-renders of the whole panel — enough to time out under a full
+    // suite's load (#494).
     async function fillAndSubmit() {
-      await user.clear(screen.getByLabelText(/amount per lot/i));
-      await user.type(screen.getByLabelText(/amount per lot/i), '450');
-      const day = screen.getByLabelText(/^date$/i, { selector: '#bulk-day' });
-      await user.clear(day);
-      await user.type(day, '2026-01-01');
-      await user.clear(screen.getByLabelText(/every homeowner sees this/i));
-      await user.type(
-        screen.getByLabelText(/every homeowner sees this/i),
-        'Q1 assessment',
+      fireEvent.change(screen.getByLabelText(/amount per lot/i), {
+        target: { value: '450' },
+      });
+      fireEvent.change(
+        screen.getByLabelText(/^date$/i, { selector: '#bulk-day' }),
+        { target: { value: '2026-01-01' } },
       );
+      fireEvent.change(screen.getByLabelText(/every homeowner sees this/i), {
+        target: { value: 'Q1 assessment' },
+      });
       await user.click(
         screen.getByRole('button', { name: /^post to every active lot$/i }),
       );

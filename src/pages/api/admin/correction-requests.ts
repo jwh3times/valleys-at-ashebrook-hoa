@@ -22,11 +22,8 @@ import {
   isBatchAssertionError,
   type SqlGuard,
 } from '../../../server/roster/audit';
-import {
-  normalizeName,
-  normalizeEmail,
-  normalizePhone,
-} from '../../../server/roster/normalize';
+import { normalizeName } from '../../../server/roster/normalize';
+import { normalizedContactValue } from '../../../server/roster/builders';
 import { personDisplayLabel, associationDateIso } from '../../../lib/format';
 
 // ADR 0022 phase 3b (#218): the board's review queue for member correction
@@ -224,15 +221,12 @@ async function acceptCorrectionRequest(
         'Contact method is voided or redacted and cannot be corrected',
         { status: 409 },
       );
-    const normalized =
-      target.channel === 'email'
-        ? normalizeEmail(reqRow.proposedValue)
-        : normalizePhone(reqRow.proposedValue);
-    if (!normalized)
-      return new Response(
-        `Proposed value is not a valid ${target.channel === 'email' ? 'email address' : 'phone number'}`,
-        { status: 400 },
-      );
+    const checked = normalizedContactValue(
+      target.channel,
+      reqRow.proposedValue,
+    );
+    if (!checked.ok) return new Response(checked.error, { status: 400 });
+    const normalized = checked.value;
 
     const oldId = target.id;
     const newId = crypto.randomUUID();
@@ -297,15 +291,12 @@ async function acceptCorrectionRequest(
       sensitive: [target.channel === 'email' ? 'email' : 'phone'],
     });
   } else if (reqRow.channel) {
-    const normalized =
-      reqRow.channel === 'email'
-        ? normalizeEmail(reqRow.proposedValue)
-        : normalizePhone(reqRow.proposedValue);
-    if (!normalized)
-      return new Response(
-        `Proposed value is not a valid ${reqRow.channel === 'email' ? 'email address' : 'phone number'}`,
-        { status: 400 },
-      );
+    const checked = normalizedContactValue(
+      reqRow.channel,
+      reqRow.proposedValue,
+    );
+    if (!checked.ok) return new Response(checked.error, { status: 400 });
+    const normalized = checked.value;
     const newId = crypto.randomUUID();
     domainStatements.push(
       database

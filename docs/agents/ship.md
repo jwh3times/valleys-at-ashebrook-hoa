@@ -34,6 +34,6 @@ CI-only: `test:server` (the workerd/Miniflare suite), `build` and `deploy:check`
 - **Waiver line:** `Flow waived by the user: <reason>`.
 - **Exempt:**
   - dependency bumps (Dependabot, `chore(deps)`)
-  - changes touching only `docs/`, root `*.md`, `.agents/` and `.claude/`
+  - changes touching only `docs/`, root `*.md`, `.agents/`, `.claude/` and `skills-lock.json`
   - release prep (the `docs: update docs and changelog for vX.Y.Z` commit, a release-only branch)
 - **Defined in:** `docs/agents/dev-flow.md`.

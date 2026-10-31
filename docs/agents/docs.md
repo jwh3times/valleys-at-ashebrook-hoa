@@ -41,6 +41,13 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   the auth, visibility or access model changes.
 - `CONTRIBUTING.md` — the workflow and standards. **When:** the development flow or a required check
   changes.
+- `SUPPORT.md` — where to ask for help. **When:** the issue templates or the support route change.
+- `CODE_OF_CONDUCT.md`, `LICENSE` — `owner-only`.
+- `ROADMAP.md` — a pointer to the trackers and the board, and the board's vocabulary; it lists no
+  work. **When:** where planned work lives, or a board field's meaning, changes.
+- `vendor/astro-check-ts6/README.md` — why the Astro checker runs on a TypeScript 6 bridge.
+  **When:** the bridge's pins or its wiring into `npm run check` change, or Astro's checker
+  supports TypeScript 7.
 - `docs/workstation-bootstrap.md` — prerequisites and value-free commands for a new workstation.
   **When:** a prerequisite or bootstrap command changes.
 - `CHANGELOG.md` — release notes, one dated section per merge. `ship-owned`.
@@ -86,6 +93,7 @@ detail, the specifics of an unfixed security problem, secret values; historical 
 - Bindings: `binding` in `wrangler.toml`
 - Lib helpers: `src/lib/*.ts`
 - CI steps: the `run:` lines of `.github/workflows/build.yml`
+- Required status checks: `gh api repos/jwh3times/valleys-at-ashebrook-hoa/rules/branches/main`
 
 ## Docs validation
 

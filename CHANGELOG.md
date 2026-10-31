@@ -9,6 +9,76 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.19] - 2026-10-30
+
+### Changed
+
+- The doc map now covers `ROADMAP.md`, `SUPPORT.md`, `CODE_OF_CONDUCT.md`, `LICENSE` and the
+  TypeScript 6 bridge's README, and the drift probes read the ruleset's required status checks.
+  `/end-session` handles worktrees through its own finished-branch check rather than a cleanup-list
+  entry.
+
+## [2.10.18] - 2026-10-30
+
+### Fixed
+
+- A homeowner's correction request can no longer propose a malformed or over-long contact value
+  (#491). Submitting a correction to an email address or phone number, or proposing a new one, now
+  gets the same check the board's roster and the tenant request use: "Invalid email address",
+  "Invalid phone number", or "Contact must be N characters or fewer". Nothing is stored. A request
+  for someone else's contact method still answers "Not found" whatever its value. When the board
+  accepts a request already on file, its value is checked again; a value that fails is refused,
+  nothing is written, and the request stays open. The board's message for a bad value changes from
+  "Proposed value is not a valid email address" (or phone number) to the shared wording. Name
+  corrections are unchanged.
+
+## [2.10.17] - 2026-10-30
+
+### Fixed
+
+- A dues ledger test no longer times out in a full local `npm test` run (#494). The bulk-assessment
+  key test typed its form keystroke by keystroke three times, about 75 simulated keystrokes that each
+  re-rendered the whole panel. That took about 2.4 seconds on its own. Its fields are now filled in
+  one step each, and it takes about half a second. The "fresh key after a post succeeds" test, which
+  typed the same way, gets the same change. Both still assert which key each submit sends. No site
+  behavior changes.
+
+## [2.10.16] - 2026-10-30
+
+### Changed
+
+- The shared agent skills are refreshed from `jwh3times/skills`, which now give most settings a
+  default, so the ones that matched leave `docs/agents/`. `/end-session` ends by proving both
+  repositories clean and pushed, and `/handoff` names `npm run bootstrap:private` for a machine
+  without `private/`, which `/lets-go` offers.
+
+## [2.10.15] - 2026-10-30
+
+### Fixed
+
+- The board's roster can no longer record a contact method of any length (#483). Adding one now
+  refuses an email address over 320 characters or a phone number over 32, the same limits the
+  tenant-request form already enforced, with "Contact must be N characters or fewer". The board
+  panel's Value field stops typing at the limit for the chosen channel. Contact methods already on
+  file are not checked, so none of them is refused. The tenant-request form's message changes from
+  "contact must be…" to "Contact must be…".
+
+## [2.10.14] - 2026-10-30
+
+### Changed
+
+- The shared agent skills are refreshed from `jwh3times/skills`. Agents now commit in `private/`
+  only after asking, by one procedure every repository shares, which also confirms the companion is
+  private before pushing; until now they committed it without asking. `docs/agents/workspace.md`
+  keeps this repository's own checks under `Companion commit checks`. `/ship` reports an open PR
+  that claims the same version again, and `/lets-go` installs from a changed lockfile.
+
+## [2.10.13] - 2026-10-29
+
+### Changed
+
+- Dependency update (#486): `@cloudflare/workers-types` 5.20261025.1 → 5.20261026.1.
+
 ## [2.10.12] - 2026-10-29
 
 ### Changed
@@ -4471,7 +4541,14 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.12...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.19...HEAD
+[2.10.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.18...v2.10.19
+[2.10.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.17...v2.10.18
+[2.10.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.16...v2.10.17
+[2.10.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.15...v2.10.16
+[2.10.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.14...v2.10.15
+[2.10.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.13...v2.10.14
+[2.10.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.12...v2.10.13
 [2.10.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.11...v2.10.12
 [2.10.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.10...v2.10.11
 [2.10.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.9...v2.10.10

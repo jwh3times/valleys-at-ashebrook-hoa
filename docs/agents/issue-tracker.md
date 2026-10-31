@@ -143,11 +143,6 @@ page and its contact-value scan. This heading stays so links to it still land.
 
 jwh3times/valleys-at-ashebrook-hoa
 
-## Private issue repository
-
-jwh3times/valleys-at-ashebrook-hoa-ops — only when the body itself cannot be public, routed by the
-rule above (ADR 0023).
-
 ## Board
 
 jwh3times 6 — the private Ashebrook board, one ordered view across both trackers. A new issue does
@@ -167,12 +162,7 @@ not join it on its own: add it with `gh project item-add 6 --owner jwh3times --u
 
 The issue is the record; durable facts go in its body and comments, never only in a field.
 
-## New work
-
-issue
-
 ## Security findings
 
-A draft repository security advisory on `jwh3times/valleys-at-ashebrook-hoa`, never an issue on
-either tracker (see "Security findings and long-form reviews" above). A long-form review goes to the
+The default (see "Security findings and long-form reviews" above). A long-form review goes to the
 companion's wiki, linked from a tracking issue.

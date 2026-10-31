@@ -13,15 +13,11 @@ The procedure is the `## Procedure` the shared skills carry
 
 ## Follow-up destination
 
-`jwh3times/valleys-at-ashebrook-hoa-ops` — the private tracker, selected explicitly with `-R`, since
-such steps almost always carry production identifiers or procedure detail. One issue per distinct
-human action, or per coherent batch whose steps mean nothing apart. If a private issue already
-tracks the work — a remediation issue with an ordered checklist, say — add the step there as a
-checklist line plus a comment rather than opening a duplicate.
-
-## Follow-up label
-
-`ready-for-human`
+The default (the private tracker): such steps almost always carry production identifiers or
+procedure detail. One issue per distinct human action, or per coherent batch whose steps mean
+nothing apart. If a private issue already tracks the work — a remediation issue with an ordered
+checklist, say — add the step there as a checklist line plus a comment rather than opening a
+duplicate.
 
 ## Follow-up board
 
