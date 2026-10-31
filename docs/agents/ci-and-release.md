@@ -58,15 +58,13 @@ That hazard has fired twice, both times on grouped dependabot PRs:
   `.github/dependabot.yml` now travels `oxlint`/`oxlint-tsgolint` in **their own minor+patch
   group**, so a linter release with a newly-recategorized rule arrives as its own reviewable PR.
 
-A third grouped PR failed earlier still, at `npm ci`, and is held by a second ignore rule:
+A third grouped PR failed earlier still, at `npm ci`:
 
 - PR #308 bumped `vitest` and `@vitest/coverage-v8` to 5.0.0, and `npm ci` refused the tree before
-  any gate ran: `@cloudflare/vitest-pool-workers` 0.22 declares `peer vitest@"^4.1.0"`, and that
-  pool is what runs `test/server/**` against a real workerd + D1, so it can be neither dropped nor
-  forced. `.github/dependabot.yml` now **ignores `vitest` and `@vitest/*` major updates** until the
-  pool's peer range includes vitest 5 (#313 tracks the upstream gate); 4.x minors and patches still
-  come through. Remove both entries when it does, and take the bump as its own PR with the full
-  `test:server` run.
+  any gate ran, because `@cloudflare/vitest-pool-workers` declared `peer vitest@"^4.1.0"`. #313 moved
+  to its successor, `@cloudflare/vitest-plugin`, whose peer range includes Vitest 5, and removed the
+  `vitest` and `@vitest/*` major ignores from `.github/dependabot.yml`. Take a future `vitest` major
+  as its own PR with the full `test:server` run, and check the plugin's peer range first.
 
 ## The miniflare `undici`/`sharp` overrides are caret floors
 
@@ -77,13 +75,11 @@ those entries as **caret ranges from the patched floor** (`"undici": "^7.30.1"`,
 advisories landed. When an advisory needs a newer release, **raise the floor** and refresh
 `package-lock.json`, then confirm with `npm audit`.
 
-`overrides.zod` is the same kind of floor, for a different reason. `@cloudflare/vitest-pool-workers`
-0.23 pins `zod` to exactly `4.4.3`, a test-only dependency, but npm hoisted that copy to the root of
-the tree, where `better-call`, `better-auth-cloudflare` and the Anthropic SDK resolved it too, so a
-vulnerable zod shipped in the Worker's auth code. A lockfile refresh cannot move an exact pin, and
-Dependabot reports `security_update_not_possible` for it. The override gives the whole tree one
-patched copy. Re-check it when #313 replaces the pool: `@cloudflare/vitest-plugin` pins its own exact
-zod, so remove the override only if `npm audit` stays clean without it.
+A test tool's exact pin can reach production code. `@cloudflare/vitest-plugin` pins `zod` exactly, and
+its predecessor's pin was hoisted to the root of the tree, where the auth packages resolved it too,
+so a vulnerable zod shipped in the Worker. A lockfile refresh cannot move an exact pin, and Dependabot
+reports `security_update_not_possible` for it. If the plugin's copy is ever hoisted while vulnerable,
+add a root `overrides.zod` caret floor, as #499 did until #313 removed the need.
 
 ## Actions are pinned to commit SHAs
 
