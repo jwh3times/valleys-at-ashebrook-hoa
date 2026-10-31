@@ -49,7 +49,7 @@ A time-bounded, verified relationship establishing that an Account represents a 
 _Avoid_: Owner Link, Lot link, Account ownership
 
 **Person Verification**:
-Proof that an Account represents a specific Person, established through either Automatic Person Verification or Manual Person Verification.
+Proof that an Account represents a specific Person, established through Automatic Person Verification, Manual Person Verification, or a Tenancy Claim.
 _Avoid_: Ownership proof, Lot verification
 
 **Identity Event**:
@@ -90,7 +90,15 @@ _Avoid_: Renter, resident, occupant
 
 **Tenancy Request**:
 A request by a current holder of Lot Authority to admit a named Tenant to the Lot until a stated end day. It is not a roster fact: only a System Administrator or a current Board Member with Board Access may approve it, which records the Tenancy as a Roster Change; until then, or once refused, it grants nothing.
-_Avoid_: Tenant invitation, tenant registration
+_Avoid_: Tenant application, tenant registration
+
+**Tenancy Invitation**:
+A single-use link, good for 14 days, sent to the Contact Method the Board approved for a current or upcoming Tenancy so that the Person it names can make a Tenancy Claim. It is a credential rather than a roster fact: a newer one replaces it, it dies if that Contact Method leaves the roster, and a fresh one needs no new approval while that Person has no current Person Link.
+_Avoid_: Tenancy Request, claim code, verification code
+
+**Tenancy Claim**:
+An Account's use of a live Tenancy Invitation to link itself to the Person the Tenancy names. Following the link is contact proof, so the claim is a Person Verification and creates the Person Link without the Lot Address and name matching of Automatic Person Verification. Opening the link consumes nothing, an Account already linked to that Person needs no claim, and one linked to a different Person cannot make one.
+_Avoid_: Tenant verification, tenant sign-up, tenant approval
 
 **Lot Authority**:
 Equal authority held by every individual Current Owner and every current Representative of an organizational Current Owner to act for a Lot, with no primary-person hierarchy. When an occasion permits one controlling action per Lot, the first valid action controls unless that kind of action remains revocable or correctable under its own rules.
