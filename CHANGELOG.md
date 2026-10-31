@@ -9,6 +9,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.26] - 2026-10-31
+
+### Changed
+
+- `ROADMAP.md` no longer names a current priority. Its section pointed at #212, which is closed, in
+  a file that says it holds no status lines.
+- `docs/agents/migrations.md` records that `0045` was applied to production on 2026-10-26.
+
 ## [2.10.25] - 2026-10-31
 
 ### Changed
@@ -4608,7 +4616,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.25...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.26...HEAD
+[2.10.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.25...v2.10.26
 [2.10.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...v2.10.25
 [2.10.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.23...v2.10.24
 [2.10.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.22...v2.10.23
