@@ -37,7 +37,7 @@
     "sync:agents": "node scripts/sync-agents.mjs",
     "sync:agents:check": "node scripts/sync-agents.mjs --check",
     "lint:agents": "node scripts/lint-agent-neutrality.mjs",
-    "sync:main": "node --experimental-strip-types scripts/sync-main.ts",
+    "sync:main": "node scripts/sync-main.mjs",
     "test": "vitest run",
     "test:server": "vitest run --config vitest.workers.config.ts",
     "test:watch": "vitest",

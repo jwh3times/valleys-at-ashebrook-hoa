@@ -116,7 +116,7 @@ valid and is not incremented to `x.y.1` unless an `x.y.0` tag already exists.
 The Changelog Version workflow (`.github/workflows/changelog.yml`) runs on every non-dependabot PR
 and **fails it unless `CHANGELOG.md` documents the version that PR's merge will mint**.
 
-`scripts/next-version.sh` predicts that version by mirroring the Version workflow's tag algorithm.
+`scripts/next-version.mjs` computes that version, and the Version workflow tags with the same script.
 The `/ship` skill (`.claude/skills/ship/`) classifies the branch's project-level release impact as
 major, minor, or build before writing the matching changelog section; for a major or minor
 classification it idempotently updates `package.json` and `package-lock.json` from the merge-base

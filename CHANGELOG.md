@@ -9,6 +9,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.24] - 2026-10-31
+
+### Changed
+
+- The version, changelog, docs and sync scripts are now the canonical ones from `jwh3times/skills`,
+  and the shared skills are refreshed to match. The Version workflow tags with
+  `scripts/next-version.mjs` instead of its own copy of the rule. **Changelog Version** also requires
+  a section for every released build, so a Dependabot merge must be backfilled by the next human PR.
+  CI now runs `node scripts/check-docs.mjs`: local links and anchors must resolve, and the doc map
+  must list every document.
+
 ## [2.10.23] - 2026-10-31
 
 ### Changed
@@ -4588,7 +4599,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.23...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...HEAD
+[2.10.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.23...v2.10.24
 [2.10.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.22...v2.10.23
 [2.10.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.21...v2.10.22
 [2.10.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.20...v2.10.21

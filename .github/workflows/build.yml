@@ -67,8 +67,10 @@ jobs:
       # authored inputs. Fix with `npm run sync:agents`. The synchronizer and the
       # tool-neutrality lint are shared byte-for-byte across repositories, so
       # their own node:test suites run here rather than under Vitest.
-      - run: node --test scripts/sync-agents.test.mjs scripts/lint-agent-neutrality.test.mjs
+      - run: node --test scripts/sync-agents.test.mjs scripts/lint-agent-neutrality.test.mjs scripts/sync-main.test.mjs scripts/next-version.test.mjs scripts/check-changelog.test.mjs scripts/check-docs.test.mjs
       - run: npm run sync:agents:check
+      # Local links and anchors resolve, and the doc map lists every document.
+      - run: node scripts/check-docs.mjs
       # Fails on agent or skill wording one tool cannot follow, and on links
       # that break once a skill is mirrored into .claude/skills.
       - run: npm run lint:agents

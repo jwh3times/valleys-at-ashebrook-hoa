@@ -29,7 +29,8 @@ file with the configuration change.
    npm run format:check   # Prettier (fix with: npm run format)
    npm run lint           # type-aware Oxlint correctness and React Hooks checks
    npm run sync:agents:check # generated agent trees match authored inputs
-   node --test scripts/sync-agents.test.mjs scripts/lint-agent-neutrality.test.mjs # the shared scripts' own tests
+   node --test "scripts/*.test.mjs" # the shared scripts' own tests
+   node scripts/check-docs.mjs # local doc links and anchors, and doc map coverage
    npm run lint:agents    # agent and skill sources stay tool-neutral
    npm run lint:coercions # reject blank/zero numeric coercion bugs
    npm run lint:migrations # validate the hand-authored migration sequence
@@ -45,7 +46,7 @@ file with the configuration change.
    nothing. CI's **Changelog Version** check
    (`.github/workflows/changelog.yml`) fails the PR unless it adds a `## [<version>]` section to
    `CHANGELOG.md` for the version the merge will mint — compute that version with
-   `scripts/next-version.sh`, or run the `ship` skill to handle the doc, changelog, and PR flow for
+   `scripts/next-version.mjs`, or run the `ship` skill to handle the doc, changelog, and PR flow for
    you. Dependabot PRs are exempt.
 
 ## Conventions to honour

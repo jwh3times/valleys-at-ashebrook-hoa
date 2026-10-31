@@ -3,7 +3,7 @@ name: Changelog Version
 # Verifies that CHANGELOG.md documents the version THIS PR's merge will mint.
 #
 # Every merge to main is auto-tagged v<major>.<minor>.<build> by version.yml, where the
-# build slot auto-increments. scripts/next-version.sh predicts that tag from the release
+# build slot auto-increments. scripts/next-version.mjs predicts that tag from the release
 # line and existing tags — the SAME algorithm version.yml uses to create it. This job runs
 # that script and fails the PR unless CHANGELOG.md has a matching `## [<version>]` section,
 # so the changelog can never silently fall behind the tags.
@@ -49,12 +49,4 @@ jobs:
             echo "Dependabot PR — changelog entry is backfilled by /ship on the next human PR. Skipping."
             exit 0
           fi
-          target=$(bash scripts/next-version.sh)
-          echo "This merge will mint: v${target}"
-          if grep -qF "## [${target}]" CHANGELOG.md; then
-            echo "CHANGELOG.md documents ${target} — ok"
-          else
-            echo "::error::CHANGELOG.md has no '## [${target}]' section, but this merge will mint v${target}."
-            echo "Run /ship (or add a '## [${target}] - <YYYY-MM-DD>' section to CHANGELOG.md) and push again."
-            exit 1
-          fi
+          node scripts/check-changelog.mjs
