@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.25] - 2026-10-31
+
+### Changed
+
+- **The domain glossary now covers the tenant invitation** (#473). `CONTEXT.md` gains **Tenancy
+  Invitation** and **Tenancy Claim**, and **Person Verification** names the claim as its third
+  route. **Tenancy Request** no longer lists "tenant invitation" as a term to avoid, since the code
+  and the site use that word for the invitation.
+
 ## [2.10.24] - 2026-10-31
 
 ### Changed
@@ -4599,7 +4608,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.25...HEAD
+[2.10.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...v2.10.25
 [2.10.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.23...v2.10.24
 [2.10.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.22...v2.10.23
 [2.10.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.21...v2.10.22
