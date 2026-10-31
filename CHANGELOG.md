@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.19] - 2026-10-30
+
+### Changed
+
+- The doc map now covers `ROADMAP.md`, `SUPPORT.md`, `CODE_OF_CONDUCT.md`, `LICENSE` and the
+  TypeScript 6 bridge's README, and the drift probes read the ruleset's required status checks.
+  `/end-session` handles worktrees through its own finished-branch check rather than a cleanup-list
+  entry.
+
 ## [2.10.18] - 2026-10-30
 
 ### Fixed
@@ -4532,7 +4541,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.18...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.19...HEAD
+[2.10.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.18...v2.10.19
 [2.10.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.17...v2.10.18
 [2.10.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.16...v2.10.17
 [2.10.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.15...v2.10.16

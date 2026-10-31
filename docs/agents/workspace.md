@@ -28,7 +28,6 @@ the companion's own `.gitignore` and are never committed to it.
 - `dist/`, `.output/`, `.astro/`, `coverage/` — build, Astro and coverage output.
 - `.superpowers/`, `docs/superpowers/`, `.scratch/` — scratch areas this repository declares, once
   no live branch depends on them.
-- Finished worktrees under `.worktrees/` (`git worktree remove`, then `git worktree prune`).
 
 ## Never-remove paths
 
