@@ -11,6 +11,7 @@ import {
   correctionRequests,
 } from '../../src/server/db/roster-schema';
 import { callerContext } from './caller-context';
+import { CONTACT_INPUT_LIMITS } from '../../src/lib/types';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
   GET as memberList,
@@ -281,6 +282,125 @@ describe('member correction requests', () => {
       memberReq(callerContext('mem-1', 'homeowner', []), 'GET'),
     );
     expect(unlinked.status).toBe(403);
+  });
+});
+
+describe('contact correction values (#491)', () => {
+  async function requestCount() {
+    const [row] = await getDb(env).all<{ n: number }>(
+      sql`SELECT COUNT(*) AS n FROM correction_requests`,
+    );
+    return row.n;
+  }
+
+  /** An open request as a direct API call before #491 could have left it —
+   * the member route now refuses these values, so seed the row itself. */
+  async function seedOpenRequest(
+    id: string,
+    fields: { contactMethodId?: string; channel?: 'email' | 'sms' },
+    proposedValue: string,
+  ) {
+    await getDb(env)
+      .insert(correctionRequests)
+      .values({
+        id,
+        accountId: 'mem-1',
+        personId: 'per-1',
+        kind: 'contact_method',
+        contactMethodId: fields.contactMethodId ?? null,
+        channel: fields.channel ?? null,
+        proposedValue,
+        note: null,
+        status: 'open',
+        createdAt: new Date(),
+      });
+  }
+
+  /** Ten digits, so only the length cap can refuse it. */
+  const tooLongPhone = `555${' '.repeat(CONTACT_INPUT_LIMITS.sms + 1 - '555555-0142'.length)}555-0142`;
+
+  beforeEach(async () => {
+    await seedAccount('mem-1');
+    await seedPerson('per-1', 'Jamie Resident');
+    await seedContactMethod('cm-1', 'per-1', 'old@example.test');
+  });
+
+  it('refuses a malformed or over-length contact value at submission', async () => {
+    // Only the sms cap (32) sits under the route's own 200-character
+    // proposedValue cap, so it is the length the new check adds here. Pinning
+    // the message keeps the older cap's wording from satisfying the test.
+    for (const [body, pattern] of [
+      [{ contactMethodId: 'cm-1', proposedValue: 'not-an-email' }, /email/i],
+      [{ channel: 'sms', proposedValue: '555-01' }, /phone/i],
+      [
+        { channel: 'sms', proposedValue: tooLongPhone },
+        /^Contact must be 32 characters or fewer$/,
+      ],
+    ] as const) {
+      const res = await memberSubmit(
+        memberReq(memberCtx('mem-1', 'per-1'), 'POST', {
+          kind: 'contact_method',
+          ...body,
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toMatch(pattern);
+    }
+    expect(await requestCount()).toBe(0);
+  });
+
+  it("still masks another person's contact method as 404 when the value is malformed", async () => {
+    await seedPerson('per-2', 'Other Resident');
+    await seedContactMethod('cm-other', 'per-2');
+    const foreign = await memberSubmit(
+      memberReq(memberCtx('mem-1', 'per-1'), 'POST', {
+        kind: 'contact_method',
+        contactMethodId: 'cm-other',
+        proposedValue: 'not-an-email',
+      }),
+    );
+    const missing = await memberSubmit(
+      memberReq(memberCtx('mem-1', 'per-1'), 'POST', {
+        kind: 'contact_method',
+        contactMethodId: 'cm-never-existed',
+        proposedValue: 'not-an-email',
+      }),
+    );
+    expect(foreign.status).toBe(404);
+    expect(await foreign.text()).toBe(await missing.text());
+  });
+
+  it('still accepts a name correction of up to 200 characters', async () => {
+    const res = await memberSubmit(
+      memberReq(memberCtx('mem-1', 'per-1'), 'POST', {
+        kind: 'name',
+        proposedValue: 'J'.repeat(200),
+      }),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses to apply a stored value that fails the check, leaving the request open', async () => {
+    await seedOpenRequest('req-bad-email', { contactMethodId: 'cm-1' }, 'x');
+    await seedOpenRequest('req-bad-sms', { channel: 'sms' }, '12');
+    await seedOpenRequest('req-long-sms', { channel: 'sms' }, tooLongPhone);
+    const before = await ledgerCounts();
+    const db = getDb(env);
+    const methodsBefore = await db.select().from(contactMethods);
+
+    for (const requestId of ['req-bad-email', 'req-bad-sms', 'req-long-sms']) {
+      const res = await adminDecide(
+        adminReq('POST', { action: 'accept', requestId }),
+      );
+      expect(res.status).toBe(400);
+    }
+
+    expect(await ledgerCounts()).toBe(before);
+    expect(await db.select().from(contactMethods)).toEqual(methodsBefore);
+    const statuses = await db
+      .select({ status: correctionRequests.status })
+      .from(correctionRequests);
+    expect(statuses.map((r) => r.status)).toEqual(['open', 'open', 'open']);
   });
 });
 

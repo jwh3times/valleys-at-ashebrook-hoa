@@ -18,8 +18,10 @@ import {
  * The shared normalizers deliberately do NOT validate — legacy values are
  * accepted as recorded — so a light shape check and the channel's length cap
  * live here, where someone is typing a new value and a typo should bounce
- * rather than be enshrined. Only new values pass through, so the cap never
- * refuses a value already on file.
+ * rather than be enshrined. Only values about to become a NEW Contact Method
+ * pass through — typed by the board, a tenant request, or a correction request
+ * at submission and again at acceptance — so it never refuses a recorded
+ * Contact Method's value.
  */
 export function normalizedContactValue(
   channel: keyof typeof CONTACT_INPUT_LIMITS,

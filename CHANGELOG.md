@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.18] - 2026-10-30
+
+### Fixed
+
+- A homeowner's correction request can no longer propose a malformed or over-long contact value
+  (#491). Submitting a correction to an email address or phone number, or proposing a new one, now
+  gets the same check the board's roster and the tenant request use: "Invalid email address",
+  "Invalid phone number", or "Contact must be N characters or fewer". Nothing is stored. A request
+  for someone else's contact method still answers "Not found" whatever its value. When the board
+  accepts a request already on file, its value is checked again; a value that fails is refused,
+  nothing is written, and the request stays open. The board's message for a bad value changes from
+  "Proposed value is not a valid email address" (or phone number) to the shared wording. Name
+  corrections are unchanged.
+
 ## [2.10.17] - 2026-10-30
 
 ### Fixed
@@ -4518,7 +4532,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.17...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.18...HEAD
+[2.10.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.17...v2.10.18
 [2.10.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.16...v2.10.17
 [2.10.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.15...v2.10.16
 [2.10.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.14...v2.10.15
