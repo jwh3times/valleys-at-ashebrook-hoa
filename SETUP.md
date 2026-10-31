@@ -438,7 +438,7 @@ verify:invariants` runs) — added by #240 so the phase-4 soak isn't running wit
   Drive refresh token and OAuth client inside Google's inactivity limit. A broken connection is
   logged for a System Administrator to reconnect; only a transient failure fails the run.
 - The R2 orphan sweep (`sweepR2Orphans`, #442), which finds document files and search twins no row
-  points at. It only reports unless the `R2_SWEEP_DELETE` var is exactly `"true"`, never deletes
+  points at. It deletes only when the `R2_SWEEP_DELETE` var is exactly `"true"`, as `wrangler.toml` sets it, never deletes
   during the write freeze, and logs document IDs, never keys.
 
 No job's failure blocks another; if any fails, the invocation throws so the dashboard shows the run

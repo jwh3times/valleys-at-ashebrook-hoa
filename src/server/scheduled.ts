@@ -74,7 +74,7 @@ export async function runScheduledJobs(env: Env): Promise<void> {
   }
 
   // #442: remove document files and search twins no row points at. Report-only
-  // until R2_SWEEP_DELETE is "true", and it never deletes during the write
+  // unless R2_SWEEP_DELETE is "true", and it never deletes during the write
   // freeze. Logged by document id, never by key: a key ends in the filename,
   // and a board filename can name a resident.
   try {

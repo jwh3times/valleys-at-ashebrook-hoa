@@ -365,7 +365,7 @@ handling and the daily `0 7 * * *` scheduled trigger. `src/worker.ts` is a thin 
 delegates to Astro's `handle`, `scheduled` delegates to `runScheduledJobs(env)`, which runs the
 verification-state retention sweep, the 90-day saved-report-content sweep, the ADR 0022
 invariant drift check, the Google Drive connection keepalive, and the R2 orphan sweep (#442,
-report-only unless the `R2_SWEEP_DELETE` var is exactly `"true"`) **independently**, so one failure cannot hide or stop the other jobs, and
+deleting only because `wrangler.toml` sets the `R2_SWEEP_DELETE` var to exactly `"true"`) **independently**, so one failure cannot hide or stop the other jobs, and
 throws if any failed so a partial-success invocation still shows red in the dashboard.
 
 Deploys from `main` are handled by Cloudflare Workers Builds. Manual deploys use the

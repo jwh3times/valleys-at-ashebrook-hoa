@@ -21,10 +21,10 @@ export const MAX_DELETES_PER_RUN = 100;
 /**
  * More orphans than this means something is wrong (a bad migration, a wiped
  * table), not a backlog, so a deleting run deletes nothing and fails.
- * PROVISIONAL: the PR that turns deletion on sets it from the report-only
- * counts, which include the twins `docs:dedupe` has already left behind.
+ * The report-only runs found no orphans, so this is room for ordinary
+ * leftovers: well below what a wiped table would report.
  */
-export const ORPHAN_THRESHOLD = 200;
+export const ORPHAN_THRESHOLD = 50;
 /** R2 lists 1,000 keys a page; the library is a few hundred documents. */
 export const MAX_LIST_PAGES = 20;
 
