@@ -19,10 +19,6 @@ the companion's own `.gitignore` and are never committed to it.
 - `git -C private status` shows no resident-derived record, dump or backup staged; those go to
   encrypted records storage per the portability plan, never to either Git repository.
 
-## Sync with main
-
-`npm run sync:main`
-
 ## Safe-to-remove paths
 
 - `dist/`, `.output/`, `.astro/`, `coverage/` — build, Astro and coverage output.
