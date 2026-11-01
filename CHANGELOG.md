@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.32] - 2026-11-01
+
+### Changed
+
+- Every `mattpocock/skills` skill now installs from one snapshot pinned by commit, the same in every
+  repository that shares `jwh3times/skills`, and `resolving-merge-conflicts` is gone.
+  `scripts/check-skills.mjs` fails CI when an installed skill differs from `skills-lock.json`, and
+  the rules local edits carried moved to `AGENTS.md` or `docs/agents/`.
+
 ## [2.10.31] - 2026-11-01
 
 ### Changed
@@ -4662,7 +4671,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.31...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.32...HEAD
+[2.10.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.31...v2.10.32
 [2.10.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.30...v2.10.31
 [2.10.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.29...v2.10.30
 [2.10.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.28...v2.10.29

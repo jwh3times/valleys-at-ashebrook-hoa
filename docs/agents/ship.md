@@ -13,6 +13,7 @@ All from the repository root, in the order `.github/workflows/build.yml` runs th
 - only when `scripts/` changed: `node --test "scripts/*.test.mjs"`
 - `npm run sync:agents:check`, fixed by `npm run format` then `npm run sync:agents`, committing the
   regenerated trees
+- `node scripts/check-skills.mjs`
 - `npm run lint:agents`
 - `npm run lint:coercions`
 - `npm run lint:migrations`

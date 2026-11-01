@@ -89,6 +89,8 @@
         "scripts/check-changelog.test.mjs",
         "scripts/check-docs.mjs",
         "scripts/check-docs.test.mjs",
+        "scripts/check-skills.mjs",
+        "scripts/check-skills.test.mjs",
       ],
       "rules": {
         "typescript/no-floating-promises": "off",

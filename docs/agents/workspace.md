@@ -46,5 +46,5 @@ none — `npm run dev` runs in the foreground and leaves nothing behind.
 
 ## Generated-config check
 
-`npm run sync:agents:check`; regenerate with `npm run format`, then `npm run sync:agents` — in that
+`npm run sync:agents:check && node scripts/check-skills.mjs`; regenerate with `npm run format`, then `npm run sync:agents` — in that
 order (ADR 0021). Run it always: the required `build` check runs it.

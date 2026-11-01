@@ -10,7 +10,3 @@ A change under `vendor/` is code, Markdown included.
 ## Branch names
 
 A slice of a larger spec is `feat/<spec#>-slice-<n>-<slug>`.
-
-## Close-out
-
-`/implement` ends on `/code-review` before it commits, and `/ship` opens the PR.
