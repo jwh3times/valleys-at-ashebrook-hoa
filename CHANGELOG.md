@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.29] - 2026-10-31
+
+### Changed
+
+- The development flow and shared-skills text in `AGENTS.md` now come from `jwh3times/skills`:
+  `scripts/sync-agents.mjs` writes them between marked lines, and its check fails when they drift.
+  `docs/agents/dev-flow.md` and `docs/agents/triage-labels.md` hold only what this repository adds
+  to the shared defaults, and the shared skills are refreshed to match.
+
 ## [2.10.28] - 2026-10-31
 
 ### Changed
@@ -4637,7 +4646,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.28...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.29...HEAD
+[2.10.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.28...v2.10.29
 [2.10.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.27...v2.10.28
 [2.10.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.26...v2.10.27
 [2.10.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.25...v2.10.26

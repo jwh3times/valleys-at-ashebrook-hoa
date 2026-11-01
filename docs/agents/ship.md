@@ -24,16 +24,3 @@ All from the repository root, in the order `.github/workflows/build.yml` runs th
   `worker-configuration.d.ts`
 
 CI-only: `test:server` (the workerd/Miniflare suite), `build` and `deploy:check`.
-
-## Issue link
-
-- **Branch pattern:** `<type>/<issue#>-<slug>`, e.g. `feat/294-tenant-invitation-claim`; a slice of a
-  larger spec is `feat/<spec#>-slice-<n>-<slug>`. Exempt work drops the number.
-- **Link line:** `Closes #<n>` for the ticket the PR finishes; `Part of #<n>` for one slice of a spec
-  that stays open.
-- **Waiver line:** `Flow waived by the user: <reason>`.
-- **Exempt:**
-  - dependency bumps (Dependabot, `chore(deps)`)
-  - changes touching only `docs/`, root `*.md`, `.agents/`, `.claude/` and `skills-lock.json`
-  - release prep (the `docs: update docs and changelog for vX.Y.Z` commit, a release-only branch)
-- **Defined in:** `docs/agents/dev-flow.md`.
