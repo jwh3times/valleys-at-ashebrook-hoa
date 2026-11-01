@@ -38,33 +38,49 @@ rather than the topic). Durable architecture decisions live in `docs/adr/`; the 
 
 ## Development flow
 
-Work runs through the Matt Pocock skill flow, and **every code change starts from a ready issue**:
-a `ready-for-agent` issue whose body is a `/to-spec` spec, a `/to-tickets` ticket, or a `/triage`
-brief — or a bug issue worked through `/diagnosing-bugs`. When there is none, stop before the first
-edit and name the one flow command the user should run next. The flow skills are user-invoked, so
-the human starts every phase. Dependency bumps, docs-and-agent-config-only changes, and release
-prep are exempt. Routing, exemptions, and the branch and PR links that trace the work to its issue
-are in [`dev-flow.md`](./docs/agents/dev-flow.md).
+<!-- shared:development-flow -->
+
+The flow skills are this repository's binding process for changing code. Read
+`.agents/skills/ship/settings/dev-flow.md` (the routing, exemptions and issue linking) and
+`docs/agents/dev-flow.md` (what this repository adds) before the first edit of a change, and whenever
+no ready issue exists. `/ask-matt` maps the flow itself.
+
+- **The gate.** Every code edit starts from a ready issue: an open `ready-for-agent` issue whose body
+  is a `/to-spec` spec or a `/to-tickets` ticket or that carries a `/triage` brief, or a `bug` issue
+  worked through `/diagnosing-bugs`, which needs the number and no spec. With none, stop before the
+  first edit and route the user. Reading code, running tests and answering questions need no issue.
+- **Private work.** A ready issue in the private tracker counts. Its number stays out of the branch,
+  the PR, commits and public issues, and it is closed by hand after the merge.
+- **The human starts every phase.** `/wayfinder`, `/grill-with-docs`, `/to-spec`, `/to-tickets`,
+  `/implement` and `/triage` stay user-invoked. At a phase boundary, name the next command, say in
+  one line why, and wait. Inside a phase, use `/tdd`, `/code-review`, `/diagnosing-bugs`,
+  `/domain-modeling`, `/codebase-design`, `/prototype` and `/research` whenever they fit.
+- **Exempt from the gate:** dependency bumps, changes touching only docs and agent config, release
+  prep, and an explicit user waiver recorded in the PR body as `Flow waived by the user: <reason>`.
+- **Linking.** Branches are `<type>/<issue#>-<slug>`; the PR body opens with `Closes #N` or
+  `Part of #N`.
+
+<!-- /shared:development-flow -->
 
 ## Where to look next
 
 This file carries what binds every change. Detail lives in `docs/agents/`, one file per surface —
 load the one your task touches.
 
-| Load this                                                      | When you are                                                                        |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [`dev-flow.md`](./docs/agents/dev-flow.md)                     | Starting any change — whether it needs an issue, and which flow command comes next. |
-| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.        |
-| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                                  |
-| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.                     |
-| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze.       |
-| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.         |
-| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.                 |
-| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                           |
-| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                            |
-| [`human-follow-up.md`](./docs/agents/human-follow-up.md)       | Filing a step only a human can take — the private issue and the wiki page.          |
-| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                            |
-| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                           |
+| Load this                                                      | When you are                                                                  |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [`dev-flow.md`](./docs/agents/dev-flow.md)                     | Starting any change — what this repository adds to the shared flow.           |
+| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.  |
+| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                            |
+| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.               |
+| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze. |
+| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.   |
+| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.           |
+| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                     |
+| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                      |
+| [`human-follow-up.md`](./docs/agents/human-follow-up.md)       | Filing a step only a human can take — the private issue and the wiki page.    |
+| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                      |
+| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                     |
 
 `docs/adr/` records the decisions behind all of it; [`docs/adr/README.md`](./docs/adr/README.md)
 indexes every ADR with a one-line title.
@@ -365,7 +381,7 @@ handling and the daily `0 7 * * *` scheduled trigger. `src/worker.ts` is a thin 
 delegates to Astro's `handle`, `scheduled` delegates to `runScheduledJobs(env)`, which runs the
 verification-state retention sweep, the 90-day saved-report-content sweep, the ADR 0022
 invariant drift check, the Google Drive connection keepalive, and the R2 orphan sweep (#442,
-report-only unless the `R2_SWEEP_DELETE` var is exactly `"true"`) **independently**, so one failure cannot hide or stop the other jobs, and
+deleting only because `wrangler.toml` sets the `R2_SWEEP_DELETE` var to exactly `"true"`) **independently**, so one failure cannot hide or stop the other jobs, and
 throws if any failed so a partial-success invocation still shows red in the dashboard.
 
 Deploys from `main` are handled by Cloudflare Workers Builds. Manual deploys use the
@@ -410,19 +426,29 @@ tier-enforcement, two-layer API gating, transition-only fields, ballot secrecy, 
 write-integrity, and Drizzle FK-trap rules before merging.
 
 **Five workflow skills install from the shared `jwh3times/skills` repository** (ADR 0029): `ship`,
-`end-session`, `docs-updater`, `handoff`, and `lets-go`. Their bodies are identical in every
-repository that installs them; what is particular to this one is in the settings files under
-`docs/agents/` — `workspace.md`, `issue-tracker.md`, `human-follow-up.md`, `docs.md`,
-`releases.md`, `ship.md`, and `handoffs.md` — which each skill's first step reads and, when one is
-missing, proposes. Change behavior by editing a setting; fix a skill body upstream, then reinstall:
+`end-session`, `docs-updater`, `handoff`, and `lets-go`.
+
+<!-- shared:shared-skills -->
+
+`end-session`, `handoff`, `lets-go`, `ship` and `docs-updater` install from `jwh3times/skills`, and
+are never edited here: reinstalling overwrites a local edit. A fix goes upstream, and what they need
+to know about this repository goes in the settings files under `docs/agents/`, which each skill
+proposes on first run. Re-running the install is the update; never run `npx skills update`, which
+leaves `.claude/skills/` linked to its source instead of copied:
 
 ```bash
 npx skills add jwh3times/skills -s end-session -s handoff -s lets-go -s ship -s docs-updater -a codex --copy -y
-npm run sync:agents
+node scripts/sync-agents.mjs
 ```
 
-Never run `npx skills update`. The five directories are Prettier-ignored, so a reinstall reproduces
-them byte for byte.
+`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, and `sync-main.mjs`,
+`next-version.mjs` and `check-changelog.mjs` where this repository carries them, are canonical in
+`jwh3times/skills` with their tests: fix them there, then copy them here. `sync-agents.mjs` also
+writes the marked blocks in this file: change them in `jwh3times/skills`, not here.
+
+<!-- /shared:shared-skills -->
+
+The five directories are Prettier-ignored, so a reinstall reproduces them byte for byte.
 
 - **`ship`** takes a branch from code-complete to an open PR: it classifies the release impact,
   writes the `CHANGELOG.md` section for the version `scripts/next-version.mjs` predicts (backfilling

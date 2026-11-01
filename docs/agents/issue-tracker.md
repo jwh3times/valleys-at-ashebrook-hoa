@@ -6,7 +6,7 @@ The decisions behind the arrangement below — two trackers routed by body, the 
 the Gate vocabulary — are recorded in
 [ADR 0023](../adr/0023-two-trackers-routed-by-body.md). This file is the how-to. Which issue a code
 change must trace to before its first edit, and how branches and PRs link back, is in
-[`dev-flow.md`](./dev-flow.md).
+[the development flow](../../.agents/skills/ship/settings/dev-flow.md).
 
 ## Which repository an issue goes in
 

@@ -9,6 +9,53 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.29] - 2026-10-31
+
+### Changed
+
+- The development flow and shared-skills text in `AGENTS.md` now come from `jwh3times/skills`:
+  `scripts/sync-agents.mjs` writes them between marked lines, and its check fails when they drift.
+  `docs/agents/dev-flow.md` and `docs/agents/triage-labels.md` hold only what this repository adds
+  to the shared defaults, and the shared skills are refreshed to match.
+
+## [2.10.28] - 2026-10-31
+
+### Changed
+
+- HSTS on the `ashebrookresidents.com` zone now lasts six months instead of one
+  (`max-age=15552000`), the raise planned when it was enabled (#238). A browser that has seen the
+  header keeps refusing plain HTTP for that long. Subdomains and preload stay off. This is a zone
+  setting rather than code, so `SECURITY.md` and `SETUP.md` change only to record the new value.
+
+## [2.10.27] - 2026-10-31
+
+### Changed
+
+- **The daily R2 orphan sweep now deletes what it finds** (#442). A document file or search twin that
+  no `documents` row points at, and that is more than 7 days old, is removed instead of only being
+  logged. The report-only runs were reviewed against production and found none, so nothing is
+  deleted today; this covers future leftovers, such as a file whose delete fails after its row is
+  gone. Deleted objects can't be restored, because the bucket has no versioning.
+- The sweep's sanity threshold goes from a provisional 200 to 50: a run finding more than 50 orphans
+  deletes nothing and fails.
+
+## [2.10.26] - 2026-10-31
+
+### Changed
+
+- `ROADMAP.md` no longer names a current priority. Its section pointed at #212, which is closed, in
+  a file that says it holds no status lines.
+- `docs/agents/migrations.md` records that `0045` was applied to production on 2026-10-26.
+
+## [2.10.25] - 2026-10-31
+
+### Changed
+
+- **The domain glossary now covers the tenant invitation** (#473). `CONTEXT.md` gains **Tenancy
+  Invitation** and **Tenancy Claim**, and **Person Verification** names the claim as its third
+  route. **Tenancy Request** no longer lists "tenant invitation" as a term to avoid, since the code
+  and the site use that word for the invitation.
+
 ## [2.10.24] - 2026-10-31
 
 ### Changed
@@ -4599,7 +4646,12 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.29...HEAD
+[2.10.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.28...v2.10.29
+[2.10.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.27...v2.10.28
+[2.10.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.26...v2.10.27
+[2.10.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.25...v2.10.26
+[2.10.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...v2.10.25
 [2.10.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.23...v2.10.24
 [2.10.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.22...v2.10.23
 [2.10.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.21...v2.10.22

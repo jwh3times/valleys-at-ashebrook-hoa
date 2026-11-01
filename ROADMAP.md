@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** 2026-09-04
+**Updated:** 2026-10-31
 
 Backlog items are **GitHub issues**, not entries in this file. This page explains where to look and
 what the tracker's vocabulary means; it deliberately holds no status lines, because a status line
@@ -16,16 +16,6 @@ here is a second copy of state that drifts out of step with the issue that owns 
 
 The routing rule between the two repositories is in
 [`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
-
-## The current priority
-
-**[ADR 0022 phase 4 (#212)](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/212)** —
-the irreversible removal of the legacy roster schema and compatibility layer. Its production entry
-gate cannot open before **2026-09-17** and additionally requires no clock-resetting Sev-1 plus named
-human sign-off. Phases 1–3 are shipped and production has used derived access since 2026-08-18.
-
-#212 is the authoritative source for its own live entry criteria, removal sequence, and sign-off.
-That checklist changes; this file does not duplicate it.
 
 ## Reading a gate
 
