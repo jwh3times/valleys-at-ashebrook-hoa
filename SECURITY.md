@@ -345,7 +345,7 @@ EMAIL_NOT_VERIFIED` for an existing-but-unverified account versus `401` for anyt
 nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and an **enforced**
   Content-Security-Policy that allowlists only the third-party resources the site uses (Google
   Fonts, the Google Calendar embed, Turnstile, Web3Forms, and the Cloudflare Web Analytics beacon).
-  HSTS is enabled at the Cloudflare zone level (`max-age=2592000`, one month; subdomains not
+  HSTS is enabled at the Cloudflare zone level (`max-age=15552000`, six months; subdomains not
   included; preload off) — a zone-level operator setting, not a repository or Worker header.
 - **The CSP differs on `/admin` pages only (#290 slice 3).** The admin panel opens Google Picker,
   so `/admin` and `/admin/*` responses additionally allow `https://apis.google.com` in `script-src`
