@@ -59,6 +59,17 @@ no ready issue exists. `/ask-matt` maps the flow itself.
   prep, and an explicit user waiver recorded in the PR body as `Flow waived by the user: <reason>`.
 - **Linking.** Branches are `<type>/<issue#>-<slug>`; the PR body opens with `Closes #N` or
   `Part of #N`.
+- **The flow ends at `/ship`.** `/implement` stops at a commit; `/ship` refreshes the docs, writes the
+  changelog and the PR body, and opens the PR. `/ask-matt` also routes to `/pr`, `/retro` and
+  `/implement-spec`, which are not installed here.
+- **`/handoff` is the shared skill.** It parks the session for another machine or harness, closes it
+  out with `/end-session`, and `/lets-go` resumes it. It does not write the portable file `/ask-matt`
+  describes, so a `/prototype` detour stays in the session or uses a branch.
+- **A wizard is not the record.** A step only a human can take follows the `## Procedure` in
+  `.agents/skills/ship/settings/human-follow-up.md`, whose instructions stand without the script.
+- **Research goes where it is safe to keep.** `/research` findings that would expose private material
+  go to the private companion, where there is one, never to an ignored folder with no repository
+  behind it. Details of an unpublished vulnerability are a draft advisory, never a research file.
 
 <!-- /shared:development-flow -->
 
@@ -165,6 +176,14 @@ over abbreviations. Use `*.test.ts` / `*.test.tsx` for tests.
 Every repeated row-action control needs an accessible name that combines the action with the row's
 visible identity, such as `Delete announcement: Pool closure`; the visible bare verb may remain as
 the button text.
+
+A code review reads this file's coding style, testing and security sections, the `docs/agents/` file
+for the surface the diff touches, `CONTRIBUTING.md`, and any `docs/adr/` entry touching the area. Its
+spec is under `docs/specs/`, `docs/plans/` or the gitignored `docs/superpowers/specs/`. The lints are
+narrower than their rules: `npm run lint:coercions` catches only the literal `Number(x) ||` shape, so
+review blank-versus-zero conflations in other forms; `npm run lint:fixtures` catches only the shape
+of a phone number or an email address, so ask where a fixture's names and street addresses came
+from.
 
 ### Never default a coerced numeric form value with `||`
 
@@ -331,6 +350,9 @@ intentionally static.
   for `test/server/**`; these import `{ env, applyD1Migrations }` from `cloudflare:test` and
   mostly invoke handlers directly.
 
+One suite alone is not the full test suite here: `/implement`'s last run is both, and its typecheck
+is `npm run check`.
+
 This split matches the type-checking split above: `test/unit/**` is checked by
 `tsconfig.node.json`, while `test/server/**` — which imports `cloudflare:test` — stays in
 `tsconfig.json`.
@@ -415,6 +437,13 @@ Resident-derived records and generated import artifacts also live under `private
 `ASHEBROOK_PRIVATE_ROOT`, see [`docs/workstation-bootstrap.md`](./docs/workstation-bootstrap.md))
 but are excluded from the companion by its own `.gitignore` and must never be committed there.
 
+Agent skills keep to the same line. `/research` saves to the tracked `docs/` tree (`docs/specs/`,
+`docs/plans/`, or `docs/adr/` for decisions), never the gitignored `docs/superpowers/` or
+`.superpowers/` or the repository root; private or resident-data-derived findings go under
+`private/`. `/teach` works in `private/teach/`, creating it if absent. A `/wizard` script is saved
+under `private/`, and moves to `scripts/` only when the user wants a repeatable setup path in the
+repository.
+
 Public docs should describe supported architecture and workflows, not exploit analysis, private
 execution notes, or resident-data handling details. `SECURITY.md` holds the security model,
 including the AI pseudonymization guarantees and their limits.
@@ -433,22 +462,37 @@ write-integrity, and Drizzle FK-trap rules before merging.
 `end-session`, `handoff`, `lets-go`, `ship` and `docs-updater` install from `jwh3times/skills`, and
 are never edited here: reinstalling overwrites a local edit. A fix goes upstream, and what they need
 to know about this repository goes in the settings files under `docs/agents/`, which each skill
-proposes on first run. Re-running the install is the update; never run `npx skills update`, which
-leaves `.claude/skills/` linked to its source instead of copied:
+proposes on first run.
+
+The other shared skills come from one `mattpocock/skills` snapshot (v1.3.2, pinned by commit), the
+same in every repository, and are never edited here either: what they need to know goes in this
+file or `docs/agents/`. Moving to a newer snapshot is a change in `jwh3times/skills`. Keep
+`.agents/skills/` out of every formatter: `scripts/check-skills.mjs` fails when an installed copy
+differs from `skills-lock.json`, or the lock from these commands.
+
+Re-running the install is the update; never run `npx skills update`, which leaves `.claude/skills/`
+linked to its source instead of copied:
 
 ```bash
 npx skills add jwh3times/skills -s end-session -s handoff -s lets-go -s ship -s docs-updater -a codex --copy -y
+npx skills add mattpocock/skills#d1478fcb140db0b93c0c8df17bcfd311844749d0 \
+  -s ask-matt -s code-review -s codebase-design -s diagnosing-bugs -s domain-modeling -s grill-me \
+  -s grill-with-docs -s grilling -s implement -s improve-codebase-architecture -s prototype \
+  -s research -s setup-matt-pocock-skills -s tdd -s teach -s to-questionnaire -s to-spec \
+  -s to-tickets -s triage -s wait-what -s wayfinder -s wizard -s writing-for-agents \
+  -a codex --copy -y
 node scripts/sync-agents.mjs
 ```
 
-`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, and `sync-main.mjs`,
-`next-version.mjs` and `check-changelog.mjs` where this repository carries them, are canonical in
-`jwh3times/skills` with their tests: fix them there, then copy them here. `sync-agents.mjs` also
-writes the marked blocks in this file: change them in `jwh3times/skills`, not here.
+`scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, `check-skills.mjs`, and
+`sync-main.mjs`, `next-version.mjs` and `check-changelog.mjs` where this repository carries them, are
+canonical in `jwh3times/skills` with their tests: fix them there, then copy them here.
+`sync-agents.mjs` also writes the marked blocks in this file: change them in `jwh3times/skills`, not
+here.
 
 <!-- /shared:shared-skills -->
 
-The five directories are Prettier-ignored, so a reinstall reproduces them byte for byte.
+`.agents/skills/` is Prettier-ignored, so a reinstall reproduces it byte for byte.
 
 - **`ship`** takes a branch from code-complete to an open PR: it classifies the release impact,
   writes the `CHANGELOG.md` section for the version `scripts/next-version.mjs` predicts (backfilling
