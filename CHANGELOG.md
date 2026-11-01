@@ -9,6 +9,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.31] - 2026-11-01
+
+### Changed
+
+- The Drive import design spec now cites the prototype's results under the tag
+  `archive/290-drive-import`. The never-merged `prototype/290-drive-import` branch was deleted, and
+  the tag keeps its code and `RESULTS.md` reachable.
+
+## [2.10.30] - 2026-10-31
+
+### Changed
+
+- Dependency updates (Dependabot, #503): `astro` 7.4.2 → 7.4.3, `@astrojs/cloudflare` 14.4.2 → 14.4.3,
+  `@astrojs/react` 7.1.1 → 7.1.2, `@cloudflare/workers-types` 5.20261027.1 → 5.20261028.1 and
+  `@types/node` 26.6.5 → 26.6.6.
+
 ## [2.10.29] - 2026-10-31
 
 ### Changed
@@ -4646,7 +4662,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.29...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.31...HEAD
+[2.10.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.30...v2.10.31
+[2.10.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.29...v2.10.30
 [2.10.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.28...v2.10.29
 [2.10.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.27...v2.10.28
 [2.10.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.26...v2.10.27
