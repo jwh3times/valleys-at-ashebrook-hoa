@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.28] - 2026-10-31
+
+### Changed
+
+- HSTS on the `ashebrookresidents.com` zone now lasts six months instead of one
+  (`max-age=15552000`), the raise planned when it was enabled (#238). A browser that has seen the
+  header keeps refusing plain HTTP for that long. Subdomains and preload stay off. This is a zone
+  setting rather than code, so `SECURITY.md` and `SETUP.md` change only to record the new value.
+
 ## [2.10.27] - 2026-10-31
 
 ### Changed
@@ -4628,7 +4637,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.27...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.28...HEAD
+[2.10.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.27...v2.10.28
 [2.10.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.26...v2.10.27
 [2.10.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.25...v2.10.26
 [2.10.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.24...v2.10.25

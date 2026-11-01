@@ -448,7 +448,7 @@ as failed.
 
 The Worker sets baseline security headers, including an enforced Content-Security-Policy. HSTS is
 enabled separately at the Cloudflare zone level (not by this repository or the Worker) — currently
-`max-age=2592000` (one month), subdomains not included, preload off.
+`max-age=15552000` (six months), subdomains not included, preload off.
 
 ## Local Development
 
