@@ -106,7 +106,8 @@ Each fact was checked against `main` at `e531b8c` on 2026-10-18.
 
 ## Prototype findings this design rests on
 
-From the 2026-10-17 run (`RESULTS.md` on the never-merge branch `prototype/290-drive-import`):
+From the 2026-10-17 run (`prototypes/290-drive-import/RESULTS.md` under the never-merged tag
+`archive/290-drive-import`):
 
 - **P1.** A server-minted token exports files a different client's Picker session shared. A
   never-picked file returns `404 notFound`.
