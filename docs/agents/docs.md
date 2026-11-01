@@ -43,6 +43,8 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   changes.
 - `SUPPORT.md` — where to ask for help. **When:** the issue templates or the support route change.
 - `CODE_OF_CONDUCT.md`, `LICENSE` — `owner-only`.
+- `THIRD_PARTY_NOTICES.md` — the license notices of third-party files kept here. `owner-only`: report
+  the change when a skill's source changes.
 - `ROADMAP.md` — a pointer to the trackers and the board, and the board's vocabulary; it lists no
   work. **When:** where planned work lives, or a board field's meaning, changes.
 - `vendor/astro-check-ts6/README.md` — why the Astro checker runs on a TypeScript 6 bridge.
