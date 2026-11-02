@@ -1,14 +1,27 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { aboutParagraphs, NEIGHBORHOOD } from '../lib/site';
+import {
+  aboutParagraphs,
+  hasAboutPage,
+  NEIGHBORHOOD,
+  OFFICIAL_ORG_NAME,
+} from '../lib/site';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 
 const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+
+if (!hasAboutPage(site)) {
+  return Astro.rewrite('/404');
+}
 ---
 
 <BaseLayout
   title="About this site"
-  description={`About this independent, resident-run site for ${NEIGHBORHOOD} — and its relationship to the HOA.`}
+  description={
+    site.officialMode
+      ? `About the ${OFFICIAL_ORG_NAME} website.`
+      : `About this independent, resident-run site for ${NEIGHBORHOOD} — and its relationship to the HOA.`
+  }
 >
   <div class="page-section">
     <p class="eyebrow">About</p>

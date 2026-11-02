@@ -1,4 +1,6 @@
 import type { APIRoute } from 'astro';
+import { hasAboutPage } from '../lib/site';
+import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 
 export const prerender = false;
 
@@ -8,7 +10,8 @@ export const prerender = false;
 // request because the site is full SSR — @astrojs/sitemap only emits for
 // statically built routes, so it comes up empty here. /meetings/[id] is
 // deliberately NOT listed here — those are per-record and tier-dependent,
-// same reasoning as why /documents/[id] downloads aren't listed either.
+// same reasoning as why /documents/[id] downloads aren't listed either. /about
+// is listed only while the page exists, which depends on the mode.
 const PUBLIC_PATHS = [
   '/',
   '/about',
@@ -20,11 +23,14 @@ const PUBLIC_PATHS = [
   '/privacy',
 ];
 
-export const GET: APIRoute = ({ site, url }) => {
+export const GET: APIRoute = ({ site, url, locals }) => {
   const base = (site?.toString() ?? url.origin).replace(/\/$/, '');
-  const entries = PUBLIC_PATHS.map(
-    (path) => `  <url><loc>${base}${path}</loc></url>`,
-  ).join('\n');
+  const settings = locals.site ?? DEFAULT_SITE_SETTINGS;
+  const entries = PUBLIC_PATHS.filter(
+    (path) => path !== '/about' || hasAboutPage(settings),
+  )
+    .map((path) => `  <url><loc>${base}${path}</loc></url>`)
+    .join('\n');
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${entries}
