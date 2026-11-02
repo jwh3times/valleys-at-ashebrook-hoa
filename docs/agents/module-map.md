@@ -102,7 +102,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   settings, with `DISCLAIMER_SHORT` and `DISCLAIMER_LONG` as fallbacks. `disclaimer(site)` and
   `aboutParagraphs(site)` return overrides or built-in copy when blank. `hasAboutPage(site)` is the
   one rule for whether `/about` exists: in official mode the page and its sitemap entry exist only
-  once `aboutBody` is set. This is a pure module usable in `.astro` files, islands, and unit tests.
+  once `aboutBody` is set, and `aboutDescription(site)` is its meta description for the mode. This is
+  a pure module usable in `.astro` files, islands, and unit tests.
 - `src/lib/format.ts` contains shared formatting helpers, including `associationDateIso` for the
   `America/New_York` proxy cutoff, unit-tested in `format.test.ts`.
 - `src/lib/lot-records.ts` (#291, ADR 0024; dues vocabulary added by ADR 0025, #295 slice 4) is a
