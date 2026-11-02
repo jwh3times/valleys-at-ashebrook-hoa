@@ -79,6 +79,15 @@ export function hasAboutPage(
   return !s.officialMode || s.aboutBody.trim() !== '';
 }
 
+/** /about meta description. */
+export function aboutDescription(
+  s: Pick<SiteSettings, 'officialMode'>,
+): string {
+  return s.officialMode
+    ? `About the ${OFFICIAL_ORG_NAME} website.`
+    : `About this independent, resident-run site for ${NEIGHBORHOOD} — and its relationship to the HOA.`;
+}
+
 /**
  * /about page paragraphs: the board-editable override split on blank lines
  * (trimmed, empties dropped), or the built-in paragraphs when blank.

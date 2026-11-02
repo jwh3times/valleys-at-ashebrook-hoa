@@ -1,6 +1,8 @@
 // #511: what the public pages say once the board adopts the site. Rendered
 // through the real Astro Container API so the assertions see the page a visitor
-// would, including the 404 status `Astro.rewrite('/404')` produces.
+// would, including the 404 status `Astro.rewrite('/404')` produces. The tests
+// with official mode off pass on the old code by design: they guard what the
+// resident site must keep saying.
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
@@ -46,11 +48,16 @@ describe('/about', () => {
     expect(html).toContain('Page not found');
     expect(html).not.toContain('not affiliated');
     expect(html).not.toContain('does not own or control');
+    expect(html).not.toContain('personal accounts');
+    expect(html).not.toContain('management company');
+    expect(html).not.toMatch(/independent/i);
+    expect(html).not.toMatch(/resident-run/i);
   });
 
   it('treats whitespace-only text as nothing written', async () => {
     const res = await renderAbout({ officialMode: true, aboutBody: ' \n\n ' });
     expect(res.status).toBe(404);
+    expect(await res.text()).toContain('Page not found');
   });
 
   it("shows the board's own text in official mode, described without the resident wording", async () => {

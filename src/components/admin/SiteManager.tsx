@@ -189,8 +189,7 @@ export default function SiteManager() {
           <p style={{ fontSize: '13px', color: '#666', marginTop: '6px' }}>
             The public About page. Separate paragraphs with a blank line. With
             official mode off, a blank field uses the built-in text. With
-            official mode on, a blank field hides the page, and anything saved
-            here appears publicly.
+            official mode on, a blank field hides the page.
           </p>
         </div>
         <div className="btn-row">

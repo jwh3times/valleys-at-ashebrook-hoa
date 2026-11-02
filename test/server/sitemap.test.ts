@@ -2,12 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { GET } from '../../src/pages/sitemap.xml';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../src/lib/types';
 
-function call(
-  site = 'https://ashebrookresidents.com',
-  settings?: Partial<SiteSettings>,
-) {
+function call(settings?: Partial<SiteSettings>) {
   return GET({
-    site: new URL(site),
+    site: new URL('https://ashebrookresidents.com'),
     url: new URL('http://localhost/sitemap.xml'),
     locals: settings ? { site: { ...DEFAULT_SITE_SETTINGS, ...settings } } : {},
   } as never) as Promise<Response>;
@@ -41,7 +38,7 @@ describe('GET /sitemap.xml', () => {
 
   it('leaves out /about in official mode while the board has written nothing', async () => {
     for (const aboutBody of ['', '  \n  ']) {
-      const res = await call(undefined, { officialMode: true, aboutBody });
+      const res = await call({ officialMode: true, aboutBody });
       const body = await res.text();
       expect(body).not.toContain(ABOUT_ENTRY);
       expect(body).toContain(
@@ -51,7 +48,7 @@ describe('GET /sitemap.xml', () => {
   });
 
   it('lists /about in official mode once the board has written its text', async () => {
-    const res = await call(undefined, {
+    const res = await call({
       officialMode: true,
       aboutBody: 'Written by the board.',
     });
@@ -60,7 +57,7 @@ describe('GET /sitemap.xml', () => {
 
   it('lists /about when official mode is off, with or without saved text', async () => {
     for (const aboutBody of ['', 'Resident override.']) {
-      const res = await call(undefined, { officialMode: false, aboutBody });
+      const res = await call({ officialMode: false, aboutBody });
       expect(await res.text()).toContain(ABOUT_ENTRY);
     }
   });
