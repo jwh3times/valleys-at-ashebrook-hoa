@@ -117,4 +117,34 @@ describe('SiteManager gate toggles', () => {
     });
     expect(setSiteGate).not.toHaveBeenCalled();
   });
+
+  it('says blank hides the About page in official mode', async () => {
+    fetchSiteSettings.mockResolvedValue({
+      ...defaultSettings,
+      officialMode: true,
+    });
+    render(<SiteManager />);
+    const field = await screen.findByLabelText(/about page/i);
+    expect(field).toHaveAttribute(
+      'placeholder',
+      'Leave blank to hide the About page.',
+    );
+    expect(
+      screen.getByText(/official mode on, a blank field hides the page/i),
+    ).toBeInTheDocument();
+  });
+
+  it('says blank uses the built-in text when official mode is off', async () => {
+    render(<SiteManager />);
+    const field = await screen.findByLabelText(/about page/i);
+    expect(field).toHaveAttribute(
+      'placeholder',
+      'Leave blank to use the built-in About copy.',
+    );
+    expect(
+      screen.getByText(
+        /official mode off, a blank field uses the built-in text/i,
+      ),
+    ).toBeInTheDocument();
+  });
 });

@@ -9,6 +9,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.34] - 2026-11-02
+
+### Fixed
+
+- With official mode on, `/about` no longer says the site isn't affiliated with the HOA. It answers
+  the generic 404 and leaves the sitemap until the board saves its own About text, and then shows
+  that text. With official mode off, `/about` and the sitemap are unchanged.
+- With official mode on, the home page's dues tile no longer names PayPal, Venmo, Zelle or check,
+  which the saved dues settings might not offer. The tile and the **Pay Dues** button stay.
+- The About text field in Site Settings now says what leaving it blank does in each mode.
+
 ## [2.10.33] - 2026-11-01
 
 ### Added
@@ -4678,7 +4689,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.33...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.34...HEAD
+[2.10.34]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.33...v2.10.34
 [2.10.33]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.32...v2.10.33
 [2.10.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.31...v2.10.32
 [2.10.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.30...v2.10.31

@@ -102,7 +102,7 @@ export interface SiteSettings {
   tenantAccessEnabled: boolean;
   /** Footer "not affiliated" disclaimer (unofficial mode only); blank ⇒ built-in copy. */
   disclaimerText: string;
-  /** /about page body; blank lines separate paragraphs; blank ⇒ built-in copy. */
+  /** /about page body; blank lines separate paragraphs; blank ⇒ built-in copy, or no page in official mode. */
   aboutBody: string;
 }
 
