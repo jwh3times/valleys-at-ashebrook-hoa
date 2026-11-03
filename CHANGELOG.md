@@ -9,6 +9,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.38] - 2026-11-03
+
+### Fixed
+
+- With official mode on, a board-written About page is now linked from the footer, beside
+  **Privacy**. Before, the only link sat in the resident disclaimer, which official mode hides, so
+  the page was reachable only by its URL or the sitemap. While the board's About text is blank,
+  there is no link, matching the page's 404. With official mode off, the footer is unchanged.
+
+## [2.10.37] - 2026-11-03
+
+### Changed
+
+- Dependency update (Dependabot, #521): `@cloudflare/workers-types` 5.20261030.1 → 5.20261031.1.
+
 ## [2.10.36] - 2026-11-02
 
 ### Changed
@@ -4703,7 +4718,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.36...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.38...HEAD
+[2.10.38]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.37...v2.10.38
+[2.10.37]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.36...v2.10.37
 [2.10.36]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.35...v2.10.36
 [2.10.35]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.34...v2.10.35
 [2.10.34]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.33...v2.10.34

@@ -71,7 +71,8 @@ export function disclaimer(s: Pick<SiteSettings, 'disclaimerText'>): string {
 /**
  * Whether /about exists. The built-in copy denies any HOA affiliation, so in
  * official mode the page exists only once the board has written its own text.
- * The page and the sitemap both ask here so they cannot disagree.
+ * The page, the sitemap and the footer's About link all ask here so they
+ * cannot disagree.
  */
 export function hasAboutPage(
   s: Pick<SiteSettings, 'officialMode' | 'aboutBody'>,
