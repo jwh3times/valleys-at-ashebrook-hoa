@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.36] - 2026-11-02
+
+### Changed
+
+- `end-session` now closes every session with the same report: what it did, the docs it searched and
+  updated, open PRs and security alert counts, and the human steps owed before the next session.
+
+## [2.10.35] - 2026-11-02
+
+### Changed
+
+- Dependency updates (Dependabot, #515): `astro` 7.4.3 → 7.4.4, `@cloudflare/workers-types`
+  5.20261028.1 → 5.20261030.1 and `@napi-rs/canvas` 1.0.13 → 1.1.0.
+
 ## [2.10.34] - 2026-11-02
 
 ### Fixed
@@ -4689,7 +4703,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.34...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.36...HEAD
+[2.10.36]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.35...v2.10.36
+[2.10.35]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.34...v2.10.35
 [2.10.34]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.33...v2.10.34
 [2.10.33]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.32...v2.10.33
 [2.10.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.31...v2.10.32
