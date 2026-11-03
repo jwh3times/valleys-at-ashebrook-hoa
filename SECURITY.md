@@ -503,15 +503,21 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 ## Automated safeguards
 
 - **Dependabot** — dependency update PRs and security alerts (`.github/dependabot.yml`).
-- **CI** — every push and PR runs format, type-check, unit tests, Worker/D1 integration tests
-  (`test:server`), and build gates (`.github/workflows/build.yml`).
+- **CI** — every pull request and every push to `main` runs format, type-check, unit tests,
+  Worker/D1 integration tests (`test:server`), and build gates (`.github/workflows/build.yml`).
 - **Actions pinned to commit SHAs** — every `uses:` in `.github/workflows/` names a full commit SHA
   with the human-readable version beside it in a comment, rather than a moving tag like `@v7`. A
   release tag can be re-pointed at different code by whoever controls the action's repository; a
   SHA cannot. Dependabot still proposes updates and rewrites both the SHA and the comment, so
   pinning costs no freshness. New workflow steps must be pinned the same way.
 - **CodeQL** — GitHub's default-setup code scanning analyses JavaScript/TypeScript, Actions
-  workflows, and Python on every push and pull request, and the `main` ruleset requires it to pass.
+  workflows, and Python on every push to `main` and on pull requests, and the `main` ruleset's
+  code-scanning rule blocks a merge whose analysis finds an error-level alert or a high-or-higher
+  security alert. A pull request whose head commit is Dependabot's is not analysed: CodeQL reports
+  a neutral result, which the rule does not block, and the change is scanned on `main` after the
+  merge. That is the accepted posture for dependency bumps, which change only `package.json` and
+  the lockfile; updating such a branch first makes a merge commit that is scanned before the merge.
+  See `docs/agents/ci-and-release.md`.
 - **Secret scanning with push protection** — a commit containing a recognized provider credential
   is blocked at push time rather than found afterwards. GitHub's generic-pattern scanning (formerly
   called non-provider patterns) remains unavailable for this user-owned public repository: GitHub
@@ -519,9 +525,9 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   [Secret Protection enabled](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns).
 - **Protected `main`** — an active GitHub ruleset with an empty bypass list requires every change to
   arrive through a pull request, blocks force pushes and branch deletion, requires the branch to be
-  up to date, and requires the build gate, changelog check, CodeQL, and code-quality analysis to
-  pass. Required approvals remain zero for the solo maintainer; the PR and checks still apply to
-  the repository owner.
+  up to date, and requires the build gate, changelog check and code-quality analysis to pass, with
+  CodeQL gating as described above. Required approvals remain zero for the solo maintainer; the PR
+  and checks still apply to the repository owner.
 - **Synthetic-fixture gate** — `npm run lint:fixtures` (`scripts/check-fixture-values.ts`) fails CI
   when any phone number or email address in the tracked tree is outside the NANP fictional ranges
   or the RFC 2606 reserved domains, aside from a short allowlist of published contact addresses and

@@ -18,9 +18,16 @@ Run the relevant gates locally before pushing.
 ### The Worker types gate regenerates first and judges last (#358)
 
 `worker-configuration.d.ts` is generated output committed to the tree, so it drifts whenever
-`wrangler.toml`, the environment template, or the installed toolchain moves. Dependabot edits only
-`package.json` and the lockfile, so **every bump touching `wrangler` or `@cloudflare/workers-types`
-drifts it by construction**.
+`wrangler.toml`, the environment template, or `wrangler` itself moves. `types:worker` runs
+`wrangler types`, which generates from the runtime types bundled inside `wrangler`, not from the
+`@cloudflare/workers-types` package. Dependabot edits only `package.json` and the lockfile, so:
+
+- **A `wrangler` bump usually drifts it, but not always.** Patch releases #360 and #452 didn't;
+  patch releases #347 and #356 did. Read the build's verdict rather than guessing from the version.
+- **A `@cloudflare/workers-types` bump on its own has not drifted it** (#503, #515 and #521, among
+  others), since `wrangler types` doesn't read that package.
+
+#519 records the full count behind both.
 
 CI used to check it first and stop there, which meant such a bump died in about thirty seconds
 having validated nothing. Now CI **regenerates** the file up front, runs the whole suite against
@@ -65,6 +72,24 @@ A third grouped PR failed earlier still, at `npm ci`:
   to its successor, `@cloudflare/vitest-plugin`, whose peer range includes Vitest 5, and removed the
   `vitest` and `@vitest/*` major ignores from `.github/dependabot.yml`. Take a future `vitest` major
   as its own PR with the full `test:server` run, and check the plugin's peer range first.
+
+## CodeQL runs outside `build.yml`, and skips Dependabot's own commits
+
+CodeQL code scanning is GitHub's **default setup**, configured in the repository's Settings. There
+is deliberately no CodeQL workflow file. It analyses JavaScript/TypeScript, Actions workflows and
+Python on pushes to `main` and on pull requests, with one exception:
+
+- **A PR whose head commit is Dependabot's is not scanned.** Its `CodeQL` check comes back
+  **neutral**, with "configurations not found", and no `Analyze` jobs run (#433, #475 and #521,
+  among others). A Dependabot PR whose head is a commit of the owner's runs all three analyses.
+- **A neutral check does not block the merge.** The `main` ruleset's `code_scanning` rule blocks a
+  failing analysis, not a neutral one, and its bypass list is empty, so such PRs merge and their
+  code is scanned on `main` afterwards.
+- **To scan before merging, update the branch:** `gh pr update-branch <n>` makes a merge commit
+  under the owner's account, and that commit is scanned. A dependency bump only changes
+  `package.json` and the lockfile, so a post-merge scan is usually acceptable for it.
+- **`@dependabot rebase` makes a new Dependabot commit,** so expect it to go unscanned too. No PR
+  here has tested it; prefer `gh pr update-branch`.
 
 ## The miniflare `undici`/`sharp` overrides are caret floors
 

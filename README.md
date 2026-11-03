@@ -118,11 +118,11 @@ npm run deploy     # build + deploy to Cloudflare Workers
   `tsconfig.node.json` for Node-only scripts and unit tests — and scopes TypeScript 6 only to the
   temporary `vendor/astro-check-ts6` adapter used for `.astro` diagnostics. See
   [AGENTS.md](./AGENTS.md) for why the split exists.
-- **CI:** `.github/workflows/build.yml` checks generated Worker-type drift, format, lint, type checks, tests,
-  build, and the generated Wrangler deployment config on every push and pull request. CodeQL code scanning runs via GitHub's
-  default setup (configured in repo Settings — there is intentionally no CodeQL
-  workflow file in the repo). Deploys from `main` are handled by Cloudflare Workers
-  Builds, not a GitHub deploy workflow.
+- **CI:** `.github/workflows/build.yml` checks generated Worker-type drift, format, lint, type
+  checks, tests, build, and the generated Wrangler deployment config on every pull request and every
+  push to `main`. CodeQL code scanning runs via GitHub's default setup (configured in repo Settings —
+  there is intentionally no CodeQL workflow file in the repo). Deploys from `main` are handled by
+  Cloudflare Workers Builds, not a GitHub deploy workflow.
 
 ## Project layout
 

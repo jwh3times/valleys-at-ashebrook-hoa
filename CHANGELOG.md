@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.39] - 2026-11-03
+
+### Fixed
+
+- `SECURITY.md` no longer says CodeQL scans every pull request and must pass before a merge. A pull
+  request whose latest commit is Dependabot's is not analysed: its neutral result doesn't block the
+  merge, and the change is scanned on `main` afterwards. `docs/agents/ci-and-release.md` gains a
+  CodeQL section covering this, including `gh pr update-branch` as the way to get a scan first.
+- The CI docs no longer say every `@cloudflare/workers-types` or `wrangler` bump drifts the
+  generated Worker types. A `@cloudflare/workers-types` bump on its own hasn't, and a `wrangler`
+  bump usually does but not always.
+- The README and `SECURITY.md` no longer say the build workflow runs on every push. It runs on pull
+  requests and on pushes to `main`.
+
 ## [2.10.38] - 2026-11-03
 
 ### Fixed
@@ -4718,7 +4732,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.38...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.39...HEAD
+[2.10.39]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.38...v2.10.39
 [2.10.38]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.37...v2.10.38
 [2.10.37]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.36...v2.10.37
 [2.10.36]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.35...v2.10.36
