@@ -10,6 +10,7 @@ import reactServerRenderer from '@astrojs/react/server.js';
 import AboutPage from '../../src/pages/about.astro';
 import HomePage from '../../src/pages/index.astro';
 import NotFoundPage from '../../src/pages/404.astro';
+import Footer from '../../src/components/Footer.astro';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../src/lib/types';
 
 beforeAll(async () => {
@@ -94,6 +95,56 @@ describe('/about', () => {
     expect(html).toContain('Resident override.');
     expect(html).not.toContain('not affiliated');
     expect(html).toContain('independent, resident-run site');
+  });
+});
+
+// #517: the footer links to /about exactly when the page exists, so a
+// board-written About page is reachable after adoption. The disclaimer stays
+// resident-only. Only the first test fails on the pre-#517 footer; the others
+// are guards that pass on it by design, and each fails if its half of the
+// footer's condition is dropped.
+describe('footer About link', () => {
+  async function renderFooter(site: Partial<SiteSettings>) {
+    const container = await makeContainer();
+    return container.renderToString(Footer, { locals: localsFor(site) });
+  }
+
+  it("links to the board's About page in official mode, without the disclaimer", async () => {
+    const html = await renderFooter({
+      officialMode: true,
+      aboutBody: 'Written by the board.',
+    });
+    // Spaced like the Privacy link it follows, not glued to it. Whitespace is
+    // collapsed as a browser would, so formatting the source can't break this.
+    expect(html.replace(/\s+/g, ' ')).toContain(
+      'Privacy</a> &middot; <a href="/about">About this site</a>',
+    );
+    expect(html).not.toContain('Not affiliated');
+    expect(html).not.toMatch(/independent site/i);
+  });
+
+  it.each([
+    ['blank', ''],
+    ['whitespace-only', ' \n\n '],
+  ])(
+    'has no About link in official mode while the board text is %s, since the page would 404',
+    async (_label, aboutBody) => {
+      const html = await renderFooter({ officialMode: true, aboutBody });
+      expect(html).not.toContain('href="/about"');
+      expect(html).not.toContain('Not affiliated');
+    },
+  );
+
+  it('keeps the disclaimer and a single About link when official mode is off', async () => {
+    const html = await renderFooter({ officialMode: false, aboutBody: '' });
+    expect(html).toContain(
+      'Not affiliated with, endorsed by, or operated by the Valleys at Ashebrook HOA',
+    );
+    expect(html.match(/href="\/about"/g)).toHaveLength(1);
+    // The link still reads as its own word after the disclaimer sentence.
+    expect(html.replace(/\s+/g, ' ')).toContain(
+      'of the neighborhood. <a href="/about">About this site</a>',
+    );
   });
 });
 

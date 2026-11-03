@@ -1,5 +1,5 @@
 ---
-import { displayName, disclaimer } from '../lib/site';
+import { displayName, disclaimer, hasAboutPage } from '../lib/site';
 import { DEFAULT_SITE_SETTINGS } from '../lib/types';
 
 const year = new Date().getFullYear();
@@ -7,16 +7,25 @@ const year = new Date().getFullYear();
 // the default so this component is renderable via the Astro Container API too.
 const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
 const name = displayName(site);
+// Whether the About link appears at all is the page's own rule, so the footer,
+// /about and the sitemap cannot disagree. Official mode only decides where it
+// sits: beside the disclaimer in resident mode, beside Privacy once that is hidden.
+const showAbout = hasAboutPage(site);
 ---
 
 <footer class="site-footer">
   <span>
     &copy; {year} {name} &middot; Raleigh, NC &middot;
     <a href="/privacy">Privacy</a>
+    {site.officialMode && showAbout && (
+      <Fragment>
+        &middot; <a href="/about">About this site</a>
+      </Fragment>
+    )}
   </span>
   {!site.officialMode && (
     <span class="site-footer__disclaimer">
-      {disclaimer(site)} <a href="/about">About this site</a>
+      {disclaimer(site)} {showAbout && <a href="/about">About this site</a>}
     </span>
   )}
   <a class="site-footer__domain" href="/">
