@@ -29,10 +29,11 @@ jobs:
       # REGENERATE FIRST, JUDGE LAST (#358).
       #
       # `worker-configuration.d.ts` is generated output committed to the tree,
-      # and it drifts whenever wrangler.toml, the environment template, or the
-      # installed toolchain moves. Dependabot edits only package.json and the
-      # lockfile, so every bump touching `wrangler` or `@cloudflare/workers-types`
-      # drifts it by construction.
+      # and it drifts whenever wrangler.toml, the environment template, or
+      # `wrangler` itself moves: `wrangler types` generates from the runtime
+      # types bundled in wrangler, not from @cloudflare/workers-types.
+      # Dependabot edits only package.json and the lockfile, so a `wrangler`
+      # bump usually drifts it (see docs/agents/ci-and-release.md).
       #
       # This step used to `exit 1` here, which meant such a bump died in ~30s
       # having validated NOTHING — lint, check, test, test:server, build and
