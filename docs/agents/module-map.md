@@ -101,8 +101,9 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `brandTag`, `accountNav`). The footer disclaimer and `/about` copy are board-editable via site
   settings, with `DISCLAIMER_SHORT` and `DISCLAIMER_LONG` as fallbacks. `disclaimer(site)` and
   `aboutParagraphs(site)` return overrides or built-in copy when blank. `hasAboutPage(site)` is the
-  one rule for whether `/about` exists: in official mode the page and its sitemap entry exist only
-  once `aboutBody` is set, and `aboutDescription(site)` is its meta description for the mode. This is
+  one rule for whether `/about` exists: in official mode the page, its sitemap entry and the
+  footer's About link exist only once `aboutBody` is set (the link moves beside Privacy, since the
+  disclaimer is hidden), and `aboutDescription(site)` is its meta description for the mode. This is
   a pure module usable in `.astro` files, islands, and unit tests.
 - `src/lib/format.ts` contains shared formatting helpers, including `associationDateIso` for the
   `America/New_York` proxy cutoff, unit-tested in `format.test.ts`.
