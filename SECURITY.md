@@ -503,8 +503,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 ## Automated safeguards
 
 - **Dependabot** — dependency update PRs and security alerts (`.github/dependabot.yml`).
-- **CI** — every push and PR runs format, type-check, unit tests, Worker/D1 integration tests
-  (`test:server`), and build gates (`.github/workflows/build.yml`).
+- **CI** — every pull request and every push to `main` runs format, type-check, unit tests,
+  Worker/D1 integration tests (`test:server`), and build gates (`.github/workflows/build.yml`).
 - **Actions pinned to commit SHAs** — every `uses:` in `.github/workflows/` names a full commit SHA
   with the human-readable version beside it in a comment, rather than a moving tag like `@v7`. A
   release tag can be re-pointed at different code by whoever controls the action's repository; a
