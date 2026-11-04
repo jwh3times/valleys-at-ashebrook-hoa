@@ -20,6 +20,10 @@ import {
 // fetch throughout.
 
 beforeAll(async () => {
+  // #524: the pool loads a worktree's gitignored `.dev.vars` (or `.env`) into
+  // `env`, so clear the Drive keys before the first test too, not only after
+  // each one.
+  unconfigureDrive();
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 

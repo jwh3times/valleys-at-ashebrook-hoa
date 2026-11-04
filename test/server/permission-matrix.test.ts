@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import type { AuthContext, Capability } from '../../src/server/authz/guards';
+import { unconfigureDrive } from './drive-fixtures';
 
 /**
  * The permission matrix (#206): every route's DECLARED capability, asserted
@@ -40,6 +41,11 @@ const VOTE_ROUTE = import.meta.glob('../../src/pages/api/vote.ts', {
 const VERBS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 beforeAll(async () => {
+  // #524: the matrix probes the Drive routes in their unconfigured state, as in
+  // CI. The pool loads a worktree's gitignored `.dev.vars` (or `.env`) into
+  // `env`, and with Drive configured `admin/drive/connect` gets past its 404 to
+  // read a URL these probes don't send, so clear the Drive keys first.
+  unconfigureDrive();
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 

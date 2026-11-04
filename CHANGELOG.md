@@ -9,6 +9,40 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.43] - 2026-11-04
+
+### Fixed
+
+- A full local `npm test` on a busy machine no longer times out on the sign-up and sign-in form
+  tests or the pseudonymizer's roster-scale test, which were the slowest in the suite and kept
+  crossing Vitest's 5-second limit while passing in CI. The form tests now fill each field in one
+  step instead of typing it a key at a time, since none of them checks the typed text (the slowest
+  fell from about 2.1 seconds to a quarter of a second), and they still fail if either form echoes
+  Better Auth's account-exists or unverified-email error. The roster-scale test is slow by design,
+  because its roster sizes are what it tests, so it gets its own 15-second limit. The default limit
+  for every other test is unchanged.
+
+## [2.10.42] - 2026-11-04
+
+### Fixed
+
+- A full local `npm run test:server` on a worktree set up with `npm run bootstrap:env` no longer
+  shows false failures. The test pool loads the worktree's `.dev.vars` (or `.env`) into its
+  environment, so tests that expected Google sign-in or the Drive import to be switched off saw
+  real local credentials and failed, while passing in CI. The two Google sign-in configuration
+  tests now build an environment without the Google keys, and the Drive connection, keepalive and
+  import tests and the permission matrix clear the Drive keys before their first test.
+  `AGENTS.md`'s testing guidelines now say a `test:server` test must not rely on the bare pool
+  environment for a secret the pool doesn't set itself.
+
+## [2.10.41] - 2026-11-04
+
+### Fixed
+
+- The footer now reads "Raleigh, NC · Privacy". The separator before **Privacy** used to run
+  straight into the link ("Raleigh, NC ·Privacy") in both resident and official mode, because a
+  line break in the source was the only space between them and the page dropped it.
+
 ## [2.10.40] - 2026-11-04
 
 ### Changed
@@ -4740,7 +4774,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.40...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.43...HEAD
+[2.10.43]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.42...v2.10.43
+[2.10.42]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.41...v2.10.42
+[2.10.41]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.40...v2.10.41
 [2.10.40]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.39...v2.10.40
 [2.10.39]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.38...v2.10.39
 [2.10.38]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.37...v2.10.38

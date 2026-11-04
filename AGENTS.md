@@ -360,6 +360,13 @@ This split matches the type-checking split above: `test/unit/**` is checked by
 The plugin takes Miniflare's config-based `WorkerOptions` through `cloudflareTest({ miniflare: … })`;
 supported overrides there merge over `wrangler.test.toml`.
 
+The pool also loads the worktree's gitignored `.dev.vars` (or `.env` when it is absent) into `env`,
+and `npm run bootstrap:env` fills secrets there that `vitest.workers.config.ts`'s `bindings` do not
+set, such as the Google and Drive keys. A test that needs such a secret unset must pass an explicit
+env or clear the keys first (Drive's `unconfigureDrive()` in `test/server/drive-fixtures.ts`),
+never trust the bare pool `env`: otherwise it passes in CI, which has neither file, and fails on a
+bootstrapped machine (#524).
+
 `readD1Migrations` keeps each statement's leading comments in `queries`, so a test that matches a
 statement's first keyword must strip comment lines first; otherwise an anchored filter skips nearly
 every statement and still passes (see `test/server/adr0022-phase1-schema.test.ts`).
