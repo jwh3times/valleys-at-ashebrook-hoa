@@ -33,6 +33,14 @@ const googleEnv = {
   GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
 };
+// #524: the pool loads a worktree's gitignored `.dev.vars` over its bindings,
+// and `bootstrap:env` fills the Google keys there, so the bare pool `env` is
+// "configured" on a developer machine. The unconfigured case says so itself.
+const noGoogleEnv = {
+  ...env,
+  GOOGLE_CLIENT_ID: undefined,
+  GOOGLE_CLIENT_SECRET: undefined,
+};
 const auth = () => createAuth(googleEnv, undefined, BASE);
 
 type Claims = {
@@ -241,14 +249,14 @@ afterEach(() => {
 describe('Google sign-in configuration', () => {
   it('is available only when both the client ID and secret are set', () => {
     expect(isGoogleSignInConfigured(googleEnv)).toBe(true);
-    expect(isGoogleSignInConfigured(env)).toBe(false);
+    expect(isGoogleSignInConfigured(noGoogleEnv)).toBe(false);
     expect(
-      isGoogleSignInConfigured({ ...env, GOOGLE_CLIENT_ID: 'id-only' }),
+      isGoogleSignInConfigured({ ...noGoogleEnv, GOOGLE_CLIENT_ID: 'id-only' }),
     ).toBe(false);
   });
 
   it('keeps email/password working and reports Google unavailable when unconfigured', async () => {
-    const unconfigured = createAuth({ ...env }, undefined, BASE);
+    const unconfigured = createAuth(noGoogleEnv, undefined, BASE);
     const res = await unconfigured.handler(
       new Request(`${BASE}/api/auth/sign-in/social`, {
         method: 'POST',

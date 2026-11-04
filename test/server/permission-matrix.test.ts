@@ -40,6 +40,19 @@ const VOTE_ROUTE = import.meta.glob('../../src/pages/api/vote.ts', {
 const VERBS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 beforeAll(async () => {
+  // #524: the matrix probes the Drive routes in their unconfigured state, as in
+  // CI. The pool loads a worktree's gitignored `.dev.vars` into `env`, and with
+  // Drive configured `admin/drive/connect` gets past its 404 to read a URL these
+  // probes don't send, so clear the Drive keys first.
+  const mutableEnv = env as unknown as Record<string, unknown>;
+  for (const k of [
+    'DRIVE_CLIENT_ID',
+    'DRIVE_CLIENT_SECRET',
+    'DRIVE_PICKER_API_KEY',
+    'DRIVE_PROJECT_NUMBER',
+    'DRIVE_TOKEN_KEY',
+  ])
+    delete mutableEnv[k];
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
