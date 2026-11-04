@@ -146,6 +146,22 @@ describe('footer About link', () => {
       'of the neighborhood. <a href="/about">About this site</a>',
     );
   });
+
+  // #525: the separator before Privacy ended one source line and the link
+  // started the next, and Astro drops a line-break-only gap between text and an
+  // element, so the footer read "Raleigh, NC ·Privacy" in both modes.
+  it.each([
+    ['resident', { officialMode: false, aboutBody: '' }],
+    ['official', { officialMode: true, aboutBody: 'Written by the board.' }],
+  ])(
+    'spaces the separator before the Privacy link in %s mode',
+    async (_mode, site) => {
+      const html = await renderFooter(site);
+      expect(html.replace(/\s+/g, ' ')).toContain(
+        'Raleigh, NC &middot; <a href="/privacy">Privacy</a>',
+      );
+    },
+  );
 });
 
 describe('home page dues tile', () => {
