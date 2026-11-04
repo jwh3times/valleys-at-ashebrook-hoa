@@ -33,9 +33,10 @@ const googleEnv = {
   GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com',
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
 };
-// #524: the pool loads a worktree's gitignored `.dev.vars` over its bindings,
-// and `bootstrap:env` fills the Google keys there, so the bare pool `env` is
-// "configured" on a developer machine. The unconfigured case says so itself.
+// #524: the pool loads a worktree's gitignored `.dev.vars` (or `.env`) into
+// `env`, and `bootstrap:env` fills the Google keys there, so the bare pool
+// `env` is "configured" on a developer machine. The unconfigured case says so
+// itself.
 const noGoogleEnv = {
   ...env,
   GOOGLE_CLIENT_ID: undefined,
