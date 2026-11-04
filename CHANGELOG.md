@@ -9,6 +9,14 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.40] - 2026-11-04
+
+### Changed
+
+- Board guidance: a blocker that is an issue in the same tracker is recorded as a native `blocked_by`
+  edge, not in the `Blocking Item` field. The field keeps blockers outside the project and blockers
+  on the other tracker. The open issues waiting on #361 now carry that edge.
+
 ## [2.10.39] - 2026-11-03
 
 ### Fixed
@@ -4732,7 +4740,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.39...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.40...HEAD
+[2.10.40]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.39...v2.10.40
 [2.10.39]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.38...v2.10.39
 [2.10.38]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.37...v2.10.38
 [2.10.37]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.36...v2.10.37
