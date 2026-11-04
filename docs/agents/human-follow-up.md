@@ -22,8 +22,8 @@ duplicate.
 ## Follow-up board
 
 same as Board — `Status` `Todo`; `Gate` the human gate that applies (`Operator action`,
-`Board decision`, or `Calendar/sign-off`); `Area`; `Next Action` naming the first step; and
-`Blocking Item` when one exists.
+`Board decision`, or `Calendar/sign-off`); `Area`; `Next Action` naming the first step; and the
+blocker, when one exists, as `Board fields` in `docs/agents/issue-tracker.md` says.
 
 ## Follow-up wiki
 

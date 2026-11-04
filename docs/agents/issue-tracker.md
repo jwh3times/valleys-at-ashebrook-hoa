@@ -145,7 +145,9 @@ not join it on its own: add it with `gh project item-add 6 --owner jwh3times --u
   `Operations` / `New product domain`.
 - `Next Action` (text): the first concrete step. Refresh it on anything a session touched; a stale
   one is worse than an empty one, because it will be believed.
-- `Blocking Item` (text): what blocks it, when something does.
+- `Blocking Item` (text): what blocks it, when something does. A blocker that is an issue in the
+  same tracker is a native `blocked_by` edge (see **Blocking**), not text here. A blocker on the
+  other tracker stays here, so no edge links a public issue to a private one.
 
 The issue is the record; durable facts go in its body and comments, never only in a field.
 
