@@ -30,13 +30,19 @@ const formOf = (init?: RequestInit) =>
   new URLSearchParams(typeof init?.body === 'string' ? init.body : '');
 const configure = (overrides: Record<string, string> = {}) =>
   Object.assign(mutableEnv, DRIVE_SECRETS, overrides);
+const unconfigure = () => {
+  for (const k of Object.keys(DRIVE_SECRETS)) delete mutableEnv[k];
+};
 
 beforeAll(async () => {
+  // #524: the pool loads a worktree's gitignored `.dev.vars` into `env`, so
+  // clear the Drive keys before the first test too, not only after each one.
+  unconfigure();
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
 });
 
 afterEach(async () => {
-  for (const k of Object.keys(DRIVE_SECRETS)) delete mutableEnv[k];
+  unconfigure();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   await env.DATABASE.exec('DELETE FROM drive_connection');

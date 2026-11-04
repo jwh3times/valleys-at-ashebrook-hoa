@@ -9,6 +9,19 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.42] - 2026-11-04
+
+### Fixed
+
+- A full local `npm run test:server` on a worktree set up with `npm run bootstrap:env` no longer
+  shows false failures. The test pool loads the worktree's `.dev.vars` (or `.env`) into its
+  environment, so tests that expected Google sign-in or the Drive import to be switched off saw
+  real local credentials and failed, while passing in CI. The two Google sign-in configuration
+  tests now build an environment without the Google keys, and the Drive connection, keepalive and
+  import tests and the permission matrix clear the Drive keys before their first test.
+  `AGENTS.md`'s testing guidelines now say a `test:server` test must not rely on the bare pool
+  environment for a secret the pool doesn't set itself.
+
 ## [2.10.41] - 2026-11-04
 
 ### Fixed
@@ -4748,7 +4761,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.41...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.42...HEAD
+[2.10.42]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.41...v2.10.42
 [2.10.41]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.40...v2.10.41
 [2.10.40]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.39...v2.10.40
 [2.10.39]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.38...v2.10.39

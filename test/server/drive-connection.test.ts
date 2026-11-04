@@ -59,6 +59,9 @@ function systemAdmin() {
 const boardAdmin = () => ({ authContext: callerContext(BOARD, 'board', []) });
 
 beforeAll(async () => {
+  // #524: the pool loads a worktree's gitignored `.dev.vars` into `env`, so
+  // clear the Drive keys before the first test too, not only after each one.
+  unconfigure();
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
   const now = new Date();
   await getDb(env)
