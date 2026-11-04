@@ -162,8 +162,7 @@ describe('returning to a tenant invitation', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(INVITE));
   });
 
-  // One test per value, so each reports on its own. They were split when each
-  // sign-in typed its fields and five in one test sat near the 5 s timeout (#485).
+  // One test per value, so each reports on its own.
   it.each([
     `//evil.example${INVITE}`,
     `https://evil.example${INVITE}`,
