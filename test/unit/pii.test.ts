@@ -165,6 +165,10 @@ describe('pseudonymizer — surrogate pool exhaustion (roster-scale)', () => {
     expect(p.deanonymize(out)).toBe(text);
   });
 
+  // Slow by design, from computation rather than rendering: the roster sizes
+  // below are what this test exists to exceed, so it gets its own timeout
+  // instead of a smaller roster. A full local run under load slowed it past
+  // Vitest's 5s default (#518).
   it('address and phone generation survive their base-pool sizes', () => {
     const roster: PiiEntry[] = [
       ...Array.from({ length: 7300 }, (_, i) => ({
@@ -182,7 +186,7 @@ describe('pseudonymizer — surrogate pool exhaustion (roster-scale)', () => {
     expect(out).not.toContain('Ashwood');
     expect(out).not.toContain('9190009099');
     expect(p.deanonymize(out)).toBe(text);
-  });
+  }, 15_000);
 });
 
 describe('pseudonymizer — phone precision', () => {

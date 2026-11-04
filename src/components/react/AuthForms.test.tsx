@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 /**
@@ -28,12 +28,16 @@ beforeEach(() => {
   auth.sendVerificationEmail.mockResolvedValue({ error: null });
 });
 
+// Each field is set in one change, not typed: no test here checks the typed
+// text, and typing about 50 keys per form made these the slowest tests in the
+// suite, timing out in a full local run under load (#485, #518).
 async function fillAndSubmit(button: string, fields: [string, string][]) {
-  const user = userEvent.setup();
   for (const [placeholder, value] of fields) {
-    await user.type(screen.getByPlaceholderText(placeholder), value);
+    fireEvent.change(screen.getByPlaceholderText(placeholder), {
+      target: { value },
+    });
   }
-  await user.click(screen.getByRole('button', { name: button }));
+  await userEvent.setup().click(screen.getByRole('button', { name: button }));
 }
 
 const SIGN_UP_FIELDS: [string, string][] = [
@@ -158,8 +162,7 @@ describe('returning to a tenant invitation', () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(INVITE));
   });
 
-  // One test per value: each sign-in types about 40 characters, ~800 ms
-  // under jsdom, so five in one test sat near the 5 s timeout (#485).
+  // One test per value, so each reports on its own.
   it.each([
     `//evil.example${INVITE}`,
     `https://evil.example${INVITE}`,
