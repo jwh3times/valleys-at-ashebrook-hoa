@@ -100,9 +100,10 @@ describe('/about', () => {
 
 // #517: the footer links to /about exactly when the page exists, so a
 // board-written About page is reachable after adoption. The disclaimer stays
-// resident-only. Only the first test fails on the pre-#517 footer; the others
-// are guards that pass on it by design, and each fails if its half of the
-// footer's condition is dropped.
+// resident-only. Of the #517 tests, only the first fails on the pre-#517
+// footer; the others are guards that pass on it by design, and each fails if
+// its half of the footer's condition is dropped. The #525 spacing tests at the
+// end fail on the footer before #525.
 describe('footer About link', () => {
   async function renderFooter(site: Partial<SiteSettings>) {
     const container = await makeContainer();
