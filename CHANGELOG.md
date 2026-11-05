@@ -9,6 +9,21 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.45] - 2026-11-04
+
+### Changed
+
+- Release bookkeeping only: the changelog gains the missing 2.10.44 section for Dependabot's #528.
+  No code or behavior changes.
+
+## [2.10.44] - 2026-11-04
+
+### Changed
+
+- Dependency updates (Dependabot, #528): `better-auth`, `@better-auth/core` and
+  `@better-auth/drizzle-adapter` 1.7.14 → 1.7.15, with the other Better Auth packages in the
+  lockfile following transitively, and `@cloudflare/workers-types` 5.20261031.1 → 5.20261101.1.
+
 ## [2.10.43] - 2026-11-04
 
 ### Fixed
@@ -4774,7 +4789,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.43...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.45...HEAD
+[2.10.45]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.44...v2.10.45
+[2.10.44]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.43...v2.10.44
 [2.10.43]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.42...v2.10.43
 [2.10.42]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.41...v2.10.42
 [2.10.41]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.40...v2.10.41
