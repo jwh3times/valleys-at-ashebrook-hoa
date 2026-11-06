@@ -1,6 +1,6 @@
 # Roadmap
 
-**Updated:** 2026-10-31
+**Updated:** 2026-11-06
 
 Backlog items are **GitHub issues**, not entries in this file. This page explains where to look and
 what the tracker's vocabulary means; it deliberately holds no status lines, because a status line
@@ -32,6 +32,15 @@ that made a Markdown roadmap unmaintainable, because gates change without anyone
 
 A gated item is not a commitment to build it. Several exist so the design reasoning is on record and
 is not rediscovered from scratch.
+
+## Reading priority and `blocked`
+
+Every open issue on both trackers carries one priority label, from `P1-critical` (the critical path,
+the item that unblocks the most other work) to `P4-low` (someday). The board lists the open cards in
+that order. Priority is set by value whether or not an issue is blocked, so a high-priority item can
+still be waiting. `blocked` marks an issue that is waiting on a named dependency: another issue, an
+upstream release, or a third party. Work that is open to pick up is any open card without `blocked`.
+The labels are defined in [`docs/agents/triage-labels.md`](./docs/agents/triage-labels.md).
 
 ## How to use the backlog
 
