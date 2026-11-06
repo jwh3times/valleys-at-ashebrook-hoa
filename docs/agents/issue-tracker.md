@@ -29,6 +29,10 @@ the public tracker pointing at the private record. #278 is the worked example.
 [Ashebrook](https://github.com/users/jwh3times/projects/6) (private, user-owned) is one ordered view
 across both trackers. Fields: Status, **Gate**, Area, Next Action, Blocking Item.
 
+Open cards are ordered by their priority label (`P1-critical` first, see
+[`triage-labels.md`](./triage-labels.md)), then by sequence within a tier. Work that is open to pick
+up is any open card without the `blocked` label whose readiness label names who acts.
+
 **The issue is the record; the board is a view.** Durable facts go in the issue body and comments,
 never only in a Project field. The fields are deliberately cheap to update so the board can go stale
 without losing anything.

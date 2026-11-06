@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.46] - 2026-11-06
+
+### Changed
+
+- Docs only: the tracker conventions now define the `blocked` label and the `P1-critical` to `P4-low`
+  priority labels that both issue trackers carry (`docs/agents/triage-labels.md`). They also say the
+  project board lists open work in priority order (`docs/agents/issue-tracker.md`, `ROADMAP.md`).
+  No code or behavior changes.
+
 ## [2.10.45] - 2026-11-04
 
 ### Changed
@@ -4789,7 +4798,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.45...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.46...HEAD
+[2.10.46]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.45...v2.10.46
 [2.10.45]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.44...v2.10.45
 [2.10.44]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.43...v2.10.44
 [2.10.43]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.42...v2.10.43
