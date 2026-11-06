@@ -484,22 +484,21 @@ export default function RosterAdminPanel() {
     e.preventDefault();
     const displayName = orgForm.displayName.trim();
     // A normalized-name collision is a WARNING on a successful create, not a
-    // refusal, so it has to be read off the response rather than the error.
-    let warning = '';
-    void (async () => {
-      await run(async () => {
-        const created = await createOrganization({
-          legalName: orgForm.legalName.trim(),
-          displayName: displayName === '' ? undefined : displayName,
-          evidence: buildBasicEvidence(orgEvidence),
-        });
-        warning = created.warning ?? '';
-        setOrgForm({ legalName: '', displayName: '' });
-        setOrgEvidence(NO_EVIDENCE);
-        await reload();
-      }, 'Organization recorded.');
-      if (warning) setMsg(`Organization recorded. ${warning}`);
-    })();
+    // refusal, so it has to be read off the response rather than the error;
+    // returning it makes run() show it in place of the plain success message.
+    void run(async () => {
+      const created = await createOrganization({
+        legalName: orgForm.legalName.trim(),
+        displayName: displayName === '' ? undefined : displayName,
+        evidence: buildBasicEvidence(orgEvidence),
+      });
+      setOrgForm({ legalName: '', displayName: '' });
+      setOrgEvidence(NO_EVIDENCE);
+      await reload();
+      return created.warning
+        ? `Organization recorded. ${created.warning}`
+        : undefined;
+    }, 'Organization recorded.');
   }
 
   function submitNameCorrection(e: React.FormEvent) {

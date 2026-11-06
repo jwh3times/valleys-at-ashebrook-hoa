@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RosterAdminPanel from './RosterAdminPanel';
 import * as rosterAdmin from '../../lib/roster-admin';
@@ -363,5 +363,43 @@ describe('RosterAdminPanel contact methods', () => {
     expect(value).toHaveAttribute('maxLength', '320');
     await user.selectOptions(screen.getByLabelText('Channel'), 'sms');
     expect(value).toHaveAttribute('maxLength', '32');
+  });
+});
+
+describe('RosterAdminPanel organizations', () => {
+  async function addOrganization(legalName: string) {
+    const user = userEvent.setup();
+    render(<RosterAdminPanel />);
+    await user.click(await screen.findByRole('button', { name: 'Parties' }));
+    fireEvent.change(screen.getByLabelText('Legal name'), {
+      target: { value: legalName },
+    });
+    await user.click(screen.getByRole('button', { name: 'Add organization' }));
+  }
+
+  it('reports a plain success when the name matches no organization', async () => {
+    mocked.createOrganization.mockResolvedValue({ id: 'o1' });
+    await addOrganization('Oak Holdings LLC');
+
+    expect(
+      await screen.findByText('Organization recorded.'),
+    ).toBeInTheDocument();
+    expect(mocked.createOrganization).toHaveBeenCalledWith(
+      expect.objectContaining({ legalName: 'Oak Holdings LLC' }),
+    );
+  });
+
+  it('shows the name-collision warning from a successful create', async () => {
+    mocked.createOrganization.mockResolvedValue({
+      id: 'o2',
+      warning: 'An organization with this name already exists.',
+    });
+    await addOrganization('Oak Holdings LLC');
+
+    expect(
+      await screen.findByText(
+        'Organization recorded. An organization with this name already exists.',
+      ),
+    ).toBeInTheDocument();
   });
 });
