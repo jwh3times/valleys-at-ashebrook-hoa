@@ -364,6 +364,21 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `board-consequences.ts`, `transfer-effects.ts`, and `AuditCorrelation`; it does not define a
   second access model. `roster/ownership-input.ts` shares evidence and substitution parsing with
   that route's existing actions. The browser contract lives in `src/lib/ownership-transfer.ts`.
+- `payments/` (ADR 0025, #538): the online-payment rail. `provider.ts` is the provider seam, with
+  the `PaymentProvider` interface and `NormalizedPaymentEvent`, ADR 0025's seven-type vocabulary.
+  Nothing outside `payments/providers/` may name a provider. `registry.ts`'s
+  `paymentProviderFor(env)` resolves the adapter `PAYMENTS_PROVIDER` names, or `null` (not
+  configured). No real adapter is registered yet, so every deployment is unconfigured.
+  `setPaymentProviderForTests` is the test-only hook, and the fake it injects lives in
+  `test/server/payments-fixtures.ts`. `apply.ts`'s `applyPaymentEvent(env, event)` is the
+  application path and the only writer of the payment tables and of provider-sourced ledger rows.
+  It decides from a read, writes the event, the projection, at most one entry and any exception as
+  one D1 batch, and re-decides on a lost race. It dedupes per event and per effect, never lets a
+  status move down, and opens exceptions for a mismatched amount, a non-USD currency and an
+  unmatched payment. It never reads a site flag, because the ledger outlives the flags. It throws
+  `InvalidPaymentEvent` for a fact no adapter should produce, and `UnhandledPaymentEvent` for a
+  type it does not decide yet (today it decides the four `payment_*` types, not withdrawals,
+  reinstatements or disputes), storing nothing in either case. (#539)
 - `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3, and
   slice 4 completed the feature with the homeowner-facing `/lot-records` page): `gate.ts` exports
   `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment),

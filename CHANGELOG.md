@@ -9,6 +9,52 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.50] - 2026-11-07
+
+### Added
+
+- **The groundwork for online dues payments, and nothing that can be seen or used yet.** Once the
+  provider confirms a payment, it will credit the lot's dues ledger exactly once, as an online
+  payment the board and the homeowner both see. That holds however many times, and by however
+  many routes, the confirmation arrives. A payment reported pending, failed or canceled never
+  moves the balance. A confirmed amount that differs from what was asked is credited at the
+  confirmed amount and flagged for the board. A payment in another currency, or one the site never
+  started, is never guessed at: it is recorded with no credit and flagged. No payment provider is
+  connected, and no page or route can start or receive a payment; later releases add those
+  (#538). A database migration adds the payment tables; see `docs/agents/migrations.md`.
+
+### Changed
+
+- The board's dues ledger API refuses an operation key starting with `provider:`, which is now
+  reserved for provider payments. The admin panel never sends one. (#539)
+
+## [2.10.49] - 2026-11-06
+
+### Changed
+
+- Dependency updates (Dependabot, #537): `wrangler` 4.156.2 → 4.157.0 and
+  `@cloudflare/vitest-plugin` 1.5.0 → 1.5.1, with the committed Worker types regenerated.
+
+## [2.10.48] - 2026-11-06
+
+### Changed
+
+- Dependency update (Dependabot, #536): `oxlint` 1.90.0 → 1.91.0. Its new check against
+  reassigning a captured variable inside an async function flagged the roster admin panel's
+  organization save, which now returns its name-collision warning directly. That warning still
+  shows exactly as before.
+
+## [2.10.47] - 2026-11-06
+
+### Changed
+
+- Dependency updates (Dependabot, #533): `@anthropic-ai/sdk` 1.3.0 → 1.4.0,
+  `@astrojs/cloudflare` 14.4.3 → 14.4.4, `astro` 7.4.4 → 7.4.5, `@cloudflare/vitest-plugin`
+  1.4.11 → 1.5.0, `@cloudflare/workers-types` 5.20261101.1 → 5.20261103.1, `@vitejs/plugin-react`
+  6.1.2 → 6.2.1, `pdfjs-dist` 6.4.299 → 6.5.438 and `wrangler` 4.156.0 → 4.156.2, with the
+  committed Worker types regenerated. `vitest` and `@vitest/coverage-v8` stay on 5.0.x: 5.1.0
+  fails to load most of the Workers-pool suite (#535), so Dependabot now skips 5.1 and later.
+
 ## [2.10.46] - 2026-11-06
 
 ### Changed
@@ -4798,7 +4844,11 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.46...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.50...HEAD
+[2.10.50]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.49...v2.10.50
+[2.10.49]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.48...v2.10.49
+[2.10.48]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.47...v2.10.48
+[2.10.47]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.46...v2.10.47
 [2.10.46]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.45...v2.10.46
 [2.10.45]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.44...v2.10.45
 [2.10.44]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.43...v2.10.44

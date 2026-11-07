@@ -1,6 +1,6 @@
 # ADR 0025: A Per-Lot Dues Ledger, with Online Payments Reconciled from Verified Provider Events
 
-**Status:** Accepted 2026-09-20
+**Status:** Accepted 2026-09-20; amended 2026-11-06 (see [Amendments](#amendments))
 **Date:** 2026-09-17
 
 ## Context
@@ -370,6 +370,38 @@ private tracker (`jwh3times/valleys-at-ashebrook-hoa-ops#33`). No figure is inve
 cleared the policy questions and the provider choice; the maintainer's acceptance was the separate
 gate. What remains before the fee behaviour ships is evidence, not a decision: the figures named
 just above.
+
+## Amendments
+
+**2026-11-06 (#538, #539).** Three corrections, recorded in the
+[slice 5 spec](https://github.com/jwh3times/valleys-at-ashebrook-hoa/issues/538) and shipped by
+migration `0046`:
+
+1. **Per-effect uniqueness is a deterministic operation key, not a unique `payment_id`.** The
+   decision above makes a provider `payment` entry UNIQUE per `payment_id`, and also has
+   `funds_reinstated` write a _new_ `payment` entry for the same payment. Migration `0036` built the
+   first rule as a partial unique index, which makes the second impossible to write, and a
+   provider reversal carrying its `payment_id` would collide the same way. `0046` replaces that
+   index with a plain one. Each provider effect has its own key, held by the ledger's existing
+   `(operation_key, lot_id)` unique index: `provider:<payment id>:credit`,
+   `provider:<payment id>:withdraw:<reversed entry id>` and
+   `provider:<payment id>:reinstate:<withdrawal entry id>`. Every provider entry keeps its
+   `payment_id`, so the trail runs from entry to payment. The guarantee is unchanged: a webhook and
+   a pull, or two events for one settlement, still converge on one entry.
+2. **The rail is buildable before the merchant account exists.** The sentence under "Secrets and
+   PCI scope" saying the rail "can be built to the adapter boundary but not integrated" until the
+   account exists does not hold: a provider sandbox issues working test keys with no account
+   activation, and ACH can be exercised there end to end. The account is needed to go live, not to
+   build.
+3. **The model gains what the board surfaces need to point at.** `payment_events` also records the
+   provider's payment reference (so an unmatched fact can later be applied to a Lot) and the ledger
+   entry it produced. `via` also admits `board`, for a fact the board applied to a Lot.
+   `payment_exception_resolutions` is the "appended resolution row" the decision names: one per
+   exception, naming the acting account except when the system itself resolves a withdrawal
+   answered by reinstated funds. `payments` records an `origin`, and only a payment the board
+   applied from an unmatched fact has no initiating Person. `provider_payment_ref` is unique per
+   provider rather than globally, since two adapters are free to mint the same string, and is
+   never blank.
 
 ## Related decisions
 

@@ -9,7 +9,9 @@ import {
 } from '../../src/server/db/schema';
 import { callerContext } from './caller-context';
 import { DEFAULT_SITE_SETTINGS } from '../../src/lib/types';
-import { seedProperty, truncateAll } from './fixtures';
+import { seedPerson, seedProperty, truncateAll } from './fixtures';
+import { applyPaymentEvent } from '../../src/server/payments/apply';
+import { fakeEvent, resetFakeEvents, seedPayment } from './payments-fixtures';
 
 /**
  * Board entry for the dues ledger (ADR 0025, #295 slice 2).
@@ -82,6 +84,7 @@ const entries = () => getDb(env).select().from(duesLedgerEntries);
 
 beforeEach(async () => {
   keySequence = 0;
+  resetFakeEvents();
   await truncateAll();
   await seedProperty('lot-a');
   await seedProperty('lot-b');
@@ -155,6 +158,15 @@ describe('the money itself', () => {
       expect(res.status).toBe(400);
       expect(await res.text()).toMatch(/required/i);
     }
+    expect(await entries()).toHaveLength(0);
+  });
+
+  it('refuses an operation key in the namespace provider credits use', async () => {
+    // A board entry holding `provider:<payment>:credit` would make the real
+    // settlement look already credited, and it would never post.
+    const res = await post(charge({ operationKey: 'provider:pay-1:credit' }));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/reserved/i);
     expect(await entries()).toHaveLength(0);
   });
 
@@ -553,6 +565,34 @@ describe('what the reversal takes from the original', () => {
     });
     expect(res.status).toBe(409);
     expect(await res.text()).toMatch(/payment provider/i);
+    expect((await entries()).filter((r) => r.kind === 'reversal')).toHaveLength(
+      0,
+    );
+  });
+
+  it('refuses to reverse a credit the application path wrote from a provider fact', async () => {
+    // The same refusal against a row the real path produced (#539), rather
+    // than one this suite shaped by hand. A board correction to a verified
+    // credit is a visible adjustment, never a reversal.
+    await seedPerson('payer-1');
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
+    const credited = await applyPaymentEvent(
+      env,
+      fakeEvent('payment_succeeded', 'ref_pay-1'),
+    );
+    const entryId =
+      credited.kind === 'recorded' ? credited.ledgerEntryId : null;
+    expect(entryId).not.toBeNull();
+
+    const res = await post({
+      action: 'reverse',
+      entryId,
+      effectiveDay: '2026-11-10',
+      description: 'Undo',
+      operationKey: nextKey(),
+    });
+
+    expect(res.status).toBe(409);
     expect((await entries()).filter((r) => r.kind === 'reversal')).toHaveLength(
       0,
     );

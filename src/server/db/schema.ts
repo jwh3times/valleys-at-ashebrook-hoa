@@ -28,6 +28,14 @@ import {
   LOT_RECORD_TYPES,
   LOT_VIOLATION_CATEGORIES,
   LOT_VIOLATION_STATUSES,
+  PAYMENT_EVENT_OUTCOMES,
+  PAYMENT_EVENT_TYPES,
+  PAYMENT_EVENT_VIAS,
+  PAYMENT_EXCEPTION_REASONS,
+  PAYMENT_LEDGER_STATES,
+  PAYMENT_ORIGINS,
+  PAYMENT_RESOLUTIONS,
+  PAYMENT_STATUSES,
 } from '../../lib/types';
 
 // Re-export the Better-Auth-generated tables so one schema covers everything.
@@ -521,9 +529,11 @@ export const duesLedgerEntries = sqliteTable(
     reference: text('reference'),
     source: text('source', { enum: DUES_ENTRY_SOURCES }).notNull(),
     /**
-     * The provider payment this row was credited from. No FK yet: the
-     * `payments` table arrives with the rail, and adding the column later
-     * would mean rebuilding this table.
+     * The provider payment this row was credited from, carried on every
+     * provider-sourced row (credit, withdrawal and reinstatement alike). No FK:
+     * the column predates `payments` (migration `0046`), and adding one would
+     * mean rebuilding this table; the application path in
+     * `src/server/payments/` is its only writer.
      */
     paymentId: text('payment_id'),
     reversesEntryId: text('reverses_entry_id').references(
@@ -543,11 +553,11 @@ export const duesLedgerEntries = sqliteTable(
       t.operationKey,
       t.lotId,
     ),
-    // One credited entry per provider payment — the second idempotency layer,
-    // so a webhook and a reconciliation pull cannot both credit one settlement.
-    uniqueIndex('dues_ledger_entries_payment_unq')
-      .on(t.paymentId)
-      .where(sql`${t.source} = 'provider'`),
+    // Migration `0046` replaced `0036`'s partial UNIQUE on `payment_id` with
+    // this plain index (ADR 0025's 2026-11-06 amendment): a payment can carry
+    // a credit, a withdrawal and a reinstatement, so per-effect uniqueness is a
+    // deterministic `operation_key`, held by the composite unique above.
+    index('dues_ledger_entries_payment_idx').on(t.paymentId),
     uniqueIndex('dues_ledger_entries_reverses_unq').on(t.reversesEntryId),
     index('dues_ledger_entries_lot_effective_day_idx').on(
       t.lotId,
@@ -665,6 +675,205 @@ export const lotRecordEvents = sqliteTable(
     check(
       'lot_record_events_reason_code_check',
       sql`${t.reasonCode} IS NULL OR ${t.reasonCode} IN ('entered_in_error', 'duplicate', 'superseded', 'homeowner_corrected', 'board_decision', 'other')`,
+    ),
+  ],
+);
+
+/**
+ * ONLINE PAYMENTS (ADR 0025, migration `0046`, #539).
+ *
+ * One `payments` row is one attempt by a party to pay a Lot. Its `status` and
+ * `ledgerState` are projections for display and reconciliation, written only
+ * by the application path in `src/server/payments/`; the Dues Ledger is the
+ * authority for money. None of these tables names a provider: `provider` is an
+ * adapter id in a plain string.
+ */
+export const payments = sqliteTable(
+  'payments',
+  {
+    id: text('id').primaryKey(),
+    lotId: text('lot_id')
+      .notNull()
+      .references(() => lots.id, { onDelete: 'restrict' }),
+    /** Integer CENTS, positive: what the payer asked to pay. */
+    amountCents: integer('amount_cents').notNull(),
+    /** NULL exactly when `origin = 'board_applied'`. */
+    initiatedByPersonId: text('initiated_by_person_id').references(
+      () => people.partyId,
+      { onDelete: 'restrict' },
+    ),
+    origin: text('origin', { enum: PAYMENT_ORIGINS }).notNull(),
+    provider: text('provider').notNull(),
+    providerPaymentRef: text('provider_payment_ref'),
+    status: text('status', { enum: PAYMENT_STATUSES }).notNull(),
+    ledgerState: text('ledger_state', { enum: PAYMENT_LEDGER_STATES })
+      .notNull()
+      .default('none'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('payments_provider_ref_unq').on(
+      t.provider,
+      t.providerPaymentRef,
+    ),
+    index('payments_lot_idx').on(t.lotId, t.createdAt),
+    index('payments_status_idx').on(t.status, t.createdAt),
+    check('payments_amount_positive', sql`${t.amountCents} > 0`),
+    check(
+      'payments_origin_check',
+      sql`${t.origin} IN ('checkout', 'board_applied')`,
+    ),
+    check(
+      'payments_initiator_by_origin',
+      sql`(${t.origin} = 'checkout') = (${t.initiatedByPersonId} IS NOT NULL)`,
+    ),
+    check('payments_provider_not_blank', sql`length(trim(${t.provider})) > 0`),
+    check(
+      'payments_ref_not_blank',
+      sql`${t.providerPaymentRef} IS NULL OR length(trim(${t.providerPaymentRef})) > 0`,
+    ),
+    check(
+      'payments_status_check',
+      sql`${t.status} IN ('created', 'pending', 'succeeded', 'failed', 'canceled', 'expired')`,
+    ),
+    check(
+      'payments_ledger_state_check',
+      sql`${t.ledgerState} IN ('none', 'credited', 'withdrawn')`,
+    ),
+  ],
+);
+
+/**
+ * Every verified fact received from a provider, normalized. Append-only. The
+ * raw payload is never stored — it carries payer names, emails and bank
+ * details the association does not need.
+ */
+export const paymentEvents = sqliteTable(
+  'payment_events',
+  {
+    id: text('id').primaryKey(),
+    provider: text('provider').notNull(),
+    providerEventId: text('provider_event_id').notNull(),
+    /** NULL exactly when `outcome = 'unmatched'`. */
+    paymentId: text('payment_id').references(() => payments.id, {
+      onDelete: 'restrict',
+    }),
+    /** Kept so an unmatched fact can later be applied to a Lot. */
+    providerPaymentRef: text('provider_payment_ref'),
+    type: text('type', { enum: PAYMENT_EVENT_TYPES }).notNull(),
+    /** A magnitude in integer cents; the ledger entry carries the sign. */
+    amountCents: integer('amount_cents').notNull(),
+    currency: text('currency').notNull(),
+    /** The provider's time. */
+    occurredAt: integer('occurred_at', { mode: 'timestamp_ms' }).notNull(),
+    receivedAt: integer('received_at', { mode: 'timestamp_ms' }).notNull(),
+    via: text('via', { enum: PAYMENT_EVENT_VIAS }).notNull(),
+    outcome: text('outcome', { enum: PAYMENT_EVENT_OUTCOMES }).notNull(),
+    /** The entry this event produced, if any. */
+    ledgerEntryId: text('ledger_entry_id').references(
+      () => duesLedgerEntries.id,
+      { onDelete: 'restrict' },
+    ),
+  },
+  (t) => [
+    uniqueIndex('payment_events_provider_event_unq').on(
+      t.provider,
+      t.providerEventId,
+    ),
+    index('payment_events_payment_idx').on(t.paymentId, t.occurredAt),
+    check(
+      'payment_events_type_check',
+      sql`${t.type} IN ('payment_pending', 'payment_succeeded', 'payment_failed', 'payment_canceled', 'funds_withdrawn', 'funds_reinstated', 'dispute_opened')`,
+    ),
+    check(
+      'payment_events_via_check',
+      sql`${t.via} IN ('webhook', 'reconciliation', 'board')`,
+    ),
+    check(
+      'payment_events_outcome_check',
+      sql`${t.outcome} IN ('applied', 'duplicate_effect', 'unmatched', 'exception')`,
+    ),
+    check('payment_events_amount_not_negative', sql`${t.amountCents} >= 0`),
+    check(
+      'payment_events_currency_shape',
+      sql`${t.currency} GLOB '[a-z][a-z][a-z]'`,
+    ),
+    check(
+      'payment_events_ref_not_blank',
+      sql`${t.providerPaymentRef} IS NULL OR length(trim(${t.providerPaymentRef})) > 0`,
+    ),
+    check(
+      'payment_events_unmatched_by_payment',
+      sql`(${t.outcome} = 'unmatched') = (${t.paymentId} IS NULL)`,
+    ),
+    check(
+      'payment_events_entry_by_outcome',
+      sql`${t.ledgerEntryId} IS NULL OR ${t.outcome} IN ('applied', 'exception')`,
+    ),
+  ],
+);
+
+/** The board's queue for what the automatic path refused to decide. Append-only. */
+export const paymentExceptions = sqliteTable(
+  'payment_exceptions',
+  {
+    id: text('id').primaryKey(),
+    paymentEventId: text('payment_event_id').references(
+      () => paymentEvents.id,
+      { onDelete: 'restrict' },
+    ),
+    paymentId: text('payment_id').references(() => payments.id, {
+      onDelete: 'restrict',
+    }),
+    reason: text('reason', { enum: PAYMENT_EXCEPTION_REASONS }).notNull(),
+    openedAt: integer('opened_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('payment_exceptions_stale_pending_unq')
+      .on(t.paymentId)
+      .where(sql`${t.reason} = 'stale_pending'`),
+    index('payment_exceptions_payment_idx').on(t.paymentId),
+    check(
+      'payment_exceptions_reason_check',
+      sql`${t.reason} IN ('amount_mismatch', 'currency_mismatch', 'unmatched_payment', 'funds_withdrawn', 'dispute_opened', 'partial_withdrawal', 'withdrawal_without_credit', 'possible_duplicate', 'stale_pending')`,
+    ),
+    check(
+      'payment_exceptions_has_subject',
+      sql`${t.paymentEventId} IS NOT NULL OR ${t.paymentId} IS NOT NULL`,
+    ),
+  ],
+);
+
+/**
+ * How an exception was closed — appended, never an edit of the opening row.
+ * An open exception is one with no resolution.
+ */
+export const paymentExceptionResolutions = sqliteTable(
+  'payment_exception_resolutions',
+  {
+    id: text('id').primaryKey(),
+    exceptionId: text('exception_id')
+      .notNull()
+      .references(() => paymentExceptions.id, { onDelete: 'restrict' }),
+    resolution: text('resolution', { enum: PAYMENT_RESOLUTIONS }).notNull(),
+    /** Board-only. */
+    note: text('note'),
+    /** NULL exactly when the system resolved it (`funds_reinstated`). */
+    actingAccountId: text('acting_account_id'),
+    resolvedAt: integer('resolved_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('payment_exception_resolutions_exception_unq').on(
+      t.exceptionId,
+    ),
+    check(
+      'payment_exception_resolutions_resolution_check',
+      sql`${t.resolution} IN ('reviewed_no_action', 'corrected_by_entry', 'applied_to_lot', 'funds_reinstated', 'other')`,
+    ),
+    check(
+      'payment_exception_resolutions_actor_shape',
+      sql`(${t.actingAccountId} IS NULL) = (${t.resolution} = 'funds_reinstated')`,
     ),
   ],
 );
