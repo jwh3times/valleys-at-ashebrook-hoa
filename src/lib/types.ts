@@ -305,6 +305,101 @@ export const DUES_ENTRY_SOURCES = ['board', 'provider'] as const;
 export type DuesEntrySource = (typeof DUES_ENTRY_SOURCES)[number];
 
 /**
+ * ONLINE PAYMENTS (ADR 0025, #295 slice 5, #538).
+ *
+ * The vocabulary of the payment rail. Each list is also a CHECK in the
+ * migration that created its table, and the two are pinned together by
+ * `test/unit/payments-boundaries.test.ts`, since SQL cannot import TypeScript.
+ *
+ * `payments.status` and `payments.ledger_state` are operational projections
+ * for display and reconciliation. The Dues Ledger stays the authority for
+ * money.
+ */
+export const PAYMENT_STATUSES = [
+  'created',
+  'pending',
+  'succeeded',
+  'failed',
+  'canceled',
+  'expired',
+] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+/** Whether the payment's money is on the ledger right now. */
+export const PAYMENT_LEDGER_STATES = ['none', 'credited', 'withdrawn'] as const;
+export type PaymentLedgerState = (typeof PAYMENT_LEDGER_STATES)[number];
+
+/**
+ * How the `payments` row came to exist: a homeowner's checkout, or the board
+ * applying a payment taken in the provider's own dashboard to a Lot. Only the
+ * second has no initiating Person.
+ */
+export const PAYMENT_ORIGINS = ['checkout', 'board_applied'] as const;
+export type PaymentOrigin = (typeof PAYMENT_ORIGINS)[number];
+
+/**
+ * The normalized event vocabulary — the whole contract between a provider
+ * adapter and the rest of the system (ADR 0025's table).
+ */
+export const PAYMENT_EVENT_TYPES = [
+  'payment_pending',
+  'payment_succeeded',
+  'payment_failed',
+  'payment_canceled',
+  'funds_withdrawn',
+  'funds_reinstated',
+  'dispute_opened',
+] as const;
+export type PaymentEventType = (typeof PAYMENT_EVENT_TYPES)[number];
+
+/**
+ * How a fact reached the site: a provider webhook, the server's own pull from
+ * the provider, or the board applying an unmatched fact to a Lot.
+ */
+export const PAYMENT_EVENT_VIAS = [
+  'webhook',
+  'reconciliation',
+  'board',
+] as const;
+export type PaymentEventVia = (typeof PAYMENT_EVENT_VIAS)[number];
+
+/** What recording one event did. */
+export const PAYMENT_EVENT_OUTCOMES = [
+  'applied',
+  'duplicate_effect',
+  'unmatched',
+  'exception',
+] as const;
+export type PaymentEventOutcome = (typeof PAYMENT_EVENT_OUTCOMES)[number];
+
+/** Why the automatic path handed a fact to the board instead of deciding. */
+export const PAYMENT_EXCEPTION_REASONS = [
+  'amount_mismatch',
+  'currency_mismatch',
+  'unmatched_payment',
+  'funds_withdrawn',
+  'dispute_opened',
+  'partial_withdrawal',
+  'withdrawal_without_credit',
+  'possible_duplicate',
+  'stale_pending',
+] as const;
+export type PaymentExceptionReason = (typeof PAYMENT_EXCEPTION_REASONS)[number];
+
+/**
+ * How an exception was closed. `funds_reinstated` is the one the system
+ * records itself, with no acting account.
+ */
+export const PAYMENT_RESOLUTIONS = [
+  'reviewed_no_action',
+  'corrected_by_entry',
+  'applied_to_lot',
+  'funds_reinstated',
+  'other',
+] as const;
+export type PaymentResolution = (typeof PAYMENT_RESOLUTIONS)[number];
+
+/**
  * A violation's lifecycle. `voided` is the correction path — nothing is
  * hard-deleted; a voided record stays visible to the board and disappears from
  * the homeowner surface. Status moves only through named transitions.

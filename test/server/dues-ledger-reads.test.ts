@@ -508,29 +508,55 @@ describe('the constraints the money rests on', () => {
     ).rejects.toThrow();
   });
 
-  it('refuses a second credited entry for one provider payment', async () => {
-    await insert({
-      id: 'prov-1',
-      kind: 'payment',
+  it('refuses a second credit for one provider payment under the same effect key', async () => {
+    // Migration 0046 (ADR 0025's 2026-11-06 amendment) moved per-effect
+    // uniqueness from `payment_id` to a deterministic operation key, so the
+    // effect key — not the payment id — is what refuses the double credit.
+    const credit = {
+      kind: 'payment' as const,
       amountCents: -500,
-      method: 'online',
-      source: 'provider',
+      method: 'online' as const,
+      source: 'provider' as const,
       recordedBy: null,
       paymentId: 'pay_9',
-      operationKey: 'prov-1-key',
+      operationKey: 'provider:pay_9:credit',
+    };
+    await insert({ ...credit, id: 'prov-1' });
+    // Drizzle wraps the D1 error; the constraint that fired is on its cause.
+    // Asserting WHICH constraint refused it keeps an unrelated CHECK failure
+    // from passing this test.
+    const refused = await insert({ ...credit, id: 'prov-2' }).then(
+      () => null,
+      (error: Error) =>
+        error.cause instanceof Error ? error.cause.message : error.message,
+    );
+    expect(refused).toMatch(/UNIQUE.*operation_key/);
+  });
+
+  it('lets one provider payment carry a credit and a later reinstatement', async () => {
+    // The case 0036's partial UNIQUE on `payment_id` made impossible: a
+    // dispute won after a withdrawal credits the same payment again, as a new
+    // `payment` entry under its own effect key.
+    const entry = {
+      kind: 'payment' as const,
+      amountCents: -500,
+      method: 'online' as const,
+      source: 'provider' as const,
+      recordedBy: null,
+      paymentId: 'pay_9',
+    };
+    await insert({
+      ...entry,
+      id: 'prov-1',
+      operationKey: 'provider:pay_9:credit',
     });
-    await expect(
-      insert({
-        id: 'prov-2',
-        kind: 'payment',
-        amountCents: -500,
-        method: 'online',
-        source: 'provider',
-        recordedBy: null,
-        paymentId: 'pay_9',
-        operationKey: 'prov-2-key',
-      }),
-    ).rejects.toThrow();
+    await insert({
+      ...entry,
+      id: 'prov-2',
+      operationKey: 'provider:pay_9:reinstate:w1',
+    });
+    const rows = await lotRecords.fetchAdminLotDuesLedger(env);
+    expect(rows.filter((r) => r.paymentId === 'pay_9')).toHaveLength(2);
   });
 
   it('refuses a malformed effective day and a blank description', async () => {

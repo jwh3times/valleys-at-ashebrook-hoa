@@ -313,8 +313,9 @@ GLOB-shaped); `description` (CHECK non-blank, homeowner-visible); `category` (CH
 rather than left to a writer); `method` (CHECK-bounded to `DUES_PAYMENT_METHODS`, present on a
 `payment` and NULL otherwise, same equality-CHECK shape); `reference` (board-only, e.g. a check
 number, projected out of the homeowner read the way `lot_violations.internal_note` is); `source`
-(CHECK-bounded to `DUES_ENTRY_SOURCES` — `board`/`provider`); `payment_id` (no FK — the `payments`
-table arrives with the payment rail in a later slice — CHECK-restricted to `source = 'provider'`);
+(CHECK-bounded to `DUES_ENTRY_SOURCES` — `board`/`provider`); `payment_id` (no FK, since the
+column predates `payments` and adding one would rebuild the table; CHECK-restricted to
+`source = 'provider'`);
 `reverses_entry_id` (self-referencing on delete-restrict, UNIQUE so an entry is reversed at most
 once, present exactly when `kind = 'reversal'`); `recorded_by` (the acting account, NULL exactly
 when `source = 'provider'`); `recorded_at`; `operation_key`. Two rules cannot be same-row CHECKs and
@@ -324,11 +325,44 @@ is exactly the negation of the entry it reverses, and a reversal may not itself 
 Two idempotency indexes, each shaped for a different double-submit: **`(operation_key, lot_id)`
 UNIQUE**, not `operation_key` alone, because ADR 0025's bulk action posts one assessment to every
 Lot under ONE key — a bare unique on the key would make that impossible, since the second lot's row
-would collide with the first — while the composite still makes a resubmission a no-op per Lot; and a
-**partial UNIQUE on `payment_id WHERE source = 'provider'`**, the per-effect layer so a webhook and
-a reconciliation pull can never both credit one settlement (the predicate exists because `payment_id`
-is NULL on every board-entered row, which a bare unique would otherwise collide on). An index on
-`(lot_id, effective_day)` serves the admin per-lot read and its ordering.
+would collide with the first — while the composite still makes a resubmission a no-op per Lot. The
+same composite is also the **per-effect layer** for provider rows: each provider effect has a
+deterministic key (`provider:<payment id>:credit`, `…:withdraw:<reversed entry id>`,
+`…:reinstate:<withdrawal entry id>`), so a webhook and a reconciliation pull can never both credit
+one settlement. Migration `0036` first built that layer as a partial UNIQUE on
+`payment_id WHERE source = 'provider'`. Migration `0046` replaced it with a plain index on
+`payment_id`, because one payment can carry a credit, a withdrawal and a reinstatement (ADR 0025's
+2026-11-06 amendment). An index on `(lot_id, effective_day)` serves the admin per-lot read and its
+ordering.
+
+**Payments** (migration `0046`, ADR 0025, #539) are four tables, none naming a provider:
+
+- `payments`: one attempt by a party to pay a Lot. `lot_id` (`lots`, RESTRICT), positive integer
+  `amount_cents`, `initiated_by_person_id` (`people`, RESTRICT), `origin` (`checkout` /
+  `board_applied`, with the initiator present exactly for `checkout`), `provider` (an adapter id),
+  `provider_payment_ref` (UNIQUE per provider; NULL or non-blank in both payment tables, so a blank
+  reference can never match), `status` and `ledger_state`. The last two are
+  projections, so the ledger stays the authority for money, and only the application path updates
+  them.
+- `payment_events`: every verified provider fact, normalized and append-only. UNIQUE
+  `(provider, provider_event_id)` is the per-event idempotency layer. Each row keeps the provider's
+  payment reference, a magnitude `amount_cents`, the lower-case `currency`, `occurred_at` (which
+  dates the ledger entry), `via` (`webhook` / `reconciliation` / `board`), `outcome` (`applied` /
+  `duplicate_effect` / `unmatched` / `exception`, with `unmatched` exactly when no payment claims
+  it) and the `ledger_entry_id` it produced. The raw payload is never stored.
+- `payment_exceptions`: the board's queue, append-only, citing an event, a payment, or both, with
+  a CHECK-bounded `reason`. `stale_pending` is unique per payment by index. `amount_mismatch`,
+  `currency_mismatch` and `unmatched_payment` are opened at most once per payment (or, unmatched,
+  per provider reference) by the application path's conditional INSERT, so a webhook and a pull
+  reporting one settlement raise one row.
+- `payment_exception_resolutions`: one appended row per resolved exception (UNIQUE
+  `exception_id`). It names the acting account, except for the system's own `funds_reinstated`.
+
+`dues_ledger_entries.payment_id` still has no FK, because adding one would rebuild the ledger. The
+application path, `src/server/payments/apply.ts`, is its only writer, and
+`test/unit/payments-boundaries.test.ts` pins that this module is the only writer of the payment
+tables too. Provider-sourced entries write no `lot_record_events` row, since that log requires an
+acting account. Their trail is `payment_events`.
 
 `lot_record_events` now serves two subject tables, and gained a **pair rule** with the widened
 CHECK: `record_type IN ('lot_violations', 'dues_ledger_entries')` plus

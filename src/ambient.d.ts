@@ -32,6 +32,13 @@ declare namespace Cloudflare {
     DRIVE_PICKER_API_KEY?: string;
     DRIVE_PROJECT_NUMBER?: string;
     DRIVE_TOKEN_KEY?: string;
+    /**
+     * The payment adapter id (ADR 0025, #539). Unset, or naming no registered
+     * adapter, means payments are not configured and every payment surface is
+     * absent. Its secrets and its `wrangler.toml` entry arrive with the first
+     * adapter (#541).
+     */
+    PAYMENTS_PROVIDER?: string;
     /** Anthropic API key for the admin document assistant (Claude generation). */
     ANTHROPIC_API_KEY: string;
     /**
