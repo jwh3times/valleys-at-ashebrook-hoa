@@ -3,7 +3,6 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import {
   applyPaymentEvent,
   InvalidPaymentEvent,
-  UnhandledPaymentEvent,
 } from '../../src/server/payments/apply';
 import {
   fetchAdminLotDuesLedger,
@@ -439,24 +438,750 @@ describe('the same fact arriving more than once', () => {
   });
 });
 
-describe('a fact this path does not handle yet', () => {
-  // Withdrawals, reinstatements and disputes arrive with #540. Until then such
-  // a fact is refused, not stored: stored under its event id, it would be a
-  // `duplicate_event` when redelivered after #540 ships, and lost.
-  it.each(['funds_withdrawn', 'funds_reinstated', 'dispute_opened'] as const)(
-    'refuses %s, storing nothing and leaving the credit alone',
+/** The provider's clock for a withdrawal cycle: each fact a day after the last. */
+const day = (n: number) => new Date(Date.UTC(2026, 10, 2 + n, 15));
+
+/** Credit pay-1 on lot-a, as a settled checkout leaves it. */
+async function settled(amountCents = 45000) {
+  await seedPayment({ id: 'pay-1', lotId: 'lot-a', amountCents });
+  await applyPaymentEvent(
+    env,
+    fakeEvent('payment_succeeded', 'ref_pay-1', {
+      amountCents,
+      occurredAt: day(0),
+    }),
+  );
+}
+
+describe('money that leaves after it was credited', () => {
+  it('reverses exactly the credit, keeps both entries visible, and flags it for the board', async () => {
+    await settled();
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+
+    const entries = await ledger();
+    expect(entries).toMatchObject([
+      { kind: 'payment', amountCents: -45000, source: 'provider' },
+      {
+        kind: 'reversal',
+        amountCents: 45000,
+        source: 'provider',
+        paymentId: 'pay-1',
+        reversesEntryId: entries[0]?.id,
+        recordedBy: null,
+        effectiveDay: '2026-11-05',
+        operationKey: `provider:pay-1:withdraw:${entries[0]?.id}`,
+      },
+    ]);
+    expect(result).toMatchObject({
+      kind: 'recorded',
+      ledgerEntryId: entries[1]?.id,
+    });
+    expect(await paymentRow('pay-1')).toEqual({
+      status: 'succeeded',
+      ledger_state: 'withdrawn',
+    });
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'funds_withdrawn',
+    ]);
+    const [homeowner] = await fetchMemberDuesLedger(env, 'payer-1', TODAY);
+    expect(homeowner.balanceCents).toBe(0);
+  });
+
+  it('writes no entry for a withdrawal of less than the credit, and asks the board to record it', async () => {
+    // A reversal must be an exact negation, so a partial refund cannot be
+    // one; the board records the matching adjustment itself.
+    await settled();
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        amountCents: 10000,
+        occurredAt: day(3),
+      }),
+    );
+
+    expect(result).toMatchObject({ outcome: 'exception', ledgerEntryId: null });
+    expect((await ledger()).map((e) => e.kind)).toEqual(['payment']);
+    expect((await paymentRow('pay-1'))?.ledger_state).toBe('credited');
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'partial_withdrawal',
+    ]);
+  });
+
+  it('writes no entry for a withdrawal when nothing was credited, and flags it', async () => {
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
+    await applyPaymentEvent(env, fakeEvent('payment_pending', 'ref_pay-1'));
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1'),
+    );
+
+    expect(result).toMatchObject({ outcome: 'exception', ledgerEntryId: null });
+    expect(await ledger()).toEqual([]);
+    expect((await paymentRow('pay-1'))?.ledger_state).toBe('none');
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'withdrawal_without_credit',
+    ]);
+  });
+
+  it('takes the whole credit away when more than it is withdrawn', async () => {
+    await settled();
+
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        amountCents: 46500,
+        occurredAt: day(3),
+      }),
+    );
+
+    expect((await ledger()).map((e) => e.amountCents)).toEqual([-45000, 45000]);
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'funds_withdrawn',
+    ]);
+  });
+
+  it('reverses once when a webhook and a pull both report the withdrawal', async () => {
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+
+    const pulled = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        occurredAt: day(3),
+        via: 'reconciliation',
+      }),
+    );
+
+    expect(pulled).toEqual({
+      kind: 'recorded',
+      outcome: 'duplicate_effect',
+      ledgerEntryId: null,
+    });
+    expect((await ledger()).map((e) => e.kind)).toEqual([
+      'payment',
+      'reversal',
+    ]);
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'funds_withdrawn',
+    ]);
+  });
+});
+
+/** The resolutions the board's queue will show, with who decided each. */
+async function resolutions() {
+  const { results } = await env.DATABASE.prepare(
+    `SELECT x.reason, r.resolution, r.acting_account_id
+       FROM payment_exception_resolutions r
+       JOIN payment_exceptions x ON x.id = r.exception_id
+      ORDER BY r.resolved_at, r.id`,
+  ).all<{
+    reason: string;
+    resolution: string;
+    acting_account_id: string | null;
+  }>();
+  return results;
+}
+
+describe('money that comes back after a withdrawal', () => {
+  it('credits the Lot again as a new entry and closes the withdrawal it answers', async () => {
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', { occurredAt: day(20) }),
+    );
+
+    const entries = await ledger();
+    expect(entries).toMatchObject([
+      { kind: 'payment', amountCents: -45000 },
+      { kind: 'reversal', amountCents: 45000 },
+      {
+        kind: 'payment',
+        amountCents: -45000,
+        method: 'online',
+        source: 'provider',
+        paymentId: 'pay-1',
+        reversesEntryId: null,
+        recordedBy: null,
+        effectiveDay: '2026-11-22',
+        operationKey: `provider:pay-1:reinstate:${entries[1]?.id}`,
+      },
+    ]);
+    expect(result).toMatchObject({
+      outcome: 'applied',
+      ledgerEntryId: entries[2]?.id,
+    });
+    expect((await paymentRow('pay-1'))?.ledger_state).toBe('credited');
+    expect(await openExceptions()).toEqual([]);
+    expect(await resolutions()).toEqual([
+      {
+        reason: 'funds_withdrawn',
+        resolution: 'funds_reinstated',
+        acting_account_id: null,
+      },
+    ]);
+    const [homeowner] = await fetchMemberDuesLedger(env, 'payer-1', TODAY);
+    expect(homeowner.balanceCents).toBe(-45000);
+  });
+
+  it('reinstates once when a webhook and a pull both report it', async () => {
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', { occurredAt: day(20) }),
+    );
+
+    const pulled = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', {
+        occurredAt: day(20),
+        via: 'reconciliation',
+      }),
+    );
+
+    expect(pulled).toMatchObject({ outcome: 'duplicate_effect' });
+    expect((await ledger()).map((e) => e.amountCents)).toEqual([
+      -45000, 45000, -45000,
+    ]);
+  });
+
+  it('reinstates once when two reports of it race each other', async () => {
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+
+    await Promise.all([
+      applyPaymentEvent(
+        env,
+        fakeEvent('funds_reinstated', 'ref_pay-1', { occurredAt: day(20) }),
+      ),
+      applyPaymentEvent(
+        env,
+        fakeEvent('funds_reinstated', 'ref_pay-1', {
+          occurredAt: day(20),
+          via: 'reconciliation',
+        }),
+      ),
+    ]);
+
+    expect((await ledger()).map((e) => e.kind)).toEqual([
+      'payment',
+      'reversal',
+      'payment',
+    ]);
+    expect(await resolutions()).toHaveLength(1);
+  });
+
+  it('leaves a withdrawal the board already resolved as the board resolved it', async () => {
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+    await env.DATABASE.prepare(
+      `INSERT INTO payment_exception_resolutions
+         (id, exception_id, resolution, note, acting_account_id, resolved_at)
+       SELECT 'by-board', id, 'reviewed_no_action', NULL, 'board-1', 1
+         FROM payment_exceptions`,
+    ).run();
+
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', { occurredAt: day(20) }),
+    );
+
+    expect((await ledger()).map((e) => e.kind)).toEqual([
+      'payment',
+      'reversal',
+      'payment',
+    ]);
+    expect(await resolutions()).toEqual([
+      {
+        reason: 'funds_withdrawn',
+        resolution: 'reviewed_no_action',
+        acting_account_id: 'board-1',
+      },
+    ]);
+  });
+
+  it('follows a second withdrawal and reinstatement of the same payment', async () => {
+    await settled();
+    const cycle = [
+      ['funds_withdrawn', 3],
+      ['funds_reinstated', 20],
+      ['funds_withdrawn', 30],
+      ['funds_reinstated', 50],
+    ] as const;
+    for (const [type, n] of cycle)
+      await applyPaymentEvent(
+        env,
+        fakeEvent(type, 'ref_pay-1', { occurredAt: day(n) }),
+      );
+
+    const entries = await ledger();
+    expect(entries.map((e) => [e.kind, e.amountCents])).toEqual([
+      ['payment', -45000],
+      ['reversal', 45000],
+      ['payment', -45000],
+      ['reversal', 45000],
+      ['payment', -45000],
+    ]);
+    // The second withdrawal reverses the reinstatement, not the settlement.
+    expect(entries[3]?.reversesEntryId).toBe(entries[2]?.id);
+    expect(entries[4]?.operationKey).toBe(
+      `provider:pay-1:reinstate:${entries[3]?.id}`,
+    );
+    expect((await paymentRow('pay-1'))?.ledger_state).toBe('credited');
+    expect(await openExceptions()).toEqual([]);
+    expect((await resolutions()).map((r) => r.resolution)).toEqual([
+      'funds_reinstated',
+      'funds_reinstated',
+    ]);
+  });
+
+  it('recognizes a late report of an earlier cycle under a new id, changing nothing', async () => {
+    // A pull may describe the first withdrawal and reinstatement long after
+    // the webhook delivered them; they must not be taken as the next cycle.
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', { occurredAt: day(20) }),
+    );
+
+    const lateWithdrawal = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        occurredAt: day(3),
+        via: 'reconciliation',
+      }),
+    );
+    expect(lateWithdrawal).toMatchObject({ outcome: 'duplicate_effect' });
+
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(30) }),
+    );
+    const lateReinstatement = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', {
+        occurredAt: day(20),
+        via: 'reconciliation',
+      }),
+    );
+    expect(lateReinstatement).toMatchObject({ outcome: 'duplicate_effect' });
+
+    expect((await ledger()).map((e) => e.kind)).toEqual([
+      'payment',
+      'reversal',
+      'payment',
+      'reversal',
+    ]);
+    expect((await paymentRow('pay-1'))?.ledger_state).toBe('withdrawn');
+  });
+
+  it('writes nothing for a reinstatement of a different amount, and flags it beside the open withdrawal', async () => {
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+    );
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', {
+        amountCents: 20000,
+        occurredAt: day(20),
+      }),
+    );
+
+    expect(result).toMatchObject({ outcome: 'exception', ledgerEntryId: null });
+    expect((await ledger()).map((e) => e.kind)).toEqual([
+      'payment',
+      'reversal',
+    ]);
+    expect((await paymentRow('pay-1'))?.ledger_state).toBe('withdrawn');
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'funds_withdrawn',
+      'amount_mismatch',
+    ]);
+  });
+
+  it('records a reinstatement with nothing withdrawn without touching the ledger', async () => {
+    // A failed partial refund: the partial never reached the ledger, so
+    // nothing comes back onto it, and the partial's own exception stays open.
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        amountCents: 10000,
+        occurredAt: day(3),
+      }),
+    );
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_reinstated', 'ref_pay-1', {
+        amountCents: 10000,
+        occurredAt: day(5),
+      }),
+    );
+
+    expect(result).toMatchObject({ outcome: 'applied', ledgerEntryId: null });
+    expect((await ledger()).map((e) => e.kind)).toEqual(['payment']);
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'partial_withdrawal',
+    ]);
+  });
+});
+
+describe('a dispute', () => {
+  it('puts the dispute in front of the board without touching the ledger', async () => {
+    await settled();
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('dispute_opened', 'ref_pay-1', { occurredAt: day(2) }),
+    );
+
+    expect(result).toMatchObject({ outcome: 'exception', ledgerEntryId: null });
+    expect((await ledger()).map((e) => e.kind)).toEqual(['payment']);
+    expect(await paymentRow('pay-1')).toEqual({
+      status: 'succeeded',
+      ledger_state: 'credited',
+    });
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'dispute_opened',
+    ]);
+  });
+});
+
+describe('one question for the board, however many paths ask it', () => {
+  it.each([
+    ['a dispute', 'dispute_opened', 45000],
+    ['a partial withdrawal', 'funds_withdrawn', 10000],
+  ] as const)(
+    'opens one exception for %s a webhook and a pull both report',
+    async (_label, type, amountCents) => {
+      await settled();
+      const fact = { amountCents, occurredAt: day(3) };
+      await applyPaymentEvent(env, fakeEvent(type, 'ref_pay-1', fact));
+
+      const pulled = await applyPaymentEvent(
+        env,
+        fakeEvent(type, 'ref_pay-1', { ...fact, via: 'reconciliation' }),
+      );
+
+      expect(pulled).toMatchObject({ outcome: 'duplicate_effect' });
+      expect(await openExceptions()).toHaveLength(1);
+    },
+  );
+
+  it('opens one exception for a withdrawal with nothing credited that two paths report', async () => {
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
+    await applyPaymentEvent(env, fakeEvent('funds_withdrawn', 'ref_pay-1'));
+
+    const pulled = await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', { via: 'reconciliation' }),
+    );
+
+    expect(pulled).toMatchObject({ outcome: 'duplicate_effect' });
+    expect(await openExceptions()).toHaveLength(1);
+  });
+
+  it('asks again about the same partial withdrawal once the ledger has moved on', async () => {
+    // The same amount against a different credit is a different refund.
+    await settled();
+    const partial = (n: number) =>
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        amountCents: 10000,
+        occurredAt: day(n),
+      });
+    await applyPaymentEvent(env, partial(3));
+    for (const [type, n] of [
+      ['funds_withdrawn', 4],
+      ['funds_reinstated', 20],
+    ] as const)
+      await applyPaymentEvent(
+        env,
+        fakeEvent(type, 'ref_pay-1', { occurredAt: day(n) }),
+      );
+
+    await applyPaymentEvent(env, partial(25));
+
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'partial_withdrawal',
+      'partial_withdrawal',
+    ]);
+  });
+
+  it('asks again about a second partial withdrawal of a different amount', async () => {
+    // Two partial refunds are two adjustments for the board to record.
+    await settled();
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        amountCents: 10000,
+        occurredAt: day(3),
+      }),
+    );
+    await applyPaymentEvent(
+      env,
+      fakeEvent('funds_withdrawn', 'ref_pay-1', {
+        amountCents: 5000,
+        occurredAt: day(6),
+      }),
+    );
+
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'partial_withdrawal',
+      'partial_withdrawal',
+    ]);
+  });
+});
+
+let boardSequence = 0;
+
+/** A payment the board typed in by hand, as the board's ledger route writes one. */
+async function boardPayment(
+  effectiveDay: string,
+  amountCents = 45000,
+  lotId = 'lot-a',
+) {
+  boardSequence += 1;
+  const id = `board-${boardSequence}`;
+  await env.DATABASE.prepare(
+    `INSERT INTO dues_ledger_entries
+       (id, lot_id, kind, amount_cents, effective_day, description, category,
+        method, reference, source, payment_id, reverses_entry_id, recorded_by,
+        recorded_at, operation_key)
+     VALUES (?, ?, 'payment', ?, ?, 'Check 1041', NULL, 'check', NULL,
+             'board', NULL, NULL, 'board-1', 0, ?)`,
+  )
+    .bind(id, lotId, -amountCents, effectiveDay, `op-${id}`)
+    .run();
+  return id;
+}
+
+describe('a provider credit that looks like a check the board already entered', () => {
+  // The online credit settles on 2026-11-02 (Association Day).
+  it('credits it anyway and flags it as a possible duplicate', async () => {
+    await boardPayment('2026-10-19');
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('payment_succeeded', 'ref_pay-1'),
+    );
+
+    expect(result).toMatchObject({ outcome: 'exception' });
+    expect((await ledger()).map((e) => e.source)).toEqual([
+      'board',
+      'provider',
+    ]);
+    expect(await openExceptions()).toEqual([
+      {
+        reason: 'possible_duplicate',
+        payment_id: 'pay-1',
+        provider_event_id: 'evt_1',
+      },
+    ]);
+  });
+
+  it.each([
+    ['entered more than 14 days before', () => boardPayment('2026-10-18')],
+    ['dated after the credit', () => boardPayment('2026-11-03')],
+    ['of a different amount', () => boardPayment('2026-11-01', 40000)],
+    ['on another Lot', () => boardPayment('2026-11-01', 45000, 'lot-b')],
+  ])('does not flag a board payment %s', async (_label, seed) => {
+    await seed();
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
+
+    const result = await applyPaymentEvent(
+      env,
+      fakeEvent('payment_succeeded', 'ref_pay-1'),
+    );
+
+    expect(result).toMatchObject({ outcome: 'applied' });
+    expect(await openExceptions()).toEqual([]);
+  });
+
+  it('does not flag a board payment the board already reversed', async () => {
+    // A bounced check, reversed: the online payment replaces it, not repeats it.
+    const check = await boardPayment('2026-10-30');
+    await env.DATABASE.prepare(
+      `INSERT INTO dues_ledger_entries
+         (id, lot_id, kind, amount_cents, effective_day, description, category,
+          method, reference, source, payment_id, reverses_entry_id,
+          recorded_by, recorded_at, operation_key)
+       VALUES ('bounce', 'lot-a', 'reversal', 45000, '2026-10-31',
+               'Check returned', NULL, NULL, NULL, 'board', NULL, ?, 'board-1',
+               0, 'op-bounce')`,
+    )
+      .bind(check)
+      .run();
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
+
+    await applyPaymentEvent(env, fakeEvent('payment_succeeded', 'ref_pay-1'));
+
+    expect(await openExceptions()).toEqual([]);
+  });
+});
+
+describe('facts that arrive together, or for a payment the site never started', () => {
+  it('follows a whole cycle reported in one pull, stamped with one receipt time', async () => {
+    // A reconciliation run applies several facts with the same clock; the
+    // order they were applied in, not the clock, decides what is current.
+    const pulledAt = new Date('2026-12-01T07:00:00Z');
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
+    for (const [type, n, amountCents] of [
+      ['payment_succeeded', 0, 45000],
+      ['funds_withdrawn', 3, 10000],
+      ['funds_withdrawn', 4, 45000],
+      ['funds_reinstated', 20, 45000],
+      ['funds_withdrawn', 25, 10000],
+      ['funds_withdrawn', 30, 45000],
+    ] as const)
+      await applyPaymentEvent(
+        env,
+        fakeEvent(type, 'ref_pay-1', {
+          amountCents,
+          occurredAt: day(n),
+          via: 'reconciliation',
+        }),
+        pulledAt,
+      );
+
+    const entries = await ledger();
+    expect(entries.map((e) => [e.kind, e.amountCents])).toEqual([
+      ['payment', -45000],
+      ['reversal', 45000],
+      ['payment', -45000],
+      ['reversal', 45000],
+    ]);
+    // Each withdrawal reversed the credit current when it happened.
+    expect(entries[1]?.reversesEntryId).toBe(entries[0]?.id);
+    expect(entries[3]?.reversesEntryId).toBe(entries[2]?.id);
+    // The second partial is against a different credit, so it is asked again.
+    expect(
+      (await openExceptions()).filter((x) => x.reason === 'partial_withdrawal'),
+    ).toHaveLength(2);
+  });
+
+  it.each(['funds_withdrawn', 'dispute_opened', 'funds_reinstated'] as const)(
+    'puts an unmatched %s in front of the board, since money moved',
     async (type) => {
-      await seedPayment({ id: 'pay-1', lotId: 'lot-a' });
-      await applyPaymentEvent(env, fakeEvent('payment_succeeded', 'ref_pay-1'));
+      const result = await applyPaymentEvent(
+        env,
+        fakeEvent(type, 'ref_unknown'),
+      );
 
-      await expect(
-        applyPaymentEvent(env, fakeEvent(type, 'ref_pay-1')),
-      ).rejects.toThrow(UnhandledPaymentEvent);
+      expect(result).toMatchObject({ outcome: 'unmatched' });
+      expect(await ledger()).toEqual([]);
+      expect((await openExceptions()).map((x) => x.reason)).toEqual([
+        'unmatched_payment',
+      ]);
+    },
+  );
 
-      expect(await storedEvents()).toHaveLength(1);
-      expect(await ledger()).toHaveLength(1);
-      expect(await openExceptions()).toEqual([]);
-      expect((await paymentRow('pay-1'))?.ledger_state).toBe('credited');
+  it('asks about money leaving an unmatched payment as well as its arrival', async () => {
+    await applyPaymentEvent(env, fakeEvent('payment_succeeded', 'ref_unknown'));
+    await applyPaymentEvent(env, fakeEvent('funds_withdrawn', 'ref_unknown'));
+
+    expect((await openExceptions()).map((x) => x.reason)).toEqual([
+      'unmatched_payment',
+      'unmatched_payment',
+    ]);
+  });
+
+  it.each(['funds_withdrawn', 'funds_reinstated', 'dispute_opened'] as const)(
+    'stores a redelivered %s once',
+    async (type) => {
+      await settled();
+      if (type === 'funds_reinstated')
+        await applyPaymentEvent(
+          env,
+          fakeEvent('funds_withdrawn', 'ref_pay-1', { occurredAt: day(3) }),
+        );
+      const event = fakeEvent(type, 'ref_pay-1', { occurredAt: day(20) });
+      await applyPaymentEvent(env, event);
+      const before = await ledger();
+
+      expect(await applyPaymentEvent(env, event)).toEqual({
+        kind: 'duplicate_event',
+      });
+      expect(await ledger()).toEqual(before);
+    },
+  );
+
+  it('reverses once when two reports of a withdrawal race each other', async () => {
+    await settled();
+
+    await Promise.all(
+      (['webhook', 'reconciliation'] as const).map((via) =>
+        applyPaymentEvent(
+          env,
+          fakeEvent('funds_withdrawn', 'ref_pay-1', {
+            occurredAt: day(3),
+            via,
+          }),
+        ),
+      ),
+    );
+
+    expect((await ledger()).map((e) => e.kind)).toEqual([
+      'payment',
+      'reversal',
+    ]);
+    expect(await openExceptions()).toHaveLength(1);
+  });
+
+  it.each([
+    ['a dispute', 'dispute_opened', 45000],
+    ['a partial withdrawal', 'funds_withdrawn', 10000],
+  ] as const)(
+    'opens one exception when two reports of %s race each other',
+    async (_label, type, amountCents) => {
+      await settled();
+
+      await Promise.all(
+        (['webhook', 'reconciliation'] as const).map((via) =>
+          applyPaymentEvent(
+            env,
+            fakeEvent(type, 'ref_pay-1', {
+              amountCents,
+              occurredAt: day(3),
+              via,
+            }),
+          ),
+        ),
+      );
+
+      expect(await storedEvents()).toHaveLength(3);
+      expect(await openExceptions()).toHaveLength(1);
     },
   );
 });

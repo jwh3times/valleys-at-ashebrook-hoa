@@ -352,9 +352,13 @@ ordering.
   it) and the `ledger_entry_id` it produced. The raw payload is never stored.
 - `payment_exceptions`: the board's queue, append-only, citing an event, a payment, or both, with
   a CHECK-bounded `reason`. `stale_pending` is unique per payment by index. `amount_mismatch`,
-  `currency_mismatch` and `unmatched_payment` are opened at most once per payment (or, unmatched,
-  per provider reference) by the application path's conditional INSERT, so a webhook and a pull
-  reporting one settlement raise one row.
+  `currency_mismatch`, `unmatched_payment` and `dispute_opened` are opened at most once per payment
+  (or, unmatched, per provider reference) and type of fact, by the application path's conditional
+  INSERT, so a webhook and a pull reporting one fact raise one row. `unmatched_payment` opens for
+  any unmatched fact that moved money: a settlement, a withdrawal, a reinstatement or a dispute.
+  `partial_withdrawal` and `withdrawal_without_credit` can recur, so the same INSERT treats one as
+  a repeat only for the same fact type and amount when no later fact for the payment has written an
+  entry (by insertion order, never by clock).
 - `payment_exception_resolutions`: one appended row per resolved exception (UNIQUE
   `exception_id`). It names the acting account, except for the system's own `funds_reinstated`.
 
