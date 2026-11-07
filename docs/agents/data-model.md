@@ -359,9 +359,10 @@ ordering.
   `exception_id`). It names the acting account, except for the system's own `funds_reinstated`.
 
 `dues_ledger_entries.payment_id` still has no FK, because adding one would rebuild the ledger. The
-application path, `src/server/payments/apply.ts`, is its only writer, and
-`test/unit/payments-boundaries.test.ts` pins that this module is the only writer of the payment
-tables too. Provider-sourced entries write no `lot_record_events` row, since that log requires an
+application path, `src/server/payments/apply.ts`, is its only writer, and the only writer of the
+payment tables too. `test/unit/payments-boundaries.test.ts` pins that nothing outside
+`src/server/payments/` writes them, that only `apply.ts` updates `payments`, and that the other
+three are never updated or deleted. Provider-sourced entries write no `lot_record_events` row, since that log requires an
 acting account. Their trail is `payment_events`.
 
 `lot_record_events` now serves two subject tables, and gained a **pair rule** with the widened
