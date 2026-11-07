@@ -375,10 +375,14 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   It decides from a read, writes the event, the projection, at most one entry and any exception as
   one D1 batch, and re-decides on a lost race. It dedupes per event and per effect, never lets a
   status move down, and opens exceptions for a mismatched amount, a non-USD currency and an
-  unmatched payment. It never reads a site flag, because the ledger outlives the flags. It throws
-  `InvalidPaymentEvent` for a fact no adapter should produce, and `UnhandledPaymentEvent` for a
-  type it does not decide yet (today it decides the four `payment_*` types, not withdrawals,
-  reinstatements or disputes), storing nothing in either case. (#539)
+  unmatched payment. A withdrawal reverses exactly the payment's current credit (or, for less than
+  it or with nothing credited, opens an exception and writes nothing); a reinstatement adds a new
+  `payment` entry and resolves the withdrawal's exception as the system; a dispute opens an
+  exception only; and a credit resembling a board-entered payment (same Lot and amount, within 14
+  days before) is credited and flagged `possible_duplicate`. A report of an earlier withdrawal
+  cycle, by the provider's clock, changes nothing. It never reads a site flag, because the ledger
+  outlives the flags. It throws `InvalidPaymentEvent` for a fact no adapter should produce, storing
+  nothing. (#539, #540)
 - `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3, and
   slice 4 completed the feature with the homeowner-facing `/lot-records` page): `gate.ts` exports
   `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment),

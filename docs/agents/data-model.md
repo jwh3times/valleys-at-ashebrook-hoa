@@ -319,8 +319,10 @@ column predates `payments` and adding one would rebuild the table; CHECK-restric
 `reverses_entry_id` (self-referencing on delete-restrict, UNIQUE so an entry is reversed at most
 once, present exactly when `kind = 'reversal'`); `recorded_by` (the acting account, NULL exactly
 when `source = 'provider'`); `recorded_at`; `operation_key`. Two rules cannot be same-row CHECKs and
-are enforced by the `INSERT … SELECT` that writes a reversal instead (ADR 0025): a reversal's amount
-is exactly the negation of the entry it reverses, and a reversal may not itself be reversed.
+are enforced by the board route's `INSERT … SELECT` that writes a reversal instead (ADR 0025): a
+reversal's amount is exactly the negation of the entry it reverses, and a reversal may not itself be
+reversed. The application path's withdrawal holds both by construction: it negates a provider
+`payment` entry it read, and entries are never edited.
 
 Two idempotency indexes, each shaped for a different double-submit: **`(operation_key, lot_id)`
 UNIQUE**, not `operation_key` alone, because ADR 0025's bulk action posts one assessment to every
@@ -352,9 +354,13 @@ ordering.
   it) and the `ledger_entry_id` it produced. The raw payload is never stored.
 - `payment_exceptions`: the board's queue, append-only, citing an event, a payment, or both, with
   a CHECK-bounded `reason`. `stale_pending` is unique per payment by index. `amount_mismatch`,
-  `currency_mismatch` and `unmatched_payment` are opened at most once per payment (or, unmatched,
-  per provider reference) by the application path's conditional INSERT, so a webhook and a pull
-  reporting one settlement raise one row.
+  `currency_mismatch`, `unmatched_payment` and `dispute_opened` are opened at most once per payment
+  (or, unmatched, per provider reference) and type of fact, by the application path's conditional
+  INSERT, so a webhook and a pull reporting one fact raise one row. `unmatched_payment` opens for
+  any unmatched fact that moved money: a settlement, a withdrawal, a reinstatement or a dispute.
+  `partial_withdrawal` and `withdrawal_without_credit` can recur, so the same INSERT treats one as
+  a repeat only for the same fact type and amount when no later fact for the payment has written an
+  entry (by insertion order, never by clock).
 - `payment_exception_resolutions`: one appended row per resolved exception (UNIQUE
   `exception_id`). It names the acting account, except for the system's own `funds_reinstated`.
 

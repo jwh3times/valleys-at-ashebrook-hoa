@@ -19,6 +19,8 @@ import {
   representationLots,
 } from '../../src/server/db/roster-schema';
 import { truncateAll, seedProperty, seedLotAuthority } from './fixtures';
+import { fakeEvent, resetFakeEvents, seedPayment } from './payments-fixtures';
+import { applyPaymentEvent } from '../../src/server/payments/apply';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../src/lib/types';
 import type { AuthContext } from '../../src/server/authz/guards';
 
@@ -155,7 +157,7 @@ async function seedEntry(
 
 beforeEach(async () => {
   const db = getDb(env);
-  await db.delete(duesLedgerEntries);
+  resetFakeEvents();
   await db.delete(representationLots);
   await db.delete(representations);
   await db.delete(organizations);
@@ -381,6 +383,37 @@ describe('the dues balance a homeowner reads', () => {
     // The payment's own amount keeps its sign, so a credit on the page cannot
     // be read as another charge.
     expect(html).toContain('-$450.00');
+  });
+
+  it('shows an online payment that was withdrawn and reinstated as separate entries', async () => {
+    // ADR 0025: money that leaves after it was credited stays visible, and
+    // money that comes back is a new entry, never an un-reversal.
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 50000, '2026-08-15', 'Autumn quarter');
+    await seedPayment({ id: 'pay-1', lotId: 'lot-a', personId: 'person-1' });
+    for (const [type, at] of [
+      ['payment_succeeded', '2026-09-02T15:00:00Z'],
+      ['funds_withdrawn', '2026-09-05T15:00:00Z'],
+      ['funds_reinstated', '2026-09-20T15:00:00Z'],
+    ] as const)
+      await applyPaymentEvent(
+        env,
+        fakeEvent(type, 'ref_pay-1', { occurredAt: new Date(at) }),
+      );
+
+    const html = await render(caller());
+    // In the order they happened, each carrying the balance after it.
+    const rows = [
+      'Autumn quarter',
+      'Online payment',
+      'Online payment withdrawn',
+      'Online payment reinstated',
+    ].map((text) => html.indexOf(`>${text}<`));
+    expect(rows.every((at) => at >= 0)).toBe(true);
+    expect([...rows].sort((a, b) => a - b)).toEqual(rows);
+    expect(html.match(/Balance \$500\.00/g)).toHaveLength(2);
+    expect(html.match(/Balance \$50\.00/g)).toHaveLength(2);
+    expect(html).toContain('$50.00 owed');
   });
 
   it('calls a negative balance a credit and never says it is owed', async () => {

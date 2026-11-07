@@ -9,6 +9,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.51] - 2026-11-07
+
+### Added
+
+- **Online payments that are withdrawn, reinstated or disputed stay visible on the dues ledger, in
+  the groundwork for online dues payments; nothing here can be seen or used yet.** When the
+  provider reports that a credited payment was withdrawn, the ledger gains a separate entry that
+  takes the credit back, and the board is flagged. If the money comes back, a new credit is added
+  rather than the withdrawal being erased, and the board's flag closes on its own. So the
+  homeowner and the board see every step, and the balance is their sum. A dispute is flagged for
+  the board without moving the balance. A partial withdrawal, a withdrawal with nothing credited,
+  or a reinstatement of a different amount changes nothing and is flagged instead. An online
+  credit that looks like a payment the board already entered by hand (the same amount on the same
+  lot within the previous 14 days) is still credited, and flagged as a possible duplicate. A
+  report that arrives again, or by a second route, takes effect once and raises at most one flag.
+  No payment provider is connected yet (#538, #540).
+
 ## [2.10.50] - 2026-11-07
 
 ### Added
@@ -4844,7 +4861,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.50...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.51...HEAD
+[2.10.51]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.50...v2.10.51
 [2.10.50]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.49...v2.10.50
 [2.10.49]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.48...v2.10.49
 [2.10.48]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.47...v2.10.48
