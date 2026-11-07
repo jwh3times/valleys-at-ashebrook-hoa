@@ -146,6 +146,14 @@ export async function truncateAll() {
   // cites the Tenancy and a Contact Method.
   // A renewal cites the Tenancy it renews with RESTRICT, enforced per row, so
   // the link is cleared before the table.
+  // ADR 0025 payments (#539): a payment cites a Lot and a Person, an event
+  // cites a payment and the ledger entry it produced, an exception cites both,
+  // and a resolution cites its exception. All RESTRICT, so leaves first and
+  // before the ledger, the people and the lots further down.
+  await env.DATABASE.prepare('DELETE FROM payment_exception_resolutions').run();
+  await env.DATABASE.prepare('DELETE FROM payment_exceptions').run();
+  await env.DATABASE.prepare('DELETE FROM payment_events').run();
+  await env.DATABASE.prepare('DELETE FROM payments').run();
   await env.DATABASE.prepare('DELETE FROM tenancy_invitations').run();
   await env.DATABASE.prepare('DELETE FROM tenancy_requests').run();
   await env.DATABASE.prepare(

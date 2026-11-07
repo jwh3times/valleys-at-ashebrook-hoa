@@ -19,6 +19,7 @@ import {
   DUES_PAYMENT_METHODS,
 } from '../../../lib/types';
 import { MAX_ENTRY_CENTS } from '../../../lib/money';
+import { PROVIDER_KEY_PREFIX } from '../../../server/payments/apply';
 
 export const prerender = false;
 
@@ -89,6 +90,17 @@ function operationKeyOrError(
       ok: false,
       res: new Response(
         'operationKey is required — send the same key to retry a submission safely',
+        { status: 400 },
+      ),
+    };
+  // The application path keys its entries `provider:<payment>:…` (ADR 0025);
+  // a board entry holding one of those keys would make the real settlement
+  // look already credited.
+  if (key.startsWith(PROVIDER_KEY_PREFIX))
+    return {
+      ok: false,
+      res: new Response(
+        `operationKey may not start with "${PROVIDER_KEY_PREFIX}", which is reserved for provider payments`,
         { status: 400 },
       ),
     };
@@ -186,11 +198,6 @@ async function conflictResponse(
   if (message.includes('reverses_entry_id'))
     return new Response(
       'That entry has already been reversed — an entry is reversed at most once',
-      { status: 409 },
-    );
-  if (message.includes('payment_id'))
-    return new Response(
-      'That payment has already been credited to the ledger',
       { status: 409 },
     );
   if (!message.includes('operation_key')) throw error;

@@ -323,6 +323,13 @@
       "when": 1792303200000,
       "tag": "0045_tenancy_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1792306800000,
+      "tag": "0046_payments",
+      "breakpoints": true
     }
   ]
 }

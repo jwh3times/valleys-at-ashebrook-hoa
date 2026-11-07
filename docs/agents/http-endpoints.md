@@ -400,14 +400,15 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   undone only through its own `funds_withdrawn` event, which needs the one `reverses_entry_id` slot
   the UNIQUE index allows.
 
-  Every mutation carries a required `operationKey` (`400` if missing) and is unique per lot
-  (`(operation_key, lot_id)`). A UNIQUE violation is resolved by which index it hit, since the three
-  mean different things: a hit on `reverses_entry_id` is `409` "already reversed"; a hit on
-  `payment_id` is `409` "already credited"; a hit on `operation_key` re-queries the row already
+  Every mutation carries a required `operationKey` (`400` if missing, and `400` if it starts with
+  `provider:`, the namespace the payments application path keys its entries in) and is unique per
+  lot (`(operation_key, lot_id)`). A UNIQUE violation is resolved by which index it hit, since the
+  two mean different things: a hit on `reverses_entry_id` is `409` "already reversed"; a hit on
+  `operation_key` re-queries the row already
   posted under that key/lot and returns `409` "already posted" only when its `kind` and
   `amount_cents` match what this request intended — otherwise `409` says the key was reused for a
   different entry, so a stale-tab resubmission is never told its (unposted) money was recorded. A
-  constraint violation matching none of the three is re-thrown, not guessed at. `postCharge`,
+  constraint violation matching neither is re-thrown, not guessed at. `postCharge`,
   `postPayment`, `postAdjustment`, and `reverse` each run their `INSERT … SELECT` (existence and both
   flags re-checked in the `WHERE`) and their `lot_record_events` append as one D1 batch, gated on
   `changes() = 1` exactly as `/api/admin/lot-violations` does, answering `409` "Lot not found, or lot
