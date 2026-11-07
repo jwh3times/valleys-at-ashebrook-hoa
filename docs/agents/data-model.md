@@ -319,8 +319,10 @@ column predates `payments` and adding one would rebuild the table; CHECK-restric
 `reverses_entry_id` (self-referencing on delete-restrict, UNIQUE so an entry is reversed at most
 once, present exactly when `kind = 'reversal'`); `recorded_by` (the acting account, NULL exactly
 when `source = 'provider'`); `recorded_at`; `operation_key`. Two rules cannot be same-row CHECKs and
-are enforced by the `INSERT … SELECT` that writes a reversal instead (ADR 0025): a reversal's amount
-is exactly the negation of the entry it reverses, and a reversal may not itself be reversed.
+are enforced by the board route's `INSERT … SELECT` that writes a reversal instead (ADR 0025): a
+reversal's amount is exactly the negation of the entry it reverses, and a reversal may not itself be
+reversed. The application path's withdrawal holds both by construction: it negates a provider
+`payment` entry it read, and entries are never edited.
 
 Two idempotency indexes, each shaped for a different double-submit: **`(operation_key, lot_id)`
 UNIQUE**, not `operation_key` alone, because ADR 0025's bulk action posts one assessment to every
