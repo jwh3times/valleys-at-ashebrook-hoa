@@ -549,6 +549,56 @@ production:
 This rollout uses the existing D1 site setting and standard deployment steps; it adds no Cloudflare
 resource, binding, or secret.
 
+## Online Payments (Stripe sandbox)
+
+Online dues payments (ADR 0025, #538) are being built in slices, and none of them is live: there is
+no Pay action yet. What exists is the payment provider's webhook, `POST /api/webhooks/payments`,
+which records a payment Stripe confirms on the lot's dues ledger. Production sets none of the
+payment values, so there the webhook does not exist (`404`). Work against a **Stripe sandbox**
+only; a sandbox gives test keys without activating an account, and no real money moves.
+
+Payments are configured only when all three values are set, in the local `.dev.vars`:
+
+| Name                      | Value                                                        |
+| ------------------------- | ------------------------------------------------------------ |
+| `PAYMENTS_PROVIDER`       | `stripe`                                                     |
+| `PAYMENTS_API_KEY`        | the sandbox's secret key, `sk_test_…`                        |
+| `PAYMENTS_WEBHOOK_SECRET` | the signing secret `stripe listen` prints, `whsec_…` (below) |
+
+With any of the three blank, every payment surface is absent, which is the default.
+
+1. **Provision a sandbox.** Either create one in the Stripe Dashboard (the account picker →
+   **Sandboxes** → **Create**), or, with the [Stripe CLI](https://docs.stripe.com/stripe-cli)
+   installed, run `stripe sandbox create` for one with no account registration. Copy the sandbox's
+   secret key (`sk_test_…`) into `PAYMENTS_API_KEY`. Never put a live key (`sk_live_…`) in
+   `.dev.vars`.
+2. **Log the CLI into the sandbox:** `stripe login`, choosing the sandbox.
+3. **Forward webhooks to the local site.** With the site running locally, run:
+
+   ```bash
+   stripe listen --forward-to localhost:4321/api/webhooks/payments \
+     --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,checkout.session.expired,charge.dispute.created,charge.dispute.funds_withdrawn,charge.dispute.funds_reinstated,refund.created,refund.failed
+   ```
+
+   It prints `Ready! Your webhook signing secret is whsec_…`. Put that value in
+   `PAYMENTS_WEBHOOK_SECRET` and restart the local site. Later runs for the same sandbox print the
+   same secret.
+
+4. **Check the signature gate.** `stripe trigger checkout.session.completed` delivers a signed
+   event: the `stripe listen` window shows `200` for it. The triggered session belongs to no
+   payment the site started, so it is stored unmatched and flagged for the board, and no ledger
+   changes. An unsigned `curl -X POST localhost:4321/api/webhooks/payments -d '{}'` answers `400`
+   and stores nothing.
+
+The webhook verifies Stripe's signature over the raw body before reading it, refuses one more than
+five minutes old, answers `503` during the write freeze so Stripe retries, and answers `500` when
+it could not record a delivery, which Stripe also retries. It never reads a site flag: a payment
+already in flight lands whatever the gates say.
+
+Going live is a separate, later step: it needs the association's merchant account, a webhook
+endpoint registered in the live Dashboard for the event types above, and the three values set as a
+`wrangler.toml` var and two Worker secrets.
+
 ## Public Architecture
 
 See [AGENTS.md](./AGENTS.md) for the architecture overview, [docs/agents/](./docs/agents/) for

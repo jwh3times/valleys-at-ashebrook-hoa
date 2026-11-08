@@ -1,24 +1,26 @@
 import type { PaymentProvider } from './provider';
-
-/**
- * Which payment provider this deployment uses (ADR 0025): the adapter whose id
- * `PAYMENTS_PROVIDER` names, or `null` — not configured — when it names none.
- *
- * Real adapters are registered here and nowhere else. There are none yet: the
- * first lands with the webhook (#541), so today every deployment resolves to
- * not configured, which is what keeps every payment surface absent.
- */
-type AdapterFactory = (env: Env) => PaymentProvider;
-
-const ADAPTERS: Readonly<Record<string, AdapterFactory>> = {};
+import { ADAPTERS } from './providers';
 
 let injected: PaymentProvider | null = null;
 
+/**
+ * Which payment provider this deployment uses (ADR 0025), or `null` — not
+ * configured. Configured is ONE predicate, and this is it: `PAYMENTS_PROVIDER`
+ * names a registered adapter AND both `PAYMENTS_API_KEY` and
+ * `PAYMENTS_WEBHOOK_SECRET` are set. Anything less keeps every payment surface
+ * absent, which is how production stays dark until a merchant account exists.
+ *
+ * Real adapters are registered in `providers/index.ts` and nowhere else, so
+ * this module never names a provider.
+ */
 export function paymentProviderFor(env: Env): PaymentProvider | null {
   if (injected) return injected;
   const id = env.PAYMENTS_PROVIDER?.trim();
-  if (!id || !Object.hasOwn(ADAPTERS, id)) return null;
-  return ADAPTERS[id](env);
+  const apiKey = env.PAYMENTS_API_KEY?.trim();
+  const webhookSecret = env.PAYMENTS_WEBHOOK_SECRET?.trim();
+  if (!id || !Object.hasOwn(ADAPTERS, id) || !apiKey || !webhookSecret)
+    return null;
+  return ADAPTERS[id]({ apiKey, webhookSecret });
 }
 
 /**

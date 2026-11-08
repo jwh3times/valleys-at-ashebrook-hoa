@@ -7,16 +7,28 @@ import {
 import { FAKE_PROVIDER_ID, fakeProvider } from './payments-fixtures';
 
 /**
- * Which provider a deployment uses (ADR 0025, #539). Until the first real
- * adapter lands (#541) every deployment is unconfigured, which is what keeps
- * every payment surface absent — and the fake this suite injects must never be
- * reachable through configuration.
+ * Which provider a deployment uses (ADR 0025, #539, #541). "Configured" is one
+ * predicate: a registered adapter id AND both payment secrets. Anything less
+ * resolves to not configured, which is what keeps every payment surface
+ * absent — and the fake this suite injects must never be reachable through
+ * configuration.
  */
 
 afterEach(() => setPaymentProviderForTests(null));
 
-const withProvider = (value: string | undefined): Env => ({
+const SECRETS = {
+  PAYMENTS_API_KEY: 'sk_test_not_real',
+  PAYMENTS_WEBHOOK_SECRET: 'whsec_not_real',
+};
+
+const withProvider = (
+  value: string | undefined,
+  secrets: Partial<Record<keyof typeof SECRETS, string>> = SECRETS,
+): Env => ({
   ...env,
+  PAYMENTS_API_KEY: undefined,
+  PAYMENTS_WEBHOOK_SECRET: undefined,
+  ...secrets,
   PAYMENTS_PROVIDER: value,
 });
 
@@ -37,6 +49,23 @@ describe('the payment provider registry', () => {
   it('does not resolve inherited object keys as adapter ids', () => {
     expect(paymentProviderFor(withProvider('toString'))).toBeNull();
     expect(paymentProviderFor(withProvider('__proto__'))).toBeNull();
+  });
+
+  it('resolves the stripe adapter when its id and both secrets are set', () => {
+    expect(paymentProviderFor(withProvider('stripe'))?.id).toBe('stripe');
+    expect(paymentProviderFor(withProvider(' stripe '))?.id).toBe('stripe');
+  });
+
+  it.each([
+    [
+      'no API key',
+      { PAYMENTS_WEBHOOK_SECRET: SECRETS.PAYMENTS_WEBHOOK_SECRET },
+    ],
+    ['no webhook secret', { PAYMENTS_API_KEY: SECRETS.PAYMENTS_API_KEY }],
+    ['a blank API key', { ...SECRETS, PAYMENTS_API_KEY: '  ' }],
+    ['a blank webhook secret', { ...SECRETS, PAYMENTS_WEBHOOK_SECRET: '' }],
+  ])('is not configured with %s', (_, secrets) => {
+    expect(paymentProviderFor(withProvider('stripe', secrets))).toBeNull();
   });
 
   it('answers with an injected provider, and stops once it is cleared', async () => {

@@ -43,20 +43,31 @@ export function fakeEvent(
 
 /**
  * A provider whose every method answers from what the test queued. Nothing
- * here talks to a network.
+ * here talks to a network. `verified: false` makes it refuse every webhook as
+ * unsigned, `parseError` makes a verified one fail to parse, and
+ * `webhookBodies` records the raw body each webhook was handed.
  */
 export function fakeProvider(
-  queued: { events?: NormalizedPaymentEvent[] } = {},
-): PaymentProvider {
+  queued: {
+    events?: NormalizedPaymentEvent[];
+    verified?: boolean;
+    parseError?: Error;
+  } = {},
+): PaymentProvider & { webhookBodies: string[] } {
+  const webhookBodies: string[] = [];
   return {
     id: FAKE_PROVIDER_ID,
+    webhookBodies,
     async createCheckout({ paymentId }) {
       return {
         providerPaymentRef: `ref_${paymentId}`,
         url: `https://checkout.invalid/${paymentId}`,
       };
     },
-    async verifyAndParseWebhook() {
+    async verifyAndParseWebhook(_request, rawBody) {
+      webhookBodies.push(rawBody);
+      if (queued.verified === false) return { ok: false };
+      if (queued.parseError) throw queued.parseError;
       return { ok: true, events: queued.events ?? [] };
     },
     async retrievePayment(ref) {
@@ -107,7 +118,7 @@ export async function seedPayment(row: {
 export async function storedEvents() {
   const { results } = await env.DATABASE.prepare(
     `SELECT provider_event_id, payment_id, type, outcome, ledger_entry_id, via
-       FROM payment_events ORDER BY received_at, id`,
+       FROM payment_events ORDER BY received_at, rowid`,
   ).all<{
     provider_event_id: string;
     payment_id: string | null;
@@ -142,4 +153,53 @@ export async function paymentRow(id: string) {
   )
     .bind(id)
     .first<{ status: string; ledger_state: string }>();
+}
+
+/** Synthetic payment configuration for the real adapter. Never a real key. */
+export const PAYMENT_SECRETS = {
+  PAYMENTS_PROVIDER: 'stripe',
+  PAYMENTS_API_KEY: 'sk_test_fixture_key_not_real',
+  PAYMENTS_WEBHOOK_SECRET: 'whsec_fixture_secret_not_real',
+};
+
+const mutableEnv = env as unknown as Record<string, unknown>;
+
+/** Configure the pool `env` for the real adapter, as a deployment would. */
+export const configurePayments = (
+  overrides: Partial<typeof PAYMENT_SECRETS> = {},
+) => Object.assign(mutableEnv, PAYMENT_SECRETS, overrides);
+
+/**
+ * Clear every payment value from the pool `env`, which a bootstrapped
+ * `.dev.vars` may fill: a test must never trust the bare pool `env` (#524).
+ */
+export const unconfigurePayments = () => {
+  for (const name of Object.keys(PAYMENT_SECRETS)) delete mutableEnv[name];
+};
+
+/**
+ * A `Stripe-Signature` header as Stripe computes it: `t=<seconds>` and
+ * `v1=<hex HMAC-SHA256 of "<t>.<raw body>">` under the webhook secret.
+ */
+export async function stripeSignature(
+  secret: string,
+  rawBody: string,
+  t: number = Math.floor(Date.now() / 1000),
+): Promise<{ t: number; v1: string; header: string }> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const mac = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`${t}.${rawBody}`),
+  );
+  const v1 = [...new Uint8Array(mac)]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return { t, v1, header: `t=${t},v1=${v1}` };
 }

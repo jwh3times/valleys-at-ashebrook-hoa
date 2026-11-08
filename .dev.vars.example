@@ -25,3 +25,11 @@ DRIVE_CLIENT_SECRET=
 DRIVE_PICKER_API_KEY=
 DRIVE_PROJECT_NUMBER=
 DRIVE_TOKEN_KEY=
+# Optional online dues payments (ADR 0025, #538). Leave all three blank to keep
+# every payment surface absent; payments are configured only when
+# PAYMENTS_PROVIDER names a known adapter ("stripe") AND both secrets are set.
+# Use a Stripe SANDBOX's test key (sk_test_...) and the signing secret that
+# `stripe listen` prints (whsec_...) — see SETUP.md. Never a live key here.
+PAYMENTS_PROVIDER=
+PAYMENTS_API_KEY=
+PAYMENTS_WEBHOOK_SECRET=

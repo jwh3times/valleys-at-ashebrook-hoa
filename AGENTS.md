@@ -298,6 +298,11 @@ exported verb rejects an anonymous caller, so a new endpoint cannot ship ungated
 caller class**, including a board caller who owns no Lot. Per #206 the matrix outlives the ADR
 0022 migration rather than retiring at the flip.
 
+`/api/webhooks/*` has no session and no middleware gate: its caller is a payment provider proving
+itself by signature (ADR 0025). `test/server/webhook-routes-all-gated.test.ts` is therefore its only
+layer, enumerating every module there and asserting each exported verb answers `400` unsigned and
+`404` with no provider configured.
+
 `/api/bootstrap/board` sits outside the gated prefix on purpose — it is the fail-closed
 first-System-Administrator bootstrap and must stay reachable.
 

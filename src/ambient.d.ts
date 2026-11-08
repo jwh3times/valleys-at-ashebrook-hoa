@@ -33,12 +33,19 @@ declare namespace Cloudflare {
     DRIVE_PROJECT_NUMBER?: string;
     DRIVE_TOKEN_KEY?: string;
     /**
-     * The payment adapter id (ADR 0025, #539). Unset, or naming no registered
-     * adapter, means payments are not configured and every payment surface is
-     * absent. Its secrets and its `wrangler.toml` entry arrive with the first
-     * adapter (#541).
+     * The payment adapter id and its two secrets (ADR 0025, #539, #541).
+     * Payments are configured only when PAYMENTS_PROVIDER names a registered
+     * adapter AND both secrets are set (`paymentProviderFor`); anything less
+     * leaves every payment surface absent. Production sets none of them until
+     * the association's merchant account exists, so it stays unconfigured —
+     * which is why PAYMENTS_PROVIDER has no `wrangler.toml` entry yet; going
+     * live adds one there (SETUP.md).
      */
     PAYMENTS_PROVIDER?: string;
+    /** The provider's API key; a sandbox key for local testing. */
+    PAYMENTS_API_KEY?: string;
+    /** The secret the provider signs webhook deliveries with. */
+    PAYMENTS_WEBHOOK_SECRET?: string;
     /** Anthropic API key for the admin document assistant (Claude generation). */
     ANTHROPIC_API_KEY: string;
     /**
