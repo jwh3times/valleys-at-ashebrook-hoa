@@ -184,7 +184,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   flip) and `/api/bootstrap/board` (flip step 4 creates the first System Administrator while the
   freeze is on) and `/api/admin/drive/disconnect` (ending the stored Drive credential must not wait
   for a freeze). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`,
-  `requirePaymentStartApi`, both `/api/verify/*` routes, the payment webhook's `handlePaymentWebhook`, and `src/middleware.ts` —
+  `requirePaymentStartApi`, every `/api/verify/*` route, the payment webhook's `handlePaymentWebhook`, and `src/middleware.ts` —
   whose final `else` branch is what catches any surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
   and fails if a mutating route ends up live without being declared in both that test and
   `ALWAYS_LIVE`. `authz/` also holds `derive.ts` (`deriveAccess`/`toDerivedAccess`, a capability SET
