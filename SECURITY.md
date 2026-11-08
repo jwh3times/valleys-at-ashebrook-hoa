@@ -499,6 +499,16 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   cacheable if a zone cache rule is added later. With either gating flag off, or for a caller who
   lacks the `member` capability, it answers the generic 404 rather than 403, consistent with the
   rest of the site's hidden-record behavior.
+- **The payment provider's webhook is authenticated by signature, never by a session.**
+  `POST /api/webhooks/payments` (ADR 0025) answers 404 unless `PAYMENTS_PROVIDER` names a known
+  adapter and both `PAYMENTS_API_KEY` and `PAYMENTS_WEBHOOK_SECRET` are set; production sets none
+  of them. It verifies the provider's signature over the exact raw body, refusing a timestamp more
+  than five minutes from now, before parsing anything, and an unverified delivery answers 400 with
+  nothing stored. It is not exempt from the write freeze (503, which the provider retries).
+  Middleware adds no gate beyond the freeze, so `test/server/webhook-routes-all-gated.test.ts`
+  enumerates every route under `/api/webhooks/` and fails the build if one accepts an unsigned
+  request. A verified event reaches the dues ledger only through the one idempotent application
+  path, and the route logs event ids, never the payload.
 
 ## Automated safeguards
 

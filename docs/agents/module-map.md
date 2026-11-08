@@ -178,8 +178,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   flip) and `/api/bootstrap/board` (flip step 4 creates the first System Administrator while the
   freeze is on) and `/api/admin/drive/disconnect` (ending the stored Drive credential must not wait
   for a freeze). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`, both
-  `/api/verify/*` routes, and `src/middleware.ts` — whose final `else` branch is what catches any
-  surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
+  `/api/verify/*` routes, the payment webhook's `handlePaymentWebhook`, and `src/middleware.ts` —
+  whose final `else` branch is what catches any surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
   and fails if a mutating route ends up live without being declared in both that test and
   `ALWAYS_LIVE`. `authz/` also holds `derive.ts` (`deriveAccess`/`toDerivedAccess`, a capability SET
   — `member`/`board`/`systemAdmin`, not a ladder — plus `lotIds`, `contentTier`, and
@@ -367,10 +367,18 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
 - `payments/` (ADR 0025, #538): the online-payment rail. `provider.ts` is the provider seam, with
   the `PaymentProvider` interface and `NormalizedPaymentEvent`, ADR 0025's seven-type vocabulary.
   Nothing outside `payments/providers/` may name a provider. `registry.ts`'s
-  `paymentProviderFor(env)` resolves the adapter `PAYMENTS_PROVIDER` names, or `null` (not
-  configured). No real adapter is registered yet, so every deployment is unconfigured.
-  `setPaymentProviderForTests` is the test-only hook, and the fake it injects lives in
-  `test/server/payments-fixtures.ts`. `apply.ts`'s `applyPaymentEvent(env, event)` is the
+  `paymentProviderFor(env)` is the one "provider configured" predicate: the adapter
+  `PAYMENTS_PROVIDER` names in `providers/index.ts`'s `ADAPTERS`, with `PAYMENTS_API_KEY` and
+  `PAYMENTS_WEBHOOK_SECRET` both set, or `null` (not configured, which production is).
+  `providers/stripe.ts` is the one adapter: plain `fetch` and WebCrypto with a pinned API version.
+  Its `verifyAndParseWebhook` checks the `v1` signature over the raw body (five-minute tolerance)
+  before parsing, maps the Checkout Session, dispute and refund events, and finds a dispute's or
+  refund's session by listing sessions filtered by payment intent; a signed event it cannot read
+  throws `UnreadableStripeEvent`. Its `createCheckout` arrives with #542 and its pulls with #543.
+  `webhook.ts`'s `handlePaymentWebhook` is the webhook route's body: `404` unconfigured, freeze
+  `503`, unverified `400`, then each fact applied in its own batch, `500` on any failure so the
+  provider redelivers. `setPaymentProviderForTests` is the test-only hook, and the fake it injects
+  lives in `test/server/payments-fixtures.ts`. `apply.ts`'s `applyPaymentEvent(env, event)` is the
   application path and the only writer of the payment tables and of provider-sourced ledger rows.
   It decides from a read, writes the event, the projection, at most one entry and any exception as
   one D1 batch, and re-decides on a lost race. It dedupes per event and per effect, never lets a
@@ -382,7 +390,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   days before) is credited and flagged `possible_duplicate`. A report of an earlier withdrawal
   cycle, by the provider's clock, changes nothing. It never reads a site flag, because the ledger
   outlives the flags. It throws `InvalidPaymentEvent` for a fact no adapter should produce, storing
-  nothing. (#539, #540)
+  nothing. (#539, #540, #541)
 - `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3, and
   slice 4 completed the feature with the homeowner-facing `/lot-records` page): `gate.ts` exports
   `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment),

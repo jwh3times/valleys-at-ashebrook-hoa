@@ -272,7 +272,9 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     response = context.redirect('/login', 302);
   } else {
     // Everything the branches above did not claim: public pages, /api/content/*,
-    // /api/files/*, /api/verify/*, /api/auth/*, /api/bootstrap/board. The freeze
+    // /api/files/*, /api/verify/*, /api/auth/*, /api/bootstrap/board, and
+    // /api/webhooks/*, whose caller is a provider proving itself by signature,
+    // not a session (ADR 0025). The freeze
     // is deny-by-default, so this branch is what catches a mutating surface
     // nobody thought to name — /api/verify/* today, whatever ships next
     // otherwise. freezePolicyFor decides; the three genuine exemptions live there.

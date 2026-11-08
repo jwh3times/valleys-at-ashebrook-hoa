@@ -41,6 +41,12 @@ export interface CheckoutRequest {
   cancelUrl: string;
 }
 
+/** The two secrets every adapter is built with, checked present by the registry. */
+export interface AdapterSecrets {
+  apiKey: string;
+  webhookSecret: string;
+}
+
 export type WebhookParse =
   { ok: false } | { ok: true; events: NormalizedPaymentEvent[] };
 

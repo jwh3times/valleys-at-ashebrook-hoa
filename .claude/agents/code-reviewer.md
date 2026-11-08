@@ -28,7 +28,9 @@ correctness bug, not a preference):
      exact Origin equality (`403`), JSON media type (`415`), session (`401`), homeowner rank
      (`403`).
      A new route in any of these namespaces must be picked up by the route-enumeration
-     meta-tests (`admin-routes-all-gated.test.ts`, `member-routes-all-gated.test.ts`); never
+     meta-tests (`admin-routes-all-gated.test.ts`, `member-routes-all-gated.test.ts`, and for
+     `/api/webhooks/*`, signature-gated with no middleware backstop,
+     `webhook-routes-all-gated.test.ts`); never
      accept removal of a per-route guard "because middleware covers it". A passed gate still
      grants no lot authority — writes must re-check own-lot/held-proxy scope, eligibility,
      open state, and flags inside the mutation SQL.

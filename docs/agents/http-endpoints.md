@@ -25,7 +25,10 @@ Two rules govern this whole surface and are stated once here rather than repeate
   than letting the exception fall through to the runtime's generic `500`. `/api/admin/site` and
   `/api/admin/dues` were the last two board-write routes parsing the body directly and are now on
   `readJson` too (the 2026-09-04 L5 route-hygiene review); a new route that reads a body should
-  use it from the start rather than reintroduce the gap.
+  use it from the start rather than reintroduce the gap. The one exception is the payment
+  webhook, `POST /api/webhooks/payments`, whose body is signed: an unsigned or forged body is `400`,
+  but a correctly signed one that cannot be read answers `500`, because the provider retries any
+  non-`2xx` and the fault is then the site's to fix, not the sender's.
 
 ## Routes
 
@@ -779,6 +782,18 @@ invalid-invitation` for every unknown, expired, used, superseded or contact-gone
   board-count guard are retired — `src/server/auth/seed-board.ts` and `scripts/seed-board.ts` are
   deleted. The route stays at its unchanged path and remains one of the write freeze's three
   permanent exemptions; it never calls `writeFreezeError`.
+- Payment provider webhook: `POST /api/webhooks/payments` (ADR 0025, #541; see
+  `src/server/payments/webhook.ts`). Outside both session namespaces: the caller is the provider,
+  authenticated only by the signature its adapter verifies, so middleware applies the write freeze
+  and nothing else. In order: no provider configured (`paymentProviderFor`) is `404`; the write
+  freeze is `503`, with no exemption; the body is read as **raw text**, the one route that does not
+  use `readJson`, and the adapter verifies it before anything parses it, `400` with nothing stored
+  when unverified. Each normalized fact is then applied through `applyPaymentEvent` in its own
+  batch, in order; `200` when every one was applied, a duplicate or unmatched, and when the event
+  type maps to no fact; `500` on any failure, so the provider redelivers and the earlier facts
+  re-apply as duplicates. It reads no site flag. Only `POST` is exported, and
+  `test/server/webhook-routes-all-gated.test.ts` holds every module under `api/webhooks/` to `400`
+  unsigned and `404` unconfigured.
 - Better Auth handler: `/api/auth/[...all]`.
 - Google Drive connection, `/api/admin/drive/*` (#290 slice 2, ADR 0027). Every route returns `404`
   unless `driveConfig(env)` finds all five `DRIVE_*` secrets. `GET status` is board-only
