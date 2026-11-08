@@ -16,7 +16,16 @@
  */
 
 export type MoneyParse =
-  { ok: true; cents: number } | { ok: false; error: string };
+  | { ok: true; cents: number }
+  | {
+      ok: false;
+      error: string;
+      /**
+       * Why, for a caller whose own bounds are not the ledger's — the Pay form
+       * answers a zero or an oversized amount in its own words.
+       */
+      reason: 'blank' | 'shape' | 'too_large' | 'zero';
+    };
 
 /**
  * The largest single ledger entry, in cents: $1,000,000.
@@ -41,7 +50,8 @@ const SHAPE = /^(-?)\$?\s*(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{1,2}))?$/;
  */
 export function parseDollarsToCents(raw: string): MoneyParse {
   const trimmed = raw.trim();
-  if (trimmed === '') return { ok: false, error: 'Enter an amount' };
+  if (trimmed === '')
+    return { ok: false, error: 'Enter an amount', reason: 'blank' };
 
   const match = SHAPE.exec(trimmed);
   if (!match)
@@ -49,6 +59,7 @@ export function parseDollarsToCents(raw: string): MoneyParse {
       ok: false,
       error:
         'Enter an amount in dollars and cents, such as 450 or 450.75 — no more than two decimal places',
+      reason: 'shape',
     };
 
   const [, sign, dollarsRaw, centsRaw] = match;
@@ -57,21 +68,34 @@ export function parseDollarsToCents(raw: string): MoneyParse {
   // fraction is ever multiplied.
   const cents = centsRaw === undefined ? 0 : Number(centsRaw.padEnd(2, '0'));
   if (!Number.isSafeInteger(dollars))
-    return { ok: false, error: 'That amount is too large' };
+    return {
+      ok: false,
+      error: 'That amount is too large',
+      reason: 'too_large',
+    };
 
   const total = dollars * 100 + cents;
   if (!Number.isSafeInteger(total))
-    return { ok: false, error: 'That amount is too large' };
+    return {
+      ok: false,
+      error: 'That amount is too large',
+      reason: 'too_large',
+    };
   // Zero is refused here rather than by the server, which would answer in the
   // wire's vocabulary ("amountCents cannot be zero") to someone who typed
   // dollars. A zero entry is not a fact anyone meant to record — the same
   // argument as blank, one step along.
   if (total === 0)
-    return { ok: false, error: 'An amount of zero is not an entry' };
+    return {
+      ok: false,
+      error: 'An amount of zero is not an entry',
+      reason: 'zero',
+    };
   if (total > MAX_ENTRY_CENTS)
     return {
       ok: false,
       error: `That is larger than a single entry may be ($${(MAX_ENTRY_CENTS / 100).toLocaleString('en-US')}) — check the decimal point`,
+      reason: 'too_large',
     };
   // `-total` where total is 0 would be `-0`, and every `x < 0` check
   // downstream silently disagrees with the minus that was typed. Zero is
@@ -101,4 +125,13 @@ export function describeBalance(cents: number): string {
   return cents > 0
     ? `${formatCents(cents)} owed`
     : `${formatCents(-cents)} in credit`;
+}
+
+/**
+ * Non-negative whole cents as the dollars a person would type, for prefilling
+ * a field `parseDollarsToCents` will read back: `45075` becomes `450.75`. The
+ * parser's inverse, built from integers for the same reason it is.
+ */
+export function centsAsTypedDollars(cents: number): string {
+  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
 }

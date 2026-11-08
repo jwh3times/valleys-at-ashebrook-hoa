@@ -39,6 +39,22 @@ describe('getSiteSettings', () => {
     ).toBe(false);
   });
 
+  it('normalizes online payments as a fail-closed boolean', () => {
+    expect(DEFAULT_SITE_SETTINGS.onlinePaymentsEnabled).toBe(false);
+    expect(normalizeSiteSettings({}).onlinePaymentsEnabled).toBe(false);
+    expect(
+      normalizeSiteSettings({ onlinePaymentsEnabled: true })
+        .onlinePaymentsEnabled,
+    ).toBe(true);
+    expect(
+      normalizeSiteSettings({ onlinePaymentsEnabled: 'true' })
+        .onlinePaymentsEnabled,
+    ).toBe(false);
+    expect(
+      normalizeSiteSettings({ onlinePaymentsEnabled: 1 }).onlinePaymentsEnabled,
+    ).toBe(false);
+  });
+
   it('returns defaults (official mode off) when no row exists', async () => {
     const s = await getSiteSettings(env);
     expect(s.officialMode).toBe(false);

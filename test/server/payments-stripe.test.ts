@@ -440,3 +440,84 @@ describe('Stripe events, normalized', () => {
     await expect(parse(body)).rejects.toThrow();
   });
 });
+
+// ---------------------------------------------------------------- checkout
+
+describe('starting a Stripe Checkout Session', () => {
+  const request = {
+    paymentId: 'pay-checkout-1',
+    amountCents: 45075,
+    returnUrl: 'https://residents.example/lot-records/payments/pay-checkout-1',
+    cancelUrl: 'https://residents.example/lot-records/payments/pay-checkout-1',
+  };
+
+  function stubCreate(answer: () => Response) {
+    const calls: { url: string; init: RequestInit }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ url: urlOf(input), init: init ?? {} });
+        return answer();
+      }),
+    );
+    return calls;
+  }
+
+  const created = () =>
+    Response.json({
+      id: 'cs_test_created_1',
+      object: 'checkout.session',
+      url: 'https://checkout.stripe.com/c/pay/cs_test_created_1',
+    });
+
+  it('creates a one-hour, one-line USD payment session and answers its id and URL', async () => {
+    const calls = stubCreate(created);
+
+    expect(await adapter().createCheckout(request)).toEqual({
+      providerPaymentRef: 'cs_test_created_1',
+      url: 'https://checkout.stripe.com/c/pay/cs_test_created_1',
+    });
+
+    expect(calls).toHaveLength(1);
+    const { url, init } = calls[0];
+    expect(url).toBe('https://api.stripe.com/v1/checkout/sessions');
+    expect(init.method).toBe('POST');
+    const headers = new Headers(init.headers);
+    expect(headers.get('authorization')).toBe(`Bearer ${API_KEY}`);
+    expect(headers.get('stripe-version')).toBe('2026-10-28.endive');
+    expect(headers.get('content-type')).toBe(
+      'application/x-www-form-urlencoded',
+    );
+    // A retried request can never open a second session for one payment.
+    expect(headers.get('idempotency-key')).toBe('checkout:pay-checkout-1');
+
+    expect(typeof init.body).toBe('string');
+    const form = new URLSearchParams(init.body as string);
+    expect(Object.fromEntries(form)).toEqual({
+      mode: 'payment',
+      'line_items[0][quantity]': '1',
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][unit_amount]': '45075',
+      'line_items[0][price_data][product_data][name]': 'Dues payment',
+      'payment_method_types[0]': 'us_bank_account',
+      'payment_method_types[1]': 'card',
+      client_reference_id: 'pay-checkout-1',
+      'metadata[payment_id]': 'pay-checkout-1',
+      expires_at: String(NOW_S + 3600),
+      success_url: request.returnUrl,
+      cancel_url: request.cancelUrl,
+    });
+  });
+
+  it('fails when Stripe refuses, so no payment row is written', async () => {
+    stubCreate(() => new Response('{"error":{}}', { status: 402 }));
+    await expect(adapter().createCheckout(request)).rejects.toThrow();
+  });
+
+  it('fails when Stripe answers without a session id or URL', async () => {
+    stubCreate(() =>
+      Response.json({ id: 'cs_test_1', object: 'checkout.session' }),
+    );
+    await expect(adapter().createCheckout(request)).rejects.toThrow();
+  });
+});

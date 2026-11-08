@@ -509,6 +509,17 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   enumerates every route under `/api/webhooks/` and fails the build if one accepts an unsigned
   request. A verified event reaches the dues ledger only through the one idempotent application
   path, and the route logs event ids, never the payload.
+- **Card and bank details never touch this site: online payments use hosted checkout (PCI DSS
+  SAQ A).** `POST /api/member/payments` (ADR 0025, #542) opens a Checkout Session on the
+  provider and answers its URL; the homeowner enters payment details on the provider's own page,
+  so no account or card number is ever sent to, rendered by, or stored on this site. The site
+  sends the provider only the amount and its own payment id, never an address or a name, and
+  keeps only normalized payment facts. Starting a payment follows the live-voting order: three
+  flags and a configured provider (`404`), the write freeze (`503`), exact `Origin` (`403`), the
+  JSON media type (`415`), the session (`401`) and `member` (`403`). The insert re-checks the
+  flags and Lot Authority, so a lost race writes nothing (`409`, or the masked `404`). The
+  return and cancel URLs are built from `BETTER_AUTH_URL`, never the request's `Host`, and the
+  return page shows the payment's stored status and never reads its query string.
 
 ## Automated safeguards
 

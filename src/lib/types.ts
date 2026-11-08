@@ -100,6 +100,13 @@ export interface SiteSettings {
    * `lotRecordsEnabled`, it needs `officialMode` as well.
    */
   tenantAccessEnabled: boolean;
+  /**
+   * ADR 0025 (#538): lets a homeowner START an online dues payment. It needs
+   * `officialMode` and `lotRecordsEnabled` as well, and a configured payment
+   * provider. It gates starting only: a payment already in flight is still
+   * recorded, and still shown, with it off.
+   */
+  onlinePaymentsEnabled: boolean;
   /** Footer "not affiliated" disclaimer (unofficial mode only); blank ⇒ built-in copy. */
   disclaimerText: string;
   /** /about page body; blank lines separate paragraphs; blank ⇒ built-in copy, or no page in official mode. */
@@ -121,6 +128,7 @@ export const SITE_GATE_KEYS = [
   'liveVotingEnabled',
   'lotRecordsEnabled',
   'tenantAccessEnabled',
+  'onlinePaymentsEnabled',
 ] as const;
 export type SiteGateKey = (typeof SITE_GATE_KEYS)[number];
 
@@ -423,6 +431,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   liveVotingEnabled: false,
   lotRecordsEnabled: false,
   tenantAccessEnabled: false,
+  onlinePaymentsEnabled: false,
   disclaimerText: '',
   aboutBody: '',
 };
@@ -453,6 +462,7 @@ export function normalizeSiteSettings(raw: unknown): SiteSettings {
     liveVotingEnabled: r.liveVotingEnabled === true,
     lotRecordsEnabled: r.lotRecordsEnabled === true,
     tenantAccessEnabled: r.tenantAccessEnabled === true,
+    onlinePaymentsEnabled: r.onlinePaymentsEnabled === true,
     disclaimerText: str(r.disclaimerText, DEFAULT_SITE_SETTINGS.disclaimerText),
     aboutBody: str(r.aboutBody, DEFAULT_SITE_SETTINGS.aboutBody),
   };

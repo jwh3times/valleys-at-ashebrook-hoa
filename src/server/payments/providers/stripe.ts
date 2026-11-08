@@ -14,8 +14,12 @@ import type {
  * BEFORE parsing a byte of it, then normalizes the event into ADR 0025's
  * vocabulary. Nothing Stripe-shaped leaves this file.
  *
- * `createCheckout` arrives with #542, `retrievePayment` and `listEventsSince`
- * with #543. Nothing calls them before then.
+ * `createCheckout` opens a hosted Checkout Session: the homeowner enters bank
+ * or card details on Stripe's page, never this site's (SAQ A). It sends the
+ * site's payment id and the amount, and nothing about the Lot or its owners.
+ *
+ * `retrievePayment` and `listEventsSince` arrive with #543. Nothing calls them
+ * before then.
  */
 export const STRIPE_PROVIDER_ID = 'stripe';
 
@@ -26,6 +30,20 @@ const API_BASE = 'https://api.stripe.com/v1';
 
 /** How far a delivery's signed timestamp may be from now. Never zero. */
 const SIGNATURE_TOLERANCE_S = 5 * 60;
+
+/**
+ * How long a Checkout Session stays payable. Stripe allows 30 minutes to 24
+ * hours; an hour is long enough to finish and short enough that an abandoned
+ * session expires the same afternoon, which reports the payment canceled.
+ */
+const CHECKOUT_LIFETIME_S = 60 * 60;
+
+/**
+ * The one line on Stripe's page and the homeowner's statement. Deliberately
+ * neutral: no street address and no name, so nothing about the Lot or its
+ * owners reaches the provider.
+ */
+const LINE_ITEM_NAME = 'Dues payment';
 
 /**
  * A signed delivery this adapter cannot read. Stripe sent it, so the fault is
@@ -103,7 +121,36 @@ export function stripeProvider(
 
   return {
     id: STRIPE_PROVIDER_ID,
-    createCheckout: () => notYet('createCheckout', '#542'),
+    async createCheckout({ paymentId, amountCents, returnUrl, cancelUrl }) {
+      const session = await stripePost(
+        secrets.apiKey,
+        '/checkout/sessions',
+        {
+          mode: 'payment',
+          'line_items[0][quantity]': '1',
+          'line_items[0][price_data][currency]': 'usd',
+          'line_items[0][price_data][unit_amount]': String(amountCents),
+          'line_items[0][price_data][product_data][name]': LINE_ITEM_NAME,
+          // Bank account listed first: it costs the association far less than a
+          // card. Stripe may still order its page by its own rules.
+          'payment_method_types[0]': 'us_bank_account',
+          'payment_method_types[1]': 'card',
+          client_reference_id: paymentId,
+          'metadata[payment_id]': paymentId,
+          expires_at: String(Math.floor(now() / 1000) + CHECKOUT_LIFETIME_S),
+          success_url: returnUrl,
+          cancel_url: cancelUrl,
+        },
+        // A retried request can never open a second session for one payment.
+        `checkout:${paymentId}`,
+      );
+      if (!isObject(session))
+        throw new UnreadableStripeEvent('the new session is not an object');
+      return {
+        providerPaymentRef: requiredString(session, 'id'),
+        url: requiredString(session, 'url'),
+      };
+    },
     async verifyAndParseWebhook(request, rawBody): Promise<WebhookParse> {
       const signed = await verifySignature(
         request.headers.get('stripe-signature'),
@@ -204,6 +251,28 @@ async function sessionFor(
     throw new UnreadableStripeEvent('the session list has no data');
   const [first] = list.data as unknown[];
   return isObject(first) ? requiredString(first, 'id') : null;
+}
+
+async function stripePost(
+  apiKey: string,
+  path: string,
+  form: Record<string, string>,
+  idempotencyKey: string,
+): Promise<unknown> {
+  const response = await fetch(API_BASE + path, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Stripe-Version': STRIPE_API_VERSION,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: new URLSearchParams(form).toString(),
+  });
+  // The status only: an error body can echo request details.
+  if (!response.ok)
+    throw new Error(`Stripe answered ${response.status} for ${path}`);
+  return response.json();
 }
 
 async function stripeGet(

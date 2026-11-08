@@ -198,4 +198,59 @@ describe('live-voting route protection', () => {
   });
 });
 
+describe('the member payments backstop (ADR 0025, #542)', () => {
+  async function setFlags(flags: Record<string, boolean>) {
+    await getDb(env)
+      .insert(settings)
+      .values({
+        key: 'site',
+        value: JSON.stringify({ officialMode: true, ...flags }),
+        updatedAt: new Date(),
+      });
+  }
+  const startPost: RequestInit = { method: 'POST' };
+
+  it('hides every payments path while lot records are off', async () => {
+    await setFlags({ lotRecordsEnabled: false, onlinePaymentsEnabled: true });
+    role = 'homeowner';
+    for (const path of [
+      '/api/member/payments',
+      '/api/member/payments/refresh',
+    ]) {
+      const { res, reached } = await run(path, startPost);
+      expect({ path, status: res.status, reached }).toEqual({
+        path,
+        status: 404,
+        reached: false,
+      });
+    }
+  });
+
+  it('hides starting a payment while online payments are off, and only that', async () => {
+    await setFlags({ lotRecordsEnabled: true, onlinePaymentsEnabled: false });
+    role = 'homeowner';
+    const start = await run('/api/member/payments', startPost);
+    expect(start.res.status).toBe(404);
+    expect(start.reached).toBe(false);
+    // Reading and chasing a payment already in flight stays live.
+    const chase = await run('/api/member/payments/refresh', startPost);
+    expect(chase.reached).toBe(true);
+  });
+
+  it('lets a member start a payment with all three flags on', async () => {
+    await setFlags({ lotRecordsEnabled: true, onlinePaymentsEnabled: true });
+    role = 'homeowner';
+    const { res, reached } = await run('/api/member/payments', startPost);
+    expect(res.status).toBe(200);
+    expect(reached).toBe(true);
+  });
+
+  it('does not gate a sibling path sharing the prefix', async () => {
+    await setFlags({ lotRecordsEnabled: false, onlinePaymentsEnabled: false });
+    role = 'homeowner';
+    const { reached } = await run('/api/member/paymentsx', startPost);
+    expect(reached).toBe(true);
+  });
+});
+
 import { callerContext } from './caller-context';

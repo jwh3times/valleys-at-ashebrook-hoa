@@ -374,7 +374,17 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   Its `verifyAndParseWebhook` checks the `v1` signature over the raw body (five-minute tolerance)
   before parsing, maps the Checkout Session, dispute and refund events, and finds a dispute's or
   refund's session by listing sessions filtered by payment intent; a signed event it cannot read
-  throws `UnreadableStripeEvent`. Its `createCheckout` arrives with #542 and its pulls with #543.
+  throws `UnreadableStripeEvent`. Its `createCheckout` opens a one-hour, one-line, neutrally named
+  `usd` Checkout Session (bank account first, card second) with an idempotency key per payment;
+  its pulls arrive with #543. `gate.ts` holds `paymentsStartable(site, env)` (the three flags and
+  a configured provider) and `ONLINE_PAYMENTS_ENABLED_SQL`. `checkout.ts`'s `startPayment` is the
+  only writer of a new `payments` row: it resolves the account's Person one consolidation hop to
+  check Lot Authority (the initiator stays the account's own Person, since it records who acted), opens the provider's checkout under a payment id it mints, then writes the
+  row with the provider's reference in one `INSERT … SELECT` that re-checks the flags and Lot
+  Authority, so the row is never updated outside `apply.ts`. The shared amount bounds
+  (`MIN_PAYMENT_CENTS`, `MAX_PAYMENT_CENTS`, `paymentAmountError`) and the homeowner status labels
+  live in `src/lib/payments.ts`, and `lot-records/reads.ts`'s `fetchMemberPayment` is the scoped
+  read behind the return page (#542).
   `webhook.ts`'s `handlePaymentWebhook` is the webhook route's body: `404` unconfigured, freeze
   `503`, unverified `400`, then each fact applied in its own batch, `500` on any failure so the
   provider redelivers. `setPaymentProviderForTests` is the test-only hook, and the fake it injects

@@ -1,10 +1,12 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import type { AuthContext, Capability } from '../../src/server/authz/guards';
 import { unconfigureDrive } from './drive-fixtures';
+import { setPaymentProviderForTests } from '../../src/server/payments/registry';
+import { fakeProvider } from './payments-fixtures';
 
 /**
  * The permission matrix (#206): every route's DECLARED capability, asserted
@@ -47,7 +49,12 @@ beforeAll(async () => {
   // read a URL these probes don't send, so clear the Drive keys first.
   unconfigureDrive();
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+  // The payment routes 404 without a provider, which would let them pass the
+  // matrix without their capability check ever running.
+  setPaymentProviderForTests(fakeProvider());
 });
+
+afterAll(() => setPaymentProviderForTests(null));
 
 beforeEach(async () => {
   const db = getDb(env);
@@ -58,14 +65,15 @@ beforeEach(async () => {
     // answers 404 BEFORE the capability gate runs, and a 404 satisfies both
     // "not 401" and "not 403" — so an unseeded flag would let a route pass
     // this matrix without its declared capability ever being exercised. ADR
-    // 0024 asks for `lotRecordsEnabled` here for exactly that reason; a future
-    // flag (ADR 0025's `onlinePaymentsEnabled`) belongs here the day it gates
-    // a route.
+    // 0024 asks for `lotRecordsEnabled` here for exactly that reason, and ADR
+    // 0025's `onlinePaymentsEnabled` (with the fake provider injected in
+    // `beforeAll`) for the same one.
     value: JSON.stringify({
       officialMode: true,
       liveVotingEnabled: true,
       lotRecordsEnabled: true,
       tenantAccessEnabled: true,
+      onlinePaymentsEnabled: true,
     }),
     updatedAt: new Date(),
   });

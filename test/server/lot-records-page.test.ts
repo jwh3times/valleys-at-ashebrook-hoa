@@ -1,5 +1,5 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
 import LotRecordsPage from '../../src/pages/lot-records.astro';
@@ -19,7 +19,13 @@ import {
   representationLots,
 } from '../../src/server/db/roster-schema';
 import { truncateAll, seedProperty, seedLotAuthority } from './fixtures';
-import { fakeEvent, resetFakeEvents, seedPayment } from './payments-fixtures';
+import {
+  fakeEvent,
+  fakeProvider,
+  resetFakeEvents,
+  seedPayment,
+} from './payments-fixtures';
+import { setPaymentProviderForTests } from '../../src/server/payments/registry';
 import { applyPaymentEvent } from '../../src/server/payments/apply';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../src/lib/types';
 import type { AuthContext } from '../../src/server/authz/guards';
@@ -621,5 +627,42 @@ describe('who is refused, and how', () => {
     const html = await render(caller({ personId: null }));
     expect(html).not.toContain('Summary of v-a');
     expect(html).toContain('not available through this account');
+  });
+});
+
+describe('paying online (ADR 0025, #542)', () => {
+  const PAY = 'Continue to payment';
+  const allOn: SiteSettings = { ...flagsOn, onlinePaymentsEnabled: true };
+
+  beforeEach(async () => {
+    await seedLotAuthority('person-1', 'lot-a', { startDay: '2026-01-01' });
+    await seedEntry('lot-a', 'charge', 45075, '2026-01-15', 'Winter quarter');
+  });
+  afterEach(() => setPaymentProviderForTests(null));
+
+  it('offers a Pay action, defaulting to the balance owed, with all three flags on and a provider', async () => {
+    setPaymentProviderForTests(fakeProvider());
+    const html = await render(caller(), allOn);
+    expect(html).toContain(PAY);
+    expect(html).toContain('value="450.75"');
+    expect(html).not.toContain('Payments are recorded by the board');
+  });
+
+  it.each([
+    ['online payments are off', flagsOn, true],
+    ['no payment provider is configured', allOn, false],
+  ])('offers no Pay action when %s', async (_, site, configured) => {
+    if (configured) setPaymentProviderForTests(fakeProvider());
+    const html = await render(caller(), site);
+    expect(html).not.toContain(PAY);
+    expect(html).toContain('Payments are recorded by the board');
+  });
+
+  it('never ties a payment to a particular charge in its copy', async () => {
+    setPaymentProviderForTests(fakeProvider());
+    const html = await render(caller(), allOn);
+    expect(html).not.toMatch(
+      /pays? (your|the) [a-z]+ (assessment|charge|dues)/i,
+    );
   });
 });

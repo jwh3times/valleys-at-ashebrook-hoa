@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:test';
 import type {
+  CheckoutRequest,
   NormalizedPaymentEvent,
   PaymentProvider,
 } from '../../src/server/payments/provider';
@@ -45,20 +46,31 @@ export function fakeEvent(
  * A provider whose every method answers from what the test queued. Nothing
  * here talks to a network. `verified: false` makes it refuse every webhook as
  * unsigned, `parseError` makes a verified one fail to parse, and
- * `webhookBodies` records the raw body each webhook was handed.
+ * `webhookBodies` records the raw body each webhook was handed. `checkouts`
+ * records each checkout asked for; `duringCheckout` runs while one is being
+ * created, which is how a test changes the world between a route's preflight
+ * and its insert; `checkoutError` makes creation fail.
  */
 export function fakeProvider(
   queued: {
     events?: NormalizedPaymentEvent[];
     verified?: boolean;
     parseError?: Error;
+    duringCheckout?: () => Promise<void>;
+    checkoutError?: Error;
   } = {},
-): PaymentProvider & { webhookBodies: string[] } {
+): PaymentProvider & { webhookBodies: string[]; checkouts: CheckoutRequest[] } {
   const webhookBodies: string[] = [];
+  const checkouts: CheckoutRequest[] = [];
   return {
     id: FAKE_PROVIDER_ID,
     webhookBodies,
-    async createCheckout({ paymentId }) {
+    checkouts,
+    async createCheckout(request) {
+      const { paymentId } = request;
+      checkouts.push(request);
+      await queued.duringCheckout?.();
+      if (queued.checkoutError) throw queued.checkoutError;
       return {
         providerPaymentRef: `ref_${paymentId}`,
         url: `https://checkout.invalid/${paymentId}`,

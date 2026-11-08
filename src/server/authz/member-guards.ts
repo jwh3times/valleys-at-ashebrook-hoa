@@ -3,6 +3,8 @@ import { resolveAuthContext } from './api-guards';
 import { requireCapability, Forbidden } from './guards';
 import type { AuthContext } from './guards';
 import { writeFreezeError } from './write-freeze';
+import { jsonContentError, sameOriginError } from './voting-guards';
+import { paymentsStartable } from '../payments/gate';
 
 /**
  * Gate for the homeowner-write API surface (/api/member/*, /api/vote), in
@@ -34,6 +36,16 @@ export async function requireMemberApi(
     return { ok: false, res: new Response('Not found', { status: 404 }) };
   const frozen = await writeFreezeError(env, request);
   if (frozen) return { ok: false, res: frozen };
+  return requireMemberCaller(locals, request, env);
+}
+
+/** The session (401) and the `member` capability (403), the last two steps of
+ * every homeowner-write guard. */
+async function requireMemberCaller(
+  locals: App.Locals | undefined,
+  request: Request,
+  env: Env,
+): Promise<{ ok: true; ctx: AuthContext } | { ok: false; res: Response }> {
   const ctx = await resolveAuthContext(locals, request, env);
   if (!ctx)
     return { ok: false, res: new Response('Unauthorized', { status: 401 }) };
@@ -45,4 +57,34 @@ export async function requireMemberApi(
     throw e;
   }
   return { ok: true, ctx };
+}
+
+/**
+ * Gate for STARTING an online payment, `POST /api/member/payments` (ADR 0025,
+ * #542), in the order ADR 0025 fixes, which is the live-voting order:
+ *
+ * 1. `officialMode`, `lotRecordsEnabled` and `onlinePaymentsEnabled`, and a
+ *    configured provider (`paymentsStartable`) → 404, so the surface is not
+ *    advertised;
+ * 2. the write freeze → 503;
+ * 3. exact `Origin` → 403, and the JSON media type → 415: a request that moves
+ *    money is never a cross-site form post;
+ * 4. session → 401; the `member` capability → 403.
+ *
+ * Lot Authority over the Lot named in the body is checked by the route,
+ * inside its insert, and answers the masked 404. Reads settings directly
+ * rather than trusting `locals.site`, as `requireMemberApi` does.
+ */
+export async function requirePaymentStartApi(
+  locals: App.Locals | undefined,
+  request: Request,
+  env: Env,
+): Promise<{ ok: true; ctx: AuthContext } | { ok: false; res: Response }> {
+  if (!paymentsStartable(await getSiteSettings(env), env))
+    return { ok: false, res: new Response('Not found', { status: 404 }) };
+  const frozen = await writeFreezeError(env, request);
+  if (frozen) return { ok: false, res: frozen };
+  const headerError = sameOriginError(request) ?? jsonContentError(request);
+  if (headerError) return { ok: false, res: headerError };
+  return requireMemberCaller(locals, request, env);
 }

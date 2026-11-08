@@ -193,6 +193,26 @@ describe('POST /api/admin/site { action: "setGate" }', () => {
     expect(rows[0].newValue).toBe('true');
   });
 
+  it('swaps onlinePaymentsEnabled, the gate ADR 0025 added, through the same path', async () => {
+    await seedSite({ officialMode: false, liveVotingEnabled: false });
+    const res = await post(
+      {
+        action: 'setGate',
+        key: 'onlinePaymentsEnabled',
+        expected: false,
+        value: true,
+      },
+      board,
+    );
+    expect(res.status).toBe(204);
+    expect(await storedGate('onlinePaymentsEnabled')).toBe(true);
+    const rows = await changeRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe('onlinePaymentsEnabled');
+    expect(rows[0].oldValue).toBe('false');
+    expect(rows[0].newValue).toBe('true');
+  });
+
   it('swaps tenantAccessEnabled, the gate ADR 0028 added, through the same path', async () => {
     await seedSite({ officialMode: false, liveVotingEnabled: false });
     const res = await post(

@@ -175,6 +175,10 @@ describe('every export is classified', () => {
     // roster from `personId` is what keeps a caller-supplied lot list out of
     // the page entirely.
     'fetchMemberLotAddresses',
+    // ADR 0025 (#542): one online payment, scoped by the payment's Association
+    // Day; `payment-return-page.test.ts` proves the co-owner, buyer and
+    // consolidated-duplicate cases at the page.
+    'fetchMemberPayment',
   ];
   const ADMIN_ONLY = [
     'fetchAdminLotViolations',

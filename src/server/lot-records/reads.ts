@@ -11,7 +11,10 @@ import type {
   LotRecordType,
   LotViolationCategory,
   LotViolationStatus,
+  PaymentLedgerState,
+  PaymentStatus,
 } from '../../lib/types';
+import { associationDateIso } from '../../lib/format';
 
 /**
  * LOT RECORD READS (ADR 0024, #291).
@@ -526,4 +529,59 @@ export async function fetchAdminLotDuesLedger(
     recordedAt: new Date(r.recorded_at),
     operationKey: r.operation_key,
   }));
+}
+
+/** One online payment, as a holder of its Lot reads it (ADR 0025, #542). */
+export interface MemberPayment {
+  id: string;
+  lotId: string;
+  address: string;
+  amountCents: number;
+  status: PaymentStatus;
+  ledgerState: PaymentLedgerState;
+  /** Epoch milliseconds. */
+  createdAt: number;
+}
+
+/**
+ * One payment, if the caller holds Lot Authority over its Lot today AND held
+ * it on the day the payment was started — the same two conditions as every
+ * other Lot Record read here, with the payment's Association Day as the
+ * record's date. So a co-owner sees it, a buyer does not see the seller's, and
+ * anything else is `null`, which the page renders as the generic 404.
+ *
+ * The day is computed here rather than in SQL: a payment stores only its
+ * `created_at` instant, and SQLite cannot say which day that was in the
+ * association's time zone. Nothing from the row is returned until the scope
+ * question has been answered.
+ */
+export async function fetchMemberPayment(
+  env: Env,
+  personId: string | null,
+  paymentId: string,
+  associationDay: string,
+): Promise<MemberPayment | null> {
+  if (!personId) return null;
+  const row = await env.DATABASE.prepare(
+    `SELECT p.id AS id, p.lot_id AS lotId, lots.address AS address,
+            p.amount_cents AS amountCents, p.status AS status,
+            p.ledger_state AS ledgerState, p.created_at AS createdAt
+       FROM payments p JOIN lots ON lots.id = p.lot_id
+      WHERE p.id = ?`,
+  )
+    .bind(paymentId)
+    .first<MemberPayment>();
+  if (!row) return null;
+  const scope = lotAuthorityCoversRecordDay(
+    CALLER_PERSON,
+    { value: row.lotId },
+    associationDay,
+    { value: associationDateIso(new Date(row.createdAt)) },
+  );
+  const covered = await env.DATABASE.prepare(
+    `${CALLER_PERSON_CTE} SELECT ${scope.sql} AS ok`,
+  )
+    .bind(personId, ...scope.binds)
+    .first<{ ok: number }>();
+  return covered?.ok === 1 ? row : null;
 }

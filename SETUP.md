@@ -551,10 +551,11 @@ resource, binding, or secret.
 
 ## Online Payments (Stripe sandbox)
 
-Online dues payments (ADR 0025, #538) are being built in slices, and none of them is live: there is
-no Pay action yet. What exists is the payment provider's webhook, `POST /api/webhooks/payments`,
-which records a payment Stripe confirms on the lot's dues ledger. Production sets none of the
-payment values, so there the webhook does not exist (`404`). Work against a **Stripe sandbox**
+Online dues payments (ADR 0025, #538) are being built in slices, and none of them is live. A
+homeowner can start a payment from `/lot-records` with the **Pay** action, which sends them to
+Stripe's hosted Checkout page and back to `/lot-records/payments/<id>`; Stripe's webhook,
+`POST /api/webhooks/payments`, records what Stripe confirms on the lot's dues ledger. Production
+sets none of the payment values, so there neither exists (`404`). Work against a **Stripe sandbox**
 only; a sandbox gives test keys without activating an account, and no real money moves.
 
 Payments are configured only when all three values are set, in the local `.dev.vars`:
@@ -594,6 +595,16 @@ The webhook verifies Stripe's signature over the raw body before reading it, ref
 five minutes old, answers `503` during the write freeze so Stripe retries, and answers `500` when
 it could not record a delivery, which Stripe also retries. It never reads a site flag: a payment
 already in flight lands whatever the gates say.
+
+5. **Make a test payment.** In `/admin` → **Site Settings**, turn on **Official mode**, **Lot
+   records** and **Online payments** (each its own audited switch). Sign in as a homeowner who
+   holds a lot, open `/lot-records`, and use **Pay**: Stripe's page offers a US bank account and a
+   card.
+   Choose test institution routing `110000000` with account `000123456789`; Stripe asks you to
+   verify it with the micro-deposit amounts `32` and `45`. You return to the payment's page, which
+   says **Not confirmed yet** until Stripe's first event arrives and **Processing** while the bank
+   payment settles. Other test accounts: `000111111116` fails,
+   `000555555559` is later disputed, and `000000000009` stays processing.
 
 Going live is a separate, later step: it needs the association's merchant account, a webhook
 endpoint registered in the live Dashboard for the event types above, and the three values set as a
