@@ -106,7 +106,7 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   supports `PUT` and `POST`. **`PUT` no longer writes any gate.** It replaces the presentation
   fields (name, tagline, welcome copy, disclaimer, about body) but the `ON CONFLICT DO UPDATE`'s
   `json_set` rewrites every key in `SITE_GATE_KEYS` (`officialMode`, `liveVotingEnabled`,
-  `lotRecordsEnabled`, and `tenantAccessEnabled`) back to whatever is currently stored on the row, regardless of what the body
+  `lotRecordsEnabled`, `tenantAccessEnabled`, and `onlinePaymentsEnabled`) back to whatever is currently stored on the row, regardless of what the body
   sends — a `json_type = 'true'` check re-wrapped through `json('true'|'false')` so the value stays
   a JSON boolean rather than the integer `json_extract` would coerce it to, which
   `LIVE_VOTING_ENABLED_SQL` would then read as permanently off. A first-ever `PUT` (no stored row to

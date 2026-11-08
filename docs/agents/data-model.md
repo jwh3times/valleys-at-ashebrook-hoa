@@ -281,6 +281,12 @@ enforcement detail are separate decisions (`src/server/lot-records/gate.ts`).
 changed only through the same audited compare-and-swap. It too requires `officialMode` literally
 `true` alongside it (`TENANT_ACCESS_ENABLED_SQL` in `src/server/roster/tenancy.ts`).
 
+`onlinePaymentsEnabled` (ADR 0025, #542) is the newest member of `SITE_GATE_KEYS`, default off and
+changed only through the same audited compare-and-swap. Starting an online payment requires it,
+`officialMode` and `lotRecordsEnabled` all literally `true`, plus a configured payment provider
+(`ONLINE_PAYMENTS_ENABLED_SQL` and `paymentsStartable` in `src/server/payments/gate.ts`). It gates
+starting only: recording and reading a payment already in flight never read it.
+
 Board data entry landed in #291 slice 2 (v1.2.7):
 `POST /api/admin/lot-violations` creates and transitions `lot_violations` rows and appends their
 `lot_record_events`, and `GET /api/admin/lot-violations` is the board's unscoped read — see
@@ -299,8 +305,8 @@ v1.2.11) added the board's write path, `POST /api/admin/dues-ledger` — see
 the board's admin panel (`DuesLedgerManager`) over that same route, with no schema change either;
 slice 4 (#295) added the homeowner-facing render: `/lot-records` now shows each
 held Lot's balance (`describeBalance`) and an itemized, running-balance ledger built from
-`fetchMemberDuesLedger`, with no schema change. There is still no payment rail, so every entry a
-homeowner sees is board-entered until one ships. Both flags still gate the whole family — it is
+`fetchMemberDuesLedger`, with no schema change. Provider-sourced `payment` entries come from the
+online payment rail described under **Payments** below. Both flags still gate the whole family — it is
 append-only and balance-forward:
 the balance is `SUM(amount_cents)` over a Lot's rows, never a stored column, so a positive balance
 is owed and a negative one is a credit, and there is nothing to drift. Columns: `lot_id` referencing
@@ -366,9 +372,11 @@ ordering.
 
 `dues_ledger_entries.payment_id` still has no FK, because adding one would rebuild the ledger. The
 application path, `src/server/payments/apply.ts`, is its only writer, and the only writer of the
-payment tables too. `test/unit/payments-boundaries.test.ts` pins that nothing outside
-`src/server/payments/` writes them, that only `apply.ts` updates `payments`, and that the other
-three are never updated or deleted. Provider-sourced entries write no `lot_record_events` row, since that log requires an
+payment tables too, with one exception: `src/server/payments/checkout.ts`'s `startPayment` inserts
+each new `payments` row (`origin = 'checkout'`, `status = 'created'`) in an `INSERT … SELECT` that
+re-checks the three payment flags and Lot Authority. `test/unit/payments-boundaries.test.ts` pins
+that nothing outside `src/server/payments/` writes them, that only `apply.ts` updates `payments`,
+and that the other three are never updated or deleted. Provider-sourced entries write no `lot_record_events` row, since that log requires an
 acting account. Their trail is `payment_events`.
 
 `lot_record_events` now serves two subject tables, and gained a **pair rule** with the widened

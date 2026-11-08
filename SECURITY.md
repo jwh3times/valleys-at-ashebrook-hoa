@@ -54,7 +54,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   page and every `/api/member/*` handler fail closed to 404 while `officialMode` is off. When it is
   on, the page offers sign-in/verification guidance while the API returns 401 to anonymous callers
   and 403 to callers below `homeowner`. Each handler calls
-  `requireMemberApi`, and middleware independently gates the whole prefix as a production
+  `requireMemberApi` (starting an online payment calls the stricter `requirePaymentStartApi`,
+  described below), and middleware independently gates the whole prefix as a production
   backstop. Proxy writes are then scoped to the caller's verified `lotIds`; verification
   proves control of a lot, while the grantor selects which of the Persons currently holding Lot
   Authority there is acting — Ownership, or Representation of an owning Organization (#248 part 2

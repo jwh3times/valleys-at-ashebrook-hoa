@@ -527,8 +527,8 @@ shipped the ledger's table and reads; slice 2 added the board's write path,
 `/admin`, over the same route), so a board member can now post charges, payments, adjustments,
 reversals, and a bulk assessment across every active lot without a direct API call; slice 4 added
 the homeowner-facing render, so `/lot-records` now shows each held lot's balance and itemized
-ledger alongside its enforcement records. There is still no payment rail, so every ledger entry a
-homeowner sees is board-entered until one ships. Both **Official Mode** and **Lot Records** must be
+ledger alongside its enforcement records. Ledger entries are board-entered unless online payments
+are set up as described in [Online Payments (Stripe sandbox)](#online-payments-stripe-sandbox). Both **Official Mode** and **Lot Records** must be
 on, each by its own toggle in `/admin` -> **Site Settings**, before the board's data entry becomes
 visible to homeowners at `/lot-records`. Like Official Mode and Live Voting, each flip is its own
 audited transition, independent of the rest of the settings form, and is recorded in

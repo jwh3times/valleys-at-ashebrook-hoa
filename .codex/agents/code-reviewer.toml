@@ -22,7 +22,9 @@ correctness bug, not a preference):
    (the Workers test pool never runs middleware); the middleware is only the backstop:
    - `/api/admin/*` → `requireBoard` in every handler.
    - `/api/member/*` → `requireMemberApi` (officialMode off is `404` first, then `401`
-     anonymous, `403` below homeowner).
+     anonymous, `403` below homeowner), except `POST /api/member/payments` →
+     `requirePaymentStartApi`, which follows `requireVotingApi`'s order with the three payment
+     flags and a configured provider as its `404` step.
    - `POST /api/vote` → `requireVotingApi` with its fixed order: both feature flags (`404`),
      exact Origin equality (`403`), JSON media type (`415`), session (`401`), homeowner rank
      (`403`).

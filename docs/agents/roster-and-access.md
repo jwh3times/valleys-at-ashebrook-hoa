@@ -75,7 +75,7 @@ checks the same switch and deletes nothing while it is on, still reporting. The 
 `writeFreezeError(env, request)` takes no scope argument — it derives coverage from the request's
 own path, so no call site can hold a stale opinion about what its surface freezes, and middleware
 and the per-route guards cannot drift. It is called from `requireBoard`, `requireMemberApi`,
-`requireVotingApi`, both `/api/verify/*` routes, the payment webhook's `handlePaymentWebhook`, and
+`requireVotingApi`, `requirePaymentStartApi`, both `/api/verify/*` routes, the payment webhook's `handlePaymentWebhook`, and
 `src/middleware.ts` — whose final `else` branch catches any surface no named branch claims.
 
 Three suites hold it: `test/unit/freeze-coverage.test.ts` enumerates every route module and fails
@@ -134,7 +134,8 @@ caller's Person one hop through `COALESCE(consolidated_into_party_id, id)` befor
 Representation row — so an account linked to a duplicate would otherwise be told (via `lotIds`)
 that it holds the survivor's Lots while every per-Person read still keyed on the duplicate's own
 id. `src/server/lot-records/reads.ts`'s homeowner reads (`fetchMemberLotViolations`,
-`fetchMemberLotViolation`, `fetchMemberLotAddresses`, and — since ADR 0025's ledger — `fetchMemberDuesLedger`)
+`fetchMemberLotViolation`, `fetchMemberLotAddresses`, and — since ADR 0025's ledger — `fetchMemberDuesLedger`
+and `fetchMemberPayment`)
 repeat that same one-hop canonicalization in an internal `me` CTE before scoping, because without it
 a duplicate-linked account would be shown none of the records for the Lots `lotIds` just told it it
 holds — an empty page indistinguishable from a Lot with nothing recorded, the worst answer that
@@ -143,6 +144,9 @@ deliberately does **not** canonicalize: there the question is "who acted" (a pro
 ballot caster, a Board Term holder), and the Party named on that historical record is the answer,
 duplicate or not. Canonicalize only when the question is "which Person is this **account**" —
 `LOT_SQL` and the Lot Records homeowner reads both ask that; `roster/authority.ts` never does.
+`src/server/payments/checkout.ts`'s `startPayment` asks both questions: it canonicalizes the
+account's Person to check Lot Authority over the Lot being paid, but records the account's own,
+unresolved Person as `initiated_by_person_id`, since that column records who acted.
 
 ## Writing to the roster
 
