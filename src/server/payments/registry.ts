@@ -31,7 +31,10 @@ export function paymentProviderFor(env: Env): PaymentProvider | null {
  * outside Vitest as well, so a stray production call cannot either.
  */
 export function setPaymentProviderForTests(provider: PaymentProvider | null) {
-  if (import.meta.env.MODE !== 'test')
+  // Read through a narrow type: the Node-side program (which type-checks
+  // `test/unit/scheduled.test.ts`, and through it this module) has no Vite
+  // client types, and Vite sets `MODE` at runtime either way.
+  if ((import.meta as { env?: { MODE?: string } }).env?.MODE !== 'test')
     throw new Error('setPaymentProviderForTests is for tests only');
   injected = provider;
 }

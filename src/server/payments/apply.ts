@@ -826,3 +826,56 @@ async function allAlreadyOpen(
   }
   return true;
 }
+
+/**
+ * Bank debits settle within days (ACH, up to four business days), so one
+ * still pending this long after it started is a question for the board.
+ */
+const STALE_PENDING_MS = 10 * 24 * 60 * 60 * 1000;
+
+/**
+ * Opens `stale_pending` for every payment still `pending` ten days after it
+ * started, and returns the ids it opened for (#543). The daily job calls it
+ * after its pulls, so a payment the same run settled is not flagged.
+ *
+ * Once per payment, ever: an exception the board resolved is not reopened,
+ * since nothing new has happened. The guard is inside each INSERT, beside
+ * `payment_exceptions_stale_pending_unq`, so a concurrent run cannot open a
+ * second, and neither can a payment that settled after the read.
+ */
+export async function openStalePendingExceptions(
+  env: Env,
+  now: Date,
+): Promise<string[]> {
+  const nowMs = now.getTime();
+  const startedBefore = nowMs - STALE_PENDING_MS;
+  const { results } = await env.DATABASE.prepare(
+    `SELECT id FROM payments
+      WHERE status = 'pending' AND created_at <= ?1
+        AND NOT EXISTS (SELECT 1 FROM payment_exceptions x
+                         WHERE x.payment_id = payments.id
+                           AND x.reason = 'stale_pending')
+      ORDER BY created_at, id`,
+  )
+    .bind(startedBefore)
+    .all<{ id: string }>();
+  if (results.length === 0) return [];
+
+  const landed = await env.DATABASE.batch(
+    results.map(({ id }) =>
+      env.DATABASE.prepare(
+        `INSERT INTO payment_exceptions
+           (id, payment_event_id, payment_id, reason, opened_at)
+         SELECT ?1, NULL, p.id, 'stale_pending', ?2
+           FROM payments p
+          WHERE p.id = ?3 AND p.status = 'pending' AND p.created_at <= ?4
+            AND NOT EXISTS (SELECT 1 FROM payment_exceptions x
+                             WHERE x.payment_id = p.id
+                               AND x.reason = 'stale_pending')`,
+      ).bind(crypto.randomUUID(), nowMs, id, startedBefore),
+    ),
+  );
+  return results
+    .filter((_, i) => (landed[i]?.meta.changes ?? 0) > 0)
+    .map(({ id }) => id);
+}

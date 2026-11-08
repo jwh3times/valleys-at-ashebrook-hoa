@@ -1,4 +1,4 @@
-import type { PaymentEventType } from '../../../lib/types';
+import type { PaymentEventType, PaymentEventVia } from '../../../lib/types';
 import type {
   AdapterSecrets,
   NormalizedPaymentEvent,
@@ -18,8 +18,9 @@ import type {
  * or card details on Stripe's page, never this site's (SAQ A). It sends the
  * site's payment id and the amount, and nothing about the Lot or its owners.
  *
- * `retrievePayment` and `listEventsSince` arrive with #543. Nothing calls them
- * before then.
+ * `retrievePayment` and `listEventsSince` serve the daily reconciliation job
+ * (#543): the session's current state as facts with stable ids, and the
+ * events Stripe still lists since a cursor.
  */
 export const STRIPE_PROVIDER_ID = 'stripe';
 
@@ -45,6 +46,19 @@ const CHECKOUT_LIFETIME_S = 60 * 60;
  */
 const LINE_ITEM_NAME = 'Dues payment';
 
+/** How long Stripe keeps events: a listing with no cursor reads all of it. */
+const EVENT_RETENTION_S = 30 * 24 * 60 * 60;
+
+/**
+ * How far before the cursor a listing starts. An event can appear in the list
+ * a little after its `created` time, so the span just before the last run is
+ * read twice; per-event idempotency makes that free.
+ */
+const CURSOR_OVERLAP_S = 60 * 60;
+
+/** Stripe's largest page. */
+const EVENT_PAGE_SIZE = '100';
+
 /**
  * A signed delivery this adapter cannot read. Stripe sent it, so the fault is
  * ours or a shape change: the route answers 500 and Stripe retries, rather
@@ -62,7 +76,7 @@ type StripeObject = Record<string, unknown>;
 /** A GET against Stripe's API, already authorized and version-pinned. */
 type StripeGet = (
   path: string,
-  params: Record<string, string>,
+  params: Record<string, string | readonly string[]>,
 ) => Promise<unknown>;
 
 /**
@@ -159,15 +173,129 @@ export function stripeProvider(
         now(),
       );
       if (!signed) return { ok: false };
-      return { ok: true, events: await normalize(parseEvent(rawBody), get) };
+      return {
+        ok: true,
+        events: await normalize(parseEvent(rawBody), get, 'webhook'),
+      };
     },
-    retrievePayment: () => notYet('retrievePayment', '#543'),
-    listEventsSince: () => notYet('listEventsSince', '#543'),
+    async retrievePayment(sessionId) {
+      const session = await get(
+        `/checkout/sessions/${encodeURIComponent(sessionId)}`,
+        { 'expand[]': ['payment_intent.latest_charge'] },
+      );
+      if (!isObject(session))
+        throw new UnreadableStripeEvent('the session is not an object');
+      return sessionState(session);
+    },
+    async listEventsSince(cursor) {
+      const startedS = Math.floor(now() / 1000);
+      const since =
+        cursor !== null && /^\d+$/.test(cursor)
+          ? Number(cursor) - CURSOR_OVERLAP_S
+          : startedS - EVENT_RETENTION_S;
+      const events: NormalizedPaymentEvent[] = [];
+      for (const event of await listEvents(get, since))
+        events.push(...(await normalize(event, get, 'reconciliation')));
+      return { events, nextCursor: String(startedS) };
+    },
   };
 }
 
-function notYet(method: string, ticket: string): never {
-  throw new Error(`The Stripe adapter's ${method} arrives with ${ticket}`);
+/** Every event type this adapter maps, which is all a listing asks for. */
+const MAPPED_EVENT_TYPES: readonly string[] = [
+  ...Object.keys(SESSION_EVENTS),
+  ...Object.keys(CHARGE_EVENTS),
+];
+
+/**
+ * Every mapped event created since `sinceS`, oldest first. Stripe lists newest
+ * first, a page at a time, so the pages are followed to the end and the whole
+ * reversed: applying oldest first is the order the facts happened in.
+ */
+async function listEvents(
+  get: StripeGet,
+  sinceS: number,
+): Promise<StripeEvent[]> {
+  const events: StripeEvent[] = [];
+  let startingAfter: string | null = null;
+  for (;;) {
+    const params: Record<string, string | readonly string[]> = {
+      'types[]': MAPPED_EVENT_TYPES,
+      'created[gte]': String(sinceS),
+      limit: EVENT_PAGE_SIZE,
+    };
+    if (startingAfter) params.starting_after = startingAfter;
+    const page = await get('/events', params);
+    if (!isObject(page) || !Array.isArray(page.data))
+      throw new UnreadableStripeEvent('the event list has no data');
+    const data = (page.data as unknown[]).map(readEvent);
+    events.push(...data);
+    if (page.has_more !== true || data.length === 0) break;
+    startingAfter = data[data.length - 1].id;
+  }
+  return events.reverse();
+}
+
+/**
+ * A Checkout Session's current state as the facts it amounts to, with ids
+ * stable per session and type, so a pull repeated tomorrow is stored once.
+ * Only the settlement states: a pull serves a payment still `created` or
+ * `pending`, and a withdrawal or dispute after it settled arrives as an event.
+ *
+ * A settled payment is dated by its charge, the provider's own time for it
+ * (a bank debit's charge is when the debit started, a few days before it
+ * settled). A pull matters only for what no listed event reported, and the
+ * charge precedes any later refund or dispute, so those still apply after it.
+ */
+function sessionState(session: StripeObject): NormalizedPaymentEvent[] {
+  const sessionId = requiredString(session, 'id');
+  const fact = (
+    type: PaymentEventType,
+    occurredAtS: number,
+  ): NormalizedPaymentEvent[] => [
+    {
+      provider: STRIPE_PROVIDER_ID,
+      providerEventId: `reconciliation:${sessionId}:${type}`,
+      providerPaymentRef: sessionId,
+      type,
+      amountCents: requiredInteger(session, 'amount_total'),
+      currency: requiredString(session, 'currency'),
+      occurredAt: new Date(occurredAtS * 1000),
+      via: 'reconciliation',
+    },
+  ];
+
+  if (session.status === 'expired')
+    return fact('payment_canceled', requiredInteger(session, 'expires_at'));
+  if (session.status !== 'complete') return [];
+
+  const intent = session.payment_intent;
+  if (!isObject(intent))
+    throw new UnreadableStripeEvent('payment_intent was not expanded');
+  const chargedAtS = () => {
+    const charge = intent.latest_charge;
+    if (!isObject(charge))
+      throw new UnreadableStripeEvent('latest_charge was not expanded');
+    return requiredInteger(charge, 'created');
+  };
+
+  if (session.payment_status === 'paid' || intent.status === 'succeeded')
+    return fact('payment_succeeded', chargedAtS());
+  if (
+    intent.status === 'requires_payment_method' ||
+    intent.status === 'canceled'
+  )
+    return fact('payment_failed', requiredInteger(intent, 'created'));
+  // A completed session not yet paid or failed is in progress, as the
+  // completion webhook reports it: settling (`processing`), or waiting on the
+  // payer, such as a bank account's microdeposit verification
+  // (`requires_action`), which has no charge yet.
+  return fact(
+    'payment_pending',
+    isObject(intent.latest_charge)
+      ? chargedAtS()
+      : requiredInteger(intent, 'created'),
+  );
 }
 
 interface StripeEvent {
@@ -184,6 +312,11 @@ function parseEvent(rawBody: string): StripeEvent {
   } catch {
     throw new UnreadableStripeEvent('the body is not JSON');
   }
+  return readEvent(body);
+}
+
+/** A Stripe event object, delivered or listed. */
+function readEvent(body: unknown): StripeEvent {
   if (!isObject(body)) throw new UnreadableStripeEvent('not an object');
   const data = body.data;
   if (!isObject(data) || !isObject(data.object))
@@ -199,6 +332,7 @@ function parseEvent(rawBody: string): StripeEvent {
 async function normalize(
   event: StripeEvent,
   get: StripeGet,
+  via: PaymentEventVia,
 ): Promise<NormalizedPaymentEvent[]> {
   const fact = (
     type: PaymentEventType,
@@ -212,7 +346,7 @@ async function normalize(
     amountCents: requiredInteger(event.object, amountField),
     currency: requiredString(event.object, 'currency'),
     occurredAt: new Date(event.createdMs),
-    via: 'webhook',
+    via,
   });
 
   if (Object.hasOwn(SESSION_EVENTS, event.type)) {
@@ -278,11 +412,12 @@ async function stripePost(
 async function stripeGet(
   apiKey: string,
   path: string,
-  params: Record<string, string>,
+  params: Record<string, string | readonly string[]>,
 ): Promise<unknown> {
   const url = new URL(API_BASE + path);
   for (const [name, value] of Object.entries(params))
-    url.searchParams.set(name, value);
+    for (const one of typeof value === 'string' ? [value] : value)
+      url.searchParams.append(name, one);
   const response = await fetch(url.href, {
     method: 'GET',
     headers: {

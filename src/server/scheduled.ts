@@ -3,6 +3,7 @@ import { cleanupSavedReportContent } from './cleanup/reports';
 import { formatInvariantRun, runInvariants } from './db/invariants';
 import { driveKeepalive } from './drive/keepalive';
 import { sweepR2Orphans } from './documents/sweep';
+import { reconcilePayments } from './payments/reconcile';
 
 /**
  * The body of the daily `0 7 * * *` cron trigger.
@@ -14,7 +15,7 @@ import { sweepR2Orphans } from './documents/sweep';
  *
  * The jobs are independent on purpose: one broken cleanup must not hide a
  * roster invariant violation, stop the other retention sweep, or skip the
- * Drive keepalive or the R2 orphan sweep. Every job
+ * Drive keepalive, the R2 orphan sweep or payment reconciliation. Every job
  * always runs, and this throws afterwards if any failed — a partial-success
  * invocation still shows red in the dashboard.
  */
@@ -99,6 +100,38 @@ export async function runScheduledJobs(env: Env): Promise<void> {
   } catch (err) {
     console.error('[r2-orphan-sweep] failed', err);
     failures.push('r2-orphan-sweep');
+  }
+
+  // #543 (ADR 0025): recover any payment whose webhook was missed, from the
+  // provider's events and each in-flight payment's own state. Silent with no
+  // provider configured, which is production until a merchant account exists.
+  // Payment ids and counts only, never a payer detail.
+  try {
+    const run = await reconcilePayments(env);
+    if (run.skipped === 'frozen')
+      console.log('[payments-reconcile] skipped: the write freeze is on');
+    else if (run.skipped === null) {
+      console.log(
+        `[payments-reconcile] ${run.listed} listed fact(s), ${run.pulled} payment(s) pulled, ${run.failedPulls.length} failed pull(s), ${run.stalePending.length} newly stale pending`,
+      );
+      if (run.stalePending.length > 0)
+        console.log(
+          `[payments-reconcile] stale pending: ${run.stalePending.join(', ')}`,
+        );
+      if (run.eventListFailed)
+        console.error(
+          '[payments-reconcile] the provider event list was not recorded; the cursor did not move',
+        );
+      if (run.failedPulls.length > 0)
+        console.error(
+          `[payments-reconcile] failed pulls: ${run.failedPulls.join(', ')}`,
+        );
+      if (run.eventListFailed || run.failedPulls.length > 0)
+        failures.push('payments-reconcile');
+    }
+  } catch (err) {
+    console.error('[payments-reconcile] failed', err);
+    failures.push('payments-reconcile');
   }
 
   if (failures.length > 0)
