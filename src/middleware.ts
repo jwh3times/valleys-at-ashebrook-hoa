@@ -13,6 +13,7 @@ import { writeFreezeError } from './server/authz/write-freeze';
 import { routedPathname } from './server/authz/request-path';
 import { getSiteSettings } from './server/content/settings';
 import { DEFAULT_SITE_SETTINGS } from './lib/types';
+import { lotRecordsVisible } from './server/lot-records/gate';
 
 // Enumerated from the code's external dependencies plus what Cloudflare's edge
 // injects: Google Fonts, the Google Calendar embed (frame), Turnstile
@@ -77,6 +78,27 @@ function isAdminApi(path: string): boolean {
  */
 function isMemberApi(path: string): boolean {
   return path === '/api/member' || path.startsWith('/api/member/');
+}
+
+/**
+ * Whether the member payments surface (ADR 0025) is hidden for this request:
+ * every path under it needs `officialMode` and `lotRecordsEnabled`, since a
+ * payment lands on the Lot's dues ledger, and STARTING one (a `POST` to the
+ * collection) needs `onlinePaymentsEnabled` too. Reading and chasing a payment
+ * already in flight stays live with that flag off. Each route also checks its
+ * own gate; this is the backstop.
+ */
+function memberPaymentsHidden(
+  path: string,
+  method: string,
+  site: App.Locals['site'],
+): boolean {
+  const collection = '/api/member/payments';
+  if (path !== collection && !path.startsWith(collection + '/')) return false;
+  if (!lotRecordsVisible(site)) return true;
+  return (
+    path === collection && method === 'POST' && !site.onlinePaymentsEnabled
+  );
 }
 
 /**
@@ -246,7 +268,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     // handler under src/pages/api/member/ also calls requireMemberApi; this
     // exists so a route shipped without its guard is not exposed in the
     // meantime.
-    if (!context.locals.site.officialMode) {
+    if (
+      !context.locals.site.officialMode ||
+      memberPaymentsHidden(path, context.request.method, context.locals.site)
+    ) {
       response = new Response('Not found', { status: 404 });
     } else {
       // Nested rather than another `else if` so the freeze read happens only

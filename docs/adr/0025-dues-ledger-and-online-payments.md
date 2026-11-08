@@ -1,6 +1,6 @@
 # ADR 0025: A Per-Lot Dues Ledger, with Online Payments Reconciled from Verified Provider Events
 
-**Status:** Accepted 2026-09-20; amended 2026-11-06 (see [Amendments](#amendments))
+**Status:** Accepted 2026-09-20; amended 2026-11-06 and 2026-11-08 (see [Amendments](#amendments))
 **Date:** 2026-09-17
 
 ## Context
@@ -123,7 +123,7 @@ the system:
 | `payment_failed`    | Failed before success                                    | None                                                                      |
 | `payment_canceled`  | Abandoned or expired checkout                            | None                                                                      |
 | `funds_withdrawn`   | ACH return, refund made at the provider, or lost dispute | One `reversal` of that payment's entry, plus an exception                 |
-| `funds_reinstated`  | Dispute won after a withdrawal                           | One new `payment` entry (never an un-reversal), plus exception resolution |
+| `funds_reinstated`  | Withdrawn funds came back: dispute won, or refund failed | One new `payment` entry (never an un-reversal), plus exception resolution |
 | `dispute_opened`    | Informational                                            | None; opens an exception                                                  |
 
 The adapter lives in `src/server/payments/providers/<id>.ts` and implements one interface. It
@@ -402,6 +402,27 @@ migration `0046`:
    applied from an unmatched fact has no initiating Person. `provider_payment_ref` is unique per
    provider rather than globally, since two adapters are free to mint the same string, and is
    never blank.
+
+**2026-11-08 (#541, #542).** Three corrections to what the rail as built does:
+
+1. **The checkout is opened before its `payments` row exists.** The decision above has the adapter
+   create a hosted checkout "for a `payments` row". Writing a `created` row first would need a
+   second write to attach the provider's reference, and `payments` is updated only by the
+   application path. So starting a payment mints the payment id, opens the provider's checkout
+   under it, and then writes the row, reference included, in one `INSERT … SELECT` that re-checks
+   the flags and Lot Authority. A start that loses that race writes nothing and hands no one the
+   checkout URL, so the checkout is left at the provider unused; its expiry arrives as an
+   `unmatched` fact, with no ledger effect and no exception, since no money can have moved.
+2. **The return page shows the payment's stored status, not "processing".** It reads "Not
+   confirmed yet" while the provider has reported nothing (a homeowner who left the checkout is
+   in the same state), "Processing" once the payment is pending, and its final status after that.
+   It still reads nothing from the redirect. The reconciliation it may ask for stands as decided.
+3. **A failed refund is `funds_reinstated` too.** The event table gave that type only to a dispute
+   won after a withdrawal. A refund counted as a withdrawal and then failed at the provider also
+   means the money came back, so it answers the payment's latest withdrawal with a new `payment`
+   entry, as a won dispute does; the table row now says so. If the failure arrives before the
+   refund itself, it answers nothing, and the refund's withdrawal then stays an open exception for
+   the board. No ordering logic is added for that case.
 
 ## Related decisions
 

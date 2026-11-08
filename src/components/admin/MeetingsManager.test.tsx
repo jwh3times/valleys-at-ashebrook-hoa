@@ -39,6 +39,7 @@ beforeEach(() => {
     liveVotingEnabled: true,
     lotRecordsEnabled: false,
     tenantAccessEnabled: false,
+    onlinePaymentsEnabled: false,
     disclaimerText: '',
     aboutBody: '',
   });
@@ -1570,6 +1571,7 @@ describe('MeetingsManager', () => {
       liveVotingEnabled: false,
       lotRecordsEnabled: false,
       tenantAccessEnabled: false,
+      onlinePaymentsEnabled: false,
       disclaimerText: '',
       aboutBody: '',
     });
@@ -1602,6 +1604,7 @@ describe('MeetingsManager', () => {
       liveVotingEnabled: true,
       lotRecordsEnabled: false,
       tenantAccessEnabled: false,
+      onlinePaymentsEnabled: false,
       disclaimerText: '',
       aboutBody: '',
     });

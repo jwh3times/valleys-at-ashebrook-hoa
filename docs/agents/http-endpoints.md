@@ -106,7 +106,7 @@ found"` for an id that does not match any row — the update uses `.returning({ 
   supports `PUT` and `POST`. **`PUT` no longer writes any gate.** It replaces the presentation
   fields (name, tagline, welcome copy, disclaimer, about body) but the `ON CONFLICT DO UPDATE`'s
   `json_set` rewrites every key in `SITE_GATE_KEYS` (`officialMode`, `liveVotingEnabled`,
-  `lotRecordsEnabled`, and `tenantAccessEnabled`) back to whatever is currently stored on the row, regardless of what the body
+  `lotRecordsEnabled`, `tenantAccessEnabled`, and `onlinePaymentsEnabled`) back to whatever is currently stored on the row, regardless of what the body
   sends — a `json_type = 'true'` check re-wrapped through `json('true'|'false')` so the value stays
   a JSON boolean rather than the integer `json_extract` would coerce it to, which
   `LIVE_VOTING_ENABLED_SQL` would then read as permanently off. A first-ever `PUT` (no stored row to
@@ -782,6 +782,18 @@ invalid-invitation` for every unknown, expired, used, superseded or contact-gone
   board-count guard are retired — `src/server/auth/seed-board.ts` and `scripts/seed-board.ts` are
   deleted. The route stays at its unchanged path and remains one of the write freeze's three
   permanent exemptions; it never calls `writeFreezeError`.
+- Start an online dues payment: `POST /api/member/payments` (ADR 0025, #542; see
+  `src/server/payments/checkout.ts`). Its guard is `requirePaymentStartApi`, in the live-voting
+  order: `officialMode`, `lotRecordsEnabled`, `onlinePaymentsEnabled` and a configured provider
+  (`404`), the write freeze (`503`), exact `Origin` (`403`), the JSON media type (`415`), the
+  session (`401`) and `member` (`403`). The body is `{ lotId, amountCents }`, integer cents within
+  `MIN_PAYMENT_CENTS`–`MAX_PAYMENT_CENTS` (`400` otherwise). A Lot the caller does not hold is the
+  masked `404`. It opens the provider's checkout, then records the payment in one insert that
+  re-checks the flags and Lot Authority: a lost race is `409`, or `404` if the Lot was lost, with
+  nothing written. A provider failure is `502`, with nothing written. It answers `201 { url }` and
+  the browser navigates there; the return and cancel URLs come from `BETTER_AUTH_URL`. Middleware's
+  member backstop hides every `/api/member/payments` path while `officialMode` or
+  `lotRecordsEnabled` is off, and a `POST` to the collection while `onlinePaymentsEnabled` is off.
 - Payment provider webhook: `POST /api/webhooks/payments` (ADR 0025, #541; see
   `src/server/payments/webhook.ts`). Outside both session namespaces: the caller is the provider,
   authenticated only by the signature its adapter verifies, so middleware applies the write freeze

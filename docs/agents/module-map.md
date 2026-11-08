@@ -13,7 +13,9 @@ into a client-side module.**
   is not among them — it lives in `src/lib/admin.ts` beside `saveDues` (#364).
 - `src/lib/member.ts` handles the official-mode homeowner proxy API: `fetchMyProxies`,
   `grantProxy`, `revokeProxy`, and `lookupLotPersons` (over the unchanged `/api/member/owner-lookup`
-  path), with the write/lookup request shapes kept beside those helpers.
+  path), with the write/lookup request shapes kept beside those helpers. It also holds
+  `startDuesPayment` (`POST /api/member/payments`, #542), which answers the provider's checkout URL
+  for `PayDuesForm` to navigate to.
 - `src/lib/admin.ts` handles board reads and writes against `/api/admin/*` endpoints, typed document duplicate
   errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
   `fetchReport`, `deleteReport`), the meeting-record people-picker and party-roster reads that
@@ -121,10 +123,14 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   member types and what the dues ledger stores: `parseDollarsToCents` parses the typed digits into
   separate whole-dollar and cents integers rather than multiplying a parsed fraction (the classic
   `parseFloat(x) * 100` floating-point bug), refuses blank, zero, and more-than-two-decimal-place
-  input rather than coercing them, and can never produce `-0`; `formatCents` and `describeBalance`
-  render cents back for display, sign-first. `MAX_ENTRY_CENTS` (the $1,000,000 single-entry cap)
-  lives here rather than in `src/pages/api/admin/dues-ledger.ts`, which imports it, so the form and
-  the route agree on one number. The only caller is `DuesLedgerManager`.
+  input rather than coercing them, and can never produce `-0`; a refusal carries a `reason`
+  (`blank`/`shape`/`too_large`/`zero`) so a caller with its own bounds can word it.
+  `formatCents` and `describeBalance` render cents back for display, sign-first, and
+  `centsAsTypedDollars` is the parser's integer-built inverse for prefilling a field.
+  `MAX_ENTRY_CENTS` (the $1,000,000 single-entry cap) lives here rather than in
+  `src/pages/api/admin/dues-ledger.ts`, which imports it, so the form and the route agree on one
+  number. The parser's callers are `DuesLedgerManager` and the homeowner `PayDuesForm`, which
+  applies the separate online-payment bounds in `src/lib/payments.ts`.
 - `src/lib/auth-client.ts` contains the Better Auth browser client. `/account` (`SignInMethods` in
   `src/components/react/GoogleAuth.tsx`) connects/disconnects Google and refuses removing the last
   sign-in method.
@@ -177,8 +183,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `/api/auth/*` (sign-in writes a session row; an operator locked out of `/admin` cannot run the
   flip) and `/api/bootstrap/board` (flip step 4 creates the first System Administrator while the
   freeze is on) and `/api/admin/drive/disconnect` (ending the stored Drive credential must not wait
-  for a freeze). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`, both
-  `/api/verify/*` routes, the payment webhook's `handlePaymentWebhook`, and `src/middleware.ts` —
+  for a freeze). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`,
+  `requirePaymentStartApi`, every `/api/verify/*` route, the payment webhook's `handlePaymentWebhook`, and `src/middleware.ts` —
   whose final `else` branch is what catches any surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
   and fails if a mutating route ends up live without being declared in both that test and
   `ALWAYS_LIVE`. `authz/` also holds `derive.ts` (`deriveAccess`/`toDerivedAccess`, a capability SET
@@ -374,7 +380,17 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   Its `verifyAndParseWebhook` checks the `v1` signature over the raw body (five-minute tolerance)
   before parsing, maps the Checkout Session, dispute and refund events, and finds a dispute's or
   refund's session by listing sessions filtered by payment intent; a signed event it cannot read
-  throws `UnreadableStripeEvent`. Its `createCheckout` arrives with #542 and its pulls with #543.
+  throws `UnreadableStripeEvent`. Its `createCheckout` opens a one-hour, one-line, neutrally named
+  `usd` Checkout Session (bank account first, card second) with an idempotency key per payment;
+  its pulls arrive with #543. `gate.ts` holds `paymentsStartable(site, env)` (the three flags and
+  a configured provider) and `ONLINE_PAYMENTS_ENABLED_SQL`. `checkout.ts`'s `startPayment` is the
+  only writer of a new `payments` row: it resolves the account's Person one consolidation hop to
+  check Lot Authority (the initiator stays the account's own Person, since it records who acted), opens the provider's checkout under a payment id it mints, then writes the
+  row with the provider's reference in one `INSERT … SELECT` that re-checks the flags and Lot
+  Authority, so the row is never updated outside `apply.ts`. The shared amount bounds
+  (`MIN_PAYMENT_CENTS`, `MAX_PAYMENT_CENTS`, `paymentAmountError`) and the homeowner status labels
+  live in `src/lib/payments.ts`, and `lot-records/reads.ts`'s `fetchMemberPayment` is the scoped
+  read behind the return page (#542).
   `webhook.ts`'s `handlePaymentWebhook` is the webhook route's body: `404` unconfigured, freeze
   `503`, unverified `400`, then each fact applied in its own batch, `500` on any failure so the
   provider redelivers. `setPaymentProviderForTests` is the test-only hook, and the fake it injects

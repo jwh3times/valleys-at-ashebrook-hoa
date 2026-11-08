@@ -9,6 +9,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.0] - 2026-11-07
+
+### Added
+
+- **A homeowner can pay dues online, once the association turns it on (#538, #542).** On
+  `/lot-records`, each lot the homeowner holds gets a **Pay** action beside its balance. It
+  suggests the balance owed, takes any amount from $1.00 to $10,000.00, and sends the homeowner to
+  Stripe's secure page to pay by bank account or card. Bank and card details are entered there,
+  never on this site. Afterwards the homeowner lands on a page for that payment, which shows what
+  the site has actually recorded ("Not confirmed yet", "Processing", "Received"), never what the
+  return address claims. A payment counts toward the lot's balance; it is never presented as
+  settling a particular charge. No payment provider is configured in production yet, so the Pay
+  action does not appear there.
+- **An "Online payments" switch in Site Settings.** Like the other gates it is off by default,
+  changes only through its own audited switch, and needs Official mode and Lot records on as well.
+  Turning it off stops new payments only: a payment already started is still recorded when it
+  settles, and its page stays readable.
+
+### Changed
+
+- The privacy policy now says that Stripe processes online payments, what Stripe receives, and that
+  the site keeps only the facts of each payment, never bank or card details or Stripe's full
+  messages.
+
 ## [2.10.52] - 2026-11-07
 
 ### Added
@@ -4875,7 +4899,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.52...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.0...HEAD
+[2.11.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.52...v2.11.0
 [2.10.52]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.51...v2.10.52
 [2.10.51]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.50...v2.10.51
 [2.10.50]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.49...v2.10.50

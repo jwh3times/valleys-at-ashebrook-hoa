@@ -54,7 +54,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   page and every `/api/member/*` handler fail closed to 404 while `officialMode` is off. When it is
   on, the page offers sign-in/verification guidance while the API returns 401 to anonymous callers
   and 403 to callers below `homeowner`. Each handler calls
-  `requireMemberApi`, and middleware independently gates the whole prefix as a production
+  `requireMemberApi` (starting an online payment calls the stricter `requirePaymentStartApi`,
+  described below), and middleware independently gates the whole prefix as a production
   backstop. Proxy writes are then scoped to the caller's verified `lotIds`; verification
   proves control of a lot, while the grantor selects which of the Persons currently holding Lot
   Authority there is acting — Ownership, or Representation of an owning Organization (#248 part 2
@@ -509,6 +510,17 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   enumerates every route under `/api/webhooks/` and fails the build if one accepts an unsigned
   request. A verified event reaches the dues ledger only through the one idempotent application
   path, and the route logs event ids, never the payload.
+- **Card and bank details never touch this site: online payments use hosted checkout (PCI DSS
+  SAQ A).** `POST /api/member/payments` (ADR 0025, #542) opens a Checkout Session on the
+  provider and answers its URL; the homeowner enters payment details on the provider's own page,
+  so no account or card number is ever sent to, rendered by, or stored on this site. The site
+  sends the provider only the amount and its own payment id, never an address or a name, and
+  keeps only normalized payment facts. Starting a payment follows the live-voting order: three
+  flags and a configured provider (`404`), the write freeze (`503`), exact `Origin` (`403`), the
+  JSON media type (`415`), the session (`401`) and `member` (`403`). The insert re-checks the
+  flags and Lot Authority, so a lost race writes nothing (`409`, or the masked `404`). The
+  return and cancel URLs are built from `BETTER_AUTH_URL`, never the request's `Host`, and the
+  return page shows the payment's stored status and never reads its query string.
 
 ## Automated safeguards
 

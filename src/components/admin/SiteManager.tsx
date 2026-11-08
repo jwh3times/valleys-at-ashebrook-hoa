@@ -32,6 +32,10 @@ const GATE_COPY: Record<SiteGateKey, { label: string; help: string }> = {
     label: 'Tenant access',
     help: 'Lets owners ask for accounts for their tenants, which the board approves, and lets approved tenants see the homeowner documents marked Tenant-Visible. Official mode must be on as well. Mark the documents tenants should see before turning this on: until then a tenant sees only the public site.',
   },
+  onlinePaymentsEnabled: {
+    label: 'Online payments',
+    help: 'Lets homeowners pay dues online from their lot records page, by bank account or card. Official mode and lot records must be on as well, and the payment provider must be set up for this site. Turning this off stops new payments only: a payment already started is still recorded when it settles.',
+  },
 };
 
 export default function SiteManager() {

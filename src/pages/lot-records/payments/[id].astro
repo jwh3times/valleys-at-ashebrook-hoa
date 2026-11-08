@@ -1,0 +1,91 @@
+---
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { env } from 'cloudflare:workers';
+import { DEFAULT_SITE_SETTINGS } from '../../../lib/types';
+import { associationDateIso, formatDate } from '../../../lib/format';
+import { formatCents } from '../../../lib/money';
+import { PAYMENT_STATUS_LABELS } from '../../../lib/payments';
+import { lotRecordsVisible } from '../../../server/lot-records/gate';
+import { fetchMemberPayment } from '../../../server/lot-records/reads';
+
+/**
+ * ONE ONLINE PAYMENT, WHERE THE PROVIDER SENDS THE HOMEOWNER BACK (ADR 0025,
+ * #542).
+ *
+ * It shows the payment's STORED status and nothing else. The provider's
+ * return address may carry a query string, and a page that believed it would
+ * tell a homeowner "received" for money that has not settled; so nothing here
+ * reads `Astro.url.search`. A bank payment shows "processing" for days, which
+ * is the truth.
+ *
+ * Reading a payment needs `officialMode` and `lotRecordsEnabled` but not
+ * `onlinePaymentsEnabled`: a homeowner can always see a payment already in
+ * flight. A payment the reader may not see — someone else's, one from before
+ * their own period, or none at all — is the generic 404, so the page never
+ * confirms that a payment id exists.
+ */
+
+const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
+if (!lotRecordsVisible(site)) {
+  return Astro.rewrite('/404');
+}
+
+const ctx = Astro.locals.authContext ?? null;
+const today = associationDateIso();
+// Anonymous readers are asked to sign in before anything is looked up, so the
+// prompt is the same for every id.
+const payment = ctx
+  ? await fetchMemberPayment(env, ctx.personId, Astro.params.id ?? '', today)
+  : null;
+if (ctx && !payment) {
+  return Astro.rewrite('/404');
+}
+
+const settled = payment?.status === 'succeeded';
+const withdrawn = payment?.ledgerState === 'withdrawn';
+const started = payment?.status === 'created';
+const settling = payment?.status === 'pending';
+
+// One household's payment, rendered into the page: never cacheable.
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+---
+
+<BaseLayout title="Your payment" description="An online dues payment.">
+  <div class="page-section">
+    <p class="eyebrow">Lot records</p>
+    <h1 class="page-title" style="margin-bottom: 36px;">
+      Your payment
+    </h1>
+
+    {!payment ? (
+      <p class="page-lead">
+        Sign in to see this payment. <a href="/login">Sign in</a>.
+      </p>
+    ) : (
+      <section class="lot-record">
+        <h2 class="lot-record__address">{payment.address}</h2>
+        <p class="lot-record__balance">
+          {formatCents(payment.amountCents)} &middot;{' '}
+          {withdrawn ? 'Withdrawn' : PAYMENT_STATUS_LABELS[payment.status]}
+        </p>
+        <p class="muted">
+          Started {formatDate(associationDateIso(new Date(payment.createdAt)))}.
+        </p>
+        <p>
+          {withdrawn
+            ? 'The payment provider took this payment back, so it no longer counts toward your balance. The board has been told.'
+            : settled
+              ? 'The payment provider has confirmed this payment, and it is on your lot’s account.'
+              : settling
+                ? 'The payment provider has this payment and is processing it. A bank payment can take several business days; it appears on your lot’s account once it is confirmed. You do not need to pay again.'
+                : started
+                  ? 'The payment provider has not confirmed this payment yet. If you finished paying, it will show here once they do, usually within minutes. If you left the payment page without finishing, nothing was taken, and the payment is canceled within the hour.'
+                  : 'No money was taken for this payment. You can start a new one from your lot records.'}
+        </p>
+        <p>
+          <a href="/lot-records">Back to your lot records</a>
+        </p>
+      </section>
+    )}
+  </div>
+</BaseLayout>

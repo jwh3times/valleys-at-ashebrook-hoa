@@ -11,6 +11,8 @@ import {
   type MemberLotViolation,
 } from '../server/lot-records/reads';
 import { lotRecordsVisible } from '../server/lot-records/gate';
+import { paymentsStartable } from '../server/payments/gate';
+import PayDuesForm from '../components/member/PayDuesForm';
 import { describeBalance, formatCents } from '../lib/money';
 import {
   DUES_CHARGE_CATEGORY_LABELS,
@@ -43,9 +45,10 @@ import {
  * two enforcement histories, and one merged list carries a figure that is true
  * of neither.
  *
- * Rendered entirely server-side with no client directive, per the rendering
- * model: the records ship as HTML, and there is nothing here for a client
- * island to re-fetch or to filter.
+ * Rendered server-side, per the rendering model: the records ship as HTML.
+ * The one island is the Pay action (ADR 0025, #542), present only when a
+ * homeowner may start an online payment; it fetches nothing and filters
+ * nothing, it only starts a payment and leaves for the provider's page.
  */
 
 // Astro.locals.site is set by middleware on every real request; fall back to
@@ -67,6 +70,9 @@ const member = ctx !== null && ctx.capabilities.has('member');
 const scopable = member && ctx!.personId !== null;
 
 const today = associationDateIso();
+// All three flags and a configured provider. The route re-checks every one of
+// them inside its insert; this only decides whether to offer the action.
+const payable = paymentsStartable(site, env);
 // ALL THREE reads are scoped from `personId` by the roster, never from the lot
 // array on the caller's context: that array is what the request asserts, and
 // ADR 0024 fixes the homeowner read's input as the Person. It also means these
@@ -266,9 +272,28 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
               {lot.hasFutureEntry
                 ? ', and it includes entries dated ahead of today'
                 : ''}
-              . Payments are recorded by the board — see{' '}
-              <a href="/dues">Dues &amp; Assessments</a> for how to pay.
+              .{' '}
+              {payable ? (
+                <>
+                  Pay online below, or see{' '}
+                  <a href="/dues">Dues &amp; Assessments</a> for other ways to
+                  pay.
+                </>
+              ) : (
+                <>
+                  Payments are recorded by the board — see{' '}
+                  <a href="/dues">Dues &amp; Assessments</a> for how to pay.
+                </>
+              )}
             </p>
+            {payable && (
+              <PayDuesForm
+                client:load
+                lotId={lot.lotId}
+                address={lot.address}
+                balanceCents={lot.balanceCents}
+              />
+            )}
 
             {lot.lines.length === 0 ? (
               <p>

@@ -244,6 +244,10 @@ _Avoid_: Starting balance, previous balance, balance before the earliest entry
 The correction path for a Dues Ledger Entry: an appended entry negating exactly one earlier one. An entry may be reversed at most once, and a Reversal may not itself be reversed. Unlike a Voided Lot Record it hides nothing — both entries stay visible to the Lot and to the Board.
 _Avoid_: Void, deletion, edit, un-payment
 
+**Online Payment**:
+A homeowner's attempt to pay a Lot through the payment provider. It posts a payment Dues Ledger Entry only once the provider confirms the money moved, and it may never: it can be abandoned, fail or expire. Money that comes back after a Reversal of it, such as a dispute the association won, is posted as a new payment entry, never as an undoing of the Reversal.
+_Avoid_: Transaction, checkout, charge, pending entry
+
 ## Documents
 
 **Tenant-Visible Document**:

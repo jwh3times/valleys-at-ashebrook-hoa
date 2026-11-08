@@ -13,7 +13,7 @@ const name = displayName(site);
 const operator = official
   ? `the ${OFFICIAL_ORG_NAME} board`
   : 'the resident who maintains this site';
-const EFFECTIVE = '26 October 2026';
+const EFFECTIVE = '7 November 2026';
 ---
 
 <BaseLayout
@@ -135,6 +135,27 @@ const EFFECTIVE = '26 October 2026';
           was sent to and links that account to the tenant's roster record, just
           as an owner's verification is recorded.
         </p>
+
+        <h3>Online dues payments</h3>
+        <p>
+          When this feature is turned on, an owner can pay dues online. The
+          payment is made on a secure page run by Stripe, which processes it.
+          Stripe receives the bank account or card details you enter there, and
+          asks for what it needs to process the payment, such as your name and
+          email address, under{' '}
+          <a href="https://stripe.com/privacy">its own privacy policy</a>. This
+          site never sees or stores bank or card details. We send Stripe only
+          the amount and a reference for the payment, never your address or
+          anything else about your lot or its owners.
+        </p>
+        <p>
+          From Stripe we keep only the facts of each payment: its amount,
+          currency and status, the times Stripe reports, Stripe's reference for
+          it, and whether it was later withdrawn, returned, or disputed. We
+          never keep Stripe's full messages. The lot's owners see their payments
+          with the lot's other dues records, and the board sees every payment
+          and anything about one that needs its attention.
+        </p>
       </>
     )}
 
@@ -187,8 +208,8 @@ const EFFECTIVE = '26 October 2026';
     <p>
       We do not sell personal information or use it for advertising. We share it
       only with the service providers named above to run the site (Cloudflare,
-      Google, Resend, Twilio, Web3Forms, and Anthropic), or when the law
-      requires it.
+      Google, Resend, Twilio, Web3Forms, and Anthropic, and Stripe when online
+      payments are on), or when the law requires it.
     </p>
 
     <h2>Google user data</h2>
@@ -225,6 +246,12 @@ const EFFECTIVE = '26 October 2026';
         <li>
           Tenant invitation links: good for 14 days, and deleted 30 days after
           they expire.
+        </li>
+      )}
+      {official && (
+        <li>
+          Online payment records: kept with the lot's dues records, for as long
+          as the site serves the association.
         </li>
       )}
       <li>The administrative change log: permanently.</li>

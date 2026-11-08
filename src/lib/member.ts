@@ -96,3 +96,25 @@ export async function claimTenancy(token: string): Promise<void> {
   if (res.ok) return;
   throw new Error(await refusalMessage(res, 'Claim failed'));
 }
+
+/**
+ * Starts an online dues payment on a Lot (ADR 0025, #542) and answers the
+ * provider's checkout address for the browser to go to. Throws with the
+ * server's message on a refusal.
+ */
+export async function startDuesPayment(
+  lotId: string,
+  amountCents: number,
+): Promise<string> {
+  const res = await fetch('/api/member/payments', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ lotId, amountCents }),
+  });
+  if (!res.ok)
+    throw new Error(
+      await refusalMessage(res, 'The payment could not be started'),
+    );
+  const { url } = (await res.json()) as { url: string };
+  return url;
+}

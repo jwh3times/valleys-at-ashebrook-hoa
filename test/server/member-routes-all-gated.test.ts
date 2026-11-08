@@ -1,9 +1,11 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { settings } from '../../src/server/db/schema';
 import { callerContext } from './caller-context';
+import { setPaymentProviderForTests } from '../../src/server/payments/registry';
+import { fakeProvider } from './payments-fixtures';
 
 /**
  * Structural guard for the homeowner-write surface, sibling of
@@ -15,6 +17,11 @@ import { callerContext } from './caller-context';
  * feature flags are on. Only the voting route additionally hides behind the
  * liveVotingEnabled setting. A new route shipped without its per-route guard
  * is what makes this suite fail.
+ *
+ * The payment routes' own gates (`lotRecordsEnabled`, `onlinePaymentsEnabled`
+ * and a configured provider) follow `officialMode` here and a fake provider is
+ * injected, so those routes reach their session check rather than passing on
+ * a 404 that never exercised it.
  */
 const modules = {
   ...import.meta.glob('../../src/pages/api/member/**/*.ts', { eager: true }),
@@ -25,7 +32,10 @@ const VERBS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+  setPaymentProviderForTests(fakeProvider());
 });
+
+afterAll(() => setPaymentProviderForTests(null));
 
 beforeEach(async () => {
   await getDb(env).delete(settings).where(eq(settings.key, 'site'));
@@ -39,6 +49,8 @@ async function setSiteSettings(official: boolean, live: boolean) {
     value: JSON.stringify({
       officialMode: official,
       liveVotingEnabled: live,
+      lotRecordsEnabled: official,
+      onlinePaymentsEnabled: official,
     }),
     updatedAt: new Date(),
   });
