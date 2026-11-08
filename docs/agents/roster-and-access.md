@@ -75,8 +75,8 @@ checks the same switch and deletes nothing while it is on, still reporting. The 
 `writeFreezeError(env, request)` takes no scope argument — it derives coverage from the request's
 own path, so no call site can hold a stale opinion about what its surface freezes, and middleware
 and the per-route guards cannot drift. It is called from `requireBoard`, `requireMemberApi`,
-`requireVotingApi`, both `/api/verify/*` routes, and `src/middleware.ts` — whose final `else`
-branch catches any surface no named branch claims.
+`requireVotingApi`, both `/api/verify/*` routes, the payment webhook's `handlePaymentWebhook`, and
+`src/middleware.ts` — whose final `else` branch catches any surface no named branch claims.
 
 Three suites hold it: `test/unit/freeze-coverage.test.ts` enumerates every route module and fails
 if a mutating route ends up live without being declared in both that test and `ALWAYS_LIVE`;

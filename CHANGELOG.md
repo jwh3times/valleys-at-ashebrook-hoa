@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.10.52] - 2026-11-07
+
+### Added
+
+- **The site can now hear from the payment provider, in the groundwork for online dues payments;
+  nothing here can be seen or used yet.** When Stripe confirms, withdraws or disputes a payment,
+  it tells the site at `POST /api/webhooks/payments`, and the site records the fact on the lot's
+  dues ledger once, however many times Stripe repeats it. A delivery that is not signed with the
+  site's Stripe secret records nothing. A delivery the site could not record, or one that arrives
+  during maintenance, is answered so that Stripe tries again. A refund comes off the ledger at its
+  own amount, never counted twice. Production has no payment provider configured, so there the
+  address does not exist; `SETUP.md` explains how to point a development copy at a Stripe sandbox
+  and forward its webhooks locally (#538, #541).
+
 ## [2.10.51] - 2026-11-07
 
 ### Added
@@ -4861,7 +4875,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.51...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.52...HEAD
+[2.10.52]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.51...v2.10.52
 [2.10.51]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.50...v2.10.51
 [2.10.50]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.49...v2.10.50
 [2.10.49]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.48...v2.10.49
