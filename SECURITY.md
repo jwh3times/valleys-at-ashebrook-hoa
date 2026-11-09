@@ -509,7 +509,9 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   Middleware adds no gate beyond the freeze, so `test/server/webhook-routes-all-gated.test.ts`
   enumerates every route under `/api/webhooks/` and fails the build if one accepts an unsigned
   request. A verified event reaches the dues ledger only through the one idempotent application
-  path, and the route logs event ids, never the payload.
+  path, and the route logs event ids, never the payload. The daily reconciliation job (#543)
+  reads the same facts from the provider's API with the configured key, never from a caller, and
+  feeds them through that same path, logging counts and payment ids only.
 - **Card and bank details never touch this site: online payments use hosted checkout (PCI DSS
   SAQ A).** `POST /api/member/payments` (ADR 0025, #542) opens a Checkout Session on the
   provider and answers its URL; the homeowner enters payment details on the provider's own page,

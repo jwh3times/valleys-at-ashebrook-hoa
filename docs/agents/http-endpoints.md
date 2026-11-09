@@ -803,7 +803,9 @@ invalid-invitation` for every unknown, expired, used, superseded or contact-gone
   when unverified. Each normalized fact is then applied through `applyPaymentEvent` in its own
   batch, in order; `200` when every one was applied, a duplicate or unmatched, and when the event
   type maps to no fact; `500` on any failure, so the provider redelivers and the earlier facts
-  re-apply as duplicates. It reads no site flag. Only `POST` is exported, and
+  re-apply as duplicates. It reads no site flag. A delivery the provider never makes is recovered
+  by the daily reconciliation job (`src/server/payments/reconcile.ts`, #543) through the same
+  application path. Only `POST` is exported, and
   `test/server/webhook-routes-all-gated.test.ts` holds every module under `api/webhooks/` to `400`
   unsigned and `404` unconfigured.
 - Better Auth handler: `/api/auth/[...all]`.
