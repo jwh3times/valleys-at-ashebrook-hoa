@@ -53,7 +53,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `postDuesAdjustment`, `reverseDuesEntry`, `postBulkAssessment`, and `newOperationKey` (mints the
   `crypto.randomUUID()` key a form holds in a ref for its lifetime, so a retry re-sends the same key
   and a new intent gets a new one) — back the admin `DuesLedgerManager` panel, the only caller of
-  any of them.
+  any of them. Online-payment helpers (ADR 0025, #545) — `fetchBoardPayments` (the route's `404`
+  without a configured provider read as `{ enabled: false, … }`), `fetchBoardPayment`,
+  `resyncBoardPayment`, `resolvePaymentException`, and `applyUnmatchedPayment` — back the admin
+  `PaymentsManager` panel, which mints each form's key with `newOperationKey` the same way.
 - `src/lib/roster-admin.ts` (ADR 0022 phase 3e, #221) handles board — and, for its three
   System-Administrator-only actions, capability-gated — writes to every phase 3b/3c/3d roster admin
   surface, one group per admin panel: Roster (`fetchRoster`, lot create/update/retire/correct, party
@@ -395,7 +398,8 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   and a configured provider, without `onlinePaymentsEnabled`, deciding whether `/lot-records`
   lists payments, whether the return page exists, and the refresh route's `404`) and
   `ONLINE_PAYMENTS_ENABLED_SQL`. `checkout.ts`'s `startPayment` is the
-  only writer of a new `payments` row: it resolves the account's Person one consolidation hop to
+  only writer of a new `checkout` payment (the board's `board_applied` payments are `apply.ts`'s,
+  below): it resolves the account's Person one consolidation hop to
   check Lot Authority (the initiator stays the account's own Person, since it records who acted), opens the provider's checkout under a payment id it mints, then writes the
   row with the provider's reference in one `INSERT … SELECT` that re-checks the flags and Lot
   Authority, so the row is never updated outside `apply.ts`. The shared amount bounds
@@ -432,6 +436,22 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   outlives the flags. It throws `InvalidPaymentEvent` for a fact no adapter should produce, storing
   nothing. Its `openStalePendingExceptions` opens `stale_pending` for a payment still `pending`
   ten days after it started, once per payment ever. (#539, #540, #541, #543)
+  `apply.ts` also holds the board's two writes behind `/api/admin/payments` (#545), each keyed by
+  the board's operation key as the id of the row it creates, so a retry is told apart from someone
+  else getting there first. `resolvePaymentException` appends one resolution row.
+  `applyUnmatchedPayment` applies an unmatched settled USD sale (`UNMATCHED_SALE_SQL`, which the
+  board's queue reads too) to a Lot in three idempotent steps: a `board_applied` payment carrying
+  the sale's reference, whose INSERT re-checks the Lot Records flags (the only payment write that
+  reads them); the stored fact replayed through `applyPaymentEvent` as a `board` fact; and the
+  exception resolved `applied_to_lot`. Applying again resumes an apply interrupted after its first
+  step. `board.ts` is the board's read side, unscoped by Lot Authority because the caller passed
+  `requireBoard`: `listBoardPayments`, `listOpenPaymentExceptions` (the queue, oldest first),
+  `fetchBoardPaymentDetail` (a payment beside every stored fact, the ledger entries it wrote and
+  every exception with its resolution) and `resyncBoardPayment`, the on-demand pull, which unlike
+  the homeowner's refresh pulls in any status with no rate limit and writes only through
+  `applyPaymentEvent`. The board panel is `src/components/admin/PaymentsManager.tsx`, the
+  **Payments** tab after **Dues ledger**, whose labels for exception reasons, resolutions, fact
+  types, `via` and outcomes live in `src/lib/payments.ts`.
   `reconcile.ts`'s `reconcilePayments(env, now)` is the daily job's body (#543): silent with no
   provider configured and skipped during the write freeze, it applies the provider's events since
   the cursor in the `settings` row `payments_event_cursor` (`{provider, cursor}`; another

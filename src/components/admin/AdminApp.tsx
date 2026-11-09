@@ -20,6 +20,7 @@ import ElectionsManager from './ElectionsManager';
 import ProxiesManager from './ProxiesManager';
 import LotViolationsManager from './LotViolationsManager';
 import DuesLedgerManager from './DuesLedgerManager';
+import PaymentsManager from './PaymentsManager';
 import AssistantChat from './AssistantChat';
 import ReportsManager from './ReportsManager';
 import DriveConnectionCard, { DriveStatusLine } from './DriveConnectionCard';
@@ -116,6 +117,14 @@ const SECTIONS = [
     key: 'dues-ledger',
     label: 'Dues ledger',
     render: () => <DuesLedgerManager />,
+  },
+  {
+    // ADR 0025 (#545): online payments, the provider's facts about each, and
+    // the exceptions they leave for the board. Beside the ledger they credit;
+    // it explains itself while no payment provider is configured.
+    key: 'payments',
+    label: 'Payments',
+    render: () => <PaymentsManager />,
   },
   { key: 'dues', label: 'Dues', render: () => <DuesManager /> },
   {

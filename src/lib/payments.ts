@@ -1,5 +1,13 @@
 import { formatCents } from './money';
-import type { PaymentLedgerState, PaymentStatus } from './types';
+import type {
+  PaymentEventOutcome,
+  PaymentEventType,
+  PaymentEventVia,
+  PaymentExceptionReason,
+  PaymentLedgerState,
+  PaymentResolution,
+  PaymentStatus,
+} from './types';
 
 /**
  * The bounds of one online dues payment (ADR 0025, #542), shared by the Pay
@@ -70,3 +78,58 @@ export function paymentStatusLabel(
 export function paymentInFlight(status: PaymentStatus): boolean {
   return status === 'created' || status === 'pending';
 }
+
+/**
+ * Why an exception opened, in the board's words (#538's user story 27), so a
+ * board member knows what to look at before opening anything.
+ */
+export const PAYMENT_EXCEPTION_REASON_LABELS: Record<
+  PaymentExceptionReason,
+  string
+> = {
+  amount_mismatch: 'The amount paid differs from the amount asked',
+  currency_mismatch: 'Paid in a currency other than US dollars',
+  unmatched_payment: 'Money that matches no payment started on this site',
+  funds_withdrawn: 'The money was taken back after it was credited',
+  dispute_opened: 'The payer disputed the payment',
+  partial_withdrawal: 'Part of the payment was taken back',
+  withdrawal_without_credit: 'Money was taken back that was never credited',
+  possible_duplicate: 'Looks like a check or payment already entered by hand',
+  stale_pending: 'Still processing ten days after it started',
+};
+
+/** How an exception was closed, in the board's words. */
+export const PAYMENT_RESOLUTION_LABELS: Record<PaymentResolution, string> = {
+  reviewed_no_action: 'Reviewed — nothing to do',
+  corrected_by_entry: 'Corrected with a ledger entry',
+  applied_to_lot: 'Applied to a lot',
+  funds_reinstated: 'The money came back',
+  other: 'Other (see the note)',
+};
+
+/** What a provider fact said, in the board's words. */
+export const PAYMENT_EVENT_TYPE_LABELS: Record<PaymentEventType, string> = {
+  payment_pending: 'Processing',
+  payment_succeeded: 'Paid',
+  payment_failed: 'Failed',
+  payment_canceled: 'Canceled',
+  funds_withdrawn: 'Money taken back',
+  funds_reinstated: 'Money returned',
+  dispute_opened: 'Disputed',
+};
+
+/** How a fact reached the site. */
+export const PAYMENT_EVENT_VIA_LABELS: Record<PaymentEventVia, string> = {
+  webhook: 'sent by the provider',
+  reconciliation: 'asked of the provider',
+  board: 'applied by the board',
+};
+
+/** What recording a fact did. */
+export const PAYMENT_EVENT_OUTCOME_LABELS: Record<PaymentEventOutcome, string> =
+  {
+    applied: 'recorded',
+    duplicate_effect: 'already recorded',
+    unmatched: 'matched no payment',
+    exception: 'sent to the board',
+  };

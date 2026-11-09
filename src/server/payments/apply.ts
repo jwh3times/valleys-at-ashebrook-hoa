@@ -6,8 +6,10 @@ import {
   type PaymentEventOutcome,
   type PaymentEventType,
   type PaymentExceptionReason,
+  type PaymentResolution,
   type PaymentStatus,
 } from '../../lib/types';
+import { LOT_RECORDS_ENABLED_SQL } from '../lot-records/gate';
 import type { NormalizedPaymentEvent } from './provider';
 
 /**
@@ -912,4 +914,290 @@ export async function claimPaymentPull(
     .bind(nowMs, paymentId, provider, nowMs - everyMs)
     .run();
   return result.meta.changes === 1;
+}
+
+/**
+ * Whether exception `x`, joined to its fact `e`, can be applied to a Lot: an
+ * unmatched sale that settled in US dollars and names a provider reference,
+ * so the payment it creates can be matched by every later fact (#545). The
+ * board's queue reads it, and the apply INSERT asks it again.
+ */
+export const UNMATCHED_SALE_SQL = `(x.reason = 'unmatched_payment'
+   AND x.payment_id IS NULL
+   AND e.type = 'payment_succeeded'
+   AND e.currency = 'usd'
+   AND e.amount_cents > 0
+   AND e.provider_payment_ref IS NOT NULL)`;
+
+/** What resolving one exception came to (#545). */
+export type ResolveOutcome =
+  /** The resolution row was written now. */
+  | 'resolved'
+  /** This same submission was already recorded; nothing was written twice. */
+  | 'retried'
+  /** Someone else resolved it first. */
+  | 'already_resolved'
+  | 'not_found'
+  /** The operation key already names a resolution of a different exception. */
+  | 'key_reused';
+
+/**
+ * Closes one exception with an appended resolution row (ADR 0025): the opening
+ * row is never edited, and an exception resolves once, by
+ * `payment_exception_resolutions_exception_unq`.
+ *
+ * The board's operation key is the new row's id, so a retry of the same
+ * submission is told apart from a second board member getting there first —
+ * both write nothing, but only one of them was already this caller's doing.
+ */
+export async function resolvePaymentException(
+  env: Env,
+  input: {
+    /** The operation key minted when the form opened. */
+    resolutionId: string;
+    exceptionId: string;
+    resolution: Exclude<PaymentResolution, 'funds_reinstated'>;
+    note: string | null;
+    accountId: string;
+  },
+  now: Date,
+): Promise<ResolveOutcome> {
+  try {
+    const result = await env.DATABASE.prepare(
+      `INSERT INTO payment_exception_resolutions
+         (id, exception_id, resolution, note, acting_account_id, resolved_at)
+       SELECT ?1, x.id, ?3, ?4, ?5, ?6
+         FROM payment_exceptions x
+        WHERE x.id = ?2
+          AND NOT EXISTS (SELECT 1 FROM payment_exception_resolutions r
+                           WHERE r.exception_id = x.id)`,
+    )
+      .bind(
+        input.resolutionId,
+        input.exceptionId,
+        input.resolution,
+        input.note,
+        input.accountId,
+        now.getTime(),
+      )
+      .run();
+    if (result.meta.changes === 1) return 'resolved';
+  } catch (error) {
+    // The key already used (primary key), or a concurrent resolution (the
+    // per-exception index): either way, the reads below say which.
+    if (!String(error).includes('UNIQUE')) throw error;
+  }
+  return whyNotResolved(env, input);
+}
+
+async function whyNotResolved(
+  env: Env,
+  input: { resolutionId: string; exceptionId: string },
+): Promise<Exclude<ResolveOutcome, 'resolved'>> {
+  const byKey = await env.DATABASE.prepare(
+    `SELECT exception_id FROM payment_exception_resolutions WHERE id = ?`,
+  )
+    .bind(input.resolutionId)
+    .first<{ exception_id: string }>();
+  if (byKey)
+    return byKey.exception_id === input.exceptionId ? 'retried' : 'key_reused';
+  const exists = await env.DATABASE.prepare(
+    `SELECT 1 FROM payment_exceptions WHERE id = ?`,
+  )
+    .bind(input.exceptionId)
+    .first();
+  return exists ? 'already_resolved' : 'not_found';
+}
+
+/** What applying an unmatched payment to a Lot came to (#545). */
+export type ApplyUnmatchedOutcome =
+  | { kind: 'applied'; paymentId: string }
+  | { kind: Exclude<ResolveOutcome, 'resolved'> }
+  /** Not a settled USD sale with a reference, so there is nothing to credit. */
+  | { kind: 'not_applicable' }
+  /** The Lot does not exist, or Lot Records is switched off. */
+  | { kind: 'lot_unavailable' }
+  /** The provider's reference already belongs to another payment. */
+  | { kind: 'reference_taken' };
+
+type NotApplied = Exclude<ApplyUnmatchedOutcome, { kind: 'applied' }>;
+
+/**
+ * Applies a payment taken outside the site — a Payment Link sale, say — to a
+ * Lot, exactly once (ADR 0025, #545).
+ *
+ * 1. A `board_applied` payment is written for the Lot, carrying the sale's
+ *    provider reference, so every later fact about that sale (a refund, a
+ *    dispute) matches it. Its id is the board's operation key. The INSERT
+ *    re-checks the Lot Records flags, the Lot, and that the exception is still
+ *    open and still a settled USD sale.
+ * 2. The stored fact is replayed through `applyPaymentEvent` as a `board`
+ *    fact, under a stable id derived from the original, so it credits the Lot
+ *    once under the new payment's credit key, with the same checks as any
+ *    settlement (a look-alike check still opens `possible_duplicate`).
+ * 3. The exception is resolved `applied_to_lot`, naming the acting account.
+ *
+ * These are three writes, not one batch, because step 2 is the application
+ * path's own batch. Each is idempotent, and an apply interrupted after step 1
+ * is finished by trying again: the reference then already belongs to a
+ * `board_applied` payment on the same Lot, which is taken as this apply's own.
+ * Applying a completed one again writes nothing, since its exception is
+ * resolved and the reference taken.
+ */
+export async function applyUnmatchedPayment(
+  env: Env,
+  input: {
+    /** The operation key minted when the form opened. */
+    key: string;
+    exceptionId: string;
+    lotId: string;
+    accountId: string;
+  },
+  now: Date,
+): Promise<ApplyUnmatchedOutcome> {
+  const source = await env.DATABASE.prepare(
+    `SELECT e.id, e.provider, e.provider_payment_ref, e.amount_cents,
+            e.currency, e.occurred_at, ${UNMATCHED_SALE_SQL} AS applicable,
+            (SELECT r.id FROM payment_exception_resolutions r
+              WHERE r.exception_id = x.id) AS resolution_id
+       FROM payment_exceptions x
+       LEFT JOIN payment_events e ON e.id = x.payment_event_id
+      WHERE x.id = ?`,
+  )
+    .bind(input.exceptionId)
+    .first<{
+      id: string | null;
+      provider: string | null;
+      provider_payment_ref: string | null;
+      amount_cents: number | null;
+      currency: string | null;
+      occurred_at: number | null;
+      applicable: number | null;
+      resolution_id: string | null;
+    }>();
+  if (!source) return { kind: 'not_found' };
+  if (source.resolution_id !== null)
+    return { kind: closedBy(source.resolution_id, input.key) };
+  if (
+    source.applicable !== 1 ||
+    source.id === null ||
+    source.provider === null ||
+    source.amount_cents === null ||
+    source.currency === null ||
+    source.occurred_at === null
+  )
+    return { kind: 'not_applicable' };
+
+  const paymentId = await createBoardAppliedPayment(env, input, now);
+  if (typeof paymentId !== 'string') return paymentId;
+
+  await applyPaymentEvent(
+    env,
+    {
+      provider: source.provider,
+      // Stable, so an interrupted apply tried again stores the replay once.
+      providerEventId: `board:${source.id}`,
+      providerPaymentRef: source.provider_payment_ref,
+      type: 'payment_succeeded',
+      amountCents: source.amount_cents,
+      currency: source.currency,
+      occurredAt: new Date(source.occurred_at),
+      via: 'board',
+    },
+    now,
+  );
+
+  // The Lot is credited now, so the answer is "applied" whatever this step
+  // finds: a board member who resolved the exception by hand in the moment
+  // between leaves their resolution standing, and an exception left open (a
+  // reused key) is closed by applying it again, which resumes this apply.
+  await resolvePaymentException(
+    env,
+    {
+      resolutionId: input.key,
+      exceptionId: input.exceptionId,
+      resolution: 'applied_to_lot',
+      note: null,
+      accountId: input.accountId,
+    },
+    now,
+  );
+  return { kind: 'applied', paymentId };
+}
+
+/**
+ * An exception already resolved: by this same submission (its key is the
+ * resolution's id), or by someone else.
+ */
+const closedBy = (resolutionId: string, key: string) =>
+  resolutionId === key ? ('retried' as const) : ('already_resolved' as const);
+
+/**
+ * Step 1 of `applyUnmatchedPayment`: the `board_applied` payment's id, or why
+ * there is none.
+ */
+async function createBoardAppliedPayment(
+  env: Env,
+  input: { key: string; exceptionId: string; lotId: string },
+  now: Date,
+): Promise<string | NotApplied> {
+  const nowMs = now.getTime();
+  try {
+    const result = await env.DATABASE.prepare(
+      `INSERT INTO payments
+         (id, lot_id, amount_cents, initiated_by_person_id, origin, provider,
+          provider_payment_ref, status, ledger_state, created_at, updated_at)
+       SELECT ?1, lots.id, e.amount_cents, NULL, 'board_applied', e.provider,
+              e.provider_payment_ref, 'created', 'none', ?4, ?4
+         FROM payment_exceptions x
+         JOIN payment_events e ON e.id = x.payment_event_id
+         JOIN lots ON lots.id = ?3
+        WHERE x.id = ?2
+          AND ${UNMATCHED_SALE_SQL}
+          AND NOT EXISTS (SELECT 1 FROM payment_exception_resolutions r
+                           WHERE r.exception_id = x.id)
+          AND ${LOT_RECORDS_ENABLED_SQL}`,
+    )
+      .bind(input.key, input.exceptionId, input.lotId, nowMs)
+      .run();
+    if (result.meta.changes === 1) return input.key;
+  } catch (error) {
+    if (!String(error).includes('UNIQUE')) throw error;
+    return interruptedApply(env, input);
+  }
+  // Nothing written: the exception was resolved in the meantime, or the Lot
+  // or the flags were not there.
+  const resolution = await env.DATABASE.prepare(
+    `SELECT id FROM payment_exception_resolutions WHERE exception_id = ?`,
+  )
+    .bind(input.exceptionId)
+    .first<{ id: string }>();
+  if (resolution) return { kind: closedBy(resolution.id, input.key) };
+  return { kind: 'lot_unavailable' };
+}
+
+/**
+ * The INSERT hit a unique key: the sale's reference already belongs to a
+ * payment, or the operation key is already some payment's id. A
+ * `board_applied` payment for this reference on the same Lot is an earlier
+ * apply that stopped before it finished, so it is carried on.
+ */
+async function interruptedApply(
+  env: Env,
+  input: { key: string; exceptionId: string; lotId: string },
+): Promise<string | NotApplied> {
+  const holder = await env.DATABASE.prepare(
+    `SELECT p.id, p.lot_id, p.origin
+       FROM payment_exceptions x
+       JOIN payment_events e ON e.id = x.payment_event_id
+       JOIN payments p ON p.provider = e.provider
+                      AND p.provider_payment_ref = e.provider_payment_ref
+      WHERE x.id = ?`,
+  )
+    .bind(input.exceptionId)
+    .first<{ id: string; lot_id: string; origin: string }>();
+  if (!holder) return { kind: 'key_reused' };
+  if (holder.origin === 'board_applied' && holder.lot_id === input.lotId)
+    return holder.id;
+  return { kind: 'reference_taken' };
 }
