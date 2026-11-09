@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   fireEvent,
   render,
@@ -545,5 +545,107 @@ describe('the exceptions queue', () => {
     expect(
       screen.queryByRole('button', { name: /^Apply payment to a lot/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("the treasurer's export", () => {
+  const CSV =
+    'Effective day,Lot,Kind,Amount,Payment reference,Entry id\r\n' +
+    '2026-11-02,1 Ashebrook Lane,Payment,-450.00,cs_test_one,entry-1\r\n';
+
+  // The click spy below must not outlive this block.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Captures what the panel hands the browser to save. */
+  function captureDownloads() {
+    const saved: { name: string; blob: Blob }[] = [];
+    const blobs = new Map<string, Blob>();
+    Object.defineProperty(URL, 'createObjectURL', {
+      value: vi.fn((blob: Blob) => {
+        const url = `blob:export-${blobs.size}`;
+        blobs.set(url, blob);
+        return url;
+      }),
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      value: vi.fn(),
+      configurable: true,
+      writable: true,
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push({ name: this.download, blob: blobs.get(this.href)! });
+    });
+    return saved;
+  }
+
+  const chooseDays = (first: string, last: string) => {
+    fireEvent.change(screen.getByLabelText('First day'), {
+      target: { value: first },
+    });
+    fireEvent.change(screen.getByLabelText('Last day'), {
+      target: { value: last },
+    });
+  };
+
+  it('saves the provider-sourced entries for the chosen days as a CSV file', async () => {
+    const saved = captureDownloads();
+    mocked.exportProviderEntries.mockResolvedValue(CSV);
+    render(<PaymentsManager />);
+    await loaded();
+
+    chooseDays('2026-11-01', '2026-11-30');
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(mocked.exportProviderEntries).toHaveBeenCalledWith({
+      from: '2026-11-01',
+      to: '2026-11-30',
+    });
+    expect(saved[0].name).toBe('provider-entries-2026-11-01-to-2026-11-30.csv');
+    expect(saved[0].blob.type).toBe('text/csv;charset=utf-8');
+    expect(await saved[0].blob.text()).toBe(CSV);
+  });
+
+  it('asks for both days, in order, before exporting, and sends nothing', async () => {
+    const saved = captureDownloads();
+    render(<PaymentsManager />);
+    await loaded();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    expect(
+      await screen.findByText(/choose the first and last day/i),
+    ).toBeInTheDocument();
+
+    chooseDays('2026-11-30', '2026-11-01');
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    expect(
+      await screen.findByText(/last day must not be before the first/i),
+    ).toBeInTheDocument();
+
+    expect(mocked.exportProviderEntries).not.toHaveBeenCalled();
+    expect(saved).toHaveLength(0);
+  });
+
+  it('says why the site refused an export, and saves nothing', async () => {
+    const saved = captureDownloads();
+    mocked.exportProviderEntries.mockRejectedValue(
+      new Error('The site is read-only for maintenance'),
+    );
+    render(<PaymentsManager />);
+    await loaded();
+
+    chooseDays('2026-11-01', '2026-11-30');
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    expect(
+      await screen.findByText(/Error: The site is read-only for maintenance/),
+    ).toBeInTheDocument();
+    expect(saved).toHaveLength(0);
   });
 });
