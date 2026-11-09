@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.1] - 2026-11-08
+
+### Added
+
+- **A payment whose message from Stripe went missing is still recorded within a day (#538,
+  #543).** Once a day the site asks Stripe what has happened since it last asked, and checks on
+  every payment still unconfirmed an hour after it started. Anything Stripe reports goes through
+  the same path as Stripe's own messages, so a payment already recorded is never counted twice.
+  This still works when the daily check has not run for longer than the 30 days Stripe keeps its
+  messages, because each unconfirmed payment is checked directly. A payment still waiting to settle
+  ten days after it started is flagged for the board, once. The check pauses during maintenance
+  and catches up the next day. No payment provider is configured in production, so there it does
+  nothing.
+
 ## [2.11.0] - 2026-11-07
 
 ### Added
@@ -4899,7 +4913,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.0...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.1...HEAD
+[2.11.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.0...v2.11.1
 [2.11.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.52...v2.11.0
 [2.10.52]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.51...v2.10.52
 [2.10.51]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.50...v2.10.51

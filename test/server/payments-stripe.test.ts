@@ -521,3 +521,307 @@ describe('starting a Stripe Checkout Session', () => {
     await expect(adapter().createCheckout(request)).rejects.toThrow();
   });
 });
+
+/**
+ * A stubbed Stripe that answers each GET by its path, and the URLs it was
+ * asked, for the reconciliation pull (#543).
+ */
+function stubStripe(answer: (url: URL) => Response) {
+  const calls: { url: URL; headers: Headers }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(urlOf(input));
+      calls.push({ url, headers: new Headers(init?.headers) });
+      return answer(url);
+    }),
+  );
+  return calls;
+}
+
+const CHARGE_CREATED_S = NOW_S - 3 * 86_400;
+
+/** A session as `retrievePayment` asks for it: intent and charge expanded. */
+const expandedSession = (
+  overrides: Record<string, unknown> = {},
+  intent: Record<string, unknown> = {},
+) =>
+  session({
+    created: NOW_S - 4 * 86_400,
+    expires_at: NOW_S - 4 * 86_400 + 3600,
+    payment_intent: {
+      id: INTENT_ID,
+      object: 'payment_intent',
+      status: 'succeeded',
+      created: NOW_S - 4 * 86_400,
+      latest_charge: {
+        id: 'ch_test_1',
+        object: 'charge',
+        created: CHARGE_CREATED_S,
+      },
+      ...intent,
+    },
+    ...overrides,
+  });
+
+const pulledFact = (type: string, occurredAtS: number) => ({
+  provider: 'stripe',
+  providerEventId: `reconciliation:${SESSION_ID}:${type}`,
+  providerPaymentRef: SESSION_ID,
+  type,
+  amountCents: 45000,
+  currency: 'usd',
+  occurredAt: new Date(occurredAtS * 1000),
+  via: 'reconciliation',
+});
+
+describe('pulling one Stripe payment as it stands now', () => {
+  const pull = () => adapter().retrievePayment(SESSION_ID);
+
+  it('reads the session with its payment intent and charge, authorized and version-pinned', async () => {
+    const calls = stubStripe(() => Response.json(expandedSession()));
+
+    await pull();
+
+    expect(calls).toHaveLength(1);
+    const [{ url, headers }] = calls;
+    expect(url.origin + url.pathname).toBe(
+      `https://api.stripe.com/v1/checkout/sessions/${SESSION_ID}`,
+    );
+    expect(url.searchParams.getAll('expand[]')).toEqual([
+      'payment_intent.latest_charge',
+    ]);
+    expect(headers.get('authorization')).toBe(`Bearer ${API_KEY}`);
+    expect(headers.get('stripe-version')).toBe('2026-10-28.endive');
+  });
+
+  it('reports a paid session as succeeded, dated by the charge', async () => {
+    stubStripe(() => Response.json(expandedSession()));
+    expect(await pull()).toEqual([
+      pulledFact('payment_succeeded', CHARGE_CREATED_S),
+    ]);
+  });
+
+  it('gives the same fact the same id on every pull', async () => {
+    stubStripe(() => Response.json(expandedSession()));
+    const [first] = await pull();
+    const [second] = await pull();
+    expect(second.providerEventId).toBe(first.providerEventId);
+  });
+
+  it('reports a bank debit still settling as pending', async () => {
+    stubStripe(() =>
+      Response.json(
+        expandedSession({ payment_status: 'unpaid' }, { status: 'processing' }),
+      ),
+    );
+    expect(await pull()).toEqual([
+      pulledFact('payment_pending', CHARGE_CREATED_S),
+    ]);
+  });
+
+  it('reports a bank account awaiting microdeposit verification as pending, dated by its intent', async () => {
+    // The webhook records this session as pending; a pull must not leave it
+    // looking unstarted, or it never reaches the board as stale.
+    stubStripe(() =>
+      Response.json(
+        expandedSession(
+          { payment_status: 'unpaid' },
+          { status: 'requires_action', latest_charge: null },
+        ),
+      ),
+    );
+    expect(await pull()).toEqual([
+      pulledFact('payment_pending', NOW_S - 4 * 86_400),
+    ]);
+  });
+
+  it('reports a bank debit that settled before the session caught up as succeeded', async () => {
+    stubStripe(() =>
+      Response.json(
+        expandedSession({ payment_status: 'unpaid' }, { status: 'succeeded' }),
+      ),
+    );
+    expect((await pull()).map((f) => f.type)).toEqual(['payment_succeeded']);
+  });
+
+  it.each(['requires_payment_method', 'canceled'])(
+    'reports a debit whose intent is %s as failed',
+    async (status) => {
+      stubStripe(() =>
+        Response.json(
+          expandedSession({ payment_status: 'unpaid' }, { status }),
+        ),
+      );
+      expect((await pull()).map((f) => f.type)).toEqual(['payment_failed']);
+    },
+  );
+
+  it('reports an expired session as canceled, at its expiry', async () => {
+    stubStripe(() =>
+      Response.json(
+        expandedSession({
+          status: 'expired',
+          payment_status: 'unpaid',
+          payment_intent: null,
+        }),
+      ),
+    );
+    expect(await pull()).toEqual([
+      pulledFact('payment_canceled', NOW_S - 4 * 86_400 + 3600),
+    ]);
+  });
+
+  it('reports nothing for a session still open', async () => {
+    stubStripe(() =>
+      Response.json(
+        expandedSession({
+          status: 'open',
+          payment_status: 'unpaid',
+          payment_intent: null,
+        }),
+      ),
+    );
+    expect(await pull()).toEqual([]);
+  });
+
+  it('fails rather than guess a date when a paid session has no charge', async () => {
+    stubStripe(() =>
+      Response.json(expandedSession({}, { latest_charge: null })),
+    );
+    await expect(pull()).rejects.toThrow('Unreadable Stripe event');
+  });
+
+  it('fails when Stripe refuses', async () => {
+    stubStripe(() => new Response('{"error":{}}', { status: 404 }));
+    await expect(pull()).rejects.toThrow('Stripe answered 404');
+  });
+});
+
+describe('listing Stripe events since a cursor', () => {
+  const MAPPED_TYPES = [
+    'checkout.session.completed',
+    'checkout.session.async_payment_succeeded',
+    'checkout.session.async_payment_failed',
+    'checkout.session.expired',
+    'charge.dispute.created',
+    'charge.dispute.funds_withdrawn',
+    'charge.dispute.funds_reinstated',
+    'refund.created',
+    'refund.failed',
+  ];
+
+  const listed = (
+    id: string,
+    createdS: number,
+    type = 'checkout.session.completed',
+    object: unknown = session(),
+  ) => ({
+    id,
+    object: 'event',
+    api_version: '2026-10-28.endive',
+    created: createdS,
+    livemode: false,
+    type,
+    data: { object },
+  });
+
+  const page = (data: unknown[], hasMore = false) =>
+    Response.json({
+      object: 'list',
+      data,
+      has_more: hasMore,
+      url: '/v1/events',
+    });
+
+  const eventCalls = (calls: { url: URL }[]) =>
+    calls.filter((c) => c.url.pathname === '/v1/events').map((c) => c.url);
+
+  it('asks for the mapped types over the last 30 days when there is no cursor', async () => {
+    const calls = stubStripe(() => page([]));
+
+    const result = await adapter().listEventsSince(null);
+
+    const [url] = eventCalls(calls);
+    expect(url.searchParams.getAll('types[]').sort()).toEqual(
+      [...MAPPED_TYPES].sort(),
+    );
+    expect(url.searchParams.get('created[gte]')).toBe(
+      String(NOW_S - 30 * 86_400),
+    );
+    expect(url.searchParams.get('limit')).toBe('100');
+    expect(result).toEqual({ events: [], nextCursor: String(NOW_S) });
+  });
+
+  it('reads from an hour before the cursor, so an event Stripe listed late is not missed', async () => {
+    const calls = stubStripe(() => page([]));
+
+    await adapter().listEventsSince(String(NOW_S - 86_400));
+
+    expect(eventCalls(calls)[0].searchParams.get('created[gte]')).toBe(
+      String(NOW_S - 86_400 - 3600),
+    );
+  });
+
+  it('treats a cursor it cannot read as none', async () => {
+    const calls = stubStripe(() => page([]));
+
+    await adapter().listEventsSince('not-a-time');
+
+    expect(eventCalls(calls)[0].searchParams.get('created[gte]')).toBe(
+      String(NOW_S - 30 * 86_400),
+    );
+  });
+
+  it('follows every page and answers the facts oldest first, as reconciliation', async () => {
+    const calls = stubStripe((url) =>
+      url.searchParams.get('starting_after') === 'evt_2'
+        ? page([listed('evt_1', NOW_S - 300)])
+        : page(
+            [listed('evt_3', NOW_S - 100), listed('evt_2', NOW_S - 200)],
+            true,
+          ),
+    );
+
+    const { events } = await adapter().listEventsSince(null);
+
+    expect(
+      eventCalls(calls).map((u) => u.searchParams.get('starting_after')),
+    ).toEqual([null, 'evt_2']);
+    expect(events.map((e) => [e.providerEventId, e.via])).toEqual([
+      ['evt_1', 'reconciliation'],
+      ['evt_2', 'reconciliation'],
+      ['evt_3', 'reconciliation'],
+    ]);
+    expect(events[0]).toEqual(
+      normalized('payment_succeeded', {
+        providerEventId: 'evt_1',
+        occurredAt: new Date((NOW_S - 300) * 1000),
+        via: 'reconciliation',
+      }),
+    );
+  });
+
+  it('finds the session for a listed dispute', async () => {
+    stubStripe((url) =>
+      url.pathname === '/v1/checkout/sessions'
+        ? Response.json({ object: 'list', data: [session()], has_more: false })
+        : page([
+            listed('evt_d', NOW_S - 100, 'charge.dispute.created', dispute()),
+          ]),
+    );
+
+    const { events } = await adapter().listEventsSince(null);
+
+    expect(events.map((e) => [e.type, e.providerPaymentRef])).toEqual([
+      ['dispute_opened', SESSION_ID],
+    ]);
+  });
+
+  it('fails when Stripe refuses, so the cursor stays where it was', async () => {
+    stubStripe(() => new Response('{"error":{}}', { status: 500 }));
+    await expect(adapter().listEventsSince(null)).rejects.toThrow(
+      'Stripe answered 500',
+    );
+  });
+});

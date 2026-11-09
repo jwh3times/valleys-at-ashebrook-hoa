@@ -5,6 +5,7 @@ const cleanupSavedReportContent = vi.hoisted(() => vi.fn());
 const runInvariants = vi.hoisted(() => vi.fn());
 const driveKeepalive = vi.hoisted(() => vi.fn());
 const sweepR2Orphans = vi.hoisted(() => vi.fn());
+const reconcilePayments = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/server/cleanup/verification', () => ({
   cleanupVerificationState,
@@ -17,6 +18,8 @@ vi.mock('../../src/server/cleanup/reports', () => ({
 vi.mock('../../src/server/drive/keepalive', () => ({ driveKeepalive }));
 
 vi.mock('../../src/server/documents/sweep', () => ({ sweepR2Orphans }));
+
+vi.mock('../../src/server/payments/reconcile', () => ({ reconcilePayments }));
 
 vi.mock('../../src/server/db/invariants', async (importOriginal) => ({
   // formatInvariantRun is pure and worth exercising for real — the log lines
@@ -63,6 +66,15 @@ const VIOLATED = run({
   healthy: false,
 });
 
+const RECONCILED = {
+  skipped: null,
+  listed: 2,
+  eventListFailed: false,
+  pulled: 3,
+  failedPulls: [],
+  stalePending: [],
+};
+
 const NO_ORPHANS = {
   mode: 'report-only',
   documents: [],
@@ -80,6 +92,8 @@ describe('the daily scheduled jobs', () => {
     driveKeepalive.mockResolvedValue('skipped');
     sweepR2Orphans.mockReset();
     sweepR2Orphans.mockResolvedValue(NO_ORPHANS);
+    reconcilePayments.mockReset();
+    reconcilePayments.mockResolvedValue(RECONCILED);
     vi.restoreAllMocks();
   });
 
@@ -94,6 +108,121 @@ describe('the daily scheduled jobs', () => {
     expect(runInvariants).toHaveBeenCalledWith(env);
     expect(driveKeepalive).toHaveBeenCalledWith(env);
     expect(sweepR2Orphans).toHaveBeenCalledWith(env);
+    expect(reconcilePayments).toHaveBeenCalledWith(env);
+  });
+
+  it('still runs the other jobs when payment reconciliation throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    reconcilePayments.mockRejectedValue(new Error('D1 unavailable'));
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: payments-reconcile',
+    );
+    expect(cleanupVerificationState).toHaveBeenCalledWith(env);
+    expect(cleanupSavedReportContent).toHaveBeenCalledWith(env);
+    expect(runInvariants).toHaveBeenCalledWith(env);
+    expect(driveKeepalive).toHaveBeenCalledWith(env);
+    expect(sweepR2Orphans).toHaveBeenCalledWith(env);
+  });
+
+  it('still reconciles payments when the other jobs fail', async () => {
+    // A provider outage must not hide an invariant violation, and the reverse.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanupVerificationState.mockRejectedValue(new Error('D1 unavailable'));
+    runInvariants.mockResolvedValue(VIOLATED);
+    sweepR2Orphans.mockRejectedValue(new Error('R2 unavailable'));
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: cleanup, invariants, r2-orphan-sweep',
+    );
+    expect(reconcilePayments).toHaveBeenCalledWith(env);
+  });
+
+  it('logs reconciliation counts and payment ids, and nothing else', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    reconcilePayments.mockResolvedValue({
+      ...RECONCILED,
+      stalePending: ['pay-1', 'pay-2'],
+    });
+
+    await expect(runScheduledJobs(env)).resolves.toBeUndefined();
+    const logged = log.mock.calls
+      .map((c) => String(c[0]))
+      .filter((line) => line.startsWith('[payments-reconcile]'));
+    expect(logged).toEqual([
+      '[payments-reconcile] 2 listed fact(s), 3 payment(s) pulled, 0 failed pull(s), 2 newly stale pending',
+      '[payments-reconcile] stale pending: pay-1, pay-2',
+    ]);
+  });
+
+  it('fails the run when a pull or the event list failed, naming the payments', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    reconcilePayments.mockResolvedValue({
+      ...RECONCILED,
+      eventListFailed: true,
+      failedPulls: ['pay-3'],
+    });
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: payments-reconcile',
+    );
+    expect(error.mock.calls.map((c) => String(c[0]))).toEqual(
+      expect.arrayContaining([
+        '[payments-reconcile] the provider event list was not recorded; the cursor did not move',
+        '[payments-reconcile] failed pulls: pay-3',
+      ]),
+    );
+  });
+
+  it('fails the run when only the event list failed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    reconcilePayments.mockResolvedValue({
+      ...RECONCILED,
+      eventListFailed: true,
+    });
+
+    await expect(runScheduledJobs(env)).rejects.toThrow(
+      'scheduled job failed: payments-reconcile',
+    );
+  });
+
+  it('says nothing about payments with no provider configured', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    reconcilePayments.mockResolvedValue({
+      ...RECONCILED,
+      skipped: 'unconfigured',
+    });
+
+    await expect(runScheduledJobs(env)).resolves.toBeUndefined();
+    expect(reconcilePayments).toHaveBeenCalledWith(env);
+    expect(
+      log.mock.calls.filter((c) =>
+        String(c[0]).startsWith('[payments-reconcile]'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('logs a skip for the write freeze without failing the run', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    cleanupVerificationState.mockResolvedValue(CLEAN_SWEEP);
+    runInvariants.mockResolvedValue(run());
+    reconcilePayments.mockResolvedValue({ ...RECONCILED, skipped: 'frozen' });
+
+    await expect(runScheduledJobs(env)).resolves.toBeUndefined();
+    expect(log.mock.calls.map((c) => String(c[0]))).toContain(
+      '[payments-reconcile] skipped: the write freeze is on',
+    );
   });
 
   it('still runs the other jobs when the R2 orphan sweep fails', async () => {

@@ -50,6 +50,12 @@ export function fakeEvent(
  * records each checkout asked for; `duringCheckout` runs while one is being
  * created, which is how a test changes the world between a route's preflight
  * and its insert; `checkoutError` makes creation fail.
+ *
+ * For the reconciliation pull (#543): `pulls` answers `retrievePayment` per
+ * provider reference (an `Error` makes that one pull fail), and `pulledRefs`
+ * records each reference asked about. `listed` answers `listEventsSince` (an
+ * `Error` makes the listing fail) with `nextCursor`, and `cursorsAsked`
+ * records the cursor each listing was handed.
  */
 export function fakeProvider(
   queued: {
@@ -58,14 +64,26 @@ export function fakeProvider(
     parseError?: Error;
     duringCheckout?: () => Promise<void>;
     checkoutError?: Error;
+    pulls?: Record<string, NormalizedPaymentEvent[] | Error>;
+    listed?: NormalizedPaymentEvent[] | Error;
+    nextCursor?: string | null;
   } = {},
-): PaymentProvider & { webhookBodies: string[]; checkouts: CheckoutRequest[] } {
+): PaymentProvider & {
+  webhookBodies: string[];
+  checkouts: CheckoutRequest[];
+  pulledRefs: string[];
+  cursorsAsked: (string | null)[];
+} {
   const webhookBodies: string[] = [];
   const checkouts: CheckoutRequest[] = [];
+  const pulledRefs: string[] = [];
+  const cursorsAsked: (string | null)[] = [];
   return {
     id: FAKE_PROVIDER_ID,
     webhookBodies,
     checkouts,
+    pulledRefs,
+    cursorsAsked,
     async createCheckout(request) {
       const { paymentId } = request;
       checkouts.push(request);
@@ -83,10 +101,18 @@ export function fakeProvider(
       return { ok: true, events: queued.events ?? [] };
     },
     async retrievePayment(ref) {
-      return (queued.events ?? []).filter((e) => e.providerPaymentRef === ref);
+      pulledRefs.push(ref);
+      const answer = queued.pulls?.[ref] ?? [];
+      if (answer instanceof Error) throw answer;
+      return answer;
     },
-    async listEventsSince() {
-      return { events: queued.events ?? [], nextCursor: null };
+    async listEventsSince(cursor) {
+      cursorsAsked.push(cursor);
+      if (queued.listed instanceof Error) throw queued.listed;
+      return {
+        events: queued.listed ?? [],
+        nextCursor: queued.nextCursor ?? null,
+      };
     },
   };
 }
@@ -103,7 +129,10 @@ export async function seedPayment(row: {
   ref?: string | null;
   status?: string;
   provider?: string;
+  /** When the checkout started; `2026-11-01T12:00:00Z` unless a test dates it. */
+  createdAt?: string;
 }) {
+  const createdAt = Date.parse(row.createdAt ?? '2026-11-01T12:00:00Z');
   const personId = row.personId === undefined ? 'payer-1' : row.personId;
   await env.DATABASE.prepare(
     `INSERT INTO payments
@@ -120,8 +149,8 @@ export async function seedPayment(row: {
       row.provider ?? FAKE_PROVIDER_ID,
       row.ref === undefined ? `ref_${row.id}` : row.ref,
       row.status ?? 'created',
-      Date.parse('2026-11-01T12:00:00Z'),
-      Date.parse('2026-11-01T12:00:00Z'),
+      createdAt,
+      createdAt,
     )
     .run();
 }

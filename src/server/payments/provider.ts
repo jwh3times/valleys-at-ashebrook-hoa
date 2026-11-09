@@ -61,11 +61,18 @@ export interface PaymentProvider {
     request: Request,
     rawBody: string,
   ): Promise<WebhookParse>;
-  /** The payment's current state, as facts with stable ids. */
+  /**
+   * The payment's current state, as facts with stable ids, so a pull repeated
+   * every day is stored once. `via` is `reconciliation`.
+   */
   retrievePayment(
     providerPaymentRef: string,
   ): Promise<NormalizedPaymentEvent[]>;
-  /** Facts since an opaque cursor the adapter minted. */
+  /**
+   * Facts since an opaque cursor the adapter minted (`null`: as far back as the
+   * provider keeps), oldest first, with the cursor the next call should pass.
+   * `via` is `reconciliation`.
+   */
   listEventsSince(
     cursor: string | null,
   ): Promise<{ events: NormalizedPaymentEvent[]; nextCursor: string | null }>;

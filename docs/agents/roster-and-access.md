@@ -68,7 +68,8 @@ which must never wait for a freeze to lift. `connect` and `callback` are GETs th
 check `isWriteFrozen` themselves.
 
 Not every freeze reader is a request guard: the daily R2 orphan sweep (`documents/sweep.ts`, #442)
-checks the same switch and deletes nothing while it is on, still reporting. The `docs:import` and
+checks the same switch and deletes nothing while it is on, still reporting, and daily payment
+reconciliation (`payments/reconcile.ts`, #543) skips while it is on, catching up on the next run. The `docs:import` and
 `corpus:import` scripts refuse `--commit` unless production's freeze is on (`requireWriteFreeze` in
 `scripts/wrangler-d1.ts`, fail-closed), since they upload to R2 before writing rows.
 

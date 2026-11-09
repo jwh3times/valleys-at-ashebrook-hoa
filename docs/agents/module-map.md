@@ -303,9 +303,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   performs the same purge atomically with roster redactions.
 - `scheduled.ts`: `runScheduledJobs(env)`, the body of the Worker's daily `0 7 * * *` cron trigger;
   it independently runs verification cleanup, saved-report cleanup, ADR 0022 invariants, the
-  Drive keepalive (a broken connection is logged, not a failure), and the R2 orphan sweep
-  (over-threshold or a throw fails the run; it logs counts and document ids, never keys) — see
-  **Deploy** below.
+  Drive keepalive (a broken connection is logged, not a failure), the R2 orphan sweep
+  (over-threshold or a throw fails the run; it logs counts and document ids, never keys), and
+  payment reconciliation (`payments/reconcile.ts`, below; a failed event list or any failed pull
+  fails the run; it logs counts and payment ids only) — see **Deploy** below.
 - `roster/tenancy.ts` (#294, ADR 0028): `TENANT_ACCESS_ENABLED_SQL`, the mutation-boundary fragment
   requiring `officialMode` AND `tenantAccessEnabled` literal JSON `true`, fail-closed
   (`documentVisibleTo` embeds it, so turning either gate off takes effect on the next request);
@@ -382,7 +383,11 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   refund's session by listing sessions filtered by payment intent; a signed event it cannot read
   throws `UnreadableStripeEvent`. Its `createCheckout` opens a one-hour, one-line, neutrally named
   `usd` Checkout Session (bank account first, card second) with an idempotency key per payment;
-  its pulls arrive with #543. `gate.ts` holds `paymentsStartable(site, env)` (the three flags and
+  its `retrievePayment` reads a session with its payment intent's latest charge and returns its
+  settlement state as facts with stable ids (`reconciliation:<session>:<type>`), and its
+  `listEventsSince` lists the mapped event types from an hour before the cursor (no cursor: the
+  30 days Stripe keeps), oldest first, minting the listing's start time as the next cursor.
+  `gate.ts` holds `paymentsStartable(site, env)` (the three flags and
   a configured provider) and `ONLINE_PAYMENTS_ENABLED_SQL`. `checkout.ts`'s `startPayment` is the
   only writer of a new `payments` row: it resolves the account's Person one consolidation hop to
   check Lot Authority (the initiator stays the account's own Person, since it records who acted), opens the provider's checkout under a payment id it mints, then writes the
@@ -406,7 +411,16 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   days before) is credited and flagged `possible_duplicate`. A report of an earlier withdrawal
   cycle, by the provider's clock, changes nothing. It never reads a site flag, because the ledger
   outlives the flags. It throws `InvalidPaymentEvent` for a fact no adapter should produce, storing
-  nothing. (#539, #540, #541)
+  nothing. Its `openStalePendingExceptions` opens `stale_pending` for a payment still `pending`
+  ten days after it started, once per payment ever. (#539, #540, #541, #543)
+  `reconcile.ts`'s `reconcilePayments(env, now)` is the daily job's body (#543): silent with no
+  provider configured and skipped during the write freeze, it applies the provider's events since
+  the cursor in the `settings` row `payments_event_cursor` (`{provider, cursor}`; another
+  provider's cursor is ignored), advancing it only when the listing and every fact in it were
+  recorded; then pulls each of this provider's `created`/`pending` payments older than an hour,
+  where a failed pull is named, the rest go on, and the cursor is not held; then opens
+  `stale_pending`. Every fact goes through `applyPaymentEvent`, so one the webhook delivered is a
+  duplicate.
 - `lot-records/` (#291, ADR 0024; the admin `LotViolationsManager` panel shipped in slice 3, and
   slice 4 completed the feature with the homeowner-facing `/lot-records` page): `gate.ts` exports
   `LOT_RECORDS_ENABLED_SQL`/`lotRecordsEnabledInDb` (the mutation-boundary SQL fragment),

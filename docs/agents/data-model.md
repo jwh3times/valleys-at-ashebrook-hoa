@@ -43,7 +43,9 @@ board's "Tenant-Visible" mark. A CHECK allows `1` only while `visibility = 'home
 PATCH route clears it when a document leaves that tier. It widens who may read the document only for
 a caller holding the `tenant` capability, which nothing grants yet);
 the document library uses 16 `DOCUMENT_CATEGORIES`, see `src/lib/types.ts`), `settings`
-(key/value singletons `dues` and `site`; the site JSON includes `officialMode` and the
+(key/value singletons `dues`, `site`, and `payments_event_cursor` — the daily payment
+reconciliation job's `{provider, cursor}` JSON (#543), its own row so the whole-blob site `PUT`,
+which writes only `site`, never moves it; the site JSON includes `officialMode` and the
 fail-closed/default-false `liveVotingEnabled` flag — per #363/ADR 0024 both are transition-only:
 `PUT /api/admin/site` preserves whatever is already stored for every key in `SITE_GATE_KEYS`
 regardless of the request body, and a gate changes only through the audited compare-and-swap
@@ -359,7 +361,8 @@ ordering.
   `duplicate_effect` / `unmatched` / `exception`, with `unmatched` exactly when no payment claims
   it) and the `ledger_entry_id` it produced. The raw payload is never stored.
 - `payment_exceptions`: the board's queue, append-only, citing an event, a payment, or both, with
-  a CHECK-bounded `reason`. `stale_pending` is unique per payment by index. `amount_mismatch`,
+  a CHECK-bounded `reason`. `stale_pending` is unique per payment by index, and the daily reconciliation job opens it for a
+  payment still `pending` ten days after it started (#543), never again once resolved. `amount_mismatch`,
   `currency_mismatch`, `unmatched_payment` and `dispute_opened` are opened at most once per payment
   (or, unmatched, per provider reference) and type of fact, by the application path's conditional
   INSERT, so a webhook and a pull reporting one fact raise one row. `unmatched_payment` opens for

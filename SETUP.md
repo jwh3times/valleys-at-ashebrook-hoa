@@ -415,7 +415,7 @@ Astro SSR requests and the daily scheduled trigger.
 
 ## Scheduled Maintenance
 
-Wrangler config includes a daily cron trigger (`0 7 * * *`). It runs five jobs independently, so
+Wrangler config includes a daily cron trigger (`0 7 * * *`). It runs six jobs independently, so
 a failure in one does not hide or stop the others:
 
 - `cleanupVerificationState`, which keeps 30 days of consumed/expired property-verification rows
@@ -440,6 +440,12 @@ verify:invariants` runs) — added by #240 so the phase-4 soak isn't running wit
 - The R2 orphan sweep (`sweepR2Orphans`, #442), which finds document files and search twins no row
   points at. It deletes only when the `R2_SWEEP_DELETE` var is exactly `"true"`, as `wrangler.toml` sets it, never deletes
   during the write freeze, and logs document IDs, never keys.
+- Payment reconciliation (`reconcilePayments`, #543), which recovers a payment whose webhook was
+  missed or delayed: it reads the provider's events since its stored cursor, pulls every payment
+  still in progress after an hour, and flags one still pending after ten days for the board. It
+  does nothing while no payment provider is configured, which is production's default, and skips
+  during the write freeze. A failed event list or a failed pull fails the run; it logs counts and
+  payment IDs only.
 
 No job's failure blocks another; if any fails, the invocation throws so the dashboard shows the run
 as failed.
@@ -594,7 +600,9 @@ With any of the three blank, every payment surface is absent, which is the defau
 The webhook verifies Stripe's signature over the raw body before reading it, refuses one more than
 five minutes old, answers `503` during the write freeze so Stripe retries, and answers `500` when
 it could not record a delivery, which Stripe also retries. It never reads a site flag: a payment
-already in flight lands whatever the gates say.
+already in flight lands whatever the gates say. A delivery that never arrives is recovered by the
+daily [payment reconciliation](#scheduled-maintenance) job, which uses the same three values and
+needs nothing else configured.
 
 5. **Make a test payment.** In `/admin` → **Site Settings**, turn on **Official mode**, **Lot
    records** and **Online payments** (each its own audited switch). Sign in as a homeowner who
