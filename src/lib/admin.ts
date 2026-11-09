@@ -389,7 +389,8 @@ export async function applyUnmatchedPayment(input: {
 /**
  * The treasurer's CSV of provider-sourced ledger entries with an effective
  * day from `from` through `to` (#546). Answers the file's text; the route's
- * refusal text is the error.
+ * refusal text is the error. Not `adminRequest`, which parses JSON: the
+ * reply is CSV.
  */
 export async function exportProviderEntries(range: {
   from: string;

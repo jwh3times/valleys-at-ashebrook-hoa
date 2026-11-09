@@ -872,6 +872,8 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
 
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    // Per-Lot money and addresses: no cache may keep a copy.
+    expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.text()).toBe(
       `${HEADER}\r\n` +
         `2026-11-02,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-1,${await entryOf('pay-1')}\r\n`,

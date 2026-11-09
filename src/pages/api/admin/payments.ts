@@ -154,7 +154,11 @@ async function exportCsv(body: unknown): Promise<Response> {
     to: to.value,
   });
   return new Response(csv, {
-    headers: { 'content-type': 'text/csv; charset=utf-8' },
+    // Per-Lot money and addresses, as the board's other sensitive reads.
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'cache-control': 'no-store',
+    },
   });
 }
 
