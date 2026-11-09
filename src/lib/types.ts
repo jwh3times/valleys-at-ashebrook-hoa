@@ -408,6 +408,109 @@ export const PAYMENT_RESOLUTIONS = [
 export type PaymentResolution = (typeof PAYMENT_RESOLUTIONS)[number];
 
 /**
+ * The resolutions a board member chooses (#545). `applied_to_lot` is written
+ * only by applying an unmatched payment to a Lot, and `funds_reinstated` only
+ * by the system, so neither is offered as a choice.
+ */
+export const BOARD_PAYMENT_RESOLUTIONS = [
+  'reviewed_no_action',
+  'corrected_by_entry',
+  'other',
+] as const satisfies readonly PaymentResolution[];
+export type BoardPaymentResolution = (typeof BOARD_PAYMENT_RESOLUTIONS)[number];
+
+/** The longest board-only note a resolution may carry. */
+export const MAX_RESOLUTION_NOTE_LENGTH = 2000;
+
+/** One online payment as the board lists it (ADR 0025, #545). */
+export interface AdminPaymentSummary {
+  id: string;
+  lotId: string;
+  amountCents: number;
+  origin: PaymentOrigin;
+  status: PaymentStatus;
+  ledgerState: PaymentLedgerState;
+  providerPaymentRef: string | null;
+  /** When the payment started, as an ISO instant. */
+  createdAt: string;
+  /** How many of its exceptions have no resolution yet. */
+  openExceptions: number;
+}
+
+/** One stored provider fact for a payment. */
+export interface AdminPaymentEvent {
+  id: string;
+  providerEventId: string;
+  type: PaymentEventType;
+  amountCents: number;
+  currency: string;
+  /** The provider's time for the fact, as an ISO instant. */
+  occurredAt: string;
+  /** When the site recorded it, as an ISO instant. */
+  receivedAt: string;
+  via: PaymentEventVia;
+  outcome: PaymentEventOutcome;
+  ledgerEntryId: string | null;
+}
+
+/** A ledger entry one of the payment's facts wrote. */
+export interface AdminPaymentEntry {
+  id: string;
+  kind: DuesLedgerKind;
+  /** Signed, as the ledger stores it. */
+  amountCents: number;
+  effectiveDay: string;
+  description: string;
+  reversesEntryId: string | null;
+}
+
+/** How an exception was closed, once it was. */
+export interface AdminPaymentResolution {
+  resolution: PaymentResolution;
+  note: string | null;
+  /** NULL only when the system resolved it. */
+  actingAccountId: string | null;
+  resolvedAt: string;
+}
+
+/** One exception, open or resolved, on a payment's detail. */
+export interface AdminPaymentException {
+  id: string;
+  reason: PaymentExceptionReason;
+  openedAt: string;
+  resolution: AdminPaymentResolution | null;
+}
+
+/** One payment with everything the board needs to investigate it. */
+export interface AdminPaymentDetail extends AdminPaymentSummary {
+  events: AdminPaymentEvent[];
+  entries: AdminPaymentEntry[];
+  exceptions: AdminPaymentException[];
+}
+
+/**
+ * One exception in the board's open queue. An unmatched one cites no payment,
+ * only the fact that opened it.
+ */
+export interface AdminOpenPaymentException {
+  id: string;
+  reason: PaymentExceptionReason;
+  openedAt: string;
+  paymentId: string | null;
+  lotId: string | null;
+  providerPaymentRef: string | null;
+  /** The fact that opened it, when a fact did (`stale_pending` has none). */
+  fact: {
+    type: PaymentEventType;
+    amountCents: number;
+    currency: string;
+    occurredAt: string;
+  } | null;
+  /** Whether the board can apply it to a Lot: a settled USD sale with a reference. */
+  applicable: boolean;
+}
+
+/**
  * A violation's lifecycle. `voided` is the correction path — nothing is
  * hard-deleted; a voided record stays visible to the board and disappears from
  * the homeowner surface. Status moves only through named transitions.

@@ -124,6 +124,17 @@ describe('AdminApp', () => {
     ).toBeInTheDocument();
   });
 
+  it('offers a Payments tab beside the Dues ledger', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      loading: false,
+      user: fakeUser,
+      isAdmin: true,
+    });
+    render(<AdminApp />);
+    const tabs = screen.getAllByRole('button').map((b) => b.textContent);
+    expect(tabs.indexOf('Payments')).toBe(tabs.indexOf('Dues ledger') + 1);
+  });
+
   it('offers a Resolutions tab', () => {
     vi.mocked(useAuth).mockReturnValue({
       loading: false,
