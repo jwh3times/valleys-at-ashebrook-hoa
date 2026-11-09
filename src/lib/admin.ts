@@ -29,6 +29,11 @@ import type {
   AdminDuesEntryDetail,
   DuesChargeCategory,
   DuesPaymentMethod,
+  AdminPaymentSummary,
+  AdminPaymentDetail,
+  AdminOpenPaymentException,
+  BoardPaymentResolution,
+  PaymentStatus,
 } from './types';
 import {
   REPORT_PAGE_SIZE,
@@ -295,6 +300,89 @@ export async function postBulkAssessment(input: {
     'POST',
     { action: 'postBulkAssessment', ...input },
     'Post assessment failed',
+  );
+}
+
+// ---------- Online payments (ADR 0025, #545) ----------
+
+/**
+ * The board's payments, newest first, and its queue of open exceptions.
+ * `enabled: false` is the route's 404: no payment provider is configured, so
+ * there is nothing to show — not an empty list.
+ */
+export async function fetchBoardPayments(filter: {
+  lotId?: string;
+  status?: PaymentStatus;
+}): Promise<{
+  enabled: boolean;
+  payments: AdminPaymentSummary[];
+  exceptions: AdminOpenPaymentException[];
+}> {
+  const params = new URLSearchParams();
+  if (filter.lotId) params.set('lotId', filter.lotId);
+  if (filter.status) params.set('status', filter.status);
+  const query = params.size ? `?${params.toString()}` : '';
+  const res = await fetch(`/api/admin/payments${query}`);
+  if (res.status === 404)
+    return { enabled: false, payments: [], exceptions: [] };
+  if (!res.ok)
+    throw new Error(
+      (await res.text()) || `Load payments failed: ${res.status}`,
+    );
+  const body = (await res.json()) as {
+    payments: AdminPaymentSummary[];
+    exceptions: AdminOpenPaymentException[];
+  };
+  return { enabled: true, ...body };
+}
+
+export async function fetchBoardPayment(
+  paymentId: string,
+): Promise<AdminPaymentDetail> {
+  return adminRequest(
+    `/api/admin/payments?id=${encodeURIComponent(paymentId)}`,
+    'GET',
+    undefined,
+    'Load payment failed',
+  );
+}
+
+/** Asks the provider about one payment now; answers how many facts were new. */
+export async function resyncBoardPayment(
+  paymentId: string,
+): Promise<{ recorded: number }> {
+  return adminRequest(
+    '/api/admin/payments',
+    'POST',
+    { action: 'resync', paymentId },
+    'Re-sync failed',
+  );
+}
+
+export async function resolvePaymentException(input: {
+  exceptionId: string;
+  resolution: BoardPaymentResolution;
+  note?: string;
+  operationKey: string;
+}): Promise<{ id: string }> {
+  return adminRequest(
+    '/api/admin/payments',
+    'POST',
+    { action: 'resolveException', ...input },
+    'Resolve failed',
+  );
+}
+
+export async function applyUnmatchedPayment(input: {
+  exceptionId: string;
+  lotId: string;
+  operationKey: string;
+}): Promise<{ paymentId: string }> {
+  return adminRequest(
+    '/api/admin/payments',
+    'POST',
+    { action: 'applyUnmatched', ...input },
+    'Apply failed',
   );
 }
 
