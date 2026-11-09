@@ -1,5 +1,6 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
 import LotRecordsPage from '../../src/pages/lot-records.astro';
@@ -664,5 +665,182 @@ describe('paying online (ADR 0025, #542)', () => {
     expect(html).not.toMatch(
       /pays? (your|the) [a-z]+ (assessment|charge|dues)/i,
     );
+  });
+});
+
+describe('the payments a homeowner can check (ADR 0025, #544)', () => {
+  const PAY = 'Continue to payment';
+  const IN_FLIGHT = 'already on its way';
+  const allOn: SiteSettings = { ...flagsOn, onlinePaymentsEnabled: true };
+
+  beforeEach(async () => {
+    await seedLotAuthority('person-1', 'lot-a', {
+      startDay: '2026-01-01',
+      fullName: 'Robin Firstpayer',
+    });
+    setPaymentProviderForTests(fakeProvider());
+  });
+  afterEach(() => setPaymentProviderForTests(null));
+
+  it('lists each payment on the lot with its status, amount, start day and reference, newest first', async () => {
+    await seedPayment({
+      id: 'pay-old',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      amountCents: 12500,
+      status: 'failed',
+      createdAt: '2026-10-02T15:00:00Z',
+    });
+    await seedPayment({
+      id: 'pay-new',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      amountCents: 45075,
+      status: 'succeeded',
+      createdAt: '2026-11-01T15:00:00Z',
+    });
+
+    const html = await render(caller(), allOn);
+
+    expect(html).toContain('Online payments');
+    const newer = html.indexOf('ref_pay-new');
+    const older = html.indexOf('ref_pay-old');
+    expect(newer).toBeGreaterThan(-1);
+    expect(older).toBeGreaterThan(newer);
+    expect(html).toContain('$450.75');
+    expect(html).toContain('Received');
+    expect(html).toContain('$125.00');
+    expect(html).toContain('Did not go through');
+    expect(html).toContain('November 1, 2026');
+    expect(html).toContain('href="/lot-records/payments/pay-new"');
+  });
+
+  it('shows a payment a fellow co-owner made, without naming who made it', async () => {
+    await seedLotAuthority('person-2', 'lot-a', {
+      startDay: '2026-01-01',
+      fullName: 'Casey Coowner',
+    });
+    await seedPayment({
+      id: 'pay-1',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      status: 'succeeded',
+    });
+
+    const html = await render(caller({ personId: 'person-2' }), allOn);
+
+    expect(html).toContain('ref_pay-1');
+    expect(html).not.toContain('Robin Firstpayer');
+  });
+
+  it('does not show a buyer the seller’s payments', async () => {
+    await getDb(env)
+      .update(ownerships)
+      .set({ endDay: '2026-11-05' })
+      .where(eq(ownerships.ownerPartyId, 'person-1'));
+    await seedLotAuthority('buyer-1', 'lot-a', { startDay: '2026-11-06' });
+    await seedPayment({
+      id: 'pay-seller',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      status: 'succeeded',
+      createdAt: '2026-11-01T15:00:00Z',
+    });
+
+    const html = await render(caller({ personId: 'buyer-1' }), allOn);
+
+    expect(html).not.toContain('ref_pay-seller');
+  });
+
+  it('shows a payment still in flight above the Pay action', async () => {
+    await seedPayment({
+      id: 'pay-1',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      status: 'pending',
+    });
+
+    const html = await render(caller(), allOn);
+
+    const notice = html.indexOf(IN_FLIGHT);
+    expect(notice).toBeGreaterThan(-1);
+    expect(notice).toBeLessThan(html.indexOf(PAY));
+    expect(html.slice(notice, html.indexOf(PAY))).toContain(
+      'href="/lot-records/payments/pay-1"',
+    );
+  });
+
+  it.each(['created', 'pending'])(
+    'counts a %s payment as in flight, and a settled one as not',
+    async (status) => {
+      await seedPayment({
+        id: 'pay-1',
+        lotId: 'lot-a',
+        personId: 'person-1',
+        status,
+      });
+      expect(await render(caller(), allOn)).toContain(IN_FLIGHT);
+
+      await env.DATABASE.prepare(
+        "UPDATE payments SET status = 'succeeded'",
+      ).run();
+      expect(await render(caller(), allOn)).not.toContain(IN_FLIGHT);
+    },
+  );
+
+  it('still shows payments, and one in flight, after online payments are turned off', async () => {
+    await seedPayment({
+      id: 'pay-1',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      status: 'pending',
+    });
+
+    const html = await render(caller(), flagsOn);
+
+    expect(html).not.toContain(PAY);
+    expect(html).toContain(IN_FLIGHT);
+    expect(html).toContain('ref_pay-1');
+  });
+
+  it('shows no payments at all while no payment provider is configured', async () => {
+    setPaymentProviderForTests(null);
+    await seedPayment({
+      id: 'pay-1',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      status: 'pending',
+    });
+
+    const html = await render(caller(), allOn);
+
+    expect(html).not.toContain('Online payments');
+    expect(html).not.toContain(IN_FLIGHT);
+    expect(html).not.toContain('ref_pay-1');
+  });
+
+  it('says there are none yet when Pay is offered, and stays silent when it is not', async () => {
+    expect(await render(caller(), allOn)).toContain('No online payments yet');
+
+    const off = await render(caller(), flagsOn);
+    expect(off).not.toContain('Online payments');
+    expect(off).not.toContain('No online payments yet');
+  });
+
+  it('calls a payment the provider took back withdrawn', async () => {
+    await seedPayment({
+      id: 'pay-1',
+      lotId: 'lot-a',
+      personId: 'person-1',
+      status: 'succeeded',
+    });
+    await env.DATABASE.prepare(
+      "UPDATE payments SET ledger_state = 'withdrawn'",
+    ).run();
+
+    const html = await render(caller(), allOn);
+
+    expect(html).toContain('Withdrawn');
+    expect(html).not.toContain('Received');
   });
 });

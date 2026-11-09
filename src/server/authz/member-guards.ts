@@ -4,7 +4,7 @@ import { requireCapability, Forbidden } from './guards';
 import type { AuthContext } from './guards';
 import { writeFreezeError } from './write-freeze';
 import { jsonContentError, sameOriginError } from './voting-guards';
-import { paymentsStartable } from '../payments/gate';
+import { paymentsReadable, paymentsStartable } from '../payments/gate';
 
 /**
  * Gate for the homeowner-write API surface (/api/member/*, /api/vote), in
@@ -82,6 +82,33 @@ export async function requirePaymentStartApi(
 ): Promise<{ ok: true; ctx: AuthContext } | { ok: false; res: Response }> {
   if (!paymentsStartable(await getSiteSettings(env), env))
     return { ok: false, res: new Response('Not found', { status: 404 }) };
+  return requirePaymentCaller(locals, request, env);
+}
+
+/**
+ * Gate for CHASING an online payment, `POST /api/member/payments/refresh`
+ * (#544): the order above, except that step 1 asks only for `officialMode`,
+ * `lotRecordsEnabled` and a configured provider (`paymentsReadable`). Turning
+ * online payments off stops new checkouts, never a homeowner checking one
+ * already made. The payment is scoped by the route through Lot Authority on
+ * the day it started, and answers the masked 404.
+ */
+export async function requirePaymentRefreshApi(
+  locals: App.Locals | undefined,
+  request: Request,
+  env: Env,
+): Promise<{ ok: true; ctx: AuthContext } | { ok: false; res: Response }> {
+  if (!paymentsReadable(await getSiteSettings(env), env))
+    return { ok: false, res: new Response('Not found', { status: 404 }) };
+  return requirePaymentCaller(locals, request, env);
+}
+
+/** Steps 2 to 4 of both payment gates: freeze, headers, session, `member`. */
+async function requirePaymentCaller(
+  locals: App.Locals | undefined,
+  request: Request,
+  env: Env,
+): Promise<{ ok: true; ctx: AuthContext } | { ok: false; res: Response }> {
   const frozen = await writeFreezeError(env, request);
   if (frozen) return { ok: false, res: frozen };
   const headerError = sameOriginError(request) ?? jsonContentError(request);

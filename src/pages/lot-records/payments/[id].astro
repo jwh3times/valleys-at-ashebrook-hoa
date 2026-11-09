@@ -3,10 +3,9 @@ import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { env } from 'cloudflare:workers';
 import { DEFAULT_SITE_SETTINGS } from '../../../lib/types';
 import { associationDateIso, formatDate } from '../../../lib/format';
-import { formatCents } from '../../../lib/money';
-import { PAYMENT_STATUS_LABELS } from '../../../lib/payments';
-import { lotRecordsVisible } from '../../../server/lot-records/gate';
+import { paymentsReadable } from '../../../server/payments/gate';
 import { fetchMemberPayment } from '../../../server/lot-records/reads';
+import PaymentStatus from '../../../components/member/PaymentStatus';
 
 /**
  * ONE ONLINE PAYMENT, WHERE THE PROVIDER SENDS THE HOMEOWNER BACK (ADR 0025,
@@ -18,15 +17,20 @@ import { fetchMemberPayment } from '../../../server/lot-records/reads';
  * reads `Astro.url.search`. A bank payment shows "processing" for days, which
  * is the truth.
  *
- * Reading a payment needs `officialMode` and `lotRecordsEnabled` but not
- * `onlinePaymentsEnabled`: a homeowner can always see a payment already in
- * flight. A payment the reader may not see — someone else's, one from before
- * their own period, or none at all — is the generic 404, so the page never
- * confirms that a payment id exists.
+ * Reading a payment needs `officialMode`, `lotRecordsEnabled` and a
+ * configured provider, but not `onlinePaymentsEnabled`: a homeowner can always
+ * see a payment already in flight. A payment the reader may not see — someone
+ * else's, one from before their own period, or none at all — is the generic
+ * 404, so the page never confirms that a payment id exists.
+ *
+ * The status is the one island (#544): server-rendered from the stored status,
+ * so without JavaScript the page still tells the truth, and with it the island
+ * asks the server to check with the provider a bounded number of times while
+ * the payment may still settle.
  */
 
 const site = Astro.locals.site ?? DEFAULT_SITE_SETTINGS;
-if (!lotRecordsVisible(site)) {
+if (!paymentsReadable(site, env)) {
   return Astro.rewrite('/404');
 }
 
@@ -41,10 +45,16 @@ if (ctx && !payment) {
   return Astro.rewrite('/404');
 }
 
-const settled = payment?.status === 'succeeded';
-const withdrawn = payment?.ledgerState === 'withdrawn';
-const started = payment?.status === 'created';
-const settling = payment?.status === 'pending';
+// Built here rather than in the markup, so no line break lands as a space
+// before the full stop.
+const startedLine = payment
+  ? 'Started ' +
+    formatDate(associationDateIso(new Date(payment.createdAt))) +
+    (payment.providerPaymentRef
+      ? ' · Reference ' + payment.providerPaymentRef
+      : '') +
+    '.'
+  : '';
 
 // One household's payment, rendered into the page: never cacheable.
 Astro.response.headers.set('Cache-Control', 'private, no-store');
@@ -64,24 +74,14 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
     ) : (
       <section class="lot-record">
         <h2 class="lot-record__address">{payment.address}</h2>
-        <p class="lot-record__balance">
-          {formatCents(payment.amountCents)} &middot;{' '}
-          {withdrawn ? 'Withdrawn' : PAYMENT_STATUS_LABELS[payment.status]}
-        </p>
-        <p class="muted">
-          Started {formatDate(associationDateIso(new Date(payment.createdAt)))}.
-        </p>
-        <p>
-          {withdrawn
-            ? 'The payment provider took this payment back, so it no longer counts toward your balance. The board has been told.'
-            : settled
-              ? 'The payment provider has confirmed this payment, and it is on your lot’s account.'
-              : settling
-                ? 'The payment provider has this payment and is processing it. A bank payment can take several business days; it appears on your lot’s account once it is confirmed. You do not need to pay again.'
-                : started
-                  ? 'The payment provider has not confirmed this payment yet. If you finished paying, it will show here once they do, usually within minutes. If you left the payment page without finishing, nothing was taken, and the payment is canceled within the hour.'
-                  : 'No money was taken for this payment. You can start a new one from your lot records.'}
-        </p>
+        <p class="muted">{startedLine}</p>
+        <PaymentStatus
+          client:load
+          paymentId={payment.id}
+          amountCents={payment.amountCents}
+          status={payment.status}
+          ledgerState={payment.ledgerState}
+        />
         <p>
           <a href="/lot-records">Back to your lot records</a>
         </p>

@@ -35,6 +35,19 @@ export const ONLINE_PAYMENTS_ENABLED_SQL = `
 ` as const;
 
 /**
+ * Whether a homeowner may READ and CHASE their payments (#544): the two Lot
+ * Records flags and a configured provider, but not `onlinePaymentsEnabled`, so
+ * a payment already in flight stays visible after payments are switched off.
+ * With no provider configured every payment surface is absent.
+ */
+export function paymentsReadable(
+  site: Pick<SiteSettings, 'officialMode' | 'lotRecordsEnabled'>,
+  env: Env,
+): boolean {
+  return lotRecordsVisible(site) && paymentProviderFor(env) !== null;
+}
+
+/**
  * The read-time half: whether this deployment offers starting a payment at
  * all, for a guard or a page deciding whether the surface exists.
  */

@@ -179,6 +179,10 @@ describe('every export is classified', () => {
     // Day; `payment-return-page.test.ts` proves the co-owner, buyer and
     // consolidated-duplicate cases at the page.
     'fetchMemberPayment',
+    // #544: every such payment, by the same rule applied to each one's own
+    // day; `lot-records-page.test.ts` proves the co-owner and buyer cases at
+    // the page.
+    'fetchMemberPayments',
   ];
   const ADMIN_ONLY = [
     'fetchAdminLotViolations',

@@ -1,7 +1,11 @@
 // Client helpers for the homeowner-write endpoints (/api/member/*). Same
 // fetch-and-throw-text shape as src/lib/admin.ts, so form components can
 // surface the server's readable error messages directly.
-import type { MemberProxyLists } from './types';
+import type {
+  MemberProxyLists,
+  PaymentLedgerState,
+  PaymentStatus,
+} from './types';
 import { refusalMessage } from './refusal-message';
 
 export interface GrantProxyInput {
@@ -117,4 +121,29 @@ export async function startDuesPayment(
     );
   const { url } = (await res.json()) as { url: string };
   return url;
+}
+
+/**
+ * Asks the server to check one online payment with the provider (#544) and
+ * answers the payment's status as the server then holds it. The server asks
+ * the provider at most once a minute; inside that window this still answers
+ * the stored status. Throws with the server's message on a refusal.
+ */
+export async function refreshDuesPayment(
+  paymentId: string,
+): Promise<{ status: PaymentStatus; ledgerState: PaymentLedgerState }> {
+  const res = await fetch('/api/member/payments/refresh', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ paymentId }),
+  });
+  if (!res.ok)
+    throw new Error(
+      await refusalMessage(res, 'The payment could not be checked'),
+    );
+  const { status, ledgerState } = (await res.json()) as {
+    status: PaymentStatus;
+    ledgerState: PaymentLedgerState;
+  };
+  return { status, ledgerState };
 }
