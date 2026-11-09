@@ -879,3 +879,37 @@ export async function openStalePendingExceptions(
     .filter((_, i) => (landed[i]?.meta.changes ?? 0) > 0)
     .map(({ id }) => id);
 }
+
+/**
+ * Claims the right to ask the provider about one payment now (#544), and
+ * answers whether this caller won it.
+ *
+ * A pull that finds nothing new writes nothing, so `updated_at` alone would
+ * never hold a rate limit. This stamps it, in one guarded UPDATE, only when the
+ * payment was last touched — by a fact or by an earlier claim — at least
+ * `everyMs` ago, so two requests racing for the same payment ask the provider
+ * once. It also refuses a payment of another provider, or one with no
+ * reference to ask about. It changes no status: only facts do that.
+ *
+ * Unlike the site's other mutations it re-checks neither Lot Authority nor the
+ * flags: the caller has scoped the payment a moment before, and losing that
+ * race costs one provider pull whose facts are recorded whoever asked, since
+ * ingestion never reads a flag. The stamp grants nothing and shows nothing.
+ */
+export async function claimPaymentPull(
+  env: Env,
+  paymentId: string,
+  provider: string,
+  now: Date,
+  everyMs: number,
+): Promise<boolean> {
+  const nowMs = now.getTime();
+  const result = await env.DATABASE.prepare(
+    `UPDATE payments SET updated_at = ?1
+      WHERE id = ?2 AND provider = ?3 AND provider_payment_ref IS NOT NULL
+        AND updated_at <= ?4`,
+  )
+    .bind(nowMs, paymentId, provider, nowMs - everyMs)
+    .run();
+  return result.meta.changes === 1;
+}

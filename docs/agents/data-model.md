@@ -353,7 +353,9 @@ ordering.
   `provider_payment_ref` (UNIQUE per provider; NULL or non-blank in both payment tables, so a blank
   reference can never match), `status` and `ledger_state`. The last two are
   projections, so the ledger stays the authority for money, and only the application path updates
-  them.
+  them. `updated_at` moves with a fact and also with a homeowner's provider pull, which
+  `claimPaymentPull` stamps to hold that pull to once a minute per payment (#544), so it is not a
+  record of the last status change.
 - `payment_events`: every verified provider fact, normalized and append-only. UNIQUE
   `(provider, provider_event_id)` is the per-event idempotency layer. Each row keeps the provider's
   payment reference, a magnitude `amount_cents`, the lower-case `currency`, `occurred_at` (which

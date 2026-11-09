@@ -539,6 +539,12 @@ export interface MemberPayment {
   amountCents: number;
   status: PaymentStatus;
   ledgerState: PaymentLedgerState;
+  /**
+   * The provider's own reference for the payment, which a homeowner can quote
+   * to the board or find in the provider's emails. `null` only for a payment
+   * that never reached the provider.
+   */
+  providerPaymentRef: string | null;
   /** Epoch milliseconds. */
   createdAt: number;
 }
@@ -565,7 +571,9 @@ export async function fetchMemberPayment(
   const row = await env.DATABASE.prepare(
     `SELECT p.id AS id, p.lot_id AS lotId, lots.address AS address,
             p.amount_cents AS amountCents, p.status AS status,
-            p.ledger_state AS ledgerState, p.created_at AS createdAt
+            p.ledger_state AS ledgerState,
+            p.provider_payment_ref AS providerPaymentRef,
+            p.created_at AS createdAt
        FROM payments p JOIN lots ON lots.id = p.lot_id
       WHERE p.id = ?`,
   )
@@ -584,4 +592,70 @@ export async function fetchMemberPayment(
     .bind(personId, ...scope.binds)
     .first<{ ok: number }>();
   return covered?.ok === 1 ? row : null;
+}
+
+/**
+ * Every payment the caller may read, newest first (#544): on a Lot they hold
+ * today, started on or after the start of their own authority over it — the
+ * condition `fetchMemberPayment` applies to one. A co-owner reads a fellow
+ * co-owner's payments; a buyer reads none of the seller's. Who started a
+ * payment is never returned.
+ *
+ * Two statements, because SQLite cannot say which Association Day a stored
+ * instant fell on. The first lists the payments on Lots the caller holds
+ * today, which only narrows the candidates; the second is the scope itself,
+ * the same predicate every read here embeds, applied in SQL to each candidate
+ * with the day computed from its own `created_at`. Nothing from the first
+ * statement is returned.
+ */
+export async function fetchMemberPayments(
+  env: Env,
+  personId: string | null,
+  associationDay: string,
+): Promise<MemberPayment[]> {
+  if (!personId) return [];
+
+  const holds = lotAuthorityExists(
+    CALLER_PERSON,
+    { column: 'p.lot_id' },
+    associationDay,
+  );
+  const { results: candidates } = await env.DATABASE.prepare(
+    `${CALLER_PERSON_CTE}
+     SELECT p.id AS id, p.created_at AS createdAt
+       FROM payments p
+      WHERE ${holds.sql}`,
+  )
+    .bind(personId, ...holds.binds)
+    .all<{ id: string; createdAt: number }>();
+  if (candidates.length === 0) return [];
+
+  const days = JSON.stringify(
+    candidates.map(({ id, createdAt }) => ({
+      id,
+      day: associationDateIso(new Date(createdAt)),
+    })),
+  );
+  const scope = lotAuthorityCoversRecordDay(
+    CALLER_PERSON,
+    { column: 'p.lot_id' },
+    associationDay,
+    { column: "json_extract(started.value, '$.day')" },
+  );
+  const { results } = await env.DATABASE.prepare(
+    `${CALLER_PERSON_CTE}
+     SELECT p.id AS id, p.lot_id AS lotId, lots.address AS address,
+            p.amount_cents AS amountCents, p.status AS status,
+            p.ledger_state AS ledgerState,
+            p.provider_payment_ref AS providerPaymentRef,
+            p.created_at AS createdAt
+       FROM json_each(?) started
+       JOIN payments p ON p.id = json_extract(started.value, '$.id')
+       JOIN lots ON lots.id = p.lot_id
+      WHERE ${scope.sql}
+      ORDER BY p.created_at DESC, p.id DESC`,
+  )
+    .bind(personId, days, ...scope.binds)
+    .all<MemberPayment>();
+  return results;
 }

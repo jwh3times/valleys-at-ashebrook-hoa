@@ -15,7 +15,10 @@ into a client-side module.**
   `grantProxy`, `revokeProxy`, and `lookupLotPersons` (over the unchanged `/api/member/owner-lookup`
   path), with the write/lookup request shapes kept beside those helpers. It also holds
   `startDuesPayment` (`POST /api/member/payments`, #542), which answers the provider's checkout URL
-  for `PayDuesForm` to navigate to.
+  for `PayDuesForm` to navigate to, and `refreshDuesPayment` (`POST /api/member/payments/refresh`,
+  #544), which the return page's `PaymentStatus` island (`src/components/member/PaymentStatus.tsx`)
+  calls on a bounded backoff — 5, 10, 20, 40, 60 and 60 seconds, a failed check counting as a try —
+  while the payment is in flight, then stops and says so.
 - `src/lib/admin.ts` handles board reads and writes against `/api/admin/*` endpoints, typed document duplicate
   errors, duplicate-resolution helpers, saved-report list/fetch/delete helpers (`fetchReports`,
   `fetchReport`, `deleteReport`), the meeting-record people-picker and party-roster reads that
@@ -184,7 +187,7 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   flip) and `/api/bootstrap/board` (flip step 4 creates the first System Administrator while the
   freeze is on) and `/api/admin/drive/disconnect` (ending the stored Drive credential must not wait
   for a freeze). Called from `requireBoard`, `requireMemberApi`, `requireVotingApi`,
-  `requirePaymentStartApi`, every `/api/verify/*` route, the payment webhook's `handlePaymentWebhook`, and `src/middleware.ts` —
+  `requirePaymentStartApi`, `requirePaymentRefreshApi`, every `/api/verify/*` route, the payment webhook's `handlePaymentWebhook`, and `src/middleware.ts` —
   whose final `else` branch is what catches any surface no named branch claims. `test/unit/freeze-coverage.test.ts` enumerates every route module
   and fails if a mutating route ends up live without being declared in both that test and
   `ALWAYS_LIVE`. `authz/` also holds `derive.ts` (`deriveAccess`/`toDerivedAccess`, a capability SET
@@ -388,14 +391,30 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `listEventsSince` lists the mapped event types from an hour before the cursor (no cursor: the
   30 days Stripe keeps), oldest first, minting the listing's start time as the next cursor.
   `gate.ts` holds `paymentsStartable(site, env)` (the three flags and
-  a configured provider) and `ONLINE_PAYMENTS_ENABLED_SQL`. `checkout.ts`'s `startPayment` is the
+  a configured provider), `paymentsReadable(site, env)` (#544: `officialMode`, `lotRecordsEnabled`
+  and a configured provider, without `onlinePaymentsEnabled`, deciding whether `/lot-records`
+  lists payments, whether the return page exists, and the refresh route's `404`) and
+  `ONLINE_PAYMENTS_ENABLED_SQL`. `checkout.ts`'s `startPayment` is the
   only writer of a new `payments` row: it resolves the account's Person one consolidation hop to
   check Lot Authority (the initiator stays the account's own Person, since it records who acted), opens the provider's checkout under a payment id it mints, then writes the
   row with the provider's reference in one `INSERT … SELECT` that re-checks the flags and Lot
   Authority, so the row is never updated outside `apply.ts`. The shared amount bounds
-  (`MIN_PAYMENT_CENTS`, `MAX_PAYMENT_CENTS`, `paymentAmountError`) and the homeowner status labels
-  live in `src/lib/payments.ts`, and `lot-records/reads.ts`'s `fetchMemberPayment` is the scoped
-  read behind the return page (#542).
+  (`MIN_PAYMENT_CENTS`, `MAX_PAYMENT_CENTS`, `paymentAmountError`), the homeowner status labels
+  (`paymentStatusLabel`, which reads a withdrawn payment as `Withdrawn` whatever its checkout status)
+  and `paymentInFlight` (`created` or `pending`) live in `src/lib/payments.ts`.
+  `lot-records/reads.ts`'s `fetchMemberPayment` is the scoped read behind the return page (#542),
+  and `fetchMemberPayments(env, personId, associationDay)` lists, newest first, the payments
+  `/lot-records` shows (#544): those on a Lot the caller holds today, each scoped to Lot Authority
+  on its own Association Day (so a co-owner sees a fellow co-owner's and a buyer none of the
+  seller's), in two statements because SQLite cannot tell which Association Day a stored instant
+  fell on. Neither returns who started a payment.
+  `refresh.ts`'s `refreshPayment(env, provider, payment, now)` is the refresh route's body (#544):
+  it pulls only a payment still in flight, through `retrievePayment` and `applyPaymentEvent` like
+  the daily job's pull, and at most once per `REFRESH_EVERY_MS` (a minute) per payment, claimed by
+  `apply.ts`'s `claimPaymentPull` — a guarded `UPDATE` stamping `payments.updated_at` only when the
+  payment was last touched at least that long ago, which changes no status and re-checks neither
+  Lot Authority nor the flags, since the caller scoped the payment a moment before and ingestion
+  never reads a flag.
   `webhook.ts`'s `handlePaymentWebhook` is the webhook route's body: `404` unconfigured, freeze
   `503`, unverified `400`, then each fact applied in its own batch, `500` on any failure so the
   provider redelivers. `setPaymentProviderForTests` is the test-only hook, and the fake it injects

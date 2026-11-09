@@ -1,5 +1,5 @@
 import { formatCents } from './money';
-import type { PaymentStatus } from './types';
+import type { PaymentLedgerState, PaymentStatus } from './types';
 
 /**
  * The bounds of one online dues payment (ADR 0025, #542), shared by the Pay
@@ -48,3 +48,25 @@ export function paymentAmountError(amountCents: unknown): string | null {
 /** The two refusals, for a caller that already knows which bound was missed. */
 export const PAYMENT_TOO_SMALL = `A payment must be at least ${formatCents(MIN_PAYMENT_CENTS)}`;
 export const PAYMENT_TOO_LARGE = `A single online payment can be at most ${formatCents(MAX_PAYMENT_CENTS)}; contact the board to pay more`;
+
+/**
+ * A payment's status as a homeowner reads it, with one override: a payment
+ * the provider took back no longer counts, whatever its checkout status says.
+ */
+export function paymentStatusLabel(
+  status: PaymentStatus,
+  ledgerState: PaymentLedgerState,
+): string {
+  return ledgerState === 'withdrawn'
+    ? 'Withdrawn'
+    : PAYMENT_STATUS_LABELS[status];
+}
+
+/**
+ * Whether a payment may still settle: the provider has not answered yet
+ * (`created`) or is settling it (`pending`). These are the payments shown
+ * above the Pay action, and the ones the return page keeps checking.
+ */
+export function paymentInFlight(status: PaymentStatus): boolean {
+  return status === 'created' || status === 'pending';
+}

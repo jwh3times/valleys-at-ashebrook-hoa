@@ -1,5 +1,5 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactServerRenderer from '@astrojs/react/server.js';
 import PaymentPage from '../../src/pages/lot-records/payments/[id].astro';
@@ -10,7 +10,8 @@ import {
   seedLotAuthority,
   seedPerson,
 } from './fixtures';
-import { seedPayment } from './payments-fixtures';
+import { fakeProvider, seedPayment } from './payments-fixtures';
+import { setPaymentProviderForTests } from '../../src/server/payments/registry';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../src/lib/types';
 import type { AuthContext } from '../../src/server/authz/guards';
 
@@ -41,7 +42,10 @@ beforeEach(async () => {
   await seedLotAuthority('neighbor-1', 'lot-b', { startDay: '2020-01-01' });
   // Created 2026-11-01, as every seeded payment is.
   await seedPayment({ id: 'pay-1', lotId: 'lot-a', amountCents: 45075 });
+  setPaymentProviderForTests(fakeProvider());
 });
+
+afterEach(() => setPaymentProviderForTests(null));
 
 const flagsOn: SiteSettings = {
   ...DEFAULT_SITE_SETTINGS,
@@ -144,6 +148,27 @@ describe('the payment a homeowner returns to', () => {
     expect(status).toBe(200);
   });
 
+  it('hands the stored status to the island that keeps checking, so it renders without JavaScript', async () => {
+    await setStatus('pending');
+    const { html } = await render('pay-1', caller('payer-1'));
+
+    expect(html).toContain('<astro-island');
+    expect(html).toContain('PaymentStatus');
+    expect(html).toContain('Processing');
+    expect(html).toContain('do not need to pay again');
+    expect(html).toContain(
+      'Bank payments take several business days to settle',
+    );
+  });
+
+  it('says nothing about settling once the payment is confirmed', async () => {
+    await setStatus('succeeded');
+    const { html } = await render('pay-1', caller('payer-1'));
+
+    expect(html).toContain('Received');
+    expect(html).not.toContain('several business days');
+  });
+
   it('asks an anonymous reader to sign in, without looking the payment up', async () => {
     const { status, html } = await render('no-such-payment', null);
     expect(status).toBe(200);
@@ -167,6 +192,13 @@ describe('a payment the reader may not see is the generic 404', () => {
     // A buyer holds the Lot today but not on the day the seller paid.
     await seedLotAuthority('buyer-1', 'lot-a', { startDay: '2026-11-05' });
     const { status, html } = await render('pay-1', caller('buyer-1'));
+    expect(status).toBe(404);
+    expect(html).not.toContain('$450.75');
+  });
+
+  it('while no payment provider is configured', async () => {
+    setPaymentProviderForTests(null);
+    const { status, html } = await render('pay-1', caller('payer-1'));
     expect(status).toBe(404);
     expect(html).not.toContain('$450.75');
   });

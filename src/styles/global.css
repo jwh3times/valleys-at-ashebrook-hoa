@@ -2065,6 +2065,21 @@ body.body--bare {
   font-size: 13.5px;
 }
 
+/* Payments still in flight, above the Pay action (#544), so nobody pays twice
+   by accident. */
+.lot-record__inflight {
+  margin: 0 0 12px;
+}
+
+.lot-record__inflight p,
+.lot-record__inflight ul {
+  margin: 0;
+}
+
+.lot-record__inflight ul {
+  padding-left: 18px;
+}
+
 /* A ledger row: what it was on the left, the amount and the running balance
    on the right. `flex-wrap` rather than a fixed two-column grid so a long
    description on a phone pushes the amount below it instead of crushing it. */
