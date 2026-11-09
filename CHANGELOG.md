@@ -9,6 +9,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.3] - 2026-11-09
+
+### Added
+
+- **The board can investigate and resolve online payments, from a new Payments tab beside Dues
+  ledger (#538, #545).** It answers "I paid, and the ledger says I didn't".
+  - **Each payment's detail** shows everything the payment provider reported about it, the ledger
+    entries those reports wrote, and every question it raised for the board with how each was
+    closed. A second refund of the same amount shows as its own report, even though it raises no
+    second question.
+  - **Re-sync** asks the provider about one payment there and then, so a missed confirmation can be
+    closed while the homeowner is still on the phone. A report the site already has is never
+    counted twice.
+  - **The queue of open questions** says why each one opened: an amount that differs, a payment
+    taken back or disputed, money matching no payment, one that looks like a check already entered,
+    or one still processing after ten days. The board resolves each with a reason and an optional
+    board-only note, required when the reason is "Other". The decision and who made it are added
+    to the record; nothing is edited.
+  - **Apply to a lot** credits a payment taken outside the site, such as through a payment link, to
+    the lot it was for, exactly once. Later news about that payment, such as a refund, then lands
+    on the same lot. It needs Lot records switched on.
+  - No payment provider is configured in production, so the tab says so and offers nothing there.
+
 ## [2.11.2] - 2026-11-09
 
 ### Added
@@ -4935,7 +4958,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.2...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.3...HEAD
+[2.11.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.2...v2.11.3
 [2.11.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.1...v2.11.2
 [2.11.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.0...v2.11.1
 [2.11.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.52...v2.11.0

@@ -431,6 +431,48 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   [`data-model.md`](./data-model.md) for `dues_ledger_entries` and
   [`module-map.md`](./module-map.md) for `lot-records/reads.ts`.
 
+- The board's online payments: `/api/admin/payments` (ADR 0025, #545; see
+  `src/server/payments/board.ts` and `apply.ts`) supports `GET`/`POST`. Gate order is
+  `requireBoard` (write freeze `503` on `POST`, `401`, `403`), then a configured payment provider
+  (`paymentProviderFor`, `404` without one). It does **not** require the Lot Records flags, since
+  ingestion never reads a flag and the board must see payments that keep arriving while Lot
+  Records is off; only `applyUnmatched` re-checks them, inside its INSERT. `GET` answers
+  `{ payments, exceptions }`: payments newest first, narrowed by `?lotId=` and `?status=` (`400`
+  on a status outside `PAYMENT_STATUSES`), each with its count of open exceptions, and every open
+  exception oldest first, an unmatched one carrying the fact that opened it and whether it can be
+  applied. `?id=<paymentId>` is one payment's detail: every stored provider fact in insertion
+  order, the ledger entries naming it, and every exception with its resolution (`404` unknown,
+  `400` on an empty id — presence, not truthiness). `POST` reads the body through `readJson`
+  (`400`) and is an action bus:
+  - `resync` `{ paymentId }` pulls the payment through `retrievePayment` and `applyPaymentEvent`,
+    in any status and with no rate limit, answering `200 { recorded }` (the facts new to the
+    site). Unknown is `404`; a payment with no provider reference, or taken through another
+    provider, is `409`; a provider failure is `502`, logged with the payment id and the error's
+    name only. It creates no row of its own, so it takes no operation key.
+  - `resolveException` `{ exceptionId, resolution, note?, operationKey }` appends a resolution:
+    `resolution` from `BOARD_PAYMENT_RESOLUTIONS` (`reviewed_no_action`, `corrected_by_entry`,
+    `other`), a trimmed `note` of at most `MAX_RESOLUTION_NOTE_LENGTH` (2000) characters, required
+    for `other` (`400` otherwise). `201 { id }`; `404` unknown exception.
+  - `applyUnmatched` `{ exceptionId, lotId, operationKey }` applies a payment taken outside the
+    site to a Lot. Only an open `unmatched_payment` exception whose fact is a settled USD
+    `payment_succeeded` with a provider reference qualifies (`UNMATCHED_SALE_SQL`, `409`
+    otherwise). It is three writes, not one batch, because the second is the application path's
+    own batch: a `board_applied` payment for the Lot (its INSERT re-checks the flags, the Lot, and
+    that the exception is still open and applicable — `409` "Lot not found, or lot records are not
+    enabled"); the stored fact replayed through `applyPaymentEvent` as a `via = 'board'` fact
+    under the stable id `board:<payment_events.id>`, so it credits once under the new payment's
+    credit key and a look-alike board-entered payment still opens `possible_duplicate`; then the
+    exception resolved `applied_to_lot` naming the acting account. An apply interrupted after the
+    first write is finished by applying again to the same Lot, which resumes the `board_applied`
+    payment already holding the reference there; a reference held by any other payment is `409`.
+    `201 { paymentId }`.
+
+  Each board write's `operationKey` must be a lower-case UUID (`400` otherwise) and **becomes the
+  id of the row it creates** (the resolution, or the `board_applied` payment), so the `409`s say
+  what happened: the same key retried is "already recorded", an exception someone else resolved
+  first is "already been resolved", and a key already used for a different exception is refused as
+  reused. Applying a completed apply again writes nothing.
+
 - Board-only duplicate review: `GET /api/admin/duplicates` lazy-backfills document hashes from R2
   and returns exact or near groups, each member annotated with a `verifiedAt` timestamp; groups
   where every member is already kept-verified are hidden until a matching upload resets one.
@@ -486,7 +528,7 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
 unit, status, voteWeight}` ordered by address — `status` rather than a derived "retired" flag,
     because the election/motion SQL still decides live Lots from `lots.status` and every
     writer keeps the two in step; this is the Lot list (`fetchLots`/`LotSummary` in
-    `src/lib/admin.ts`/`src/lib/types.ts`) the Dues ledger, Elections, Lot violations, Meetings, and
+    `src/lib/admin.ts`/`src/lib/types.ts`) the Dues ledger, Elections, Lot violations, Meetings, Payments, and
     Proxies admin panels pick lots from, replacing the deleted `GET /api/admin/properties`, which
     also returned every legacy owner's name, phone, and
     email. `POST`: `create` — inserts a live Lot with vote weight defaulting to 1,

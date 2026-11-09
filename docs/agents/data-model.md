@@ -374,12 +374,18 @@ ordering.
   entry (by insertion order, never by clock).
 - `payment_exception_resolutions`: one appended row per resolved exception (UNIQUE
   `exception_id`). It names the acting account, except for the system's own `funds_reinstated`.
+  A resolution the board records through `/api/admin/payments` (#545) takes the board's operation
+  key as its `id`, as does the `board_applied` payment an apply creates, so a retried submission
+  is recognized as already recorded.
 
 `dues_ledger_entries.payment_id` still has no FK, because adding one would rebuild the ledger. The
 application path, `src/server/payments/apply.ts`, is its only writer, and the only writer of the
 payment tables too, with one exception: `src/server/payments/checkout.ts`'s `startPayment` inserts
 each new `payments` row (`origin = 'checkout'`, `status = 'created'`) in an `INSERT … SELECT` that
-re-checks the three payment flags and Lot Authority. `test/unit/payments-boundaries.test.ts` pins
+re-checks the three payment flags and Lot Authority. `apply.ts` writes the other origin,
+`board_applied` (no initiator), when the board applies an unmatched payment to a Lot (#545), in an
+`INSERT … SELECT` that re-checks the Lot Records flags and the Lot.
+`test/unit/payments-boundaries.test.ts` pins
 that nothing outside `src/server/payments/` writes them, that only `apply.ts` updates `payments`,
 and that the other three are never updated or deleted. Provider-sourced entries write no `lot_record_events` row, since that log requires an
 acting account. Their trail is `payment_events`.
