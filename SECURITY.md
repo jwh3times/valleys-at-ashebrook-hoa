@@ -54,8 +54,8 @@ to acknowledge within a few days and will coordinate a fix and disclosure timeli
   page and every `/api/member/*` handler fail closed to 404 while `officialMode` is off. When it is
   on, the page offers sign-in/verification guidance while the API returns 401 to anonymous callers
   and 403 to callers below `homeowner`. Each handler calls
-  `requireMemberApi` (starting an online payment calls the stricter `requirePaymentStartApi`,
-  described below), and middleware independently gates the whole prefix as a production
+  `requireMemberApi` (starting an online payment calls the stricter `requirePaymentStartApi`, and
+  checking one calls `requirePaymentRefreshApi`, both described below), and middleware independently gates the whole prefix as a production
   backstop. Proxy writes are then scoped to the caller's verified `lotIds`; verification
   proves control of a lot, while the grantor selects which of the Persons currently holding Lot
   Authority there is acting — Ownership, or Representation of an owning Organization (#248 part 2
@@ -496,8 +496,10 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   reference to a Lot Record table or Drizzle identifier and fails the build on one.
 - **`/lot-records` is server-rendered and marked `private, no-store`.** Like the ballot-receipt
   renders on `/elections`, it is the most caller-specific HTML on the site — one Lot's own dues
-  balance, ledger, and enforcement records (ADR 0025, #295 slice 4) — so its response must never be
-  cacheable if a zone cache rule is added later. With either gating flag off, or for a caller who
+  balance, ledger, and enforcement records (ADR 0025, #295 slice 4), and, with a payment provider
+  configured, its online payments with their provider references (#544), never who started them —
+  so its response must never be cacheable if a zone cache rule is added later. Each payment's
+  return page, `/lot-records/payments/<id>`, is marked the same way. With either gating flag off, or for a caller who
   lacks the `member` capability, it answers the generic 404 rather than 403, consistent with the
   rest of the site's hidden-record behavior.
 - **The payment provider's webhook is authenticated by signature, never by a session.**
@@ -523,6 +525,15 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   flags and Lot Authority, so a lost race writes nothing (`409`, or the masked `404`). The
   return and cancel URLs are built from `BETTER_AUTH_URL`, never the request's `Host`, and the
   return page shows the payment's stored status and never reads its query string.
+- **A homeowner can ask the site to check a payment, but cannot make it ask the provider often.**
+  `POST /api/member/payments/refresh` (ADR 0025, #544), which the return page calls a bounded
+  number of times while a payment is in flight, follows the same order as starting one, except that
+  its `404` step needs `officialMode`, `lotRecordsEnabled` and a configured provider but not
+  `onlinePaymentsEnabled`. It answers the masked `404` for any payment the caller could not read on
+  `/lot-records`, pulls only a payment still in flight, and asks the provider about one payment at
+  most once a minute, claimed in a single guarded update, so an open page or repeated reloads cannot
+  run up calls against the association's provider account. What it pulls is applied through the
+  same idempotent path as the webhook, and a provider failure is logged with ids only.
 
 ## Automated safeguards
 

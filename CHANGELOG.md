@@ -9,6 +9,28 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.2] - 2026-11-09
+
+### Added
+
+- **A homeowner can see the online payments on each lot they hold, and check how one is going
+  (#538, #544).** On `/lot-records`, each lot lists its online payments, newest first, with their
+  status, amount, the day each started and Stripe's reference. Each status links to that payment's
+  own page. A co-owner sees payments a fellow co-owner made; a buyer never sees the seller's. A
+  payment that has not settled yet also appears in a notice just above **Pay**, so nobody pays a
+  second time by mistake. The payment's own page now updates by itself while the payment settles:
+  it checks with the site for about three minutes, then says it has stopped. It also says that bank
+  payments take several business days, while card payments usually confirm within minutes. Asking
+  for a fresh status reaches Stripe at most once a minute per payment, and only for a payment still
+  settling. Turning online payments off stops new payments only: payments already made stay listed
+  and can still be checked. No payment provider is configured in production, so none of this
+  appears there.
+
+### Changed
+
+- A payment's page (`/lot-records/payments/<id>`) is now "not found" while no payment provider is
+  configured, like the rest of the online-payment pages.
+
 ## [2.11.1] - 2026-11-08
 
 ### Added
@@ -4913,7 +4935,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.1...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.2...HEAD
+[2.11.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.1...v2.11.2
 [2.11.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.0...v2.11.1
 [2.11.0]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.52...v2.11.0
 [2.10.52]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.10.51...v2.10.52

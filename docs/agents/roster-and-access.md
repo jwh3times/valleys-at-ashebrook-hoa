@@ -76,7 +76,7 @@ reconciliation (`payments/reconcile.ts`, #543) skips while it is on, catching up
 `writeFreezeError(env, request)` takes no scope argument — it derives coverage from the request's
 own path, so no call site can hold a stale opinion about what its surface freezes, and middleware
 and the per-route guards cannot drift. It is called from `requireBoard`, `requireMemberApi`,
-`requireVotingApi`, `requirePaymentStartApi`, every `/api/verify/*` route, the payment webhook's `handlePaymentWebhook`, and
+`requireVotingApi`, `requirePaymentStartApi`, `requirePaymentRefreshApi`, every `/api/verify/*` route, the payment webhook's `handlePaymentWebhook`, and
 `src/middleware.ts` — whose final `else` branch catches any surface no named branch claims.
 
 Three suites hold it: `test/unit/freeze-coverage.test.ts` enumerates every route module and fails
@@ -136,7 +136,7 @@ Representation row — so an account linked to a duplicate would otherwise be to
 that it holds the survivor's Lots while every per-Person read still keyed on the duplicate's own
 id. `src/server/lot-records/reads.ts`'s homeowner reads (`fetchMemberLotViolations`,
 `fetchMemberLotViolation`, `fetchMemberLotAddresses`, and — since ADR 0025's ledger — `fetchMemberDuesLedger`
-and `fetchMemberPayment`)
+and `fetchMemberPayment`/`fetchMemberPayments`)
 repeat that same one-hop canonicalization in an internal `me` CTE before scoping, because without it
 a duplicate-linked account would be shown none of the records for the Lots `lotIds` just told it it
 holds — an empty page indistinguishable from a Lot with nothing recorded, the worst answer that

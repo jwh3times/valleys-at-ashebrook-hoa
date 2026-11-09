@@ -794,6 +794,22 @@ invalid-invitation` for every unknown, expired, used, superseded or contact-gone
   the browser navigates there; the return and cancel URLs come from `BETTER_AUTH_URL`. Middleware's
   member backstop hides every `/api/member/payments` path while `officialMode` or
   `lotRecordsEnabled` is off, and a `POST` to the collection while `onlinePaymentsEnabled` is off.
+- Check an online payment with the provider: `POST /api/member/payments/refresh` (ADR 0025, #544;
+  see `src/server/payments/refresh.ts`), called by the return page's `PaymentStatus` island. Its
+  guard is `requirePaymentRefreshApi`, `requirePaymentStartApi`'s order with a narrower first step:
+  `officialMode`, `lotRecordsEnabled` and a configured provider (`paymentsReadable`, `404`), but
+  **not** `onlinePaymentsEnabled`, so a payment already in flight stays chaseable after payments
+  are switched off; then the write freeze (`503`), exact `Origin` (`403`), the JSON media type
+  (`415`), the session (`401`) and `member` (`403`). The body is `{ paymentId }` (`400` on a
+  malformed body or a missing id). A payment the caller may not read — another Lot's, one from
+  before their own period of Lot Authority, or none — is the masked `404`, decided by the same
+  `fetchMemberPayment` read the return page uses. Only a payment still `created` or `pending` is
+  pulled, and at most once a minute per payment: `claimPaymentPull` stamps the payment in one
+  guarded `UPDATE`, so racing requests ask the provider once. The pulled facts go through
+  `applyPaymentEvent`. It answers `200 { status, ledgerState, pulled }`; inside the one-minute
+  window, or for a payment no longer in flight, that is the stored status with `pulled: false`. A
+  provider failure is `502` with a retry-in-a-minute message, and the claim still holds, so a
+  failing provider is not asked again for a minute either.
 - Payment provider webhook: `POST /api/webhooks/payments` (ADR 0025, #541; see
   `src/server/payments/webhook.ts`). Outside both session namespaces: the caller is the provider,
   authenticated only by the signature its adapter verifies, so middleware applies the write freeze
