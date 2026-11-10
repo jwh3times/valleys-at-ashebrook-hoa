@@ -386,6 +386,26 @@ export async function applyUnmatchedPayment(input: {
   );
 }
 
+/**
+ * The treasurer's CSV of provider-sourced ledger entries with an effective
+ * day from `from` through `to` (#546). Answers the file's text; the route's
+ * refusal text is the error. Not `adminRequest`, which parses JSON: the
+ * reply is CSV.
+ */
+export async function exportProviderEntries(range: {
+  from: string;
+  to: string;
+}): Promise<string> {
+  const res = await fetch('/api/admin/payments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'export', ...range }),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `Export failed: ${res.status}`);
+  return res.text();
+}
+
 // ---------- Announcements ----------
 export async function saveAnnouncement(
   data: Omit<Announcement, 'id'>,

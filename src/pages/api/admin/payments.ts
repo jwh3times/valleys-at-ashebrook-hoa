@@ -9,6 +9,7 @@ import {
   BOARD_PAYMENT_RESOLUTIONS,
   MAX_RESOLUTION_NOTE_LENGTH,
   PAYMENT_STATUSES,
+  isoDateOrError,
   type BoardPaymentResolution,
   type PaymentStatus,
 } from '../../../lib/types';
@@ -25,6 +26,7 @@ import {
   listOpenPaymentExceptions,
   resyncBoardPayment,
 } from '../../../server/payments/board';
+import { exportProviderEntries } from '../../../server/payments/export';
 import type { PaymentProvider } from '../../../server/payments/provider';
 
 export const prerender = false;
@@ -45,7 +47,8 @@ export const prerender = false;
  * the same submission is then answered "already recorded", which is true,
  * rather than "someone else got there first", which would not be. A re-sync
  * creates nothing of its own (its facts are the provider's, stored once), so
- * it takes no key.
+ * it takes no key, and neither does the treasurer's CSV `export` (#546),
+ * which only reads.
  */
 
 const NOT_FOUND = () => new Response('Not found', { status: 404 });
@@ -122,13 +125,42 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return resolve(parsed.value, ctx.userId);
     case 'applyUnmatched':
       return apply(parsed.value, ctx.userId);
+    case 'export':
+      return exportCsv(parsed.value);
     default:
       return refuse(
         400,
-        'Unknown action — expected one of: resync, resolveException, applyUnmatched',
+        'Unknown action — expected one of: resync, resolveException, applyUnmatched, export',
       );
   }
 };
+
+/**
+ * The treasurer's CSV of provider-sourced entries over a range of
+ * Association Days, both ends included. It writes nothing, so it takes no
+ * operation key. It is a `POST` action as the spec fixes it, so the write
+ * freeze holds it too.
+ */
+async function exportCsv(body: unknown): Promise<Response> {
+  const from = isoDateOrError(stringField(body, 'from'), 'from');
+  if (!from.ok) return refuse(400, from.error);
+  const to = isoDateOrError(stringField(body, 'to'), 'to');
+  if (!to.ok) return refuse(400, to.error);
+  // Association Days are `YYYY-MM-DD`, so text order is day order.
+  if (to.value < from.value) return refuse(400, 'to must not be before from');
+
+  const csv = await exportProviderEntries(env, {
+    from: from.value,
+    to: to.value,
+  });
+  return new Response(csv, {
+    // Per-Lot money and addresses, as the board's other sensitive reads.
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
+}
 
 async function resync(
   body: unknown,

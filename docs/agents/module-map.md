@@ -55,8 +55,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   and a new intent gets a new one) — back the admin `DuesLedgerManager` panel, the only caller of
   any of them. Online-payment helpers (ADR 0025, #545) — `fetchBoardPayments` (the route's `404`
   without a configured provider read as `{ enabled: false, … }`), `fetchBoardPayment`,
-  `resyncBoardPayment`, `resolvePaymentException`, and `applyUnmatchedPayment` — back the admin
-  `PaymentsManager` panel, which mints each form's key with `newOperationKey` the same way.
+  `resyncBoardPayment`, `resolvePaymentException`, `applyUnmatchedPayment`, and
+  `exportProviderEntries` (#546; answers the CSV's text, not through `adminRequest`, which parses
+  JSON) — back the admin `PaymentsManager` panel, which mints each form's key with
+  `newOperationKey` the same way.
 - `src/lib/roster-admin.ts` (ADR 0022 phase 3e, #221) handles board — and, for its three
   System-Administrator-only actions, capability-gated — writes to every phase 3b/3c/3d roster admin
   surface, one group per admin panel: Roster (`fetchRoster`, lot create/update/retire/correct, party
@@ -449,7 +451,11 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `fetchBoardPaymentDetail` (a payment beside every stored fact, the ledger entries it wrote and
   every exception with its resolution) and `resyncBoardPayment`, the on-demand pull, which unlike
   the homeowner's refresh pulls in any status with no rate limit and writes only through
-  `applyPaymentEvent`. The board panel is `src/components/admin/PaymentsManager.tsx`, the
+  `applyPaymentEvent`. `export.ts`'s `exportProviderEntries(env, { from, to })` is the
+  treasurer's read-only CSV of provider-sourced ledger entries over a range of Association Days
+  (#546), behind the route's `export` action: board-recorded entries are left out, amounts are
+  built from integer cents, and every text cell is neutralized against spreadsheet formulas before
+  RFC 4180 quoting. The board panel is `src/components/admin/PaymentsManager.tsx`, the
   **Payments** tab after **Dues ledger**, whose labels for exception reasons, resolutions, fact
   types, `via` and outcomes live in `src/lib/payments.ts`.
   `reconcile.ts`'s `reconcilePayments(env, now)` is the daily job's body (#543): silent with no

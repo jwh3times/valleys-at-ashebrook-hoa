@@ -431,8 +431,8 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
   [`data-model.md`](./data-model.md) for `dues_ledger_entries` and
   [`module-map.md`](./module-map.md) for `lot-records/reads.ts`.
 
-- The board's online payments: `/api/admin/payments` (ADR 0025, #545; see
-  `src/server/payments/board.ts` and `apply.ts`) supports `GET`/`POST`. Gate order is
+- The board's online payments: `/api/admin/payments` (ADR 0025, #545, #546; see
+  `src/server/payments/board.ts`, `apply.ts` and `export.ts`) supports `GET`/`POST`. Gate order is
   `requireBoard` (write freeze `503` on `POST`, `401`, `403`), then a configured payment provider
   (`paymentProviderFor`, `404` without one). It does **not** require the Lot Records flags, since
   ingestion never reads a flag and the board must see payments that keep arriving while Lot
@@ -466,6 +466,18 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
     first write is finished by applying again to the same Lot, which resumes the `board_applied`
     payment already holding the reference there; a reference held by any other payment is `409`.
     `201 { paymentId }`.
+  - `export` `{ from, to }` is the treasurer's CSV for bank reconciliation (#546): every
+    `dues_ledger_entries` row with `source = 'provider'` whose `effective_day` falls from `from`
+    through `to`, both ends included (board-recorded entries are left out). Both are `YYYY-MM-DD`
+    Association Days checked by `isoDateOrError` (`400` when missing or not a real calendar day),
+    then `400` "to must not be before from". `200` `text/csv; charset=utf-8` with
+    `cache-control: no-store`: the header row
+    `Effective day,Lot,Kind,Amount,Payment reference,Entry id`, then one CRLF-terminated row per
+    entry ordered by effective day; an empty range answers the header alone. `Amount` keeps the ledger's sign (a payment is negative) as `-?digits.dd`
+    built from the integer cents; every text cell gets a `'` prefix when it starts with `=`, `+`,
+    `-`, `@`, a tab or a carriage return, so a spreadsheet reads it as text, and is then RFC 4180
+    quoted. It writes nothing, so it takes no operation key; as a `POST` it is still held by the
+    write freeze.
 
   Each board write's `operationKey` must be a lower-case UUID (`400` otherwise) and **becomes the
   id of the row it creates** (the resolution, or the `board_applied` payment), so the `409`s say

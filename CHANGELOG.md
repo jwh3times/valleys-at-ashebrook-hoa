@@ -9,6 +9,50 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.7] - 2026-11-09
+
+### Added
+
+- **The treasurer can export the payment provider's ledger entries as a spreadsheet, from the
+  board's Payments tab (#538, #546).** It is for matching the provider's payouts against the
+  association's bank statement outside the site.
+  - **Choose a first and last day** under "Export for bank reconciliation", then **Export CSV**.
+    The file holds every ledger entry the payment provider wrote with an effective day in that
+    range, both days included: the day, the lot, the kind (payment or reversal), the amount, the
+    payment reference and the entry's id. Entries the board recorded by hand, such as checks, are
+    not included. A range with nothing in it gives a file with only the column headings.
+  - **Amounts carry the ledger's sign,** so a payment is negative and its reversal positive, and
+    they stay numbers a spreadsheet can add up. They are worked out in whole cents, so no rounding
+    creeps in.
+  - **Opening the file is safe.** A lot address or payment reference that a spreadsheet would run
+    as a formula is shown as plain text instead.
+  - The export only reads, so it changes nothing, and it is held during a maintenance freeze like
+    the board's other actions. No payment provider is configured in production, so the tab still
+    offers nothing there.
+
+## [2.11.6] - 2026-11-09
+
+### Changed
+
+- Dependency update (Dependabot, #556): `jsdom` 30.1.3 → 31.0.0, used only by the component tests.
+
+## [2.11.5] - 2026-11-09
+
+### Changed
+
+- Dependency updates (Dependabot, #555): `@anthropic-ai/sdk` 1.4.0 → 1.6.0, `@astrojs/cloudflare`
+  14.4.4 → 14.4.6, `@astrojs/react` 7.1.2 → 7.1.4, `astro` 7.4.5 → 7.4.7, `better-auth`,
+  `@better-auth/core` and `@better-auth/drizzle-adapter` 1.7.15 → 1.7.18,
+  `@cloudflare/vitest-plugin` 1.5.1 → 1.6.0, `@cloudflare/workers-types` 5.20261103.1 →
+  5.20261106.1 and `wrangler` 4.157.0 → 4.158.0. The committed Worker types were regenerated for
+  the newer `workerd` (1.20261104.1) that the lockfile brought in transitively.
+
+## [2.11.4] - 2026-11-09
+
+### Changed
+
+- Dependency update (Dependabot, #554): `oxlint-tsgolint` 7.0.2005 → 7.0.2006.
+
 ## [2.11.3] - 2026-11-09
 
 ### Added
@@ -4958,7 +5002,11 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.3...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.7...HEAD
+[2.11.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.6...v2.11.7
+[2.11.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.5...v2.11.6
+[2.11.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.4...v2.11.5
+[2.11.4]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.3...v2.11.4
 [2.11.3]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.2...v2.11.3
 [2.11.2]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.1...v2.11.2
 [2.11.1]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.0...v2.11.1

@@ -832,9 +832,198 @@ describe('applying a payment taken outside the site to a Lot', () => {
   });
 });
 
+describe("exporting provider-sourced entries for the treasurer's bank reconciliation", () => {
+  const HEADER = 'Effective day,Lot,Kind,Amount,Payment reference,Entry id';
+
+  /** A settled online payment for `lotId`, credited on the Association Day of `at`. */
+  async function settled(
+    id: string,
+    lotId: string,
+    at: string,
+    overrides: Partial<NormalizedPaymentEvent> = {},
+  ) {
+    await seedPayment({ id, lotId });
+    await record(
+      fakeEvent('payment_succeeded', `ref_${id}`, {
+        occurredAt: new Date(at),
+        ...overrides,
+      }),
+    );
+  }
+
+  /** The id of the ledger entry a payment's settlement wrote. */
+  async function entryOf(paymentId: string, kind = 'payment') {
+    const row = await env.DATABASE.prepare(
+      `SELECT id FROM dues_ledger_entries WHERE payment_id = ? AND kind = ?`,
+    )
+      .bind(paymentId, kind)
+      .first<{ id: string }>();
+    if (!row) throw new Error(`no ${kind} entry for ${paymentId}`);
+    return row.id;
+  }
+
+  const exportRange = (from: unknown, to: unknown, ctx = board) =>
+    post({ action: 'export', from, to }, ctx);
+
+  it('answers CSV of each entry the provider wrote in the range', async () => {
+    await settled('pay-1', 'lot-a', '2026-11-02T15:00:00Z');
+
+    const res = await exportRange('2026-11-01', '2026-11-30');
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    // Per-Lot money and addresses: no cache may keep a copy.
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(await res.text()).toBe(
+      `${HEADER}\r\n` +
+        `2026-11-02,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-1,${await entryOf('pay-1')}\r\n`,
+    );
+  });
+
+  it('includes both ends of the range, and nothing outside it or recorded by the board', async () => {
+    await settled('pay-before', 'lot-a', '2026-10-31T16:00:00Z');
+    await settled('pay-first', 'lot-a', '2026-11-01T16:00:00Z');
+    await settled('pay-last', 'lot-b', '2026-11-30T16:00:00Z');
+    await settled('pay-after', 'lot-b', '2026-12-01T16:00:00Z');
+    // A check the board recorded by hand, inside the range.
+    await env.DATABASE.prepare(
+      `INSERT INTO dues_ledger_entries
+         (id, lot_id, kind, amount_cents, effective_day, description, method,
+          source, recorded_by, recorded_at, operation_key)
+       VALUES ('board-check', 'lot-a', 'payment', -10000, '2026-11-15',
+               'Check 1001', 'check', 'board', 'board-1', 1, 'board-check')`,
+    ).run();
+
+    const res = await exportRange('2026-11-01', '2026-11-30');
+
+    expect(await res.text()).toBe(
+      `${HEADER}\r\n` +
+        `2026-11-01,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-first,${await entryOf('pay-first')}\r\n` +
+        `2026-11-30,lot-b Ashebrook Lane,Payment,-450.00,ref_pay-last,${await entryOf('pay-last')}\r\n`,
+    );
+  });
+
+  it('defuses a cell a spreadsheet would run as a formula, and quotes what needs quoting', async () => {
+    await seedProperty('lot-formula', {
+      address: '=HYPERLINK("http://x.test","Pay")',
+      addressNormalized: 'formula lot',
+    });
+    await seedProperty('lot-comma', {
+      address: '12 Oak Lane, Rear',
+      addressNormalized: '12 oak lane rear',
+    });
+    const sale = async (id: string, lotId: string, ref: string, at: string) => {
+      await seedPayment({ id, lotId, ref });
+      await record(
+        fakeEvent('payment_succeeded', ref, { occurredAt: new Date(at) }),
+      );
+    };
+    await sale('pay-1', 'lot-formula', '-2+3', '2026-11-02T16:00:00Z');
+    await sale('pay-2', 'lot-comma', '@SUM(A1)', '2026-11-03T16:00:00Z');
+    await sale('pay-3', 'lot-a', '+1', '2026-11-04T16:00:00Z');
+    await sale('pay-4', 'lot-a', '\tcmd', '2026-11-05T16:00:00Z');
+
+    const body = await (await exportRange('2026-11-01', '2026-11-30')).text();
+
+    expect(body).toBe(
+      `${HEADER}\r\n` +
+        `2026-11-02,"'=HYPERLINK(""http://x.test"",""Pay"")",Payment,-450.00,'-2+3,${await entryOf('pay-1')}\r\n` +
+        `2026-11-03,"12 Oak Lane, Rear",Payment,-450.00,'@SUM(A1),${await entryOf('pay-2')}\r\n` +
+        `2026-11-04,lot-a Ashebrook Lane,Payment,-450.00,'+1,${await entryOf('pay-3')}\r\n` +
+        `2026-11-05,lot-a Ashebrook Lane,Payment,-450.00,'\tcmd,${await entryOf('pay-4')}\r\n`,
+    );
+  });
+
+  it('renders each amount exactly, with the sign the ledger records', async () => {
+    await settled('pay-cent', 'lot-a', '2026-11-02T16:00:00Z', {
+      amountCents: 1,
+    });
+    await settled('pay-odd', 'lot-a', '2026-11-03T16:00:00Z', {
+      amountCents: 1005,
+    });
+    await settled('pay-big', 'lot-b', '2026-11-04T16:00:00Z', {
+      amountCents: 99999999,
+    });
+    // The bank pulled pay-odd back: an exact negation of its credit.
+    await record(
+      fakeEvent('funds_withdrawn', 'ref_pay-odd', {
+        amountCents: 1005,
+        occurredAt: new Date('2026-11-05T16:00:00Z'),
+      }),
+    );
+
+    const rows = (await (await exportRange('2026-11-01', '2026-11-30')).text())
+      .split('\r\n')
+      .slice(1, -1)
+      .map((line) => line.split(','));
+
+    expect(rows.map(([day, , kind, amount]) => [day, kind, amount])).toEqual([
+      ['2026-11-02', 'Payment', '-0.01'],
+      ['2026-11-03', 'Payment', '-10.05'],
+      ['2026-11-04', 'Payment', '-999999.99'],
+      ['2026-11-05', 'Reversal', '10.05'],
+    ]);
+    // The reversal names the payment it reverses.
+    expect(rows[3][4]).toBe('ref_pay-odd');
+    expect(rows[3][5]).toBe(await entryOf('pay-odd', 'reversal'));
+  });
+
+  it('is the board’s alone, and absent with no payment provider', async () => {
+    await settled('pay-1', 'lot-a', '2026-11-02T16:00:00Z');
+
+    const asOwner = await exportRange('2026-11-01', '2026-11-30', homeowner);
+    expect(asOwner.status).toBe(403);
+    expect(await asOwner.text()).not.toContain('ref_pay-1');
+
+    setPaymentProviderForTests(null);
+    unconfigurePayments();
+    expect((await exportRange('2026-11-01', '2026-11-30')).status).toBe(404);
+  });
+
+  it('answers a range with nothing in it with the header alone, not an error', async () => {
+    await settled('pay-1', 'lot-a', '2026-11-02T16:00:00Z');
+
+    const res = await exportRange('2026-12-01', '2026-12-31');
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(`${HEADER}\r\n`);
+  });
+
+  it('refuses a range that is not two Association Days, in order', async () => {
+    const refusals: [unknown, unknown][] = [
+      [undefined, '2026-11-30'],
+      ['2026-11-01', undefined],
+      ['', '2026-11-30'],
+      ['2026-11-1', '2026-11-30'],
+      ['2026-11-01T00:00:00Z', '2026-11-30'],
+      ['2026-02-31', '2026-03-01'],
+      ['2026-11-01', '2026-13-01'],
+      [20261101, '2026-11-30'],
+      ['2026-11-30', '2026-11-01'],
+    ];
+    for (const [from, to] of refusals) {
+      const res = await exportRange(from, to);
+      expect(res.status, `from ${String(from)} to ${String(to)}`).toBe(400);
+      expect(res.headers.get('content-type')).not.toContain('text/csv');
+    }
+  });
+
+  it('takes a one-day range', async () => {
+    await settled('pay-1', 'lot-a', '2026-11-02T16:00:00Z');
+    await settled('pay-2', 'lot-a', '2026-11-03T16:00:00Z');
+
+    const body = await (await exportRange('2026-11-03', '2026-11-03')).text();
+
+    expect(body).toBe(
+      `${HEADER}\r\n` +
+        `2026-11-03,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-2,${await entryOf('pay-2')}\r\n`,
+    );
+  });
+});
+
 describe('the actions the route knows', () => {
   it('refuses an unknown action and a malformed body', async () => {
-    expect((await post({ action: 'export' })).status).toBe(400);
+    expect((await post({ action: 'refund' })).status).toBe(400);
     expect((await post('{not json')).status).toBe(400);
   });
 });

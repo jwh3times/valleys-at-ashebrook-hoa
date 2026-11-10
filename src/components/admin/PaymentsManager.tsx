@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   applyUnmatchedPayment,
+  exportProviderEntries,
   fetchBoardPayment,
   fetchBoardPayments,
   fetchLots,
@@ -78,6 +79,8 @@ export default function PaymentsManager() {
   const [note, setNote] = useState('');
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [applyLotId, setApplyLotId] = useState('');
+  const [exportFrom, setExportFrom] = useState('');
+  const [exportTo, setExportTo] = useState('');
 
   /**
    * The open form's key, minted when it opens. A ref, so a re-render cannot
@@ -270,6 +273,39 @@ export default function PaymentsManager() {
       setApplyingId(null);
       return `Payment applied to ${addressOf(lotId)}.`;
     });
+  }
+
+  /**
+   * Reads, so it writes nothing, takes no key and reloads nothing: the file
+   * is the whole answer.
+   */
+  function submitExport() {
+    if (!exportFrom || !exportTo) {
+      setMsg('Error: choose the first and last day to export.');
+      return;
+    }
+    if (exportTo < exportFrom) {
+      setMsg('Error: the last day must not be before the first.');
+      return;
+    }
+    const range = { from: exportFrom, to: exportTo };
+    setBusy(true);
+    setMsg('');
+    void (async () => {
+      try {
+        downloadCsv(
+          await exportProviderEntries(range),
+          `provider-entries-${range.from}-to-${range.to}.csv`,
+        );
+        setMsg(
+          `Exported the provider's entries from ${formatDate(range.from)} through ${formatDate(range.to)}.`,
+        );
+      } catch (err: unknown) {
+        setMsg(`Error: ${errorText(err, 'the export failed.')}`);
+      } finally {
+        setBusy(false);
+      }
+    })();
   }
 
   if (loading)
@@ -558,8 +594,60 @@ export default function PaymentsManager() {
           ))
         )}
       </div>
+
+      <h2 className="panel-editor__title">Export for bank reconciliation</h2>
+      <p className="muted">
+        Every ledger entry the payment provider wrote, with an effective day
+        from the first day through the last, as a CSV file to lay beside the
+        association&apos;s bank statement. Entries the board recorded by hand
+        are not included. Amounts carry the ledger&apos;s sign: a payment is
+        negative.
+      </p>
+      <div className="field-grid">
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="payments-export-from">First day</label>
+          <input
+            id="payments-export-from"
+            type="date"
+            value={exportFrom}
+            onChange={(e) => setExportFrom(e.target.value)}
+          />
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <label htmlFor="payments-export-to">Last day</label>
+          <input
+            id="payments-export-to"
+            type="date"
+            value={exportTo}
+            onChange={(e) => setExportTo(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="btn-row" style={{ marginTop: '12px' }}>
+        <button
+          type="button"
+          className="btn btn--small"
+          disabled={busy}
+          onClick={submitExport}
+        >
+          Export CSV
+        </button>
+      </div>
     </div>
   );
+}
+
+/** Hands the browser `csv` to save as `fileName`. */
+function downloadCsv(csv: string, fileName: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 /** Everything that happened to one payment, in the order it was recorded. */
