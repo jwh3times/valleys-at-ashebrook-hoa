@@ -390,7 +390,10 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   before parsing, maps the Checkout Session, dispute and refund events, and finds a dispute's or
   refund's session by listing sessions filtered by payment intent; a signed event it cannot read
   throws `UnreadableStripeEvent`. Its `createCheckout` opens a one-hour, one-line, neutrally named
-  `usd` Checkout Session (bank account first, card second) with an idempotency key per payment;
+  `usd` Checkout Session with an idempotency key per payment. It offers exactly a US bank account
+  and a card through `allowed_payment_method_types` (the pinned version answers `400` to the older
+  `payment_method_types`, #559) and sets Link's display to `never`, so Link adds no button or
+  pay-later option of its own;
   its `retrievePayment` reads a session with its payment intent's latest charge and returns its
   settlement state as facts with stable ids (`reconciliation:<session>:<type>`), and its
   `listEventsSince` lists the mapped event types from an hour before the cursor (no cursor: the
