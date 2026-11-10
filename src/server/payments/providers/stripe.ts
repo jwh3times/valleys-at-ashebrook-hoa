@@ -145,10 +145,16 @@ export function stripeProvider(
           'line_items[0][price_data][currency]': 'usd',
           'line_items[0][price_data][unit_amount]': String(amountCents),
           'line_items[0][price_data][product_data][name]': LINE_ITEM_NAME,
-          // Bank account listed first: it costs the association far less than a
-          // card. Stripe may still order its page by its own rules.
-          'payment_method_types[0]': 'us_bank_account',
-          'payment_method_types[1]': 'card',
+          // Exactly these two, whatever the account's payment-method settings
+          // offer by default (#559). The pinned version answers 400 to the
+          // older `payment_method_types`, which endive removed. Bank account
+          // listed first: it costs the association far less than a card.
+          // Stripe may still order its page by its own rules.
+          'allowed_payment_method_types[0]': 'us_bank_account',
+          'allowed_payment_method_types[1]': 'card',
+          // Link would otherwise add its own button and pay-later options
+          // (Klarna among them) beside the two above.
+          'wallet_options[link][display]': 'never',
           client_reference_id: paymentId,
           'metadata[payment_id]': paymentId,
           expires_at: String(Math.floor(now() / 1000) + CHECKOUT_LIFETIME_S),

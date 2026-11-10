@@ -9,6 +9,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.8] - 2026-11-10
+
+### Fixed
+
+- **Paying online now reaches Stripe's payment page (#559).** Every attempt had failed with "The
+  payment service could not be reached", because the Stripe API version the site uses no longer
+  accepts the way it chose payment methods. Found in the sandbox rehearsal (#547) before anyone
+  could pay: no payment provider is configured in production. Stripe's page now offers exactly a
+  US bank account and a card (Apple Pay included), and no longer adds Link's own button or a
+  Klarna pay-later option. Stripe lists the card first; it orders its page itself.
+
 ## [2.11.7] - 2026-11-09
 
 ### Added
@@ -5002,7 +5013,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.7...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.8...HEAD
+[2.11.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.7...v2.11.8
 [2.11.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.6...v2.11.7
 [2.11.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.5...v2.11.6
 [2.11.5]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.4...v2.11.5
