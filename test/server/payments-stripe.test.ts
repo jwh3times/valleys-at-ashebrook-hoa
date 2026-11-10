@@ -499,8 +499,12 @@ describe('starting a Stripe Checkout Session', () => {
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': '45075',
       'line_items[0][price_data][product_data][name]': 'Dues payment',
-      'payment_method_types[0]': 'us_bank_account',
-      'payment_method_types[1]': 'card',
+      // At the pinned version Stripe answers 400 to `payment_method_types`
+      // (removed in endive, #559); exact equality keeps it out.
+      'allowed_payment_method_types[0]': 'us_bank_account',
+      'allowed_payment_method_types[1]': 'card',
+      // Link would otherwise add its own button and pay-later options.
+      'wallet_options[link][display]': 'never',
       client_reference_id: 'pay-checkout-1',
       'metadata[payment_id]': 'pay-checkout-1',
       expires_at: String(NOW_S + 3600),
