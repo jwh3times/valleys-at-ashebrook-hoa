@@ -9,6 +9,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.10] - 2026-11-10
+
+### Fixed
+
+- **The Workers test suite passes again on a machine whose `.dev.vars` holds a Stripe sandbox
+  (#560).** Three tests that check what the site shows when no payment provider is configured
+  failed there, because they read the payment keys `.dev.vars` supplies. They now clear those keys
+  first, as the payment tests already did. Both files also start with sandbox keys set, so CI,
+  which has no `.dev.vars`, now catches a test that forgets. No change to the site itself.
+
 ## [2.11.9] - 2026-11-10
 
 ### Fixed
@@ -5029,7 +5039,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.9...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.10...HEAD
+[2.11.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.9...v2.11.10
 [2.11.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.8...v2.11.9
 [2.11.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.7...v2.11.8
 [2.11.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.6...v2.11.7
