@@ -9,6 +9,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.9] - 2026-11-10
+
+### Fixed
+
+- **The setup guide's Stripe sandbox steps now match what a sandbox actually does (#547).** The
+  end-to-end rehearsal found two places the guide was wrong.
+  - **Verifying the test bank account.** The guide said to enter the micro-deposit amounts `32` and
+    `45`. The sandbox asked for a descriptor code instead, and sends no email for it. The guide now
+    says to post the test code `SM11AA` through Stripe's API. It also covers entering the bank
+    details by hand, skipping the offer to save the account with Link, a second failing test
+    account, and the test card.
+  - **A new optional step rehearses a missed webhook.** It shows how to run the daily
+    reconciliation job locally and prove that it recovers a payment the site never heard about.
+    Wrangler's old trigger address for the job now answers "not found", so the step uses the
+    current one.
+
 ## [2.11.8] - 2026-11-10
 
 ### Fixed
@@ -5013,7 +5029,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.8...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.9...HEAD
+[2.11.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.8...v2.11.9
 [2.11.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.7...v2.11.8
 [2.11.7]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.6...v2.11.7
 [2.11.6]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.5...v2.11.6
