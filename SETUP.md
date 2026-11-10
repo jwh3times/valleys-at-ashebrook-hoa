@@ -606,13 +606,28 @@ needs nothing else configured.
 
 5. **Make a test payment.** In `/admin` → **Site Settings**, turn on **Official mode**, **Lot
    records** and **Online payments** (each its own audited switch). Sign in as a homeowner who
-   holds a lot, open `/lot-records`, and use **Pay**: Stripe's page offers a US bank account and a
-   card.
-   Choose test institution routing `110000000` with account `000123456789`; Stripe asks you to
-   verify it with the micro-deposit amounts `32` and `45`. You return to the payment's page, which
-   says **Not confirmed yet** until Stripe's first event arrives and **Processing** while the bank
-   payment settles. Other test accounts: `000111111116` fails,
-   `000555555559` is later disputed, and `000000000009` stays processing.
+   holds a lot, open `/lot-records`, and use **Pay**: Stripe's page offers a card and a US bank
+   account (Stripe chooses the order).
+   For the bank account, choose **Enter bank details manually**, with routing `110000000` and
+   account `000123456789`. Stripe may offer to save the account with Link; **Finish without
+   saving** continues. The payment then waits for micro-deposit verification. A sandbox sends no
+   email for it, so verify through the API instead: for the payment intent's
+   `verify_with_microdeposits` action of type `descriptor_code`, post the test code `SM11AA` to
+   `/v1/payment_intents/<id>/verify_microdeposits` (the type `amounts` takes `32` and `45`
+   instead). You return to the payment's page, which says **Not confirmed yet** until Stripe's
+   first event arrives and **Processing** while the bank payment settles, usually under a minute in
+   a sandbox. Other test accounts: `000111111116` and `000222222227` fail, `000555555559` is
+   later disputed, and `000000000009` stays processing. The test card `4242 4242 4242 4242` is
+   confirmed at once.
+
+6. **Rehearse a missed webhook (optional).** The reconciliation job runs only in the built Worker.
+   Run `npm run build`, then
+   `npx wrangler dev -c dist/server/wrangler.json --test-scheduled --local --persist-to .wrangler/state --env-file .dev.vars --port 8788`,
+   and trigger the scheduled handler with
+   `curl -X POST "http://127.0.0.1:8788/cdn-cgi/local/explorer/api/local/scheduled?worker=valleys-at-ashebrook-hoa&cron=0+7+*+*+*"`.
+   It shares the local database with `npm run dev`. The payment's own page also asks Stripe a few
+   seconds after it loads, so to prove the job recovers a payment, keep that page from loading
+   (stop the site, or leave Checkout before the redirect).
 
 Going live is a separate, later step: it needs the association's merchant account, a webhook
 endpoint registered in the live Dashboard for the event types above, and the three values set as a
