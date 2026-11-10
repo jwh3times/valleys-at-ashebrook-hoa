@@ -10,7 +10,12 @@ import {
   seedLotAuthority,
   seedPerson,
 } from './fixtures';
-import { fakeProvider, seedPayment } from './payments-fixtures';
+import {
+  configurePayments,
+  fakeProvider,
+  seedPayment,
+  unconfigurePayments,
+} from './payments-fixtures';
 import { setPaymentProviderForTests } from '../../src/server/payments/registry';
 import { DEFAULT_SITE_SETTINGS, type SiteSettings } from '../../src/lib/types';
 import type { AuthContext } from '../../src/server/authz/guards';
@@ -27,9 +32,13 @@ import type { AuthContext } from '../../src/server/authz/guards';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+  // Start as a machine whose bootstrapped `.dev.vars` holds a payment sandbox,
+  // so a test that trusts the bare pool `env` fails in CI too (#560).
+  configurePayments();
 });
 
 beforeEach(async () => {
+  unconfigurePayments();
   // A consolidation link points at another party with RESTRICT, so it would
   // make the shared teardown's `DELETE FROM parties` fail.
   await env.DATABASE.prepare(
