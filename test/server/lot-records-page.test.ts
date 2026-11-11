@@ -21,10 +21,12 @@ import {
 } from '../../src/server/db/roster-schema';
 import { truncateAll, seedProperty, seedLotAuthority } from './fixtures';
 import {
+  configurePayments,
   fakeEvent,
   fakeProvider,
   resetFakeEvents,
   seedPayment,
+  unconfigurePayments,
 } from './payments-fixtures';
 import { setPaymentProviderForTests } from '../../src/server/payments/registry';
 import { applyPaymentEvent } from '../../src/server/payments/apply';
@@ -51,6 +53,9 @@ import type { AuthContext } from '../../src/server/authz/guards';
 
 beforeAll(async () => {
   await applyD1Migrations(env.DATABASE, env.MIGRATIONS!);
+  // Start as a machine whose bootstrapped `.dev.vars` holds a payment sandbox,
+  // so a test that trusts the bare pool `env` fails in CI too (#560).
+  configurePayments();
 });
 
 const DAY_IN_LOT_A = '2026-09-01';
@@ -164,6 +169,7 @@ async function seedEntry(
 
 beforeEach(async () => {
   const db = getDb(env);
+  unconfigurePayments();
   resetFakeEvents();
   await db.delete(representationLots);
   await db.delete(representations);
