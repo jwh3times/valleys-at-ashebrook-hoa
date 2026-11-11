@@ -16,7 +16,11 @@ import { lotRecordsVisible } from '../server/lot-records/gate';
 import { paymentsReadable, paymentsStartable } from '../server/payments/gate';
 import PayDuesForm from '../components/member/PayDuesForm';
 import { describeBalance, formatCents } from '../lib/money';
-import { paymentInFlight, paymentStatusLabel } from '../lib/payments';
+import {
+  paymentInFlight,
+  paymentReference,
+  paymentStatusLabel,
+} from '../lib/payments';
 import {
   DUES_CHARGE_CATEGORY_LABELS,
   DUES_LEDGER_KIND_LABELS,
@@ -54,8 +58,8 @@ import {
  * nothing, it only starts a payment and leaves for the provider's page.
  *
  * Each Lot also lists its online payments (#544), so "I paid" can always be
- * checked against something: status, amount, the day it started and the
- * provider's reference. A payment still in flight is repeated above the Pay
+ * checked against something: status, amount, the day it started and its
+ * Payment Reference (#562), the one the provider's receipt prints. A payment still in flight is repeated above the Pay
  * action, so nobody pays twice by accident. The list needs a configured
  * provider and the two Lot Records flags, not `onlinePaymentsEnabled`: a
  * payment already made stays visible after payments are switched off. Who
@@ -407,9 +411,7 @@ Astro.response.headers.set('Cache-Control', 'private, no-store');
                           </p>
                           <p class="record-list__meta">
                             Started {startedOn(payment)}
-                            {payment.providerPaymentRef
-                              ? ' · Reference ' + payment.providerPaymentRef
-                              : ''}
+                            {' · Reference ' + paymentReference(payment.id)}
                           </p>
                         </div>
                         <p class="record-list__amount">

@@ -1,6 +1,7 @@
 import type { DuesLedgerKind } from '../../lib/types';
 import { DUES_LEDGER_KIND_LABELS } from '../../lib/lot-records';
 import { formatLotLabel } from '../../lib/format';
+import { paymentReference } from '../../lib/payments';
 
 /**
  * THE TREASURER'S EXPORT OF PROVIDER-SOURCED ENTRIES (ADR 0025, #546).
@@ -19,7 +20,10 @@ const HEADER = [
   'Lot',
   'Kind',
   'Amount',
-  'Payment reference',
+  // The provider's id for its own records, then the Payment Reference the
+  // homeowner's receipt carries (#562).
+  'Provider reference',
+  'Payment Reference',
   'Entry id',
 ];
 
@@ -31,6 +35,7 @@ interface ExportRow {
   address: string;
   unit: string | null;
   plat_lot_number: string | null;
+  payment_id: string | null;
   provider_payment_ref: string | null;
 }
 
@@ -45,7 +50,7 @@ export async function exportProviderEntries(
   const { results } = await env.DATABASE.prepare(
     `SELECT l.id, l.effective_day, l.kind, l.amount_cents,
             lot.address, lot.unit, lot.plat_lot_number,
-            p.provider_payment_ref
+            l.payment_id, p.provider_payment_ref
        FROM dues_ledger_entries l
        JOIN lots lot ON lot.id = l.lot_id
        LEFT JOIN payments p ON p.id = l.payment_id
@@ -73,6 +78,7 @@ export async function exportProviderEntries(
       // integer, so it is always `-?digits.dd` and never a formula.
       centsToCsv(r.amount_cents),
       textCell(r.provider_payment_ref ?? ''),
+      textCell(r.payment_id === null ? '' : paymentReference(r.payment_id)),
       textCell(r.id),
     ]),
   ];
@@ -81,7 +87,7 @@ export async function exportProviderEntries(
 
 /**
  * A text cell, safe to open in a spreadsheet. A Lot's address is typed by
- * the board and a payment reference comes from the provider, so neither is
+ * the board and a provider reference comes from the provider, so neither is
  * trusted: a value a spreadsheet would read as a formula (one starting `=`,
  * `+`, `-`, `@`, a tab or a carriage return) is prefixed with `'`, which
  * makes it plain text. Then RFC 4180 quoting, for a comma, a quote or a line

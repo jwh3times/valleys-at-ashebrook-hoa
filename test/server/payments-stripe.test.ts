@@ -446,6 +446,7 @@ describe('Stripe events, normalized', () => {
 describe('starting a Stripe Checkout Session', () => {
   const request = {
     paymentId: 'pay-checkout-1',
+    reference: 'AB12-CD34',
     amountCents: 45075,
     returnUrl: 'https://residents.example/lot-records/payments/pay-checkout-1',
     cancelUrl: 'https://residents.example/lot-records/payments/pay-checkout-1',
@@ -498,7 +499,11 @@ describe('starting a Stripe Checkout Session', () => {
       'line_items[0][quantity]': '1',
       'line_items[0][price_data][currency]': 'usd',
       'line_items[0][price_data][unit_amount]': '45075',
-      'line_items[0][price_data][product_data][name]': 'Dues payment',
+      // The Payment Reference (#562), on the checkout page and the receipt's
+      // line item, and as the description its receipt prints under Summary.
+      'line_items[0][price_data][product_data][name]':
+        'Dues payment · Ref AB12-CD34',
+      'payment_intent_data[description]': 'Payment Reference AB12-CD34',
       // At the pinned version Stripe answers 400 to `payment_method_types`
       // (removed in endive, #559); exact equality keeps it out.
       'allowed_payment_method_types[0]': 'us_bank_account',

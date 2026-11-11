@@ -113,6 +113,17 @@ describe('the payment a homeowner returns to', () => {
     expect(res.headers.get('cache-control')).toBe('private, no-store');
   });
 
+  it('names the payment by its Payment Reference, never the provider’s own id (#562)', async () => {
+    const id = 'de501dc2-7a1b-4c3d-9e8f-0a1b2c3d4e5f';
+    await seedPayment({ id, lotId: 'lot-a', amountCents: 12500 });
+
+    const { status, html } = await render(id, caller('payer-1'));
+
+    expect(status).toBe(200);
+    expect(html).toContain('Reference DE50-1DC2.');
+    expect(html).not.toContain(`ref_${id}`);
+  });
+
   it('never takes its status from the query string', async () => {
     const { html } = await render('pay-1', caller('payer-1'), {
       query: '?status=succeeded&redirect_status=succeeded',

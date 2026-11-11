@@ -424,6 +424,29 @@ migration `0046`:
    refund itself, it answers nothing, and the refund's withdrawal then stays an open exception for
    the board. No ordering logic is added for that case.
 
+**2026-11-11 (#562).** The reference a homeowner quotes belongs to the association:
+
+1. **The shared identifier is the Payment Reference, not the provider's.** "I paid, and the ledger
+   says I didn't" says the homeowner surface shows "the provider's reference, the same one on the
+   provider's emailed receipt". It is not: the Stripe sandbox rehearsal (#547) found the receipt
+   shows Stripe's own receipt number and never the Checkout Session id the site showed. The
+   homeowner surfaces now show the payment's **Payment Reference** (`CONTEXT.md`) instead: the
+   first eight characters of its id, upper-cased and split four and four, such as `DE50-1DC2`.
+   It is derived, never stored, and need not be unique. The adapter receives it on every checkout
+   and prints it on the provider's checkout page and receipt. With Stripe that is the line item's
+   name and the payment's description, and a sandbox payment showed both on the hosted receipt.
+   The board's Payments panel and its export show the Payment Reference beside the provider's
+   reference, which the board still needs for the provider's dashboard.
+2. **The provider's receipt number was rejected.** Stripe's `receipt_number` is `null` until
+   Stripe sends a receipt email, which happens only after the payment succeeds (for a bank debit,
+   after it clears), never for a sandbox payment to an outside address, and not at all when the
+   association leaves receipts off. Storing it would need a column, a later pull to fill it, and
+   a window where the homeowner has a number the site cannot show. Whether Stripe emails receipts
+   stays the association's account setting; the site does not force it.
+3. **Wording.** Where this record says "the provider's payment reference" (the 2026-11-06
+   amendment, item 3), it means the provider's own reference, `provider_payment_ref`, not a
+   Payment Reference.
+
 ## Related decisions
 
 - [ADR 0005: Resident Mode and Official Mode](./0005-resident-mode-and-official-mode.md)

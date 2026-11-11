@@ -18,6 +18,12 @@ import type {
 vi.mock('../../lib/admin');
 const mocked = vi.mocked(admin);
 
+// Payment ids are random UUIDs, as the site mints them, so each row's Payment
+// Reference (#562) is the one in its comment.
+const PAY_1 = 'de501dc2-7a1b-4c3d-9e8f-0a1b2c3d4e5f'; // DE50-1DC2
+const PAY_B = 'b0b0b0b0-1111-4111-8111-111111111111'; // B0B0-B0B0
+const PAY_2 = '22220000-3333-4333-8333-333333333333'; // 2222-0000
+
 /**
  * The board's Payments panel (ADR 0025, #545). Driven as a board member uses
  * it: by visible text and by the accessible names of the row actions, with
@@ -32,7 +38,7 @@ function payment(
   overrides: Partial<AdminPaymentSummary> = {},
 ): AdminPaymentSummary {
   return {
-    id: 'pay-1',
+    id: PAY_1,
     lotId: 'lot-a',
     amountCents: 45000,
     origin: 'checkout',
@@ -70,7 +76,7 @@ const dispute: AdminOpenPaymentException = {
   id: 'x-dispute',
   reason: 'dispute_opened',
   openedAt: '2026-11-03T16:00:00.000Z',
-  paymentId: 'pay-1',
+  paymentId: PAY_1,
   lotId: 'lot-a',
   providerPaymentRef: 'cs_test_one',
   fact: {
@@ -177,7 +183,7 @@ describe('the list of payments', () => {
     await loaded();
 
     const row = screen
-      .getByRole('button', { name: 'Re-sync payment: cs_test_one' })
+      .getByRole('button', { name: 'Re-sync payment: DE50-1DC2' })
       .closest('.panel-card') as HTMLElement;
     expect(within(row).getByText(/\$450\.00 — Processing/)).toBeInTheDocument();
     expect(within(row).getByText(/1 Ashebrook Lane/)).toBeInTheDocument();
@@ -226,7 +232,7 @@ describe('the list of payments', () => {
         enabled: true,
         payments: [
           payment({
-            id: 'pay-b',
+            id: PAY_B,
             lotId: 'lot-b',
             providerPaymentRef: 'cs_test_b',
           }),
@@ -235,7 +241,7 @@ describe('the list of payments', () => {
       });
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Re-sync payment: cs_test_one' }),
+      screen.getByRole('button', { name: 'Re-sync payment: DE50-1DC2' }),
     );
     await waitFor(() =>
       expect(mocked.fetchBoardPayments).toHaveBeenCalledTimes(2),
@@ -244,17 +250,17 @@ describe('the list of payments', () => {
       target: { value: 'lot-b' },
     });
     expect(
-      await screen.findByRole('button', { name: 'Re-sync payment: cs_test_b' }),
+      await screen.findByRole('button', { name: 'Re-sync payment: B0B0-B0B0' }),
     ).toBeInTheDocument();
 
     answerStale({ enabled: true, payments: [payment()], exceptions: [] });
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(
-      screen.getByRole('button', { name: 'Re-sync payment: cs_test_b' }),
+      screen.getByRole('button', { name: 'Re-sync payment: B0B0-B0B0' }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Re-sync payment: cs_test_one' }),
+      screen.queryByRole('button', { name: 'Re-sync payment: DE50-1DC2' }),
     ).not.toBeInTheDocument();
   });
 });
@@ -265,10 +271,10 @@ describe("a payment's detail", () => {
     await loaded();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Details of payment: cs_test_one' }),
+      screen.getByRole('button', { name: 'Details of payment: DE50-1DC2' }),
     );
 
-    expect(mocked.fetchBoardPayment).toHaveBeenCalledWith('pay-1');
+    expect(mocked.fetchBoardPayment).toHaveBeenCalledWith(PAY_1);
     expect(
       await screen.findByText(
         /Paid · \$450\.00 · sent by the provider · recorded/,
@@ -296,7 +302,7 @@ describe("a payment's detail", () => {
       payments: [
         payment(),
         payment({
-          id: 'pay-2',
+          id: PAY_2,
           lotId: 'lot-b',
           providerPaymentRef: 'cs_test_two',
         }),
@@ -313,7 +319,7 @@ describe("a payment's detail", () => {
       )
       .mockResolvedValueOnce({
         ...detail,
-        id: 'pay-2',
+        id: PAY_2,
         lotId: 'lot-b',
         providerPaymentRef: 'cs_test_two',
         events: [],
@@ -324,26 +330,26 @@ describe("a payment's detail", () => {
     await loaded();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Details of payment: cs_test_one' }),
+      screen.getByRole('button', { name: 'Details of payment: DE50-1DC2' }),
     );
     fireEvent.click(
-      screen.getByRole('button', { name: 'Details of payment: cs_test_two' }),
+      screen.getByRole('button', { name: 'Details of payment: 2222-0000' }),
     );
     await waitFor(() =>
       expect(
-        screen.getByRole('button', { name: 'Details of payment: cs_test_two' }),
+        screen.getByRole('button', { name: 'Details of payment: 2222-0000' }),
       ).toHaveAttribute('aria-expanded', 'true'),
     );
     answerFirst(detail);
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(
-      screen.getByRole('button', { name: 'Details of payment: cs_test_one' }),
+      screen.getByRole('button', { name: 'Details of payment: DE50-1DC2' }),
     ).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText(/Online payment/)).not.toBeInTheDocument();
   });
 
-  it('names a payment with no reference by what its row shows', async () => {
+  it('names a payment the provider has no reference for by its Payment Reference', async () => {
     mocked.fetchBoardPayments.mockResolvedValue({
       enabled: true,
       payments: [payment({ providerPaymentRef: null })],
@@ -352,8 +358,25 @@ describe("a payment's detail", () => {
     render(<PaymentsManager />);
     expect(
       await screen.findByRole('button', {
-        name: /^Details of payment: 1 Ashebrook Lane, \$450\.00, started /,
+        name: 'Details of payment: DE50-1DC2',
       }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/provider reference none yet/, {
+        selector: '.admin-row-sub',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the Payment Reference first, then the provider’s reference for its Dashboard (#562)', async () => {
+    render(<PaymentsManager />);
+    await loaded();
+
+    expect(
+      screen.getByText(
+        /Payment Reference DE50-1DC2 · provider reference cs_test_one/,
+        { selector: '.admin-row-sub' },
+      ),
     ).toBeInTheDocument();
   });
 
@@ -363,13 +386,13 @@ describe("a payment's detail", () => {
     await loaded();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Re-sync payment: cs_test_one' }),
+      screen.getByRole('button', { name: 'Re-sync payment: DE50-1DC2' }),
     );
 
     expect(
       await screen.findByText(/1 new fact recorded from the provider/i),
     ).toBeInTheDocument();
-    expect(mocked.resyncBoardPayment).toHaveBeenCalledWith('pay-1');
+    expect(mocked.resyncBoardPayment).toHaveBeenCalledWith(PAY_1);
     // The list is read again, so the row shows what the pull changed.
     expect(mocked.fetchBoardPayments).toHaveBeenCalledTimes(2);
   });
@@ -379,7 +402,7 @@ describe("a payment's detail", () => {
     render(<PaymentsManager />);
     await loaded();
     fireEvent.click(
-      screen.getByRole('button', { name: 'Re-sync payment: cs_test_one' }),
+      screen.getByRole('button', { name: 'Re-sync payment: DE50-1DC2' }),
     );
     expect(
       await screen.findByText(/nothing new from the provider/i),
@@ -399,6 +422,25 @@ describe('the exceptions queue', () => {
     ).toBeInTheDocument();
   });
 
+  it('names one linked to a payment by its Payment Reference, and one with no payment by the provider’s (#562)', async () => {
+    render(<PaymentsManager />);
+    await loaded();
+
+    expect(
+      screen.getByText(
+        /Payment Reference DE50-1DC2 · provider reference cs_test_one · opened/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no lot · provider reference cs_link_one · opened/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Resolve exception: Money that matches no payment started on this site, cs_link_one',
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('resolves one with a reason and a note, under the key its form opened with', async () => {
     mocked.resolvePaymentException.mockResolvedValue({ id: 'key-x' });
     render(<PaymentsManager />);
@@ -406,7 +448,7 @@ describe('the exceptions queue', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Resolve exception: The payer disputed the payment, cs_test_one',
+        name: 'Resolve exception: The payer disputed the payment, DE50-1DC2',
       }),
     );
     const key = mocked.newOperationKey.mock.results.at(-1)?.value as string;
@@ -418,7 +460,7 @@ describe('the exceptions queue', () => {
     });
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Confirm resolving exception: The payer disputed the payment, cs_test_one',
+        name: 'Confirm resolving exception: The payer disputed the payment, DE50-1DC2',
       }),
     );
 
@@ -438,7 +480,7 @@ describe('the exceptions queue', () => {
     await loaded();
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Resolve exception: The payer disputed the payment, cs_test_one',
+        name: 'Resolve exception: The payer disputed the payment, DE50-1DC2',
       }),
     );
     fireEvent.change(screen.getByLabelText(/^resolution$/i), {
@@ -446,7 +488,7 @@ describe('the exceptions queue', () => {
     });
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Confirm resolving exception: The payer disputed the payment, cs_test_one',
+        name: 'Confirm resolving exception: The payer disputed the payment, DE50-1DC2',
       }),
     );
 
@@ -464,13 +506,13 @@ describe('the exceptions queue', () => {
     await loaded();
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Resolve exception: The payer disputed the payment, cs_test_one',
+        name: 'Resolve exception: The payer disputed the payment, DE50-1DC2',
       }),
     );
     const confirm = () =>
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'Confirm resolving exception: The payer disputed the payment, cs_test_one',
+          name: 'Confirm resolving exception: The payer disputed the payment, DE50-1DC2',
         }),
       );
 
@@ -550,8 +592,8 @@ describe('the exceptions queue', () => {
 
 describe("the treasurer's export", () => {
   const CSV =
-    'Effective day,Lot,Kind,Amount,Payment reference,Entry id\r\n' +
-    '2026-11-02,1 Ashebrook Lane,Payment,-450.00,cs_test_one,entry-1\r\n';
+    'Effective day,Lot,Kind,Amount,Provider reference,Payment Reference,Entry id\r\n' +
+    '2026-11-02,1 Ashebrook Lane,Payment,-450.00,cs_test_one,DE50-1DC2,entry-1\r\n';
 
   // The click spy below must not outlive this block.
   afterEach(() => {

@@ -2,7 +2,11 @@ import { env, applyD1Migrations } from 'cloudflare:test';
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { POST } from '../../src/pages/api/member/payments';
 import { setPaymentProviderForTests } from '../../src/server/payments/registry';
-import { MAX_PAYMENT_CENTS, MIN_PAYMENT_CENTS } from '../../src/lib/payments';
+import {
+  MAX_PAYMENT_CENTS,
+  MIN_PAYMENT_CENTS,
+  paymentReference,
+} from '../../src/lib/payments';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
   truncateAll,
@@ -161,11 +165,21 @@ describe('starting a payment', () => {
     expect(fake.checkouts).toEqual([
       {
         paymentId: row.id,
+        reference: paymentReference(row.id),
         amountCents: 45075,
         returnUrl: `${SITE_URL}/lot-records/payments/${row.id}`,
         cancelUrl: `${SITE_URL}/lot-records/payments/${row.id}`,
       },
     ]);
+  });
+
+  it('hands the provider the payment’s Payment Reference to print on its receipt (#562)', async () => {
+    await start({ lotId: 'lot-a', amountCents: 45075 });
+
+    const [row] = await paymentRows();
+    expect(fake.checkouts).toHaveLength(1);
+    expect(fake.checkouts[0].reference).toBe(paymentReference(row.id));
+    expect(fake.checkouts[0].reference).toMatch(/^[0-9A-F]{4}-[0-9A-F]{4}$/);
   });
 
   it('lets an account linked to a consolidated duplicate pay for the survivor’s Lot', async () => {

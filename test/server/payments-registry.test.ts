@@ -75,6 +75,7 @@ describe('the payment provider registry', () => {
 
     const checkout = await fake.createCheckout({
       paymentId: 'pay-1',
+      reference: 'PAY1-0000',
       amountCents: 45000,
       returnUrl: 'https://site.invalid/back',
       cancelUrl: 'https://site.invalid/cancel',

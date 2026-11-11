@@ -21,6 +21,22 @@ export const MIN_PAYMENT_CENTS = 100;
 export const MAX_PAYMENT_CENTS = 1_000_000;
 
 /**
+ * An Online Payment's Payment Reference (#562): the first eight characters of
+ * its id, upper-cased and split four and four, such as `DE50-1DC2`. It is what
+ * the homeowner quotes, so the site shows it everywhere a payment is named and
+ * the provider prints it on its receipt.
+ *
+ * Derived, never stored. Payment ids are random UUIDs, so their first eight
+ * characters are random hex. The reference is short enough to read aloud
+ * because it need not be unique: the board reads it beside the Lot, amount and
+ * day, and nothing may use it as a key.
+ */
+export function paymentReference(paymentId: string): string {
+  const head = paymentId.replaceAll('-', '').slice(0, 8).toUpperCase();
+  return `${head.slice(0, 4)}-${head.slice(4)}`;
+}
+
+/**
  * A payment's stored status, as a homeowner reads it — never what the address
  * bar claims. `created` is deliberately neutral: the homeowner may have
  * finished on the provider's page (and its confirmation has not arrived yet)

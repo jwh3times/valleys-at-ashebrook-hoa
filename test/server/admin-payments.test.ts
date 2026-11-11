@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { GET, POST } from '../../src/pages/api/admin/payments';
 import { setPaymentProviderForTests } from '../../src/server/payments/registry';
 import { applyPaymentEvent } from '../../src/server/payments/apply';
+import { paymentReference } from '../../src/lib/payments';
 import type { NormalizedPaymentEvent } from '../../src/server/payments/provider';
 import type {
   AdminOpenPaymentException,
@@ -833,7 +834,10 @@ describe('applying a payment taken outside the site to a Lot', () => {
 });
 
 describe("exporting provider-sourced entries for the treasurer's bank reconciliation", () => {
-  const HEADER = 'Effective day,Lot,Kind,Amount,Payment reference,Entry id';
+  // The provider's id and the site's Payment Reference side by side (#562),
+  // so a row matches both the provider's records and the homeowner's receipt.
+  const HEADER =
+    'Effective day,Lot,Kind,Amount,Provider reference,Payment Reference,Entry id';
 
   /** A settled online payment for `lotId`, credited on the Association Day of `at`. */
   async function settled(
@@ -866,7 +870,8 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
     post({ action: 'export', from, to }, ctx);
 
   it('answers CSV of each entry the provider wrote in the range', async () => {
-    await settled('pay-1', 'lot-a', '2026-11-02T15:00:00Z');
+    const id = 'de501dc2-7a1b-4c3d-9e8f-0a1b2c3d4e5f';
+    await settled(id, 'lot-a', '2026-11-02T15:00:00Z');
 
     const res = await exportRange('2026-11-01', '2026-11-30');
 
@@ -876,7 +881,7 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.text()).toBe(
       `${HEADER}\r\n` +
-        `2026-11-02,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-1,${await entryOf('pay-1')}\r\n`,
+        `2026-11-02,lot-a Ashebrook Lane,Payment,-450.00,ref_${id},DE50-1DC2,${await entryOf(id)}\r\n`,
     );
   });
 
@@ -898,8 +903,8 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
 
     expect(await res.text()).toBe(
       `${HEADER}\r\n` +
-        `2026-11-01,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-first,${await entryOf('pay-first')}\r\n` +
-        `2026-11-30,lot-b Ashebrook Lane,Payment,-450.00,ref_pay-last,${await entryOf('pay-last')}\r\n`,
+        `2026-11-01,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-first,${paymentReference('pay-first')},${await entryOf('pay-first')}\r\n` +
+        `2026-11-30,lot-b Ashebrook Lane,Payment,-450.00,ref_pay-last,${paymentReference('pay-last')},${await entryOf('pay-last')}\r\n`,
     );
   });
 
@@ -927,10 +932,10 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
 
     expect(body).toBe(
       `${HEADER}\r\n` +
-        `2026-11-02,"'=HYPERLINK(""http://x.test"",""Pay"")",Payment,-450.00,'-2+3,${await entryOf('pay-1')}\r\n` +
-        `2026-11-03,"12 Oak Lane, Rear",Payment,-450.00,'@SUM(A1),${await entryOf('pay-2')}\r\n` +
-        `2026-11-04,lot-a Ashebrook Lane,Payment,-450.00,'+1,${await entryOf('pay-3')}\r\n` +
-        `2026-11-05,lot-a Ashebrook Lane,Payment,-450.00,'\tcmd,${await entryOf('pay-4')}\r\n`,
+        `2026-11-02,"'=HYPERLINK(""http://x.test"",""Pay"")",Payment,-450.00,'-2+3,${paymentReference('pay-1')},${await entryOf('pay-1')}\r\n` +
+        `2026-11-03,"12 Oak Lane, Rear",Payment,-450.00,'@SUM(A1),${paymentReference('pay-2')},${await entryOf('pay-2')}\r\n` +
+        `2026-11-04,lot-a Ashebrook Lane,Payment,-450.00,'+1,${paymentReference('pay-3')},${await entryOf('pay-3')}\r\n` +
+        `2026-11-05,lot-a Ashebrook Lane,Payment,-450.00,'\tcmd,${paymentReference('pay-4')},${await entryOf('pay-4')}\r\n`,
     );
   });
 
@@ -963,9 +968,28 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
       ['2026-11-04', 'Payment', '-999999.99'],
       ['2026-11-05', 'Reversal', '10.05'],
     ]);
-    // The reversal names the payment it reverses.
+    // The reversal names the payment it reverses, both ways.
     expect(rows[3][4]).toBe('ref_pay-odd');
-    expect(rows[3][5]).toBe(await entryOf('pay-odd', 'reversal'));
+    expect(rows[3][5]).toBe(paymentReference('pay-odd'));
+    expect(rows[3][6]).toBe(await entryOf('pay-odd', 'reversal'));
+  });
+
+  it('leaves the Payment Reference empty for a provider entry tied to no payment (#562)', async () => {
+    await env.DATABASE.prepare(
+      `INSERT INTO dues_ledger_entries
+         (id, lot_id, kind, amount_cents, effective_day, description, method,
+          source, payment_id, recorded_by, recorded_at, operation_key)
+       VALUES ('loose-entry', 'lot-a', 'payment', -10000, '2026-11-15',
+               'Online payment', 'online', 'provider', NULL, NULL, 1,
+               'loose-entry')`,
+    ).run();
+
+    const body = await (await exportRange('2026-11-01', '2026-11-30')).text();
+
+    expect(body).toBe(
+      `${HEADER}\r\n` +
+        `2026-11-15,lot-a Ashebrook Lane,Payment,-100.00,,,loose-entry\r\n`,
+    );
   });
 
   it('is the board’s alone, and absent with no payment provider', async () => {
@@ -1016,7 +1040,7 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
 
     expect(body).toBe(
       `${HEADER}\r\n` +
-        `2026-11-03,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-2,${await entryOf('pay-2')}\r\n`,
+        `2026-11-03,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-2,${paymentReference('pay-2')},${await entryOf('pay-2')}\r\n`,
     );
   });
 });
