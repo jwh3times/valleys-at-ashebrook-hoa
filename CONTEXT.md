@@ -248,6 +248,10 @@ _Avoid_: Void, deletion, edit, un-payment
 A homeowner's attempt to pay a Lot through the payment provider. It posts a payment Dues Ledger Entry only once the provider confirms the money moved, and it may never: it can be abandoned, fail or expire. Money that comes back after a Reversal of it, such as a dispute the association won, is posted as a new payment entry, never as an undoing of the Reversal.
 _Avoid_: Transaction, checkout, charge, pending entry
 
+**Payment Reference**:
+The identifier the site gives an Online Payment when it starts, shown to the homeowner and the Board and printed on the payment provider's receipt, so the homeowner can quote what is in their inbox and the Board can find the same payment. It belongs to the association, exists whether or not the provider sends receipts, and is never the provider's own receipt number or session identifier.
+_Avoid_: Receipt number, transaction id, session id, confirmation number
+
 ## Documents
 
 **Tenant-Visible Document**:
