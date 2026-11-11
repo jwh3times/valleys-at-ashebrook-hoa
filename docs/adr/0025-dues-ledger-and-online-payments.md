@@ -1,6 +1,6 @@
 # ADR 0025: A Per-Lot Dues Ledger, with Online Payments Reconciled from Verified Provider Events
 
-**Status:** Accepted 2026-09-20; amended 2026-11-06 and 2026-11-08 (see [Amendments](#amendments))
+**Status:** Accepted 2026-09-20; amended 2026-11-06, 2026-11-08 and 2026-11-11 (see [Amendments](#amendments))
 **Date:** 2026-09-17
 
 ## Context

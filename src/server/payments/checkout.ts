@@ -53,7 +53,7 @@ export async function startPayment(
   const returnUrl = `${siteUrl.replace(/\/+$/, '')}/lot-records/payments/${paymentId}`;
   const { providerPaymentRef, url } = await provider.createCheckout({
     paymentId,
-    reference: paymentReference(paymentId),
+    paymentReference: paymentReference(paymentId),
     amountCents,
     returnUrl,
     // The same page: it shows the payment's stored status, whichever way the

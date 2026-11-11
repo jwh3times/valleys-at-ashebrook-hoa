@@ -446,7 +446,7 @@ describe('Stripe events, normalized', () => {
 describe('starting a Stripe Checkout Session', () => {
   const request = {
     paymentId: 'pay-checkout-1',
-    reference: 'AB12-CD34',
+    paymentReference: 'AB12-CD34',
     amountCents: 45075,
     returnUrl: 'https://residents.example/lot-records/payments/pay-checkout-1',
     cancelUrl: 'https://residents.example/lot-records/payments/pay-checkout-1',

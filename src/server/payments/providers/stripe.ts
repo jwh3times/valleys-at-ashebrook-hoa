@@ -137,7 +137,7 @@ export function stripeProvider(
     id: STRIPE_PROVIDER_ID,
     async createCheckout({
       paymentId,
-      reference,
+      paymentReference,
       amountCents,
       returnUrl,
       cancelUrl,
@@ -154,8 +154,8 @@ export function stripeProvider(
           // checkout page and the receipt both show, and as the description,
           // which the receipt prints under Summary and the Dashboard searches.
           // The sandbox rehearsal saw both on the hosted receipt.
-          'line_items[0][price_data][product_data][name]': `${LINE_ITEM_NAME} · Ref ${reference}`,
-          'payment_intent_data[description]': `Payment Reference ${reference}`,
+          'line_items[0][price_data][product_data][name]': `${LINE_ITEM_NAME} · Ref ${paymentReference}`,
+          'payment_intent_data[description]': `Payment Reference ${paymentReference}`,
           // Exactly these two, whatever the account's payment-method settings
           // offer by default (#559). The pinned version answers 400 to the
           // older `payment_method_types`, which endive removed. Bank account

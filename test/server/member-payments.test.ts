@@ -165,7 +165,7 @@ describe('starting a payment', () => {
     expect(fake.checkouts).toEqual([
       {
         paymentId: row.id,
-        reference: paymentReference(row.id),
+        paymentReference: paymentReference(row.id),
         amountCents: 45075,
         returnUrl: `${SITE_URL}/lot-records/payments/${row.id}`,
         cancelUrl: `${SITE_URL}/lot-records/payments/${row.id}`,
@@ -178,8 +178,10 @@ describe('starting a payment', () => {
 
     const [row] = await paymentRows();
     expect(fake.checkouts).toHaveLength(1);
-    expect(fake.checkouts[0].reference).toBe(paymentReference(row.id));
-    expect(fake.checkouts[0].reference).toMatch(/^[0-9A-F]{4}-[0-9A-F]{4}$/);
+    expect(fake.checkouts[0].paymentReference).toBe(paymentReference(row.id));
+    expect(fake.checkouts[0].paymentReference).toMatch(
+      /^[0-9A-F]{4}-[0-9A-F]{4}$/,
+    );
   });
 
   it('lets an account linked to a consolidated duplicate pay for the survivor’s Lot', async () => {

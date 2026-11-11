@@ -184,6 +184,9 @@ export default function PaymentsManager() {
    * its Payment Reference (#562), which every payment has.
    */
   const paymentIdentity = (p: AdminPaymentSummary) => paymentReference(p.id);
+  /** An exception's payment's Payment Reference, when it has a payment. */
+  const exceptionPaymentReference = (x: AdminOpenPaymentException) =>
+    x.paymentId === null ? null : paymentReference(x.paymentId);
   /**
    * What an exception's controls say they act on, likewise: its payment's
    * Payment Reference, or with no payment the provider's reference, or with
@@ -191,10 +194,9 @@ export default function PaymentsManager() {
    */
   const exceptionIdentity = (x: AdminOpenPaymentException) =>
     `${PAYMENT_EXCEPTION_REASON_LABELS[x.reason]}, ${
-      x.paymentId !== null
-        ? paymentReference(x.paymentId)
-        : (x.providerPaymentRef ??
-          `${addressOf(x.lotId)}, opened ${onDay(x.openedAt)}`)
+      exceptionPaymentReference(x) ??
+      x.providerPaymentRef ??
+      `${addressOf(x.lotId)}, opened ${onDay(x.openedAt)}`
     }`;
 
   function toggleDetail(p: AdminPaymentSummary) {
@@ -384,9 +386,9 @@ export default function PaymentsManager() {
                       ? `${formatCents(x.fact.amountCents)}${x.fact.currency === 'usd' ? '' : ` ${x.fact.currency.toUpperCase()}`} · `
                       : ''}
                     {`${addressOf(x.lotId)} · ${
-                      x.paymentId !== null
-                        ? `Payment Reference ${paymentReference(x.paymentId)} · `
-                        : ''
+                      exceptionPaymentReference(x) === null
+                        ? ''
+                        : `Payment Reference ${exceptionPaymentReference(x)} · `
                     }provider reference ${x.providerPaymentRef ?? 'none'} · opened ${onDay(x.openedAt)}`}
                   </div>
                 </div>

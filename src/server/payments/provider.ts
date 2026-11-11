@@ -41,7 +41,7 @@ export interface CheckoutRequest {
    * provider's checkout page and receipt exactly as given, so the homeowner
    * can quote what is in their inbox and the site shows the same text.
    */
-  reference: string;
+  paymentReference: string;
   amountCents: number;
   returnUrl: string;
   cancelUrl: string;

@@ -3,7 +3,6 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { GET, POST } from '../../src/pages/api/admin/payments';
 import { setPaymentProviderForTests } from '../../src/server/payments/registry';
 import { applyPaymentEvent } from '../../src/server/payments/apply';
-import { paymentReference } from '../../src/lib/payments';
 import type { NormalizedPaymentEvent } from '../../src/server/payments/provider';
 import type {
   AdminOpenPaymentException,
@@ -836,6 +835,8 @@ describe('applying a payment taken outside the site to a Lot', () => {
 describe("exporting provider-sourced entries for the treasurer's bank reconciliation", () => {
   // The provider's id and the site's Payment Reference side by side (#562),
   // so a row matches both the provider's records and the homeowner's receipt.
+  // These fixture ids are not UUIDs, so their Payment References read oddly
+  // (`pay-first` → `PAY--FIRS`); the first test pins a real one.
   const HEADER =
     'Effective day,Lot,Kind,Amount,Provider reference,Payment Reference,Entry id';
 
@@ -903,8 +904,8 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
 
     expect(await res.text()).toBe(
       `${HEADER}\r\n` +
-        `2026-11-01,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-first,${paymentReference('pay-first')},${await entryOf('pay-first')}\r\n` +
-        `2026-11-30,lot-b Ashebrook Lane,Payment,-450.00,ref_pay-last,${paymentReference('pay-last')},${await entryOf('pay-last')}\r\n`,
+        `2026-11-01,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-first,PAY--FIRS,${await entryOf('pay-first')}\r\n` +
+        `2026-11-30,lot-b Ashebrook Lane,Payment,-450.00,ref_pay-last,PAY--LAST,${await entryOf('pay-last')}\r\n`,
     );
   });
 
@@ -932,10 +933,10 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
 
     expect(body).toBe(
       `${HEADER}\r\n` +
-        `2026-11-02,"'=HYPERLINK(""http://x.test"",""Pay"")",Payment,-450.00,'-2+3,${paymentReference('pay-1')},${await entryOf('pay-1')}\r\n` +
-        `2026-11-03,"12 Oak Lane, Rear",Payment,-450.00,'@SUM(A1),${paymentReference('pay-2')},${await entryOf('pay-2')}\r\n` +
-        `2026-11-04,lot-a Ashebrook Lane,Payment,-450.00,'+1,${paymentReference('pay-3')},${await entryOf('pay-3')}\r\n` +
-        `2026-11-05,lot-a Ashebrook Lane,Payment,-450.00,'\tcmd,${paymentReference('pay-4')},${await entryOf('pay-4')}\r\n`,
+        `2026-11-02,"'=HYPERLINK(""http://x.test"",""Pay"")",Payment,-450.00,'-2+3,PAY--1,${await entryOf('pay-1')}\r\n` +
+        `2026-11-03,"12 Oak Lane, Rear",Payment,-450.00,'@SUM(A1),PAY--2,${await entryOf('pay-2')}\r\n` +
+        `2026-11-04,lot-a Ashebrook Lane,Payment,-450.00,'+1,PAY--3,${await entryOf('pay-3')}\r\n` +
+        `2026-11-05,lot-a Ashebrook Lane,Payment,-450.00,'\tcmd,PAY--4,${await entryOf('pay-4')}\r\n`,
     );
   });
 
@@ -970,7 +971,7 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
     ]);
     // The reversal names the payment it reverses, both ways.
     expect(rows[3][4]).toBe('ref_pay-odd');
-    expect(rows[3][5]).toBe(paymentReference('pay-odd'));
+    expect(rows[3][5]).toBe('PAY--ODD');
     expect(rows[3][6]).toBe(await entryOf('pay-odd', 'reversal'));
   });
 
@@ -1040,7 +1041,7 @@ describe("exporting provider-sourced entries for the treasurer's bank reconcilia
 
     expect(body).toBe(
       `${HEADER}\r\n` +
-        `2026-11-03,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-2,${paymentReference('pay-2')},${await entryOf('pay-2')}\r\n`,
+        `2026-11-03,lot-a Ashebrook Lane,Payment,-450.00,ref_pay-2,PAY--2,${await entryOf('pay-2')}\r\n`,
     );
   });
 });

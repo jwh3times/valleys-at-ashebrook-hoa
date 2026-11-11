@@ -59,8 +59,9 @@ import {
  *
  * Each Lot also lists its online payments (#544), so "I paid" can always be
  * checked against something: status, amount, the day it started and its
- * Payment Reference (#562), the one the provider's receipt prints. A payment still in flight is repeated above the Pay
- * action, so nobody pays twice by accident. The list needs a configured
+ * Payment Reference (#562), the one the provider's receipt prints. A payment
+ * still in flight is repeated above the Pay action, so nobody pays twice by
+ * accident. The list needs a configured
  * provider and the two Lot Records flags, not `onlinePaymentsEnabled`: a
  * payment already made stays visible after payments are switched off. Who
  * started a payment is never shown; the record belongs to the Lot.

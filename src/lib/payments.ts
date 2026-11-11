@@ -32,7 +32,7 @@ export const MAX_PAYMENT_CENTS = 1_000_000;
  * day, and nothing may use it as a key.
  */
 export function paymentReference(paymentId: string): string {
-  const head = paymentId.replaceAll('-', '').slice(0, 8).toUpperCase();
+  const head = paymentId.slice(0, 8).toUpperCase();
   return `${head.slice(0, 4)}-${head.slice(4)}`;
 }
 
