@@ -9,6 +9,27 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.13] - 2026-11-10
+
+### Changed
+
+- The installed-skills check (`scripts/check-skills.mjs`) reads the version 2 `skills-lock.json`
+  that `skills` CLI 1.8.0 writes, whose hashes no longer depend on line endings, so the shared
+  skills install with the current CLI instead of a pinned 1.7.4 (#568). The lock is now version 2;
+  no skill's content changed.
+
+## [2.11.12] - 2026-11-10
+
+### Changed
+
+- Dependency update (Dependabot, #564): `@cloudflare/workers-types` 5.20261101.1 → 5.20261107.1.
+
+## [2.11.11] - 2026-11-10
+
+### Changed
+
+- Dependency update (Dependabot, #563): `oxlint` 1.91.0 → 1.92.0.
+
 ## [2.11.10] - 2026-11-10
 
 ### Fixed
@@ -5039,7 +5060,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.10...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.13...HEAD
+[2.11.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.12...v2.11.13
+[2.11.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.11...v2.11.12
+[2.11.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.10...v2.11.11
 [2.11.10]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.9...v2.11.10
 [2.11.9]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.8...v2.11.9
 [2.11.8]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.7...v2.11.8
