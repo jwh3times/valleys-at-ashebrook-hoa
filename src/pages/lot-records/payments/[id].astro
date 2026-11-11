@@ -3,6 +3,7 @@ import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { env } from 'cloudflare:workers';
 import { DEFAULT_SITE_SETTINGS } from '../../../lib/types';
 import { associationDateIso, formatDate } from '../../../lib/format';
+import { paymentReference } from '../../../lib/payments';
 import { paymentsReadable } from '../../../server/payments/gate';
 import { fetchMemberPayment } from '../../../server/lot-records/reads';
 import PaymentStatus from '../../../components/member/PaymentStatus';
@@ -50,9 +51,8 @@ if (ctx && !payment) {
 const startedLine = payment
   ? 'Started ' +
     formatDate(associationDateIso(new Date(payment.createdAt))) +
-    (payment.providerPaymentRef
-      ? ' · Reference ' + payment.providerPaymentRef
-      : '') +
+    ' · Reference ' +
+    paymentReference(payment.id) +
     '.'
   : '';
 

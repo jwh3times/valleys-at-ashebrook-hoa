@@ -497,8 +497,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **`/lot-records` is server-rendered and marked `private, no-store`.** Like the ballot-receipt
   renders on `/elections`, it is the most caller-specific HTML on the site — one Lot's own dues
   balance, ledger, and enforcement records (ADR 0025, #295 slice 4), and, with a payment provider
-  configured, its online payments with their provider references (#544), never who started them —
-  so its response must never be cacheable if a zone cache rule is added later. Each payment's
+  configured, its online payments, each named by its Payment Reference (#544, #562), never who
+  started them — so its response must never be cacheable if a zone cache rule is added later. Each payment's
   return page, `/lot-records/payments/<id>`, is marked the same way. With either gating flag off, or for a caller who
   lacks the `member` capability, it answers the generic 404 rather than 403, consistent with the
   rest of the site's hidden-record behavior.
@@ -518,8 +518,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   SAQ A).** `POST /api/member/payments` (ADR 0025, #542) opens a Checkout Session on the
   provider and answers its URL; the homeowner enters payment details on the provider's own page,
   so no account or card number is ever sent to, rendered by, or stored on this site. The site
-  sends the provider only the amount and its own payment id, never an address or a name, and
-  keeps only normalized payment facts. Starting a payment follows the live-voting order: three
+  sends the provider only the amount, its own payment id and the Payment Reference derived from
+  it (#562), never an address or a name, and keeps only normalized payment facts. Starting a payment follows the live-voting order: three
   flags and a configured provider (`404`), the write freeze (`503`), exact `Origin` (`403`), the
   JSON media type (`415`), the session (`401`) and `member` (`403`). The insert re-checks the
   flags and Lot Authority, so a lost race writes nothing (`409`, or the masked `404`). The

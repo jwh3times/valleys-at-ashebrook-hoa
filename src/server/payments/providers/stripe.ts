@@ -42,7 +42,7 @@ const CHECKOUT_LIFETIME_S = 60 * 60;
 /**
  * The one line on Stripe's page and the homeowner's statement. Deliberately
  * neutral: no street address and no name, so nothing about the Lot or its
- * owners reaches the provider.
+ * owners reaches the provider. The Payment Reference follows it (#562).
  */
 const LINE_ITEM_NAME = 'Dues payment';
 
@@ -135,7 +135,13 @@ export function stripeProvider(
 
   return {
     id: STRIPE_PROVIDER_ID,
-    async createCheckout({ paymentId, amountCents, returnUrl, cancelUrl }) {
+    async createCheckout({
+      paymentId,
+      paymentReference,
+      amountCents,
+      returnUrl,
+      cancelUrl,
+    }) {
       const session = await stripePost(
         secrets.apiKey,
         '/checkout/sessions',
@@ -144,7 +150,12 @@ export function stripeProvider(
           'line_items[0][quantity]': '1',
           'line_items[0][price_data][currency]': 'usd',
           'line_items[0][price_data][unit_amount]': String(amountCents),
-          'line_items[0][price_data][product_data][name]': LINE_ITEM_NAME,
+          // The Payment Reference twice (#562): in the line item, which the
+          // checkout page and the receipt both show, and as the description,
+          // which the receipt prints under Summary and the Dashboard searches.
+          // The sandbox rehearsal saw both on the hosted receipt.
+          'line_items[0][price_data][product_data][name]': `${LINE_ITEM_NAME} · Ref ${paymentReference}`,
+          'payment_intent_data[description]': `Payment Reference ${paymentReference}`,
           // Exactly these two, whatever the account's payment-method settings
           // offer by default (#559). The pinned version answers 400 to the
           // older `payment_method_types`, which endive removed. Bank account

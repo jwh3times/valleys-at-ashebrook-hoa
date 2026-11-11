@@ -472,8 +472,9 @@ meetingId: election.meetingId, associationDay: election.electionDate }` so a pro
     Association Days checked by `isoDateOrError` (`400` when missing or not a real calendar day),
     then `400` "to must not be before from". `200` `text/csv; charset=utf-8` with
     `cache-control: no-store`: the header row
-    `Effective day,Lot,Kind,Amount,Payment reference,Entry id`, then one CRLF-terminated row per
-    entry ordered by effective day; an empty range answers the header alone. `Amount` keeps the ledger's sign (a payment is negative) as `-?digits.dd`
+    `Effective day,Lot,Kind,Amount,Provider reference,Payment Reference,Entry id`, then one
+    CRLF-terminated row per entry ordered by effective day; an empty range answers the header
+    alone. `Payment Reference` is the linked payment's (#562), empty for an entry with no payment. `Amount` keeps the ledger's sign (a payment is negative) as `-?digits.dd`
     built from the integer cents; every text cell gets a `'` prefix when it starts with `=`, `+`,
     `-`, `@`, a tab or a carriage return, so a spreadsheet reads it as text, and is then RFC 4180
     quoted. It writes nothing, so it takes no operation key; as a `POST` it is still held by the

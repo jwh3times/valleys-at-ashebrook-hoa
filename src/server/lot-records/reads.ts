@@ -540,9 +540,10 @@ export interface MemberPayment {
   status: PaymentStatus;
   ledgerState: PaymentLedgerState;
   /**
-   * The provider's own reference for the payment, which a homeowner can quote
-   * to the board or find in the provider's emails. `null` only for a payment
-   * that never reached the provider.
+   * The provider's own reference for the payment, which the refresh pull asks
+   * the provider about. Never shown to the homeowner: what they see and quote
+   * is the Payment Reference (#562). `null` only for a payment that never
+   * reached the provider.
    */
   providerPaymentRef: string | null;
   /** Epoch milliseconds. */

@@ -36,6 +36,12 @@ export interface NormalizedPaymentEvent {
 
 export interface CheckoutRequest {
   paymentId: string;
+  /**
+   * The payment's Payment Reference (#562), which the adapter prints on the
+   * provider's checkout page and receipt exactly as given, so the homeowner
+   * can quote what is in their inbox and the site shows the same text.
+   */
+  paymentReference: string;
   amountCents: number;
   returnUrl: string;
   cancelUrl: string;

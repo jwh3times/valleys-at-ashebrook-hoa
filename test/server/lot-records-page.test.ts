@@ -688,9 +688,11 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
   });
   afterEach(() => setPaymentProviderForTests(null));
 
-  it('lists each payment on the lot with its status, amount, start day and reference, newest first', async () => {
+  it('lists each payment on the lot with its status, amount, start day and Payment Reference, newest first', async () => {
+    const OLD = '0a1b2c3d-ffff-4fff-8fff-ffffffffffff';
+    const NEW = 'de501dc2-7a1b-4c3d-9e8f-0a1b2c3d4e5f';
     await seedPayment({
-      id: 'pay-old',
+      id: OLD,
       lotId: 'lot-a',
       personId: 'person-1',
       amountCents: 12500,
@@ -698,7 +700,7 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
       createdAt: '2026-10-02T15:00:00Z',
     });
     await seedPayment({
-      id: 'pay-new',
+      id: NEW,
       lotId: 'lot-a',
       personId: 'person-1',
       amountCents: 45075,
@@ -709,8 +711,9 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
     const html = await render(caller(), allOn);
 
     expect(html).toContain('Online payments');
-    const newer = html.indexOf('ref_pay-new');
-    const older = html.indexOf('ref_pay-old');
+    // The Payment Reference (#562), never the provider's own id.
+    const newer = html.indexOf('Reference DE50-1DC2');
+    const older = html.indexOf('Reference 0A1B-2C3D');
     expect(newer).toBeGreaterThan(-1);
     expect(older).toBeGreaterThan(newer);
     expect(html).toContain('$450.75');
@@ -718,7 +721,9 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
     expect(html).toContain('$125.00');
     expect(html).toContain('Did not go through');
     expect(html).toContain('November 1, 2026');
-    expect(html).toContain('href="/lot-records/payments/pay-new"');
+    expect(html).toContain(`href="/lot-records/payments/${NEW}"`);
+    expect(html).not.toContain(`ref_${NEW}`);
+    expect(html).not.toContain(`ref_${OLD}`);
   });
 
   it('shows a payment a fellow co-owner made, without naming who made it', async () => {
@@ -735,7 +740,7 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
 
     const html = await render(caller({ personId: 'person-2' }), allOn);
 
-    expect(html).toContain('ref_pay-1');
+    expect(html).toContain('/lot-records/payments/pay-1"');
     expect(html).not.toContain('Robin Firstpayer');
   });
 
@@ -755,7 +760,7 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
 
     const html = await render(caller({ personId: 'buyer-1' }), allOn);
 
-    expect(html).not.toContain('ref_pay-seller');
+    expect(html).not.toContain('/lot-records/payments/pay-seller');
   });
 
   it('shows a payment still in flight above the Pay action', async () => {
@@ -806,7 +811,7 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
 
     expect(html).not.toContain(PAY);
     expect(html).toContain(IN_FLIGHT);
-    expect(html).toContain('ref_pay-1');
+    expect(html).toContain('/lot-records/payments/pay-1"');
   });
 
   it('shows no payments at all while no payment provider is configured', async () => {
@@ -822,7 +827,7 @@ describe('the payments a homeowner can check (ADR 0025, #544)', () => {
 
     expect(html).not.toContain('Online payments');
     expect(html).not.toContain(IN_FLIGHT);
-    expect(html).not.toContain('ref_pay-1');
+    expect(html).not.toContain('/lot-records/payments/pay-1');
   });
 
   it('says there are none yet when Pay is offered, and stays silent when it is not', async () => {

@@ -9,6 +9,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.15] - 2026-11-11
+
+### Added
+
+- **Every online payment now has a Payment Reference, the same on the site and on Stripe's receipt
+  (#562).** A homeowner who quoted their receipt to the board used to give a number the site never
+  showed: Stripe's receipt prints its own receipt number, and the site showed Stripe's long session
+  id. Each payment now gets a short reference such as `DE50-1DC2`, taken from its own id. Stripe
+  prints it on the checkout page and the receipt, as the item's name and the payment's description,
+  and a sandbox payment's receipt showed both. Homeowners see only this reference, on
+  `/lot-records` and the payment's return page. The board's Payments panel shows it first, then
+  Stripe's reference for looking a payment up in Stripe's dashboard, and names each row's buttons
+  by it. Nothing new is stored or sent to Stripe. Whether Stripe emails receipts at all stays the
+  association's account setting. Online payments remain off in production until the association
+  turns them on.
+
+### Changed
+
+- **The treasurer's ledger export has a Payment Reference column (#562).** The column that held
+  Stripe's id is now headed `Provider reference`, and a `Payment Reference` column beside it
+  matches each entry to the homeowner's receipt. It is empty for an entry tied to no payment.
+  ADR 0025 records the change in a dated amendment, including why Stripe's own receipt number was
+  not used.
+
 ## [2.11.14] - 2026-11-10
 
 ### Changed
@@ -5071,7 +5095,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.14...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.15...HEAD
+[2.11.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.14...v2.11.15
 [2.11.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.13...v2.11.14
 [2.11.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.12...v2.11.13
 [2.11.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.11...v2.11.12

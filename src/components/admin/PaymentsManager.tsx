@@ -19,6 +19,7 @@ import {
   PAYMENT_EXCEPTION_REASON_LABELS,
   PAYMENT_RESOLUTION_LABELS,
   PAYMENT_STATUS_LABELS,
+  paymentReference,
   paymentStatusLabel,
 } from '../../lib/payments';
 import {
@@ -180,14 +181,23 @@ export default function PaymentsManager() {
 
   /**
    * What a payment row's controls say they act on, from what the row shows:
-   * its reference, or without one its Lot, amount and start day.
+   * its Payment Reference (#562), which every payment has.
    */
-  const paymentIdentity = (p: AdminPaymentSummary) =>
-    p.providerPaymentRef ??
-    `${addressOf(p.lotId)}, ${formatCents(p.amountCents)}, started ${onDay(p.createdAt)}`;
-  /** What an exception's controls say they act on, likewise. */
+  const paymentIdentity = (p: AdminPaymentSummary) => paymentReference(p.id);
+  /** An exception's payment's Payment Reference, when it has a payment. */
+  const exceptionPaymentReference = (x: AdminOpenPaymentException) =>
+    x.paymentId === null ? null : paymentReference(x.paymentId);
+  /**
+   * What an exception's controls say they act on, likewise: its payment's
+   * Payment Reference, or with no payment the provider's reference, or with
+   * neither its Lot and the day it opened.
+   */
   const exceptionIdentity = (x: AdminOpenPaymentException) =>
-    `${PAYMENT_EXCEPTION_REASON_LABELS[x.reason]}, ${x.providerPaymentRef ?? `${addressOf(x.lotId)}, opened ${onDay(x.openedAt)}`}`;
+    `${PAYMENT_EXCEPTION_REASON_LABELS[x.reason]}, ${
+      exceptionPaymentReference(x) ??
+      x.providerPaymentRef ??
+      `${addressOf(x.lotId)}, opened ${onDay(x.openedAt)}`
+    }`;
 
   function toggleDetail(p: AdminPaymentSummary) {
     if (detailId === p.id) {
@@ -375,9 +385,11 @@ export default function PaymentsManager() {
                     {x.fact
                       ? `${formatCents(x.fact.amountCents)}${x.fact.currency === 'usd' ? '' : ` ${x.fact.currency.toUpperCase()}`} · `
                       : ''}
-                    {addressOf(x.lotId)} · reference{' '}
-                    {x.providerPaymentRef ?? 'none'} · opened{' '}
-                    {onDay(x.openedAt)}
+                    {`${addressOf(x.lotId)} · ${
+                      exceptionPaymentReference(x) === null
+                        ? ''
+                        : `Payment Reference ${exceptionPaymentReference(x)} · `
+                    }provider reference ${x.providerPaymentRef ?? 'none'} · opened ${onDay(x.openedAt)}`}
                   </div>
                 </div>
                 <div className="row-actions">
@@ -558,8 +570,8 @@ export default function PaymentsManager() {
                     {addressOf(p.lotId)} · started {onDay(p.createdAt)}
                     {p.origin === 'board_applied'
                       ? ' · applied by the board'
-                      : ''}{' '}
-                    · reference {p.providerPaymentRef ?? 'none yet'}
+                      : ''}
+                    {` · Payment Reference ${paymentReference(p.id)} · provider reference ${p.providerPaymentRef ?? 'none yet'}`}
                   </div>
                 </div>
                 <div className="row-actions">

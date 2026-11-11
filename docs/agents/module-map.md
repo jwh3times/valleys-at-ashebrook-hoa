@@ -405,12 +405,15 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   `ONLINE_PAYMENTS_ENABLED_SQL`. `checkout.ts`'s `startPayment` is the
   only writer of a new `checkout` payment (the board's `board_applied` payments are `apply.ts`'s,
   below): it resolves the account's Person one consolidation hop to
-  check Lot Authority (the initiator stays the account's own Person, since it records who acted), opens the provider's checkout under a payment id it mints, then writes the
+  check Lot Authority (the initiator stays the account's own Person, since it records who acted), opens the provider's checkout under a payment id it mints, passing that payment's
+  Payment Reference for the provider to print (#562), then writes the
   row with the provider's reference in one `INSERT … SELECT` that re-checks the flags and Lot
   Authority, so the row is never updated outside `apply.ts`. The shared amount bounds
   (`MIN_PAYMENT_CENTS`, `MAX_PAYMENT_CENTS`, `paymentAmountError`), the homeowner status labels
-  (`paymentStatusLabel`, which reads a withdrawn payment as `Withdrawn` whatever its checkout status)
-  and `paymentInFlight` (`created` or `pending`) live in `src/lib/payments.ts`.
+  (`paymentStatusLabel`, which reads a withdrawn payment as `Withdrawn` whatever its checkout status),
+  `paymentInFlight` (`created` or `pending`) and `paymentReference(paymentId)` (#562: the Payment
+  Reference every surface shows, derived from the id and never stored) live in
+  `src/lib/payments.ts`.
   `lot-records/reads.ts`'s `fetchMemberPayment` is the scoped read behind the return page (#542),
   and `fetchMemberPayments(env, personId, associationDay)` lists, newest first, the payments
   `/lot-records` shows (#544): those on a Lot the caller holds today, each scoped to Lot Authority
