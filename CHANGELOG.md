@@ -9,6 +9,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.16] - 2026-11-11
+
+### Changed
+
+- `AGENTS.md`, which loads into every agent request, is about 2,500 characters shorter. It no
+  longer repeats the generated shared-skills block's opening sentence or restates what `ship`,
+  `end-session`, `docs-updater`, `handoff` and `lets-go` do, since each skill's own `SKILL.md` says
+  so. How the skill and agent trees are generated, and which `scripts/*.mjs` files are shared with
+  other repositories, moved word for word to the new `docs/agents/agent-skills.md`. `AGENTS.md`
+  keeps the never-edit rules and points there from its "Where to look next" table.
+
 ## [2.11.15] - 2026-11-11
 
 ### Added
@@ -5095,7 +5106,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.15...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.16...HEAD
+[2.11.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.15...v2.11.16
 [2.11.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.14...v2.11.15
 [2.11.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.13...v2.11.14
 [2.11.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.12...v2.11.13
