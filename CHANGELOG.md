@@ -9,6 +9,17 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.14] - 2026-11-10
+
+### Changed
+
+- **The domain glossary now defines the Payment Reference** (#562). `CONTEXT.md` gains **Payment
+  Reference**: the identifier the site gives an Online Payment, which the homeowner and the board
+  both see and the payment provider prints on its receipt, so a homeowner can quote what is in their
+  inbox. The association owns it, and it is never the provider's receipt number or session id. The
+  term comes first; #562 builds the feature that uses it. `docs/agents/data-model.md` no longer
+  calls the provider's id a "payment reference".
+
 ## [2.11.13] - 2026-11-10
 
 ### Changed
@@ -5060,7 +5071,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.13...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.14...HEAD
+[2.11.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.13...v2.11.14
 [2.11.13]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.12...v2.11.13
 [2.11.12]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.11...v2.11.12
 [2.11.11]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.10...v2.11.11

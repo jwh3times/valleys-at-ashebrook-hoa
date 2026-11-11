@@ -358,10 +358,10 @@ ordering.
   record of the last status change.
 - `payment_events`: every verified provider fact, normalized and append-only. UNIQUE
   `(provider, provider_event_id)` is the per-event idempotency layer. Each row keeps the provider's
-  payment reference, a magnitude `amount_cents`, the lower-case `currency`, `occurred_at` (which
-  dates the ledger entry), `via` (`webhook` / `reconciliation` / `board`), `outcome` (`applied` /
-  `duplicate_effect` / `unmatched` / `exception`, with `unmatched` exactly when no payment claims
-  it) and the `ledger_entry_id` it produced. The raw payload is never stored.
+  reference (`provider_payment_ref`), a magnitude `amount_cents`, the lower-case `currency`,
+  `occurred_at` (which dates the ledger entry), `via` (`webhook` / `reconciliation` / `board`),
+  `outcome` (`applied` / `duplicate_effect` / `unmatched` / `exception`, with `unmatched` exactly
+  when no payment claims it) and the `ledger_entry_id` it produced. The raw payload is never stored.
 - `payment_exceptions`: the board's queue, append-only, citing an event, a payment, or both, with
   a CHECK-bounded `reason`. `stale_pending` is unique per payment by index, and the daily reconciliation job opens it for a
   payment still `pending` ten days after it started (#543), never again once resolved. `amount_mismatch`,
