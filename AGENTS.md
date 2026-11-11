@@ -90,6 +90,7 @@ load the one your task touches.
 | [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                     |
 | [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                      |
 | [`human-follow-up.md`](./docs/agents/human-follow-up.md)       | Filing a step only a human can take — the private issue and the wiki page.    |
+| [`agent-skills.md`](./docs/agents/agent-skills.md)             | Editing a skill, an agent, or a shared `scripts/*.mjs` file.                  |
 | [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                      |
 | [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                     |
 
@@ -468,9 +469,6 @@ The project subagent **`code-reviewer`** lives in `.claude/agents/`: it reviews 
 tier-enforcement, two-layer API gating, transition-only fields, ballot secrecy, numeric-coercion, D1
 write-integrity, and Drizzle FK-trap rules before merging.
 
-**Five workflow skills install from the shared `jwh3times/skills` repository** (ADR 0029): `ship`,
-`end-session`, `docs-updater`, `handoff`, and `lets-go`.
-
 <!-- shared:shared-skills -->
 
 `end-session`, `handoff`, `lets-go`, `ship` and `docs-updater` install from `jwh3times/skills`, and
@@ -508,22 +506,6 @@ here.
 
 `.agents/skills/` is Prettier-ignored, so a reinstall reproduces it byte for byte.
 
-- **`ship`** takes a branch from code-complete to an open PR: it classifies the release impact,
-  writes the `CHANGELOG.md` section for the version `scripts/next-version.mjs` predicts (backfilling
-  Dependabot builds), runs `docs-updater` on the branch's diff, runs the `Fast checks` in
-  `docs/agents/ship.md`, pushes, and opens or updates the PR.
-- **`end-session`** closes out a work session: memory, issues and the board, human follow-ups,
-  docs, the private companion, and the local workspace. It never pushes the public repository,
-  never runs a remote-D1 write, and shows every deletion as a list before acting.
-- **`docs-updater`** finds where the docs and the code disagree and fixes the docs, following the
-  `Doc map` in `docs/agents/docs.md`. It runs from `ship` and `end-session`, so there is no per-turn
-  docs hook.
-- **`handoff`** and **`lets-go`** (user-invoked) carry a session between the user's machines through
-  a shared Handoffs folder: `/handoff` audits for work not merged to `main`, writes a handoff
-  document, registers it in the folder's handoff map, and closes out with `end-session`; `/lets-go`
-  resumes from it and clears the entry. How the folder reaches a machine is that machine's config
-  (`~/.config/handoffs/config`), not this repository's.
-
 **Human follow-ups from agent work are filed, not narrated.** When completed agent work leaves a
 step only a human can take — a dashboard, DNS, or zone setting, a production migration or secret, a
 force-push, a named sign-off, an association decision — the closing report is not where it lives.
@@ -533,20 +515,7 @@ report both links — never in the public PR body. `ship`, `end-session`, and `d
 [`docs/agents/human-follow-up.md`](./docs/agents/human-follow-up.md), and `code-reviewer` flags a
 diff that introduces an operator step without them.
 
-**One source of truth, two CLIs.** `.agents/skills` is the authored source for complete skill
-directories. Run `npm run format` before `npm run sync:agents`; the latter regenerates
-`.claude/skills` for Claude Code and `.codex/agents` from authored `.claude/agents`. Never edit
-generated trees or reintroduce skill symlinks: with `core.symlinks=false`, Git stages linked
-contents as duplicate files. Each authored Claude custom agent is rendered as a Codex custom-agent
-TOML file, preserving its name, description, and developer instructions. The `PostToolUse` hook in
-`.claude/settings.json` re-syncs after authored inputs change, and CI plus `/ship` run
-`npm run sync:agents:check` to reject generated-tree drift. See
-[ADR 0021](./docs/adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
-
-`scripts/sync-agents.mjs`, `scripts/lint-agent-neutrality.mjs`, `scripts/sync-main.mjs`,
-`scripts/next-version.mjs`, `scripts/check-changelog.mjs` and `scripts/check-docs.mjs`, each with its
-`node:test` suite, are the one exception to TypeScript-only `scripts/`: they are shared **byte-for-byte** with other
-repositories, so they are plain `.mjs`, Prettier-ignored, outside the TypeScript programs and
-Vitest, and must never be edited here — change the canonical copy in `jwh3times/skills` and copy it
-to every repository. `npm run lint:agents` runs the second in CI: it rejects agent or skill wording
-one tool cannot follow and links that break once a skill is mirrored.
+**One source of truth, two CLIs.** Never edit the generated `.claude/skills/` or `.codex/agents/`
+trees, never reintroduce skill symlinks, and never edit the shared `.mjs` scripts here. Before
+editing a skill, an agent, or a script under `scripts/*.mjs`, read
+[`agent-skills.md`](./docs/agents/agent-skills.md).
