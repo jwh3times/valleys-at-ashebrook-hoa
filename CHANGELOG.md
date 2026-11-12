@@ -9,6 +9,18 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.17] - 2026-11-11
+
+### Fixed
+
+- **ADR 0025 now says when a dispute takes the money (#566).** Its event table listed a "lost
+  dispute" as a cause of `funds_withdrawn`, but the Stripe sandbox rehearsal showed that the funds
+  leave as soon as a dispute opens. Losing it moves no money and sends nothing, so the withdrawal's
+  exception simply stays with the board. A dated amendment records this. The online-payment rail
+  already behaved this way, so nothing about it changes.
+- The `2.11.14` section of this changelog is now dated 2026-11-11, the day its tag was minted,
+  rather than 2026-11-10.
+
 ## [2.11.16] - 2026-11-11
 
 ### Changed
@@ -44,7 +56,7 @@ No unreleased changes.
   ADR 0025 records the change in a dated amendment, including why Stripe's own receipt number was
   not used.
 
-## [2.11.14] - 2026-11-10
+## [2.11.14] - 2026-11-11
 
 ### Changed
 
@@ -5106,7 +5118,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.16...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.17...HEAD
+[2.11.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.16...v2.11.17
 [2.11.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.15...v2.11.16
 [2.11.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.14...v2.11.15
 [2.11.14]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.13...v2.11.14

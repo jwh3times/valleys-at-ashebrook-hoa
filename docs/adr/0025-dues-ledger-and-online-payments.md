@@ -447,6 +447,16 @@ migration `0046`:
    amendment, item 3), it means the provider's own reference, `provider_payment_ref`, not a
    Payment Reference.
 
+**2026-11-11 (#566).** A dispute takes the money when it opens, not when it is lost. The event
+table lists "lost dispute" as a cause of `funds_withdrawn`. In the Stripe sandbox rehearsal (#547),
+a disputed bank debit sent the dispute's opening and its funds withdrawal one second apart, so the
+money leaves the association's account as soon as the dispute opens. The rail as built already
+handles this: the opening is `dispute_opened` and the withdrawal is `funds_withdrawn`, which
+reverse the payment's entry and open their exceptions as the table says. The dispute's outcome is
+not a fact of its own. A won dispute arrives as `funds_reinstated`. A lost one moves no money and
+sends nothing, so it only means no `funds_reinstated` follows, and the withdrawal's exception stays
+with the board.
+
 ## Related decisions
 
 - [ADR 0005: Resident Mode and Official Mode](./0005-resident-mode-and-official-mode.md)
