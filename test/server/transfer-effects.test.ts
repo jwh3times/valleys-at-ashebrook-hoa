@@ -3,7 +3,6 @@ import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { getDb } from '../../src/server/db/client';
 import { users } from '../../src/server/db/auth-schema';
-import { associationDateIso } from '../../src/lib/format';
 import {
   ballotChoices,
   ballots,
@@ -13,6 +12,7 @@ import {
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 import {
+  associationDay as day,
   now,
   seedBallot,
   seedCandidate,
@@ -54,8 +54,6 @@ beforeAll(async () => {
 
 // Association-day arithmetic, never UTC midnight: a `new Date().toISOString()`
 // day here fails every CI run between UTC and Eastern midnight (the 3b lesson).
-const day = (offset: number): string =>
-  associationDateIso(new Date(Date.now() + offset * 86_400_000));
 const TODAY = day(0);
 
 const CLEAR = [

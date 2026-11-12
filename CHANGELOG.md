@@ -9,6 +9,25 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.19] - 2026-11-12
+
+### Fixed
+
+- **The Workers test suite no longer fails in the hour before midnight after a clock change
+  (#575).** Two suites built Association Days by stepping the clock back in 24-hour blocks. A
+  New York day is 25 hours long when the clocks go back, so in the last local hour before midnight,
+  two neighbouring days could land on the same date, and a test's "day before" fixture was seeded
+  on the day itself. That turned #572's `build` red until it was re-run after midnight. Both suites
+  now share one test helper that shifts the calendar date rather than the clock, and new tests pin
+  it at the autumn and spring clock changes. The site's own date handling was correct and is
+  unchanged.
+
+## [2.11.18] - 2026-11-12
+
+### Changed
+
+- Dependency update (Dependabot, #572): `@cloudflare/workers-types` 5.20261107.1 → 5.20261108.1.
+
 ## [2.11.17] - 2026-11-11
 
 ### Fixed
@@ -5118,7 +5137,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.17...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.19...HEAD
+[2.11.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.18...v2.11.19
+[2.11.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.17...v2.11.18
 [2.11.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.16...v2.11.17
 [2.11.16]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.15...v2.11.16
 [2.11.15]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.14...v2.11.15

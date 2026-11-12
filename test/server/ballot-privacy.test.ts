@@ -11,10 +11,10 @@ import {
   users,
 } from '../../src/server/db/schema';
 import { parties, people, ownerships } from '../../src/server/db/roster-schema';
-import { associationDateIso } from '../../src/lib/format';
 import { callerContext } from './caller-context';
 import type { AuthContext } from '../../src/server/authz/guards';
 import {
+  associationDay as day,
   now,
   seedCandidate,
   seedElection,
@@ -56,8 +56,6 @@ beforeAll(async () => {
 });
 
 // Association-day arithmetic, never UTC midnight (the 3b CI skew lesson).
-const day = (offset: number): string =>
-  associationDateIso(new Date(Date.now() + offset * 86_400_000));
 const TODAY = day(0);
 
 const VOTER: AuthContext = callerContext('voter-1', 'homeowner', ['lot-1']);
