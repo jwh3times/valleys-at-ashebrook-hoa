@@ -9,6 +9,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.21] - 2026-11-12
+
+### Added
+
+- **`/what-next` reports what to work on next.** A shared skill from `jwh3times/skills`: it reads the
+  open issues, open PRs and the board, and ranks the work by the board's manual order, per the new
+  `Priority order` setting in `docs/agents/issue-tracker.md`. It names one item and the command that
+  takes it, and changes nothing on GitHub. The development flow's routing points at it when nothing
+  is chosen yet.
+
+## [2.11.20] - 2026-11-12
+
+### Changed
+
+- Dependency update (Dependabot, #576): `@cloudflare/workers-types` 5.20261108.1 → 5.20261109.1 and
+  `@vitejs/plugin-react` 6.2.1 → 6.3.0.
+
 ## [2.11.19] - 2026-11-12
 
 ### Fixed
@@ -5137,7 +5154,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.19...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.21...HEAD
+[2.11.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.20...v2.11.21
+[2.11.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.19...v2.11.20
 [2.11.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.18...v2.11.19
 [2.11.18]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.17...v2.11.18
 [2.11.17]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.16...v2.11.17
