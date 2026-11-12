@@ -27,6 +27,9 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   those changes.
 - `docs/agents/ci-and-release.md` — the pipeline, versioning, the changelog guard, Dependabot.
   **When:** CI, Dependabot, versioning or the changelog workflow changes.
+- `docs/agents/agent-skills.md` — how the skill and agent trees are generated, and the shared
+  `.mjs` scripts. **When:** `scripts/sync-agents.mjs`, the generated trees, or the shared-script
+  set changes.
 - `docs/agents/dev-flow.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`,
   `docs/agents/domain.md` — the conventions the flow skills read. **When:** a convention or route changes.
 - `docs/agents/` settings (`workspace`, `human-follow-up`, `docs`, `releases`, `ship`, `handoffs`,
