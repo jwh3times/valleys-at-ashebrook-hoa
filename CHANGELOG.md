@@ -44,7 +44,7 @@ No unreleased changes.
   ADR 0025 records the change in a dated amendment, including why Stripe's own receipt number was
   not used.
 
-## [2.11.14] - 2026-11-10
+## [2.11.14] - 2026-11-11
 
 ### Changed
 
