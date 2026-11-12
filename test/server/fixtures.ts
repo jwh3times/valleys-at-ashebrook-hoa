@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test';
 import { eq } from 'drizzle-orm';
 import { vi } from 'vitest';
 import { getDb } from '../../src/server/db/client';
+import { associationDateIso } from '../../src/lib/format';
 import {
   lots,
   meetings,
@@ -44,6 +45,20 @@ import { parties, people, ownerships } from '../../src/server/db/roster-schema';
 
 /** Fixed clock. Tests that care about time pass `createdAt`/`updatedAt`. */
 export const now = new Date();
+
+/**
+ * The Association Day `offsetDays` calendar days from today's, as `YYYY-MM-DD`.
+ *
+ * Shift the date, never the instant: an Association Day is 25 hours long when
+ * New York's clocks go back and 23 when they go forward, so adding multiples of
+ * 24 hours to `Date.now()` lands two neighbouring offsets on one day (#575).
+ */
+export function associationDay(offsetDays = 0): string {
+  const [year, month, day] = associationDateIso().split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + offsetDays))
+    .toISOString()
+    .slice(0, 10);
+}
 
 /** Build the `APIContext`-shaped argument the admin route handlers take. */
 export function req(url: string, method: string, body?: unknown) {
