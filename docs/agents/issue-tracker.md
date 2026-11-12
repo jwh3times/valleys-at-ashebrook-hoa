@@ -159,3 +159,7 @@ The issue is the record; durable facts go in its body and comments, never only i
 
 The default (see "Security findings and long-form reviews" above). A long-form review goes to the
 companion's wiki, linked from a tracking issue.
+
+## Priority order
+
+- `board order`: the board's manual order, top first.

@@ -65,9 +65,9 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
 - `docs/plans/`, `docs/specs/` — dated historical records. `frozen`.
 - `design/` — a reference-only mockup. `frozen`.
 - `.agents/skills/*/**` — skills, mirrored to `.claude/skills/`: the `mattpocock/skills` set and
-  `end-session`, `handoff`, `lets-go`, `ship` and `docs-updater` from `jwh3times/skills`, all locked
-  in `skills-lock.json`. `frozen`. **When:** a skill is added, removed or replaced: `AGENTS.md`'s
-  "Agents & Docs Automation" and, for a shared skill, ADR 0029.
+  `end-session`, `handoff`, `lets-go`, `ship`, `docs-updater` and `what-next` from
+  `jwh3times/skills`, all locked in `skills-lock.json`. `frozen`. **When:** a skill is added,
+  removed or replaced: `AGENTS.md`'s "Agents & Docs Automation" and, for a shared skill, ADR 0029.
 - `.claude/agents/code-reviewer.md` — the reviewer's correctness rules. **When:** a rule it reviews
   against changes (tier enforcement, API gating, ballot secrecy, D1 write integrity).
 - `private/operations/OPERATIONS.md` — production identity, roster import, the post-flip
