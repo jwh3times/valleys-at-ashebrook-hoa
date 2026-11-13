@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.22] - 2026-11-12
+
+### Changed
+
+- **`/what-next` puts an active handoff first.** When `handoff_map.json` names one for this
+  repository, the report leads with it and recommends `/lets-go`, and one whose document has not
+  reached this machine is shown as pending. It still changes nothing, and a machine without the
+  handoffs config skips the check.
+
 ## [2.11.21] - 2026-11-12
 
 ### Added
@@ -5154,7 +5163,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.21...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.22...HEAD
+[2.11.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.21...v2.11.22
 [2.11.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.20...v2.11.21
 [2.11.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.19...v2.11.20
 [2.11.19]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.18...v2.11.19
