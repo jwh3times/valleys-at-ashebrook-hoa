@@ -24,16 +24,6 @@ updates:
     labels:
       - 'dependencies'
       - 'npm'
-    # Vitest 5.1's module mocker calls AsyncLocalStorage#disable(), which workerd
-    # does not implement, so every Workers-pool suite that mocks a module fails to
-    # load (vitest-dev/vitest#11907). The guard ships in @cloudflare/vitest-plugin
-    # 1.6.1; until then vitest and @vitest/coverage-v8 stay on 5.0.x. Lift this
-    # ignore and the '~5.0.5' ranges in package.json together.
-    ignore:
-      - dependency-name: 'vitest'
-        versions: ['>= 5.1.0']
-      - dependency-name: '@vitest/*'
-        versions: ['>= 5.1.0']
     groups:
       # --- Peer-locked families — majors only. All minor/patch bumps land in the
       #     catch-all group at the bottom. ---
