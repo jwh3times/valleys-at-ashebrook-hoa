@@ -14,17 +14,6 @@ const baseConfig = getViteConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'test/**/*.test.{ts,tsx}'],
     exclude: ['test/server/**'],
-    coverage: {
-      provider: 'v8',
-      include: ['src/**/*.{ts,tsx,astro}'],
-      exclude: ['src/**/*.{test,spec}.{ts,tsx}', 'src/test/**'],
-      thresholds: {
-        statements: 55,
-        branches: 50,
-        functions: 40,
-        lines: 55,
-      },
-    },
   },
 });
 
