@@ -73,6 +73,12 @@ A third grouped PR failed earlier still, at `npm ci`:
   `vitest` and `@vitest/*` major ignores from `.github/dependabot.yml`. Take a future `vitest` major
   as its own PR with the full `test:server` run, and check the plugin's peer range first.
 
+A matching peer range is not enough. Vitest 5.1's module mocker calls `AsyncLocalStorage#disable()`,
+which workerd does not implement, so every Workers-pool suite with a `vi.mock()` factory failed to
+load. #533 held `vitest` and `@vitest/*` at 5.0.x with a Dependabot ignore; #535 lifted it once
+`@cloudflare/vitest-plugin` 1.6.1 made `disable()` a no-op in the test runtime. Run the full
+`test:server` for a `vitest` minor too.
+
 ## CodeQL runs outside `build.yml`, and skips Dependabot's own commits
 
 CodeQL code scanning is GitHub's **default setup**, configured in the repository's Settings. There
