@@ -9,6 +9,26 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.27] - 2026-11-14
+
+### Removed
+
+- The unused test-coverage setup (#584): the `coverage` block in the jsdom Vitest config (provider
+  `v8`, with 55/50/40/55 thresholds) and the `@vitest/coverage-v8` dev dependency. Nothing ran it, and
+  a manual `vitest run --coverage` skipped the 64 modules that import `cloudflare:*`, which do not
+  resolve under jsdom. Even with that fixed, a jsdom-only figure reads far below the thresholds,
+  because the route handlers are tested in the Workers pool, which measures no coverage.
+
+## [2.11.26] - 2026-11-14
+
+### Changed
+
+- Dependency updates (Dependabot, #583): `@anthropic-ai/sdk` 1.7.0 → 1.8.0, `@astrojs/cloudflare`
+  14.4.6 → 14.4.7, `@astrojs/react` 7.1.5 → 7.1.7, `astro` 7.4.8 → 7.4.10, `better-auth`,
+  `@better-auth/core` and `@better-auth/drizzle-adapter` 1.7.19 → 1.7.20, `@cloudflare/vitest-plugin`
+  1.6.1 → 1.7.0 and `wrangler` 4.159.0 → 4.160.0. The committed Worker types were regenerated for
+  the newer `workerd` (1.20261110.1).
+
 ## [2.11.25] - 2026-11-13
 
 ### Changed
@@ -5189,7 +5209,9 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.25...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.27...HEAD
+[2.11.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.26...v2.11.27
+[2.11.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.25...v2.11.26
 [2.11.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.24...v2.11.25
 [2.11.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.23...v2.11.24
 [2.11.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.22...v2.11.23
