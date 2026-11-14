@@ -46,8 +46,10 @@ git add worker-configuration.d.ts
 ```
 
 CI deliberately does **not** commit the regenerated file back. Doing so would need a
-`contents: write` token on a job whose `npm ci` has just run the install scripts of the very
-package being bumped — the risk `AGENTS.md` gates behind human confirmation everywhere else.
+`contents: write` token on a job that has just run code from the very package being bumped
+(`types:worker` runs Wrangler, and the build and tests load the rest): dependency code running
+beside a credential, the risk `AGENTS.md` gates behind human confirmation when install scripts are
+approved.
 
 > **A failed early gate skips every later step, including the whole test suite.** A
 > green-looking single blocker can therefore hide a real failure behind it — do not assume the
