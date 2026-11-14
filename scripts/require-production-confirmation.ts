@@ -25,9 +25,7 @@ function executableIndex(words: string[], executable: string): number {
   });
 }
 
-function npmOperation(
-  words: string[],
-): { kind: 'install' | 'run'; name?: string } | null {
+function npmOperation(words: string[]): { kind: 'run'; name?: string } | null {
   const npmIndex = executableIndex(words, 'npm');
   if (npmIndex < 0) return null;
 
@@ -36,13 +34,73 @@ function npmOperation(
     (word) => !word.startsWith('-'),
   );
   const operation = argumentsAfterNpm[operationIndex];
-  if (operation === 'install' || operation === 'i') return { kind: 'install' };
   if (operation !== 'run') return null;
 
   const scriptName = argumentsAfterNpm
     .slice(operationIndex + 1)
     .find((word) => !word.startsWith('-'));
   return { kind: 'run', name: scriptName };
+}
+
+// npm 12's settings that let dependency install scripts run despite the `allowScripts` policy:
+// `allow-scripts` adds packages to it, `dangerously-allow-all-scripts` ignores it. Each can be a
+// flag, an `npm config set` key, or an `npm_config_*` variable. `--allow-scripts-pending` and
+// `--allow-scripts-pin` only list or pin, and `--no-…` turns a setting off, so none of them match.
+const SCRIPT_SWITCH_FLAG =
+  /^--(?:dangerously-allow-all-scripts|allow-scripts)(?:=|$)/i;
+const SCRIPT_SWITCH_CONFIG_KEY =
+  /^(?:dangerously-allow-all-scripts|allow-scripts)(?:=|$)/i;
+const SCRIPT_SWITCH_VARIABLE =
+  /^npm_config_(?:dangerously_allow_all_scripts|allow_scripts)=/i;
+
+/**
+ * Whether a command segment lets dependency install scripts run. Plain installs are not gated:
+ * npm 12 blocks every dependency's install scripts until they are approved, so changing the
+ * dependency tree runs no dependency code. Approving those scripts, or switching the policy off,
+ * is what lets them run (#586). A `package.json` or `.npmrc` edited outside a command is left to
+ * review of the diff.
+ */
+function enablesInstallScripts(words: string[]): boolean {
+  // An exported or inline variable applies to whatever npm runs next in the same shell.
+  if (words.some((word) => SCRIPT_SWITCH_VARIABLE.test(word))) return true;
+
+  const npmIndex = executableIndex(words, 'npm');
+  const npxIndex = executableIndex(words, 'npx');
+  const commandIndex = npmIndex >= 0 ? npmIndex : npxIndex;
+  if (commandIndex < 0) return false;
+
+  // Arguments after `--` belong to a script or binary, not to npm.
+  const argumentsAfterCommand = words.slice(commandIndex + 1);
+  const separator = argumentsAfterCommand.indexOf('--');
+  const npmArguments =
+    separator < 0
+      ? argumentsAfterCommand
+      : argumentsAfterCommand.slice(0, separator);
+  if (npmArguments.some((word) => SCRIPT_SWITCH_FLAG.test(word))) return true;
+  if (npmIndex < 0) return false;
+
+  // Found by presence rather than position, because a value-taking flag such as
+  // `--prefix <dir>` stands between `npm` and its command.
+  const positional = npmArguments.filter((word) => !word.startsWith('-'));
+  const after = (command: string): string[] => {
+    const index = positional.indexOf(command);
+    return index < 0 ? [] : positional.slice(index + 1);
+  };
+
+  if (positional.includes('approve-scripts')) {
+    return !npmArguments.includes('--allow-scripts-pending');
+  }
+  if (after('install-scripts')[0] === 'approve') return true;
+
+  const config = after('config');
+  if (config[0] === 'set') {
+    return config.slice(1).some((word) => SCRIPT_SWITCH_CONFIG_KEY.test(word));
+  }
+  const pkg = after('pkg');
+  if (pkg[0] === 'set') {
+    return pkg.slice(1).some((word) => /^allowScripts(?:[.[=]|$)/.test(word));
+  }
+  return false;
 }
 
 function wranglerArguments(words: string[]): string[] | null {
@@ -126,11 +184,11 @@ function productionConfirmationReasonForSegment(
 ): string | null {
   const normalized = command.replace(/\s+/g, ' ').trim();
   const words = shellWords(normalized);
-  const npm = npmOperation(words);
-
-  if (npm?.kind === 'install') {
-    return 'execute dependency lifecycle scripts while production credentials are available';
+  if (enablesInstallScripts(words)) {
+    return 'let dependency install scripts run while production credentials are available';
   }
+
+  const npm = npmOperation(words);
 
   if (npm?.kind === 'run' && npm.name === 'deploy') {
     return 'deploy the application to production';
