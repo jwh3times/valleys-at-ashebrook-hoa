@@ -9,6 +9,15 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.29] - 2026-11-14
+
+### Changed
+
+- The docs refresh now knows which documents describe the agent confirmation hook. A change to what
+  `scripts/require-production-confirmation.ts` prompts for points it at `AGENTS.md` (Deploy),
+  `SECURITY.md` ("Confirmation-gated production mutations") and the Worker-types paragraph of
+  `docs/agents/ci-and-release.md`. #586 had to find those three by hand.
+
 ## [2.11.28] - 2026-11-14
 
 ### Changed
@@ -5223,7 +5232,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.28...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.29...HEAD
+[2.11.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.28...v2.11.29
 [2.11.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.27...v2.11.28
 [2.11.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.26...v2.11.27
 [2.11.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.25...v2.11.26
