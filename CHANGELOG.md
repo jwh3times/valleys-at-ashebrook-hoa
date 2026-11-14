@@ -9,6 +9,32 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.25] - 2026-11-13
+
+### Changed
+
+- `vitest` and `@vitest/coverage-v8` move from 5.0.5 to 5.1.0 (#535), which ends the 5.0.x hold.
+  `@cloudflare/vitest-plugin` 1.6.1 (in 2.11.24) makes `AsyncLocalStorage#disable()` a no-op in the
+  Workers test runtime, so Vitest 5.1's module mocker no longer breaks the `vi.mock()` suites.
+  Dependabot no longer skips Vitest 5.1 and later.
+
+## [2.11.24] - 2026-11-13
+
+### Changed
+
+- Dependency updates (Dependabot, #581): `@anthropic-ai/sdk` 1.6.0 → 1.7.0, `@astrojs/react`
+  7.1.4 → 7.1.5, `astro` 7.4.7 → 7.4.8, `better-auth`, `@better-auth/core` and
+  `@better-auth/drizzle-adapter` 1.7.18 → 1.7.19, `@cloudflare/vitest-plugin` 1.6.0 → 1.6.1,
+  `@cloudflare/workers-types` 5.20261109.1 → 5.20261110.1, `@testing-library/user-event`
+  14.6.8 → 14.6.9 and `wrangler` 4.158.0 → 4.159.0. The committed Worker types were regenerated for
+  the newer `workerd` (1.20261109.1).
+
+## [2.11.23] - 2026-11-13
+
+### Changed
+
+- Dependency update (Dependabot, #580): `oxlint` 1.92.0 → 1.93.0.
+
 ## [2.11.22] - 2026-11-12
 
 ### Changed
@@ -5163,7 +5189,10 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.22...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.25...HEAD
+[2.11.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.24...v2.11.25
+[2.11.24]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.23...v2.11.24
+[2.11.23]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.22...v2.11.23
 [2.11.22]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.21...v2.11.22
 [2.11.21]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.20...v2.11.21
 [2.11.20]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.19...v2.11.20
