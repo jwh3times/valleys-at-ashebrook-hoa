@@ -12,7 +12,7 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   block); a Cloudflare binding or secret changes (the bindings paragraph); the two-layer API gating
   pattern changes; roles, visibility tiers, official mode or the verification flow change ("What
   This Is", Roles and access); a skill or agent is added, removed or replaced ("Agents & Docs
-  Automation").
+  Automation"); `scripts/require-production-confirmation.ts` changes what it prompts for (Deploy).
 - `docs/agents/http-endpoints.md` — each route's contract: guard order, status codes, re-checks.
   **When:** an endpoint under `src/pages/api/**` is added or changed.
 - `docs/agents/data-model.md` — each table's entry. **When:** `src/server/db/*schema.ts` changes.
@@ -26,7 +26,9 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
 - `docs/agents/voting-and-ballots.md` — elections, motions, ballots, voting flags. **When:** any of
   those changes.
 - `docs/agents/ci-and-release.md` — the pipeline, versioning, the changelog guard, Dependabot.
-  **When:** CI, Dependabot, versioning or the changelog workflow changes.
+  **When:** CI, Dependabot, versioning or the changelog workflow changes; the confirmation hook's
+  install-script rule changes (the Worker-types paragraph cites it, as does the matching comment in
+  `.github/workflows/build.yml`).
 - `docs/agents/agent-skills.md` — how the skill and agent trees are generated, and the shared
   `.mjs` scripts. **When:** `scripts/sync-agents.mjs`, the generated trees, or the shared-script
   set changes.
@@ -41,7 +43,8 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   **When:** a resource, secret, command or port actually changes — a binding or secret in
   `wrangler.toml`, a new migration step that changes deployment. Touch its steps for nothing else.
 - `SECURITY.md` — the reporting process, consistent with the roles and visibility model. **When:**
-  the auth, visibility or access model changes.
+  the auth, visibility or access model changes; `scripts/require-production-confirmation.ts`
+  changes what it prompts for ("Confirmation-gated production mutations").
 - `CONTRIBUTING.md` — the workflow and standards. **When:** the development flow or a required check
   changes.
 - `SUPPORT.md` — where to ask for help. **When:** the issue templates or the support route change.
