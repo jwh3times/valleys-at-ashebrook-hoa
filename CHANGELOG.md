@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.28] - 2026-11-14
+
+### Changed
+
+- The agent confirmation hook now asks before anything that lets dependency install scripts run,
+  rather than before installs (#586). npm 12 blocks every dependency's install scripts until they
+  are approved, so a plain install runs no dependency code, yet `npm add`, `npm update` and the
+  approval commands went unprompted. It now prompts for `npm install-scripts approve`,
+  `npm approve-scripts`, `npm pkg set allowScripts…`, and npm's `allow-scripts` and
+  `dangerously-allow-all-scripts` settings as an `npm` or `npx` flag, an `npm config set` key or an
+  `npm_config_*` variable. `npm install`, `add`, `update`, `uninstall` and `ci` no longer prompt.
+  Every production gate is unchanged. `AGENTS.md` and `SECURITY.md` state the same rule, including
+  that an `allowScripts` or `.npmrc` change made with an editor is left to review of the diff.
+
 ## [2.11.27] - 2026-11-14
 
 ### Removed
@@ -5209,7 +5223,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.27...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.28...HEAD
+[2.11.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.27...v2.11.28
 [2.11.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.26...v2.11.27
 [2.11.26]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.25...v2.11.26
 [2.11.25]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.24...v2.11.25

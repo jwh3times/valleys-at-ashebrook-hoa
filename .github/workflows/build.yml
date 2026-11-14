@@ -47,9 +47,11 @@ jobs:
       # rather than "something changed, nothing was tested".
       #
       # Deliberately NOT committing the result back. That would need a
-      # `contents: write` token on a job whose `npm ci` has just executed the
-      # install scripts of the very package being bumped, which is the risk
-      # AGENTS.md gates behind human confirmation everywhere else.
+      # `contents: write` token on a job that has just run code from the very
+      # package being bumped (types:worker runs Wrangler, and the build and
+      # tests load the rest): dependency code running beside a credential, the
+      # risk AGENTS.md gates behind human confirmation when install scripts
+      # are approved.
       #
       # The file is in .prettierignore, so a regenerated copy cannot trip
       # format:check below and mask the suite a second way.

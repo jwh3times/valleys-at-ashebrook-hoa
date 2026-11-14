@@ -54,9 +54,25 @@ describe('production confirmation hook', () => {
     'wrangler pages project delete resident-site',
     'wrangler future-resource mutate production',
     'node --experimental-strip-types scripts/put-secret.ts EMAIL_API_KEY',
-    'npm install example-package',
-    'npm --silent install example-package',
     'npm --silent run deploy',
+    'npm install-scripts approve esbuild',
+    'npm --silent install-scripts approve esbuild',
+    'npm ci && npm install-scripts approve esbuild',
+    'npm approve-scripts esbuild',
+    'npm approve-scripts --all',
+    'npm ci --dangerously-allow-all-scripts',
+    'npm update --dangerously-allow-all-scripts=true',
+    'npm exec --allow-scripts=canvas example-package',
+    'npm exec --allow-scripts canvas example-package',
+    'npx --dangerously-allow-all-scripts example-package',
+    'npx --allow-scripts=canvas example-package',
+    'npm pkg set allowScripts.esbuild=true',
+    'npm --prefix vendor/astro-check-ts6 install-scripts approve esbuild',
+    'export npm_config_dangerously_allow_all_scripts=true && npm ci',
+    'NPM_CONFIG_ALLOW_SCRIPTS=canvas npm exec example-package',
+    'npm config set allow-scripts=canvas --location=user',
+    'npm config set dangerously-allow-all-scripts true',
+    'npm_config_dangerously_allow_all_scripts=true npm ci',
   ])('requires confirmation for %s', (command) => {
     expect(productionConfirmationReason(command)).not.toBeNull();
   });
@@ -75,6 +91,34 @@ describe('production confirmation hook', () => {
     'npm test',
   ])(
     'does not prompt for read-only, local, or verification work: %s',
+    (command) => {
+      expect(productionConfirmationReason(command)).toBeNull();
+    },
+  );
+
+  // npm 12 blocks every dependency's install scripts until they are approved, so changing the
+  // dependency tree runs no dependency code; approving the scripts is what is gated (#586).
+  it.each([
+    'npm install',
+    'npm install example-package',
+    'npm --silent install example-package',
+    'npm i example-package',
+    'npm add example-package',
+    'npm update',
+    'npm uninstall example-package',
+    'npm install-scripts ls',
+    'npm install-scripts deny esbuild',
+    'npm approve-scripts --allow-scripts-pending',
+    'npm deny-scripts esbuild',
+    'npm config get allow-scripts',
+    'npm config delete allow-scripts',
+    'npm ci --no-dangerously-allow-all-scripts',
+    'npm install example-allow-scripts',
+    'npm test -- -t "allow-scripts"',
+    'npm run lint -- --allow-scripts',
+    'npm pkg get allowScripts',
+  ])(
+    'does not prompt for dependency changes that leave install scripts blocked: %s',
     (command) => {
       expect(productionConfirmationReason(command)).toBeNull();
     },

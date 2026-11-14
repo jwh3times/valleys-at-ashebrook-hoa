@@ -572,8 +572,15 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   production environment, but deployments, remote data writes, secret changes, destructive corpus
   imports, and equivalent high-impact operations require explicit user confirmation. Claude Code's
   project hook turns recognized command forms back into an interactive permission request even
-  though routine `npm run` commands are otherwise pre-approved. Dependency installation is gated
-  as well because its lifecycle scripts run while the production credentials are available.
+  though routine `npm run` commands are otherwise pre-approved. Letting dependency install scripts
+  run is gated as well, because they would execute while the production credentials are available.
+  That covers approving them (`npm install-scripts approve`, `npm approve-scripts`,
+  `npm pkg set allowScripts…`) and npm's `allow-scripts` and `dangerously-allow-all-scripts`
+  settings, whether passed to `npm` or `npx` as a flag, saved with `npm config set`, or set as an
+  `npm_config_*` variable. Installing, updating or removing dependencies is not gated, because npm
+  12 blocks every dependency's install scripts until they are approved. The hook sees shell
+  commands only, so an `allowScripts` or `.npmrc` change made with an editor is left to review of
+  the diff.
 
 ## Responsible disclosure
 
