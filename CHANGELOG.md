@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.30] - 2026-11-14
+
+### Fixed
+
+- The agent confirmation hook now recognizes the production `npm run` scripts (`deploy`,
+  `db:migrate:remote`, `secrets:put`, the `--commit`/`--wipe` document imports and
+  `roster:backfill --remote --write`) however npm's arguments are arranged (#588). Before this, a
+  value flag written with a space on either side of `run` (`npm --prefix . run deploy`,
+  `npm run -w x deploy`) or one of npm's other names for `run` (`run-script`, `rum`, `urn`, and the
+  abbreviations npm accepts, such as `ur` and `runScript`) ran the script with no prompt. Words after
+  npm's `--` are now read as npm reads them, so `npm --prefix . -- run deploy` and
+  `npm -- install-scripts approve` prompt too. Which operations are gated is unchanged, and
+  `npm run deploy:check` and `npm run lint -- deploy` still run without a prompt.
+
 ## [2.11.29] - 2026-11-14
 
 ### Changed
@@ -5232,7 +5246,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.29...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.30...HEAD
+[2.11.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.29...v2.11.30
 [2.11.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.28...v2.11.29
 [2.11.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.27...v2.11.28
 [2.11.27]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.26...v2.11.27
