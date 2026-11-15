@@ -25,21 +25,78 @@ function executableIndex(words: string[], executable: string): number {
   });
 }
 
-function npmOperation(words: string[]): { kind: 'run'; name?: string } | null {
-  const npmIndex = executableIndex(words, 'npm');
-  if (npmIndex < 0) return null;
+// Every word npm 12 resolves to `run` (its `deref` in `lib/utils/cmd-list.js`): the aliases
+// `run-script`, `rum` and `urn`, and the unique abbreviations `ur` and `run-` through
+// `run-scrip`. npm first turns camelCase into kebab-case, so `runScript` counts too.
+const RUN_COMMAND =
+  /^(?:run(?:-(?:s(?:c(?:r(?:i(?:p(?:t)?)?)?)?)?)?)?|rum|urn|ur)$/;
 
-  const argumentsAfterNpm = words.slice(npmIndex + 1);
-  const operationIndex = argumentsAfterNpm.findIndex(
-    (word) => !word.startsWith('-'),
+function isRunCommand(word: string): boolean {
+  return RUN_COMMAND.test(
+    word.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`),
   );
-  const operation = argumentsAfterNpm[operationIndex];
-  if (operation !== 'run') return null;
+}
 
-  const scriptName = argumentsAfterNpm
-    .slice(operationIndex + 1)
-    .find((word) => !word.startsWith('-'));
-  return { kind: 'run', name: scriptName };
+type NpmPositional = {
+  word: string;
+  /** It directly follows a flag written without `=`, so it may be that flag's value. */
+  mayBeFlagValue: boolean;
+};
+
+/**
+ * npm's arguments as its option parser reads them, without knowing which flags take a value:
+ * the flags before the first bare `--`, and the positional words — every other word before it,
+ * and every word after it, since `--` only ends npm's options. Commands are found among the
+ * positional words by presence rather than position, because a value-taking flag such as
+ * `--prefix <dir>` can stand between `npm` and its command (#588).
+ */
+function parseNpmArguments(argumentsAfterNpm: string[]): {
+  flags: string[];
+  positional: NpmPositional[];
+} {
+  const flags: string[] = [];
+  const positional: NpmPositional[] = [];
+  let endOfOptions = false;
+  let afterFlag = false;
+  for (const word of argumentsAfterNpm) {
+    if (!endOfOptions && word === '--') {
+      endOfOptions = true;
+      afterFlag = false;
+    } else if (!endOfOptions && word.startsWith('-')) {
+      flags.push(word);
+      afterFlag = !word.includes('=');
+    } else {
+      positional.push({ word, mayBeFlagValue: afterFlag });
+      afterFlag = false;
+    }
+  }
+  return { flags, positional };
+}
+
+/**
+ * The words that could name the script an `npm run` command runs: the positional words after
+ * `run` up to the first that cannot be a flag's value, which is the script name; the words after
+ * it are the script's own arguments. Empty when the command runs no script. Callers match a gated
+ * script name exactly among them, so a value-taking flag on either side of `run`
+ * (`-w <workspace>`) cannot hide it; a folder or workspace named like a gated script only adds a
+ * prompt (#588).
+ */
+function npmRunScriptCandidates(words: string[]): string[] {
+  const npmIndex = executableIndex(words, 'npm');
+  if (npmIndex < 0) return [];
+
+  const { positional } = parseNpmArguments(words.slice(npmIndex + 1));
+  const runIndex = positional.findIndex(({ word }) => isRunCommand(word));
+  if (runIndex < 0) return [];
+
+  const candidates: string[] = [];
+  for (const { word, mayBeFlagValue } of positional.slice(runIndex + 1)) {
+    candidates.push(word);
+    // After npm's `--`, npm 12 takes even a flag-shaped word (`npm -- run --silent deploy`) as the
+    // script name, so `deploy` never runs; looking past it anyway costs a prompt, never a miss.
+    if (!mayBeFlagValue && !word.startsWith('-')) break;
+  }
+  return candidates;
 }
 
 // npm 12's settings that let dependency install scripts run despite the `allowScripts` policy:
@@ -69,26 +126,21 @@ function enablesInstallScripts(words: string[]): boolean {
   const commandIndex = npmIndex >= 0 ? npmIndex : npxIndex;
   if (commandIndex < 0) return false;
 
-  // Arguments after `--` belong to a script or binary, not to npm.
-  const argumentsAfterCommand = words.slice(commandIndex + 1);
-  const separator = argumentsAfterCommand.indexOf('--');
-  const npmArguments =
-    separator < 0
-      ? argumentsAfterCommand
-      : argumentsAfterCommand.slice(0, separator);
-  if (npmArguments.some((word) => SCRIPT_SWITCH_FLAG.test(word))) return true;
+  // Flags after `--` belong to a script or binary, not to npm.
+  const { flags, positional: positionalWords } = parseNpmArguments(
+    words.slice(commandIndex + 1),
+  );
+  if (flags.some((word) => SCRIPT_SWITCH_FLAG.test(word))) return true;
   if (npmIndex < 0) return false;
 
-  // Found by presence rather than position, because a value-taking flag such as
-  // `--prefix <dir>` stands between `npm` and its command.
-  const positional = npmArguments.filter((word) => !word.startsWith('-'));
+  const positional = positionalWords.map(({ word }) => word);
   const after = (command: string): string[] => {
     const index = positional.indexOf(command);
     return index < 0 ? [] : positional.slice(index + 1);
   };
 
   if (positional.includes('approve-scripts')) {
-    return !npmArguments.includes('--allow-scripts-pending');
+    return !flags.includes('--allow-scripts-pending');
   }
   if (after('install-scripts')[0] === 'approve') return true;
 
@@ -188,15 +240,16 @@ function productionConfirmationReasonForSegment(
     return 'let dependency install scripts run while production credentials are available';
   }
 
-  const npm = npmOperation(words);
+  const scriptCandidates = npmRunScriptCandidates(words);
+  const runs = (script: string): boolean => scriptCandidates.includes(script);
 
-  if (npm?.kind === 'run' && npm.name === 'deploy') {
+  if (runs('deploy')) {
     return 'deploy the application to production';
   }
-  if (npm?.kind === 'run' && npm.name === 'db:migrate:remote') {
+  if (runs('db:migrate:remote')) {
     return 'apply migrations to production D1';
   }
-  if (npm?.kind === 'run' && npm.name === 'secrets:put') {
+  if (runs('secrets:put')) {
     return 'replace a production Worker secret';
   }
 
@@ -207,19 +260,13 @@ function productionConfirmationReasonForSegment(
     'ocr:scanned',
   ]);
   if (
-    npm?.kind === 'run' &&
-    npm.name &&
-    productionImport.has(npm.name) &&
+    scriptCandidates.some((script) => productionImport.has(script)) &&
     /--(?:commit|wipe)\b/.test(normalized)
   ) {
     return 'write or clean-replace production document data';
   }
 
-  if (
-    npm?.kind === 'run' &&
-    npm.name === 'roster:backfill' &&
-    hasFlags(normalized, '--remote', '--write')
-  ) {
+  if (runs('roster:backfill') && hasFlags(normalized, '--remote', '--write')) {
     return 'write production roster or access-audit data';
   }
 
