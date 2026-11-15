@@ -234,22 +234,864 @@ export function productionConfirmationReason(
   shell: Shell = 'bash',
 ): string | null {
   if (shell === 'powershell') return powerShellConfirmationReason(command);
+  return bashConfirmationReason(command);
+}
+
+/**
+ * How the hook read every Bash command before #591: segments split on `&&`, `||`, `;` and `|`,
+ * words split on whitespace.
+ */
+function splitterConfirmationReason(command: string): string | null {
   const segments = command.split(/\s*(?:&&|\|\||[;|])\s*/);
   for (const segment of segments) {
-    const reason = productionConfirmationReasonForSegment(segment);
+    const normalized = segment.replace(/\s+/g, ' ').trim();
+    const reason = productionConfirmationReasonForWords(
+      shellWords(normalized),
+      normalized,
+    );
     if (reason) return reason;
   }
   return null;
 }
 
-function productionConfirmationReasonForSegment(
-  command: string,
-): string | null {
-  const normalized = command.replace(/\s+/g, ' ').trim();
-  return productionConfirmationReasonForWords(
-    shellWords(normalized),
-    normalized,
+/**
+ * The reading for text the Bash reader cannot parse: the splitter's, and the splitter's again
+ * with quotes and backslashes removed and every other shell operator, a newline included, read as
+ * a separator. A shell runs each complete line before the one it cannot parse, so neither may
+ * lose a prompt; over-reading here costs only a prompt.
+ */
+function unparsedConfirmationReason(command: string): string | null {
+  return (
+    splitterConfirmationReason(command) ??
+    splitterConfirmationReason(
+      command.replace(/["'\\]/g, '').replace(/\$\(|[()`{}<>&|;\n]/g, ';'),
+    )
   );
+}
+
+class BashParseError extends Error {}
+
+/** One simple command as a POSIX shell runs it. */
+type BashCommand = {
+  /** Its words after quote removal, without redirections. */
+  words: string[];
+  /** What it reads on standard input: heredoc bodies, here-strings and `<` redirection targets. */
+  input: string[];
+  /** It reads the output of an earlier command through a pipe. */
+  piped: boolean;
+};
+
+type PendingHeredoc = {
+  delimiter: string;
+  /** A quoted delimiter (`<<'EOF'`) stops the shell expanding the body. */
+  quoted: boolean;
+  stripTabs: boolean;
+  command: BashCommand;
+};
+
+type Redirect = 'target' | 'input' | 'here-string' | 'heredoc';
+
+const BASH_BLANK = /[ \t\r\f\v]/;
+
+// Deeper nesting than this is read by `unparsedConfirmationReason`, before the stack runs out:
+// a throw from the hook blocks the tool call.
+const MAX_NESTING = 200;
+
+/**
+ * Reads Bash text the way a POSIX shell does, far enough to find every command it will run (#591):
+ * commands split on newlines and every control operator, attached or spaced; words joined from
+ * their quoted parts; redirection targets dropped; heredoc bodies and quoted text kept as data;
+ * and the commands inside `$(…)`, backticks and `<(…)` collected wherever the shell expands them.
+ * A parse error leaves `commands` holding what was read before it.
+ */
+class BashReader {
+  private readonly text: string;
+  private index = 0;
+  private nesting: number;
+  readonly commands: BashCommand[];
+  private pendingHeredocs: PendingHeredoc[] = [];
+
+  constructor(text: string, commands: BashCommand[] = [], nesting = 0) {
+    this.text = text;
+    this.commands = commands;
+    this.nesting = nesting;
+  }
+
+  /** Read the whole text, throwing `BashParseError` where a shell would wait for more. */
+  readAll(): BashCommand[] {
+    this.readSequence(null);
+    if (this.pendingHeredocs.length > 0) {
+      throw new BashParseError('heredoc without a closing delimiter');
+    }
+    return this.commands;
+  }
+
+  private peek(offset = 0): string {
+    return this.text[this.index + offset] ?? '';
+  }
+
+  private nested<T>(read: () => T): T {
+    if (++this.nesting > MAX_NESTING) {
+      throw new BashParseError('nested too deeply');
+    }
+    try {
+      return read();
+    } finally {
+      this.nesting--;
+    }
+  }
+
+  private reader(text: string): BashReader {
+    return new BashReader(text, this.commands, this.nesting + 1);
+  }
+
+  private newCommand(piped: boolean): BashCommand {
+    const command: BashCommand = { words: [], input: [], piped };
+    this.commands.push(command);
+    return command;
+  }
+
+  /**
+   * Commands up to `closer` (consumed), or to the end of the text when it is `null`. The first
+   * command reads a pipe when `piped` is set (`… | (bash)`).
+   */
+  private readSequence(closer: ')' | null, piped = false): void {
+    this.nested(() => this.readCommands(closer, piped));
+  }
+
+  private readCommands(closer: ')' | null, piped: boolean): void {
+    let command = this.newCommand(piped);
+    let word: string | null = null;
+    let quoted = false;
+    let redirect: Redirect | null = null;
+    let stripTabs = false;
+
+    const endWord = (): void => {
+      if (word === null) return;
+      if (redirect === 'heredoc') {
+        this.pendingHeredocs.push({
+          delimiter: word,
+          quoted,
+          stripTabs,
+          command,
+        });
+      } else if (redirect === 'here-string' || redirect === 'input') {
+        command.input.push(word);
+      } else if (redirect === null) {
+        command.words.push(word);
+      }
+      redirect = null;
+      word = null;
+      quoted = false;
+    };
+    /** End the last word, which must not leave a redirection waiting for its target. */
+    const endWords = (): void => {
+      endWord();
+      if (redirect !== null) {
+        throw new BashParseError('redirection without a target');
+      }
+    };
+    const isEmpty = (): boolean =>
+      word === null &&
+      redirect === null &&
+      command.words.length === 0 &&
+      command.input.length === 0;
+    const endCommand = (nextPiped = false): void => {
+      endWords();
+      command = this.newCommand(nextPiped);
+    };
+    const append = (text: string, isQuoted = false): void => {
+      word = (word ?? '') + text;
+      if (isQuoted) quoted = true;
+    };
+    const startRedirect = (kind: Redirect, length: number): void => {
+      // A file descriptor written against the operator (`2>`) is part of it, not a word.
+      if (word !== null && !quoted && /^\d+$/.test(word)) word = null;
+      endWord();
+      redirect = kind;
+      this.index += length;
+    };
+
+    while (true) {
+      const char = this.peek();
+      if (char === '') {
+        if (closer !== null) throw new BashParseError(`missing ${closer}`);
+        endWords();
+        return;
+      }
+      if (char === ')' && closer === ')') {
+        this.index++;
+        endWords();
+        return;
+      }
+      if (char === '\n') {
+        this.index++;
+        // A line ending in `|`, `&&` or `||` continues on the next one.
+        if (!isEmpty()) endCommand();
+        this.readHeredocBodies();
+        continue;
+      }
+      if (BASH_BLANK.test(char)) {
+        this.index++;
+        endWord();
+        continue;
+      }
+      if (char === '#' && word === null) {
+        while (this.peek() !== '' && this.peek() !== '\n') this.index++;
+        continue;
+      }
+      if (char === '\\') {
+        const next = this.peek(1);
+        this.index += 2;
+        // A backslash before a newline joins the lines.
+        if (next !== '\n') append(next, true);
+        continue;
+      }
+      if (char === "'") {
+        append(this.readSingleQuoted(), true);
+        continue;
+      }
+      if (char === '"') {
+        this.index++;
+        append(this.readDoubleQuoted(), true);
+        continue;
+      }
+      if (char === '$') {
+        const next = this.peek(1);
+        append(this.readDollar(true), next === "'" || next === '"');
+        continue;
+      }
+      if (char === '`') {
+        append(this.readBackquoted());
+        continue;
+      }
+      if (char === ';' || char === ')') {
+        this.index++;
+        endCommand();
+        continue;
+      }
+      if (char === '(') {
+        if (this.peek(1) === '(' && word === null) {
+          // `((…))` is arithmetic, which runs only its substitutions.
+          this.index += 2;
+          this.readArithmetic();
+          continue;
+        }
+        const subshellPiped = command.piped && isEmpty();
+        this.index++;
+        endCommand();
+        this.readSequence(')', subshellPiped);
+        endCommand();
+        continue;
+      }
+      if (char === '&') {
+        if (this.peek(1) === '>') {
+          startRedirect('target', this.peek(2) === '>' ? 3 : 2);
+        } else {
+          this.index += this.peek(1) === '&' ? 2 : 1;
+          endCommand();
+        }
+        continue;
+      }
+      if (char === '|') {
+        if (this.peek(1) === '|') {
+          this.index += 2;
+          endCommand();
+        } else {
+          this.index += this.peek(1) === '&' ? 2 : 1;
+          endCommand(true);
+        }
+        continue;
+      }
+      if (char === '<' || char === '>') {
+        const next = this.peek(1);
+        if (next === '(') {
+          // Process substitution runs its commands; the word it becomes is a file name.
+          const start = this.index;
+          this.index += 2;
+          this.readSequence(')');
+          append(this.text.slice(start, this.index));
+        } else if (char === '<' && next === '<' && this.peek(2) === '<') {
+          startRedirect('here-string', 3);
+        } else if (char === '<' && next === '<') {
+          stripTabs = this.peek(2) === '-';
+          startRedirect('heredoc', stripTabs ? 3 : 2);
+        } else if (char === '<') {
+          startRedirect(
+            next === '&' ? 'target' : 'input',
+            next === '&' || next === '>' ? 2 : 1,
+          );
+        } else {
+          startRedirect(
+            'target',
+            next === '>' || next === '|' || next === '&' ? 2 : 1,
+          );
+        }
+        continue;
+      }
+      this.index++;
+      append(char);
+    }
+  }
+
+  /** `'…'`, from its opening quote: every character is literal. */
+  private readSingleQuoted(): string {
+    const end = this.text.indexOf("'", this.index + 1);
+    if (end < 0) throw new BashParseError("missing '");
+    const value = this.text.slice(this.index + 1, end);
+    this.index = end + 1;
+    return value;
+  }
+
+  /** `"…"`, after its opening quote: substitutions run, and `\` escapes only `$`, `` ` ``, `"`, `\`. */
+  private readDoubleQuoted(): string {
+    let value = '';
+    while (true) {
+      const char = this.peek();
+      if (char === '') throw new BashParseError('missing "');
+      if (char === '"') {
+        this.index++;
+        return value;
+      }
+      if (char === '\\') {
+        const next = this.peek(1);
+        this.index += 2;
+        if (next === '\n') continue;
+        value += next !== '' && '$`"\\'.includes(next) ? next : `\\${next}`;
+        continue;
+      }
+      if (char === '$') {
+        value += this.readDollar(false);
+        continue;
+      }
+      if (char === '`') {
+        value += this.readBackquoted();
+        continue;
+      }
+      value += char;
+      this.index++;
+    }
+  }
+
+  /**
+   * Text starting with `$`, returned as the word text it stands for: `$(…)` runs its commands,
+   * `$((…))` is arithmetic, and `${…}` may hold substitutions. Outside double quotes, `$'…'` is
+   * ANSI-C quoted and `$"…"` double-quoted; inside them, and in a heredoc body, both are text.
+   */
+  private readDollar(unquoted: boolean): string {
+    const next = this.peek(1);
+    const start = this.index;
+    if (next === '(' && this.peek(2) === '(') {
+      this.index += 3;
+      this.readArithmetic();
+      return this.text.slice(start, this.index);
+    }
+    if (next === '(') {
+      this.index += 2;
+      this.readSequence(')');
+      return this.text.slice(start, this.index);
+    }
+    if (next === '{') {
+      this.index += 2;
+      this.nested(() => this.readParameter());
+      return this.text.slice(start, this.index);
+    }
+    if (unquoted && next === "'") {
+      this.index++;
+      return this.readAnsiCQuoted();
+    }
+    if (unquoted && next === '"') {
+      this.index += 2;
+      return this.readDoubleQuoted();
+    }
+    this.index++;
+    return '$';
+  }
+
+  /** `${…}`, after its opening brace: nested braces, quotes and substitutions included. */
+  private readParameter(): void {
+    while (true) {
+      const char = this.peek();
+      if (char === '') throw new BashParseError('missing }');
+      if (char === '}') {
+        this.index++;
+        return;
+      }
+      if (char === '\\') this.index += 2;
+      else if (char === "'") this.readSingleQuoted();
+      else if (char === '"') {
+        this.index++;
+        this.readDoubleQuoted();
+      } else if (char === '$') this.readDollar(false);
+      else if (char === '`') this.readBackquoted();
+      else this.index++;
+    }
+  }
+
+  /** Arithmetic after its `((`, through the closing `))`: only its substitutions run. */
+  private readArithmetic(): void {
+    this.nested(() => {
+      let depth = 0;
+      while (true) {
+        const char = this.peek();
+        if (char === '') throw new BashParseError('missing ))');
+        if (char === ')' && depth === 0) {
+          if (this.peek(1) !== ')') throw new BashParseError('missing ))');
+          this.index += 2;
+          return;
+        }
+        if (char === '(') depth++;
+        if (char === ')') depth--;
+        if (char === '\\') this.index += 2;
+        else if (char === '$') this.readDollar(false);
+        else if (char === '`') this.readBackquoted();
+        else this.index++;
+      }
+    });
+  }
+
+  /** `'…'` after `$`, from its opening quote, with its backslash escapes expanded. */
+  private readAnsiCQuoted(): string {
+    const escapes: Readonly<Record<string, string>> = {
+      n: '\n',
+      t: '\t',
+      r: '\r',
+      a: '\x07',
+      b: '\b',
+      e: '\x1b',
+      E: '\x1b',
+      f: '\f',
+      v: '\v',
+    };
+    let value = '';
+    this.index++;
+    while (true) {
+      const char = this.peek();
+      if (char === '') throw new BashParseError("missing '");
+      if (char === "'") {
+        this.index++;
+        return value;
+      }
+      if (char === '\\') {
+        const next = this.peek(1);
+        this.index += 2;
+        value += escapes[next] ?? next;
+        continue;
+      }
+      value += char;
+      this.index++;
+    }
+  }
+
+  /** `` `…` ``, from its opening backquote: its commands are read with the backslashes it removes. */
+  private readBackquoted(): string {
+    const start = this.index;
+    let inner = '';
+    this.index++;
+    while (true) {
+      const char = this.peek();
+      if (char === '') throw new BashParseError('missing `');
+      if (char === '`') break;
+      const next = this.peek(1);
+      if (char === '\\' && next !== '' && '$`\\"'.includes(next)) {
+        inner += next;
+        this.index += 2;
+        continue;
+      }
+      inner += char;
+      this.index++;
+    }
+    this.index++;
+    this.nested(() => this.reader(inner).readAll());
+    return this.text.slice(start, this.index);
+  }
+
+  /**
+   * The bodies of the heredocs started on the line just read, which follow it line by line. An
+   * unquoted delimiter lets the shell expand the body, so its substitutions run.
+   */
+  private readHeredocBodies(): void {
+    const pending = this.pendingHeredocs;
+    this.pendingHeredocs = [];
+    for (const heredoc of pending) {
+      const lines: string[] = [];
+      while (true) {
+        if (this.index >= this.text.length) {
+          throw new BashParseError(`heredoc without ${heredoc.delimiter}`);
+        }
+        const newline = this.text.indexOf('\n', this.index);
+        const end = newline < 0 ? this.text.length : newline;
+        const line = this.text.slice(this.index, end).replace(/\r$/, '');
+        this.index = end + 1;
+        const compared = heredoc.stripTabs ? line.replace(/^\t+/, '') : line;
+        if (compared === heredoc.delimiter) break;
+        lines.push(compared);
+      }
+      const body = lines.join('\n');
+      heredoc.command.input.push(body);
+      if (!heredoc.quoted) {
+        this.nested(() => this.reader(body).readExpansions());
+      }
+    }
+  }
+
+  /** Text the shell expands without splitting into commands: only its substitutions run. */
+  private readExpansions(): void {
+    while (this.index < this.text.length) {
+      const char = this.peek();
+      if (char === '\\') this.index += 2;
+      else if (char === '$') this.readDollar(false);
+      else if (char === '`') this.readBackquoted();
+      else this.index++;
+    }
+  }
+}
+
+const BASH_SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'ash']);
+
+// Words that may stand before the program a simple command runs.
+const COMMAND_PREFIXES = new Set([
+  '!',
+  '{',
+  'if',
+  'then',
+  'elif',
+  'else',
+  'do',
+  'while',
+  'until',
+  'time',
+  'exec',
+  'command',
+  'builtin',
+  'nohup',
+  'sudo',
+  'env',
+  'nice',
+]);
+
+/** The index of the program a command runs: past assignments, keywords and prefix commands. */
+function programIndex(words: string[]): number {
+  let index = 0;
+  let afterPrefix = false;
+  while (index < words.length) {
+    const word = words[index] ?? '';
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word)) afterPrefix = false;
+    else if (COMMAND_PREFIXES.has(word)) afterPrefix = true;
+    else if (!(afterPrefix && word.startsWith('-'))) return index;
+    index++;
+  }
+  return -1;
+}
+
+const isDashC = (word: string): boolean => /^-[a-z]*c[a-z]*$/i.test(word);
+const isSlashC = (word: string): boolean => /^\/\/?[ck]/i.test(word);
+
+type ReadText = (text: string) => string | null;
+
+const STANDARD_INPUT_FILE = /^\/(?:dev\/stdin|dev\/fd\/0|proc\/self\/fd\/0)$/;
+
+/**
+ * How a shell whose name is `words[0]` reads the text on its standard input, when it runs that
+ * text as commands: given neither a command string nor a script file (`bash`, `sh -s`, `pwsh -`).
+ */
+function shellInputReader(words: string[]): ReadText | null {
+  const name = programBaseName(words[0] ?? '');
+  const rest = words.slice(1);
+
+  if (BASH_SHELLS.has(name)) {
+    let readsInput = false;
+    for (let position = 0; position < rest.length; position++) {
+      const word = rest[position] ?? '';
+      if (word === '--' || word === '-') {
+        return readsInput || position === rest.length - 1
+          ? bashConfirmationReason
+          : null;
+      }
+      if (/^[-+][a-zA-Z]+$/.test(word)) {
+        if (word.slice(1).includes('c')) return null;
+        if (word.slice(1).includes('s')) readsInput = true;
+        if (/^[-+][oO]$/.test(word)) position++;
+      } else if (/^--(?:rcfile|init-file)$/.test(word)) {
+        position++;
+      } else if (!word.startsWith('--')) {
+        // A script file: its text is out of the hook's reach, and its input is data, unless the
+        // file is standard input itself.
+        return readsInput || STANDARD_INPUT_FILE.test(word)
+          ? bashConfirmationReason
+          : null;
+      }
+    }
+    return bashConfirmationReason;
+  }
+  if (name === 'source' || name === '.') {
+    return STANDARD_INPUT_FILE.test(rest[0] ?? '')
+      ? bashConfirmationReason
+      : null;
+  }
+  if (name === 'pwsh' || name === 'powershell') {
+    const commandWords = wrapperArguments(rest, { slash: true });
+    return commandWords.length === 0 ||
+      (commandWords.length === 1 && commandWords[0] === '-')
+      ? powerShellConfirmationReason
+      : null;
+  }
+  if (name === 'cmd') {
+    return rest.some(isSlashC)
+      ? null
+      : (text) => bashConfirmationReason(cmdTextAsBash(text));
+  }
+  return null;
+}
+
+const INPUT_SHELLS = new Set([
+  ...BASH_SHELLS,
+  'pwsh',
+  'powershell',
+  'cmd',
+  'source',
+  '.',
+]);
+
+/**
+ * The readers of every shell in a command that runs its standard input, wherever it stands
+ * (`timeout 60 bash`, `nice -n 5 sh -s`): a shell name that is only an argument over-prompts.
+ */
+function standardInputReaders(words: string[]): ReadText[] {
+  const readers: ReadText[] = [];
+  for (let index = 0; index < words.length; index++) {
+    if (!INPUT_SHELLS.has(programBaseName(words[index] ?? ''))) continue;
+    const reader = shellInputReader(words.slice(index));
+    if (reader) readers.push(reader);
+  }
+  return readers;
+}
+
+/** cmd's `^` escapes the next character and its `&` separates commands. */
+function cmdTextAsBash(text: string): string {
+  return text.replaceAll('^', '').replaceAll('&', ';');
+}
+
+// Programs that run their arguments as code. Every one but a shell without `-c` (or `cmd` without
+// `/c`) runs all the words after it, so the scan for wrappers stops there.
+const WRAPPERS = new Set([
+  ...BASH_SHELLS,
+  'eval',
+  'cmd',
+  'pwsh',
+  'powershell',
+  'invoke-expression',
+  'iex',
+  'start-process',
+  'saps',
+  'start',
+]);
+
+/**
+ * The reason the string a wrapper program runs needs confirmation, the wrapper standing anywhere
+ * in the command (`sudo bash -c …`, `FOO=1 eval …`).
+ */
+function bashWrapperCommandReason(words: string[]): string | null {
+  for (let index = 0; index < words.length; index++) {
+    const name = programBaseName(words[index] ?? '');
+    if (!WRAPPERS.has(name)) continue;
+    const rest = words.slice(index + 1);
+    if (name === 'eval') return bashConfirmationReason(rest.join(' '));
+    if (
+      (name === 'pwsh' || name === 'powershell') &&
+      rest.some((word) => isEncodedCommandFlag(word))
+    ) {
+      return ENCODED_COMMAND_REASON;
+    }
+    const reason = wrapperReason(words.slice(index));
+    const runsRest = BASH_SHELLS.has(name)
+      ? rest.some(isDashC)
+      : name !== 'cmd' || rest.some(isSlashC);
+    if (reason || runsRest) return reason;
+  }
+  return null;
+}
+
+/**
+ * What `commands` may write, as far as the hook can tell without running them: each heredoc and
+ * here-string they read (`cat` copies it), each word, and each command's arguments as `echo` joins
+ * them, with `printf`'s `\n` read as a newline; and what a process substitution redirected into
+ * one writes. Over-reading costs a prompt, never a miss.
+ */
+function writtenTexts(commands: BashCommand[]): string[] {
+  return commands
+    .flatMap((writer) => [
+      ...writer.input.flatMap((text) =>
+        SUBSTITUTION.test(text) ? [text, ...substitutionOutputs(text)] : [text],
+      ),
+      ...writer.words,
+      writer.words.slice(1).join(' '),
+    ])
+    .flatMap((text) =>
+      text.includes('\\n') ? [text, text.replaceAll('\\n', '\n')] : [text],
+    );
+}
+
+/** The text a command reads on standard input: its own, and a pipe's from the commands before it. */
+function standardInputTexts(
+  command: BashCommand,
+  earlier: BashCommand[],
+): string[] {
+  return [
+    ...writtenTexts([{ ...command, words: [] }]),
+    ...(command.piped ? writtenTexts(earlier) : []),
+  ];
+}
+
+const SUBSTITUTION = /\$\(|`|<\(/;
+
+/**
+ * What the substitutions in a word may write, which the shell puts in the word's place. A word has
+ * no separator outside its substitutions, so the reader's first command is the word itself and
+ * every later one runs inside a substitution; reading only those keeps each output shorter than
+ * the word, so the recursion ends.
+ */
+function substitutionOutputs(word: string): string[] {
+  const known = reading?.outputs.get(word);
+  if (known) return known;
+  const reader = new BashReader(word);
+  try {
+    reader.readAll();
+  } catch (error) {
+    if (!(error instanceof BashParseError)) throw error;
+  }
+  const outputs = writtenTexts(reader.commands.slice(1));
+  reading?.outputs.set(word, outputs);
+  return outputs;
+}
+
+const CODE_RUNNERS = new Set([...BASH_SHELLS, 'eval', 'source', '.']);
+
+/**
+ * The reason a command whose code comes from a substitution needs confirmation: a substitution as
+ * the program's name (`$(which npm) run …`), or in the code a shell runs (`eval "$(…)"`,
+ * `bash -c "$(cat <<'EOF' …)"`, `source <(…)`).
+ */
+function substitutedCodeReason(words: string[]): string | null {
+  const index = programIndex(words);
+  const program = words[index] ?? '';
+  if (index >= 0 && SUBSTITUTION.test(program)) {
+    const rest = words.slice(index + 1);
+    for (const output of substitutionOutputs(program)) {
+      const reason = bashConfirmationReason([output, ...rest].join(' '));
+      if (reason) return reason;
+    }
+  }
+  const runner = words.findIndex((word) =>
+    CODE_RUNNERS.has(programBaseName(word)),
+  );
+  if (runner < 0) return null;
+  for (const word of words.slice(runner + 1)) {
+    if (!SUBSTITUTION.test(word)) continue;
+    for (const output of substitutionOutputs(word)) {
+      const reason = bashConfirmationReason(output);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
+// Past this many alternatives a word is left unexpanded: `{a,b}` repeated multiplies them.
+const MAX_BRACE_EXPANSIONS = 64;
+
+/** A word's brace expansion (`{deploy,check}`), which the shell makes before running the command. */
+function expandBraces(word: string): string[] {
+  const match = /^([\s\S]*?)\{([^{}]*,[^{}]*)\}([\s\S]*)$/.exec(word);
+  if (!match) return [word];
+  const [, before = '', alternatives = '', after = ''] = match;
+  const expanded = alternatives
+    .split(',')
+    .flatMap((alternative) => expandBraces(`${before}${alternative}${after}`));
+  return expanded.length > MAX_BRACE_EXPANSIONS ? [word] : expanded;
+}
+
+/** The gates applied to each command a shell runs, in order. */
+function bashCommandsReason(commands: BashCommand[]): string | null {
+  for (const [index, simple] of commands.entries()) {
+    const words = simple.words.flatMap(expandBraces);
+    const reason =
+      productionConfirmationReasonForWords(words, words.join(' ')) ??
+      bashWrapperCommandReason(words) ??
+      substitutedCodeReason(words);
+    if (reason) return reason;
+    // `npm run "$SCRIPT"` or `npm run $(…)`: the script cannot be known, so ask.
+    if (npmRunScriptCandidates(words).some((word) => /[$`]/.test(word))) {
+      return DYNAMIC_SCRIPT_REASON;
+    }
+
+    const readers = standardInputReaders(words);
+    if (readers.length === 0) continue;
+    for (const text of standardInputTexts(simple, commands.slice(0, index))) {
+      for (const readInput of readers) {
+        const inputReason = readInput(text);
+        if (inputReason) return inputReason;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * One top-level reading's state. Wrappers and substitutions nest (`eval eval …`, `$($(…))`) and
+ * reach the same texts again and again, so each text's answer and each word's substitution
+ * outputs are kept; past `MAX_DEPTH` levels or `MAX_READINGS` texts, a text is read as unparsed,
+ * which over-prompts but answers well within the hook's timeout.
+ */
+type Reading = {
+  reasons: Map<string, string | null>;
+  outputs: Map<string, string[]>;
+  depth: number;
+  readings: number;
+};
+const MAX_DEPTH = 32;
+const MAX_READINGS = 2_000;
+let reading: Reading | null = null;
+
+/** The gates applied to a command read in Bash syntax (#591). */
+function bashConfirmationReason(command: string): string | null {
+  const outermost = reading === null;
+  const state: Reading = reading ?? {
+    reasons: new Map(),
+    outputs: new Map(),
+    depth: 0,
+    readings: 0,
+  };
+  reading = state;
+  try {
+    if (state.reasons.has(command)) return state.reasons.get(command) ?? null;
+    let reason: string | null;
+    if (state.depth >= MAX_DEPTH || ++state.readings > MAX_READINGS) {
+      reason = unparsedConfirmationReason(command);
+    } else {
+      state.depth++;
+      try {
+        reason = readBashCommands(command);
+      } finally {
+        state.depth--;
+      }
+    }
+    state.reasons.set(command, reason);
+    return reason;
+  } finally {
+    if (outermost) reading = null;
+  }
+}
+
+function readBashCommands(command: string): string | null {
+  const reader = new BashReader(command);
+  try {
+    return bashCommandsReason(reader.readAll());
+  } catch (error) {
+    if (!(error instanceof BashParseError)) throw error;
+    return (
+      bashCommandsReason(reader.commands) ?? unparsedConfirmationReason(command)
+    );
+  }
 }
 
 /**
@@ -598,8 +1440,8 @@ class PowerShellReader {
 
 const GATED_PROGRAMS = new Set(['npm', 'npx', 'wrangler']);
 
-/** A program's name as PowerShell resolves it: no folder, no extension, any case. */
-function powerShellProgramName(word: string): string {
+/** A program's name with no folder or extension, in any case, as PowerShell and Git Bash find it. */
+function programBaseName(word: string): string {
   return (word.replaceAll('\\', '/').split('/').at(-1) ?? word)
     .toLowerCase()
     .replace(/\.(?:cmd|ps1|bat|exe)$/, '');
@@ -611,11 +1453,11 @@ function powerShellProgramName(word: string): string {
  * programs the gates look for, and so does a group that names one (`& (Get-Command npm)`).
  */
 function powerShellProgramWord(word: string): string {
-  const name = powerShellProgramName(word);
+  const name = programBaseName(word);
   if (GATED_PROGRAMS.has(name)) return name;
   if (/^[$@]?\(/.test(word)) {
     const named = (word.match(/[^\s()'"$@,;]+/g) ?? [])
-      .map(powerShellProgramName)
+      .map(programBaseName)
       .find((part) => GATED_PROGRAMS.has(part));
     if (named) return named;
   }
@@ -677,8 +1519,8 @@ function bashWrapperReason(
   const runFlagIndex = words.findIndex(isRunFlag);
   if (runFlagIndex < 0) return null;
   const runFlag = words[runFlagIndex] ?? '';
-  // `cmd /cnpm run deploy` attaches the command to `/c`.
-  const attached = runFlag.replace(/^(?:\/[ck]|-[a-z]*c[a-z]*)/i, '');
+  // `cmd /cnpm run deploy` attaches the command to `/c`; Git Bash users write `//c`.
+  const attached = runFlag.replace(/^(?:\/\/?[ck]|-[a-z]*c[a-z]*)/i, '');
   const text = [attached, ...words.slice(runFlagIndex + 1)].join(' ');
   return productionConfirmationReason(toBash(text), 'bash');
 }
@@ -689,7 +1531,9 @@ function bashWrapperReason(
  */
 function wrapperReason(words: string[]): string | null {
   const [program = '', ...rest] = words;
-  switch (powerShellProgramName(program)) {
+  const name = programBaseName(program);
+  if (BASH_SHELLS.has(name)) return bashWrapperReason(rest, isDashC);
+  switch (name) {
     case 'invoke-expression':
     case 'iex':
       return powerShellConfirmationReason(wrapperArguments(rest).join(' '));
@@ -700,18 +1544,8 @@ function wrapperReason(words: string[]): string | null {
         wrapperArguments(rest, { slash: true }).join(' '),
       );
     case 'cmd':
-      // cmd's `^` escapes the next character and its `&` separates commands; read as Bash, the
-      // result over-prompts but never misses.
-      return bashWrapperReason(
-        rest,
-        (word) => /^\/[ck]/i.test(word),
-        (text) => text.replaceAll('^', '').replaceAll('&', ';'),
-      );
-    case 'bash':
-    case 'sh':
-    case 'zsh':
-    case 'dash':
-      return bashWrapperReason(rest, (word) => /^-[a-z]*c[a-z]*$/i.test(word));
+      // Read as Bash, cmd's text over-prompts but never misses.
+      return bashWrapperReason(rest, isSlashC, cmdTextAsBash);
     case 'start-process':
     case 'saps':
     case 'start': {

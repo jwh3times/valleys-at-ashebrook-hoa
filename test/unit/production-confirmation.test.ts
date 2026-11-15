@@ -191,6 +191,159 @@ describe('production confirmation hook', () => {
     },
   );
 
+  // The shell runs each of these, so each prompts with its gate's reason (#591).
+  const DEPLOY = 'deploy the application to production';
+  const DYNAMIC_SCRIPT = 'run an npm script whose name the hook cannot read';
+  it.each([
+    // A newline separates commands, and a backslash before it continues the line.
+    ['npm run check\nnpm run deploy', DEPLOY],
+    ['npm run check\r\nnpm run deploy', DEPLOY],
+    ['git status\n# check first\nnpm run deploy', DEPLOY],
+    ['npm run check \\\n  && npm run deploy', DEPLOY],
+    // Operators and redirections need no surrounding space.
+    ['npm run deploy&', DEPLOY],
+    ['npm run deploy>log', DEPLOY],
+    ['npm run deploy<input', DEPLOY],
+    ['npm run deploy &>log', DEPLOY],
+    ['npm run deploy 2>&1', DEPLOY],
+    ['npm run db:migrate:remote>log', 'apply migrations to production D1'],
+    [
+      'npm run corpus:import -- --commit>log',
+      'write or clean-replace production document data',
+    ],
+    ['npx wrangler deploy&', 'change or remove a production Worker deployment'],
+    [
+      'node --experimental-strip-types scripts/put-secret.ts KEY&',
+      'invoke a production-mutating operator script directly',
+    ],
+    ['(npm run deploy)', DEPLOY],
+    ['npm run check && (npm run deploy)', DEPLOY],
+    ['{ npm run deploy; }', DEPLOY],
+    [
+      '(npm install-scripts approve esbuild)',
+      'let dependency install scripts run while production credentials are available',
+    ],
+    // Quotes and backslashes join into one word, as the shell joins them.
+    ['npm run de"ploy"', DEPLOY],
+    ["npm run 'de'ploy", DEPLOY],
+    ['npm run d\\eploy', DEPLOY],
+    ["npm run $'deploy'", DEPLOY],
+    // Substitutions run wherever the shell expands them.
+    ['echo $(npm run deploy)', DEPLOY],
+    ['echo `npm run deploy`', DEPLOY],
+    ['echo "$(npm run deploy)"', DEPLOY],
+    ['echo "`npm run deploy`"', DEPLOY],
+    ['echo "$(echo "$(npm run deploy)")"', DEPLOY],
+    ['result=$(npm run deploy)', DEPLOY],
+    ['cat <(npm run deploy)', DEPLOY],
+    ['cat <<EOF\n$(npm run deploy)\nEOF', DEPLOY],
+    // Shell wrappers run their string, and a shell with no command string reads its input.
+    ['bash -c "npm run deploy"', DEPLOY],
+    ['sh -c "npm run deploy"', DEPLOY],
+    ['bash -lc "npm run deploy"', DEPLOY],
+    ['eval "npm run deploy"', DEPLOY],
+    ['cmd //c "npm run deploy"', DEPLOY],
+    ['pwsh -Command "npm run deploy"', DEPLOY],
+    [
+      'pwsh -EncodedCommand bgBwAG0AIAByAHUAbgAgAGQAZQBwAGwAbwB5AA==',
+      'run an encoded PowerShell command the hook cannot read',
+    ],
+    ['echo "npm run deploy" | bash', DEPLOY],
+    ["printf 'npm run deploy\\n' | sh", DEPLOY],
+    ["bash <<'EOF'\nnpm run deploy\nEOF", DEPLOY],
+    ['bash -s <<<"npm run deploy"', DEPLOY],
+    ["cat <<'EOF' | bash\nnpm run deploy\nEOF", DEPLOY],
+    // A substitution's output is run when a shell runs it as code or as the program's name.
+    ['bash -c "$(cat <<\'EOF\'\nnpm run deploy\nEOF\n)"', DEPLOY],
+    ['eval "$(echo npm run deploy)"', DEPLOY],
+    ['source <(echo npm run deploy)', DEPLOY],
+    ['bash <(echo npm run deploy)', DEPLOY],
+    ['$(which npm) run deploy', DEPLOY],
+    // Every Bash-like shell, and a shell behind a prefix command or a pipe in any form.
+    ['ksh -c "npm run deploy"', DEPLOY],
+    ['ash -c "npm run deploy"', DEPLOY],
+    ["timeout 60 bash <<'EOF'\nnpm run deploy\nEOF", DEPLOY],
+    ["nice -n 5 bash <<'EOF'\nnpm run deploy\nEOF", DEPLOY],
+    ["env -u HOME bash <<'EOF'\nnpm run deploy\nEOF", DEPLOY],
+    ['echo "npm run deploy" |\nbash', DEPLOY],
+    ['echo "npm run deploy" | (bash)', DEPLOY],
+    ['echo "npm run deploy" | timeout 5 bash', DEPLOY],
+    ["sh < <(printf 'npm run deploy')", DEPLOY],
+    ['bash /dev/stdin <<<"npm run deploy"', DEPLOY],
+    ['source /dev/stdin <<<"npm run deploy"', DEPLOY],
+    // Brace expansion names the script; a substitution or variable hides it.
+    ['npm run {deploy,check}', DEPLOY],
+    ['npm run $(echo deploy)', DYNAMIC_SCRIPT],
+    ['npm run `echo deploy`', DYNAMIC_SCRIPT],
+    ['npm run "$SCRIPT"', DYNAMIC_SCRIPT],
+    ['npm run ${SCRIPT:-deploy}', DYNAMIC_SCRIPT],
+    // In double quotes and heredoc bodies, `$"` and `$'` are plain text, not quoting.
+    ['grep -q "deploy$" notes.txt && npm run deploy && echo "done"', DEPLOY],
+    ['echo "total: 5$" ; npm run deploy ; echo "ok"', DEPLOY],
+    ['echo "a$\'b" ; npm run deploy ; echo "c\'d"', DEPLOY],
+    ["cat <<EOF\n$'x $(npm run deploy) y'\nEOF", DEPLOY],
+    // Arithmetic is not a heredoc.
+    ['echo $((1<<2))\nnpm run check\nnpm run deploy', DEPLOY],
+    ['(( x = 1 << 2 ))\nnpm run deploy', DEPLOY],
+    // Text the reader cannot parse is read as the hook read every command before #591, and the
+    // shell still runs each complete line before the one it cannot parse.
+    ['npm run deploy "unterminated', DEPLOY],
+    ['cat <<EOF\nnpm run deploy', DEPLOY],
+    ["npm run check\nnpm run deploy\necho it's done", DEPLOY],
+    ['npm run check\nnpm run deploy\necho "oops', DEPLOY],
+  ])('requires confirmation in shell syntax for %j', (command, reason) => {
+    expect(productionConfirmationReason(command)).toBe(reason);
+  });
+
+  // A throw blocks the tool call, and a slow answer may outlast the hook's timeout.
+  it.each([
+    ['nested wrappers', `${'eval '.repeat(40)}true; npm run deploy`],
+    ['nested shells', `${'sh -c '.repeat(40)}"npm run deploy"`],
+    ['many words', `echo ${'word '.repeat(40_000)}; npm run deploy`],
+    [
+      'nested substitutions as the program',
+      `${'$('.repeat(40)}echo npm${')'.repeat(40)} run deploy`,
+    ],
+    [
+      'nested substitutions given to eval',
+      `eval ${'"$(echo '.repeat(20)}x${')"'.repeat(20)}; npm run deploy`,
+    ],
+    [
+      'many pipes into a shell',
+      `${Array.from({ length: 200 }, () => 'echo "a b" | bash').join('\n')}\nnpm run deploy`,
+    ],
+    [
+      'deeply nested subshells',
+      `${'( '.repeat(5_000)}npm run deploy${' )'.repeat(5_000)}`,
+    ],
+  ])('answers quickly without throwing for %s', (_shape, command) => {
+    const start = performance.now();
+    expect(productionConfirmationReason(command)).toBe(DEPLOY);
+    expect(performance.now() - start).toBeLessThan(1_000);
+  });
+
+  // The shell passes these along as data and runs nothing in them (#591).
+  it.each([
+    'git commit -m "npm run deploy now prompts"',
+    "git commit -m 'npm run deploy now prompts'",
+    'echo "npm run deploy"',
+    'echo "npm run deploy" > notes.md',
+    "echo 'npm run deploy; npm run db:migrate:remote'",
+    "echo '$(npm run deploy)'",
+    "cat > f.md <<'EOF'\nnpm run deploy\nEOF",
+    'cat > f.md <<EOF\nnpm run deploy\nEOF',
+    "cat <<'EOF'\n$(npm run deploy)\nEOF",
+    'cat <<\\EOF\n`npm run deploy`\nEOF',
+    "git commit -F - <<'EOF'\nfix the hook\n\nnpm run deploy now prompts\nEOF",
+    'gh pr create --body "$(cat <<\'EOF\'\nnpm run deploy now prompts\nEOF\n)"',
+    'gh issue create --body "Run npm run corpus:import -- --commit to replace the corpus"',
+    'npm run check # then npm run deploy',
+    'grep -n "bash -c" scripts/example.sh',
+    'npm run deploy:check 2>&1',
+  ])('does not prompt for text passed as data: %j', (command) => {
+    expect(productionConfirmationReason(command)).toBeNull();
+  });
+
   it('finds a production mutation inside a compound command', () => {
     expect(
       productionConfirmationReason('npm run check && npm run deploy'),
