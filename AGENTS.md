@@ -409,8 +409,8 @@ them (`npm install-scripts approve`, `npm approve-scripts`, `npm pkg set allowSc
 npm's `allow-scripts` and `dangerously-allow-all-scripts` settings, whether passed to `npm` or
 `npx` as a flag, saved with `npm config set`, or set as an `npm_config_*` variable. Installing,
 updating or removing dependencies is not gated, because npm 12 blocks every dependency's install
-scripts until they are approved (#586). The hook sees shell commands only, so an `allowScripts` or
-`.npmrc` change made with an editor is left to review of the diff.
+scripts until they are approved (#586). The hook sees only shell commands, from any tool, PowerShell
+included, so an `allowScripts` or `.npmrc` change made with an editor is left to review of the diff.
 
 ```bash
 npm run build

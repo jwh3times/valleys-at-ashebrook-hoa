@@ -9,6 +9,23 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.31] - 2026-11-15
+
+### Fixed
+
+- The agent confirmation hook now checks a shell command whichever tool runs it (#592). It was
+  registered for the Bash tool only, so the same production command run through Claude Code's
+  PowerShell tool ran with no prompt. It now runs on every tool call and checks any call that
+  carries a command: PowerShell's is read as PowerShell, and every other tool's (Bash, Monitor, a
+  future one) as Bash, exactly as before. The PowerShell reading follows separators, backtick
+  escapes and line continuations, `$()` subexpressions, script blocks, `iex`, `pwsh`, `cmd /c`,
+  `bash -c` and `Start-Process`, program names such as `NPM`, `npm.cmd` or a full path, and the
+  `$env:npm_config_*` install-script settings. Comments, quoted strings and here-strings are data
+  unless a command runs them. An encoded PowerShell command (`-EncodedCommand`) and an `npm run`
+  whose script name is a variable or subexpression always prompt, because the hook cannot read
+  them. Which operations are gated is unchanged. A call with no command, such as a file read, passes
+  without a prompt; each one now costs about a tenth of a second to check.
+
 ## [2.11.30] - 2026-11-14
 
 ### Fixed
@@ -5246,7 +5263,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.30...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.31...HEAD
+[2.11.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.30...v2.11.31
 [2.11.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.29...v2.11.30
 [2.11.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.28...v2.11.29
 [2.11.28]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.27...v2.11.28
