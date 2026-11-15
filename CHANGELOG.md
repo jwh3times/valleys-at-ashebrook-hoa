@@ -9,6 +9,29 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.32] - 2026-11-15
+
+### Fixed
+
+- The agent confirmation hook now reads a Bash command the way the shell runs it (#591). It used
+  to split a command only at `&&`, `||`, `;` and `|`, and split words only at spaces, so a gated
+  command ran with no prompt in any of these forms:
+  - on its own line of a multi-line command;
+  - against an unspaced `&`, `>` or `(`;
+  - with its quotes splitting a word (`npm run de"ploy"`);
+  - inside `$(…)` or backticks;
+  - handed to `bash -c`, `eval` or a shell reading its input.
+
+  It now finds every command the shell runs. Its operators may be spaced or not. Redirections and
+  their targets are dropped. Substitutions are read wherever the shell expands them, and nested
+  shell strings are read in turn: `bash`, `sh`, `zsh`, `dash`, `ksh` and `ash -c`, `eval`,
+  `cmd //c`, `pwsh -Command`, and a shell fed through a pipe, a heredoc or `/dev/stdin`. Brace
+  expansion is read too. An `npm run` whose script name is a variable or a substitution now asks,
+  as it already did in PowerShell. Text the shell only passes along no longer prompts: quoted
+  arguments, comments, and heredoc bodies that no shell reads, such as a file written with
+  `cat > notes.md <<'EOF'`. Text the hook cannot parse is still read as before, so it loses no
+  prompt the old reading gave. Which operations are gated, and every reason shown, are unchanged.
+
 ## [2.11.31] - 2026-11-15
 
 ### Fixed
@@ -5263,7 +5286,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.31...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.32...HEAD
+[2.11.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.31...v2.11.32
 [2.11.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.30...v2.11.31
 [2.11.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.29...v2.11.30
 [2.11.29]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.28...v2.11.29

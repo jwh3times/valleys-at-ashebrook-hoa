@@ -573,8 +573,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   imports, and equivalent high-impact operations require explicit user confirmation. Claude Code's
   project hook checks the shell command of every tool call, reading the PowerShell tool's as
   PowerShell, and turns recognized command forms back into an interactive permission request even
-  though routine `npm run` commands are otherwise pre-approved. In PowerShell, a form it cannot
-  read, such as an encoded command or an npm script named by a variable, asks too. Letting
+  though routine `npm run` commands are otherwise pre-approved. A form it cannot read, such as an
+  encoded PowerShell command or an npm script named by a variable, asks too. Letting
   dependency install scripts run is gated as well, because they would execute while the production
   credentials are available. That covers approving them (`npm install-scripts approve`,
   `npm approve-scripts`, `npm pkg set allowScripts…`) and npm's `allow-scripts` and `dangerously-allow-all-scripts`
