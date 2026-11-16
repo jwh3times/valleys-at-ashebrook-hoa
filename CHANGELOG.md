@@ -9,6 +9,16 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.33] - 2026-11-15
+
+### Changed
+
+- The docs refresh now checks `SECURITY.md` when a change alters what the site sends a
+  third-party provider, or what a member page or API discloses (#595). Its Doc map entry fired only
+  on auth, visibility or access-model changes and on confirmation-hook changes. So when #562 added
+  the Payment Reference to what the payment provider receives and to the member payments page, the
+  two `SECURITY.md` statements it made stale had to be found by hand.
+
 ## [2.11.32] - 2026-11-15
 
 ### Fixed
@@ -5286,7 +5296,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.32...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.33...HEAD
+[2.11.33]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.32...v2.11.33
 [2.11.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.31...v2.11.32
 [2.11.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.30...v2.11.31
 [2.11.30]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.29...v2.11.30
