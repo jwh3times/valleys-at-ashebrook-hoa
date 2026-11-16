@@ -422,7 +422,6 @@ export async function confirmPersonVerification(
   }
 
   const nowMs = Date.now();
-  const method = row.channel === 'email' ? 'otp_email' : 'otp_sms';
 
   // The update-primary marker: the code row landed in ITS post-state, this
   // command's `consumed_at`. Re-checks attempts/expiry at the boundary too,
@@ -446,7 +445,7 @@ export async function confirmPersonVerification(
     },
     accountId,
     personId: row.personId,
-    method,
+    channel: row.channel,
     contactMethodId: row.contactMethodId,
     reason: 'automatic_contact_proof',
     operationKey: operationKey('verify-confirm', 'person_verified'),

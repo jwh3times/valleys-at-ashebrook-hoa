@@ -1,6 +1,6 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { SqlGuard } from '../../src/server/roster/audit';
+import { ALWAYS, type SqlGuard } from '../../src/server/roster/audit';
 import { contactProofStatements } from '../../src/server/roster/identity';
 import {
   resetTenancyWorld,
@@ -30,7 +30,7 @@ beforeEach(async () => {
 });
 
 /** Stand-ins for the credential's consumed post-state. */
-const CONSUMED: SqlGuard = { sql: '1', binds: [] };
+const CONSUMED = ALWAYS;
 const NOT_CONSUMED: SqlGuard = { sql: '0', binds: [] };
 
 function record(credentialConsumed: SqlGuard) {
@@ -39,7 +39,7 @@ function record(credentialConsumed: SqlGuard) {
     credentialConsumed,
     accountId: 'acct',
     personId: 'tenant',
-    method: 'otp_sms',
+    channel: 'sms',
     contactMethodId: 'cm-sms',
     reason: 'tenant_invitation',
     operationKey: 'test:person_verified:1',
@@ -123,6 +123,7 @@ describe('recording accepted contact proof', () => {
       env.DATABASE.batch([primary, ...record(CONSUMED).statements]),
     ).rejects.toThrow(/UNIQUE constraint failed: person_links\./);
     expect(await rows('person_verifications')).toEqual([]);
+    expect(await rows('person_links')).toEqual([]);
     expect(await identityEvents()).toEqual([]);
     const user = await env.DATABASE.prepare(
       `SELECT name FROM users WHERE id = 'acct'`,

@@ -194,7 +194,7 @@ export async function claimTenantInvitation(
       },
       accountId,
       personId: invitation.tenantPersonId,
-      method: invitation.channel === 'email' ? 'otp_email' : 'otp_sms',
+      channel: invitation.channel,
       contactMethodId: invitation.contactMethodId,
       reason: 'tenant_invitation',
       operationKey: operationKey('tenant-claim', 'person_verified'),

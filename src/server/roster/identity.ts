@@ -181,7 +181,8 @@ export interface ContactProofOptions {
   credentialConsumed: SqlGuard;
   accountId: string;
   personId: string;
-  method: 'otp_email' | 'otp_sms';
+  /** The channel the proof travelled over: `otp_email` or `otp_sms`. */
+  channel: 'email' | 'sms';
   /** The Contact Method whose control was proved. */
   contactMethodId: string;
   /** The Identity Event's reason. The verification itself is always
@@ -229,7 +230,7 @@ export function contactProofStatements(
       verificationId,
       accountId,
       personId,
-      opts.method,
+      opts.channel === 'email' ? 'otp_email' : 'otp_sms',
       opts.contactMethodId,
       nowMs,
       ...credentialConsumed.binds,
