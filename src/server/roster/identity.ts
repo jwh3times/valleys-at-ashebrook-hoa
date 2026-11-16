@@ -3,10 +3,11 @@
 // statements first, then the audit correlation's statements — following the
 // protocol `audit.ts` documents: a lost race leaves ZERO rows anywhere.
 //
-// Three callers share this module: the board's manual-verification and
-// unlink surfaces (`/api/admin/person-links`, `/api/admin/verification-requests`)
-// and the applicant's always-available self-unlink
-// (`/api/verify/unlink`). Identity stays separate from authority everywhere
+// Its callers: the board's manual-verification and unlink surfaces
+// (`/api/admin/person-links`, `/api/admin/verification-requests`), the
+// applicant's always-available self-unlink (`/api/verify/unlink`), and the two
+// credentials that record accepted contact proof, one-time-code confirmation
+// and the Tenancy Claim (#600). Identity stays separate from authority everywhere
 // here: a link creation NEVER writes an Access Grant, and a link ending only
 // ever ENDS grants the account already held — it never revokes anything on
 // its own initiative beyond that.
@@ -166,6 +167,116 @@ export function manualVerificationStatements(
     linkId,
     rootEventId,
     statements: [primary, link, ...correlation.statements],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Accepted contact proof (one-time code or Tenancy Claim; #600)
+// ---------------------------------------------------------------------------
+
+export interface ContactProofOptions {
+  database: D1Database;
+  /** The credential's consumed post-state, which the caller's own primary
+   * statement writes. Every write here is conditioned on it. */
+  credentialConsumed: SqlGuard;
+  accountId: string;
+  personId: string;
+  method: 'otp_email' | 'otp_sms';
+  /** The Contact Method whose control was proved. */
+  contactMethodId: string;
+  /** The Identity Event's reason. The verification itself is always
+   * `automatic_contact_proof`. */
+  reason: 'automatic_contact_proof' | 'tenant_invitation';
+  operationKey: string;
+  nowMs: number;
+}
+
+export interface ContactProofBatch {
+  verificationId: string;
+  linkId: string;
+  /** To follow the caller's primary statement in the same batch. */
+  statements: D1PreparedStatement[];
+}
+
+/**
+ * Records that `accountId` proved control of a Person's Contact Method: the
+ * contact-proof Person Verification, the Person Link it creates, and the
+ * `person_verified` Identity Event, each gated on the one before and all on
+ * the credential's consumption, so a credential that was not consumed writes
+ * nothing.
+ *
+ * No precondition guards the link: the partial unique indexes on
+ * `person_links` (one current link per Account, one per Person) are the
+ * collision check, so another link made since the caller's assessment errors
+ * the whole batch, credential consumption included. How that error is
+ * reported is the caller's.
+ */
+export function contactProofStatements(
+  opts: ContactProofOptions,
+): ContactProofBatch {
+  const { database, credentialConsumed, accountId, personId, nowMs } = opts;
+  const verificationId = crypto.randomUUID();
+  const linkId = crypto.randomUUID();
+
+  const verification = database
+    .prepare(
+      `INSERT INTO person_verifications (id, account_id, person_id, method,
+         contact_method_id, contact_method_party_kind, reason, verified_at)
+       SELECT ?, ?, ?, ?, ?, 'person', 'automatic_contact_proof', ?
+       WHERE ${credentialConsumed.sql}`,
+    )
+    .bind(
+      verificationId,
+      accountId,
+      personId,
+      opts.method,
+      opts.contactMethodId,
+      nowMs,
+      ...credentialConsumed.binds,
+    );
+
+  const verificationLanded = insertedRowGuard(
+    'person_verifications',
+    verificationId,
+  );
+  const link = database
+    .prepare(
+      `INSERT INTO person_links (id, account_id, person_id, verification_id, started_at)
+       SELECT ?, ?, ?, ?, ?
+       WHERE ${credentialConsumed.sql} AND ${verificationLanded.sql}`,
+    )
+    .bind(
+      linkId,
+      accountId,
+      personId,
+      verificationId,
+      nowMs,
+      ...credentialConsumed.binds,
+      ...verificationLanded.binds,
+    );
+
+  const correlation = new AuditCorrelation(database, {
+    operationKey: opts.operationKey,
+    actorAccountId: accountId,
+    nowMs,
+  });
+  correlation.event({
+    kind: 'person_verified',
+    guard: insertedRowGuard('person_links', linkId),
+    detail: {
+      family: 'identity',
+      reason: opts.reason,
+      personVerificationId: verificationId,
+      personLinkId: linkId,
+      personId,
+      targetAccountId: accountId,
+    },
+  });
+
+  return {
+    verificationId,
+    linkId,
+    statements: [verification, link, ...correlation.statements],
   };
 }
 
