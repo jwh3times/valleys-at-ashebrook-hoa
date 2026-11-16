@@ -43,8 +43,9 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   **When:** a resource, secret, command or port actually changes — a binding or secret in
   `wrangler.toml`, a new migration step that changes deployment. Touch its steps for nothing else.
 - `SECURITY.md` — the reporting process, consistent with the roles and visibility model. **When:**
-  the auth, visibility or access model changes; `scripts/require-production-confirmation.ts`
-  changes what it prompts for ("Confirmation-gated production mutations").
+  the auth, visibility or access model changes; what the site sends a third-party provider changes;
+  what a member page or API discloses changes; `scripts/require-production-confirmation.ts` changes
+  what it prompts for ("Confirmation-gated production mutations").
 - `CONTRIBUTING.md` — the workflow and standards. **When:** the development flow or a required check
   changes.
 - `SUPPORT.md` — where to ask for help. **When:** the issue templates or the support route change.
