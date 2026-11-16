@@ -72,7 +72,7 @@
     "drizzle-kit": "^0.31.11",
     "jsdom": "^31.0.0",
     "oxlint": "^1.93.0",
-    "oxlint-tsgolint": "^7.0.2006",
+    "oxlint-tsgolint": "^7.0.2007",
     "pdfjs-dist": "^6.5.438",
     "prettier": "^3.9.10",
     "prettier-plugin-astro": "^1.1.2",
