@@ -5,7 +5,12 @@
 // which `test/unit/tenancy-not-lot-authority.test.ts` pins. This module holds
 // the gate, the one currency rule, and the consequences of losing a basis.
 
-import type { AuditCorrelation, SqlGuard } from './audit';
+import {
+  OPERATOR_OBSERVATION,
+  type AuditCorrelation,
+  type SqlGuard,
+} from './audit';
+import { tenancyEndStatement } from './tenancy-ending';
 import { getSiteSettings } from '../content/settings';
 import type { SiteSettings } from '../../lib/types';
 
@@ -202,44 +207,23 @@ export async function tenancyLossStatements(
   const ending: EndingTenancy[] = [];
   for (const row of found.results) {
     statements.push(
-      input.database
-        .prepare(
-          `UPDATE tenancies
-           SET actual_end_day = MAX(start_day, ?), end_reason = ?,
-               ended_by_account_id = ?, updated_at = ?
-           WHERE id = ? AND voided_at IS NULL AND actual_end_day IS NULL
-             AND MAX(start_day, ?) < scheduled_end_day
-             AND (${input.rootGuard.sql})`,
-        )
-        .bind(
-          input.day,
-          input.reason,
-          input.actorAccountId,
-          input.nowMs,
-          row.id,
-          input.day,
-          ...input.rootGuard.binds,
-        ),
-    );
-    input.correlation.event({
-      kind: 'tenancy_ended',
-      actor: { kind: 'automatic', cause: input.cause },
-      guard: {
-        sql: `EXISTS (SELECT 1 FROM tenancies WHERE id = ? AND updated_at = ? AND end_reason = ?)`,
-        binds: [row.id, input.nowMs, input.reason],
-      },
-      detail: {
-        family: 'roster_change',
-        effective: { day: input.day },
+      tenancyEndStatement({
+        database: input.database,
+        correlation: input.correlation,
+        tenancy: {
+          id: row.id,
+          lotId: row.lot_id,
+          tenantPersonId: row.tenant_person_id,
+        },
+        day: input.day,
         reason: input.reason,
-        evidence: { kind: 'operator_observation' },
-        subjects: [
-          { column: 'tenancy_id', id: row.id, role: 'ended' },
-          { column: 'lot_id', id: row.lot_id, role: 'related' },
-          { column: 'party_id', id: row.tenant_person_id, role: 'related' },
-        ],
-      },
-    });
+        actorAccountId: input.actorAccountId,
+        nowMs: input.nowMs,
+        evidence: OPERATOR_OBSERVATION,
+        guard: input.rootGuard,
+        automaticCause: input.cause,
+      }),
+    );
     ending.push({
       id: row.id,
       tenantPersonId: row.tenant_person_id,

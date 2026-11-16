@@ -15,12 +15,6 @@ import {
   reinviteResponse,
 } from '../../../server/roster/tenancy-invitation';
 import {
-  AuditCorrelation,
-  OPERATOR_OBSERVATION,
-  operationKey,
-  updatedRowGuard,
-} from '../../../server/roster/audit';
-import {
   CLEAR_REQUEST_CONTACT_SQL,
   TENANCY_MAX_MONTHS,
   TENANT_ACCESS_ENABLED_SQL,
@@ -29,6 +23,7 @@ import {
   tenantAccessAvailable,
   tenancyCurrentSql,
 } from '../../../server/roster/tenancy';
+import { endTenancy } from '../../../server/roster/tenancy-ending';
 
 // An owner's half of Tenant Access (ADR 0028, #294 slice 3; spec decision 3).
 // Any current holder of Lot Authority over a Lot may request a Tenancy for it,
@@ -343,75 +338,40 @@ async function withdrawRequest(
   return new Response(null, { status: 204 });
 }
 
-const ALREADY_ENDED = () =>
-  new Response('Tenancy already ended or voided', { status: 409 });
-
 /**
  * Ends a Tenancy of the caller's Lot today, with `owner_ended`. One that has
  * not begun ends on its start day, so it never runs.
  *
  * The one Roster Change a non-board Account may make (spec decision 8): the
  * owner's Account is the actor. It never checks the gates: ending access must
- * not wait on a setting.
+ * not wait on a setting. One outside the caller's Lots answers the masked
+ * 404, and every Tenancy already ended or voided, however it got there, the
+ * same 409.
  */
-async function endTenancy(
+async function endTenancyAction(
   body: unknown,
   { accountId, personId, today }: Caller,
 ): Promise<Response> {
   const tenancyId = stringField(body, 'tenancyId');
   if (!tenancyId) return new Response('tenancyId is required', { status: 400 });
-  const tenancy = await tenancyInScope(tenancyId, personId, today);
-  if (!tenancy) return NOT_FOUND();
-  if (!tenancy.unended) return ALREADY_ENDED();
-  // Unended but past its end day: it has lapsed, with nothing left to end.
-  // The board's route answers this case in the same words.
-  if (tenancy.scheduledEndDay <= today)
-    return new Response('Tenancy has already reached its end day', {
-      status: 409,
-    });
-
-  // The UPDATE re-checks the Tenancy's state, so one the board ends or voids
-  // first answers the ended 409.
-  const authority = lotAuthorityExists(
-    { value: personId },
-    { column: 'tenancies.lot_id' },
+  const result = await endTenancy(env.DATABASE, {
+    tenancyId,
     today,
-  );
-  const nowMs = Date.now();
-  const primary = env.DATABASE.prepare(
-    `UPDATE tenancies
-     SET actual_end_day = MAX(start_day, ?), end_reason = 'owner_ended',
-         ended_by_account_id = ?, updated_at = ?
-     WHERE id = ? AND voided_at IS NULL AND actual_end_day IS NULL
-       AND MAX(start_day, ?) < scheduled_end_day
-       AND ${authority.sql}`,
-  ).bind(today, accountId, nowMs, tenancyId, today, ...authority.binds);
-  const correlation = new AuditCorrelation(env.DATABASE, {
-    operationKey: operationKey('member-tenancies', 'end'),
-    actorAccountId: accountId,
-    nowMs,
+    by: { kind: 'lot-authority', accountId, personId },
   });
-  correlation.event({
-    kind: 'tenancy_ended',
-    guard: updatedRowGuard('tenancies', tenancyId, nowMs),
-    detail: {
-      family: 'roster_change',
-      effective: { day: today },
-      reason: 'owner_ended',
-      evidence: OPERATOR_OBSERVATION,
-      subjects: [
-        { column: 'tenancy_id', id: tenancyId, role: 'ended' },
-        { column: 'lot_id', id: tenancy.lotId, role: 'related' },
-        { column: 'party_id', id: tenancy.tenantPersonId, role: 'related' },
-      ],
-    },
-  });
-  const [result] = await env.DATABASE.batch([
-    primary,
-    ...correlation.statements,
-  ]);
-  if (result.meta.changes !== 1) return ALREADY_ENDED();
-  return new Response(null, { status: 204 });
+  if (result.ok) return new Response(null, { status: 204 });
+  switch (result.refusal) {
+    case 'not-found':
+      return NOT_FOUND();
+    case 'end-day-reached':
+      return new Response('Tenancy has already reached its end day', {
+        status: 409,
+      });
+    case 'voided':
+    case 'already-ended':
+    case 'lost-race':
+      return new Response('Tenancy already ended or voided', { status: 409 });
+  }
 }
 
 /** Sends a fresh invitation for an approved Tenancy of the caller's Lot whose
@@ -445,7 +405,7 @@ const ACTIONS: Record<
   request: { gated: true, run: requestTenancy },
   renew: { gated: true, run: renewTenancy },
   withdraw: { gated: false, run: withdrawRequest },
-  end: { gated: false, run: endTenancy },
+  end: { gated: false, run: endTenancyAction },
   reinvite: { gated: true, run: reinvite },
 };
 

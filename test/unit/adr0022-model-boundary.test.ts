@@ -157,6 +157,9 @@ const NEW_MODEL_SURFACE = new Set([
   // it, which records a Person Verification and a Person Link.
   'server/roster/tenancy-invitation.ts',
   'server/roster/tenancy-claim.ts',
+  // #599: ending a Tenancy, shared by the owner's and the board's end and by
+  // the automatic ends when a basis Ownership is lost.
+  'server/roster/tenancy-ending.ts',
 ]);
 
 const PHASE_1_MODULES = ['roster-schema', 'audit-schema', 'cutover-schema'];
