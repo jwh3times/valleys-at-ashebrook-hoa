@@ -17,9 +17,7 @@ import {
   type Evidence,
   type SqlGuard,
 } from './audit';
-
-export type TenancyEndReason =
-  'owner_ended' | 'board_ended' | 'basis_ended' | 'lot_retired';
+import type { TenancyEndReason } from '../db/roster-schema';
 
 export interface TenancyEndStatementInput {
   database: D1Database;
@@ -68,7 +66,7 @@ export function tenancyEndStatement(
     );
   input.correlation.event({
     kind: 'tenancy_ended',
-    ...(input.automaticCause
+    ...(input.automaticCause !== undefined
       ? { actor: { kind: 'automatic' as const, cause: input.automaticCause } }
       : {}),
     guard: updatedRowGuard(
