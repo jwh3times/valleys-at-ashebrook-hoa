@@ -4,10 +4,10 @@
 // Following the link proves control of the contact the board approved, so a
 // claim is recorded exactly as an Automatic Person Verification is: a
 // contact-proof `person_verifications` row, the Person Link, and a
-// `person_verified` Identity Event, here with the `tenant_invitation` reason.
-// One batch, copied from `confirmPersonVerification`: the invitation's
-// consumption is the primary statement, and it re-checks the invitation, the
-// Tenancy and both gates; every later write is gated on it.
+// `person_verified` Identity Event, here with the `tenant_invitation` reason,
+// written by `contactProofStatements` as for a one-time code. One batch: the
+// invitation's consumption is the primary statement, and it re-checks the
+// invitation, the Tenancy and both gates; every later write is gated on it.
 //
 // Every refusal is decided by one assessment, run before the batch and again
 // after a batch that wrote nothing, so the answer a race gets and the one a
@@ -15,7 +15,8 @@
 
 import { isInvitationToken } from '../../lib/invitation-token';
 import { dailyCount, incrementDailyCount } from '../verification/rate-limit';
-import { AuditCorrelation, operationKey, type SqlGuard } from './audit';
+import { operationKey } from './audit';
+import { contactProofStatements } from './identity';
 import { hashInvitationToken } from './tenancy-invitation';
 import {
   TENANT_ACCESS_ENABLED_SQL,
@@ -181,70 +182,25 @@ export async function claimTenantInvitation(
 
   const statements: D1PreparedStatement[] = [primary];
   if (!first.alreadyLinked) {
-    const primaryGuard: SqlGuard = {
-      sql: `EXISTS (SELECT 1 FROM tenancy_invitations
-                    WHERE id = ? AND consumed_at = ? AND consumed_by_account_id = ?)`,
-      binds: [invitation.id, nowMs, accountId],
-    };
-    const verificationId = crypto.randomUUID();
-    const linkId = crypto.randomUUID();
-    const verificationGuard: SqlGuard = {
-      sql: 'EXISTS (SELECT 1 FROM person_verifications WHERE id = ?)',
-      binds: [verificationId],
-    };
-    statements.push(
-      env.DATABASE.prepare(
-        `INSERT INTO person_verifications (id, account_id, person_id, method,
-           contact_method_id, contact_method_party_kind, reason, verified_at)
-         SELECT ?, ?, ?, ?, ?, 'person', 'automatic_contact_proof', ?
-         WHERE ${primaryGuard.sql}`,
-      ).bind(
-        verificationId,
-        accountId,
-        invitation.tenantPersonId,
-        invitation.channel === 'email' ? 'otp_email' : 'otp_sms',
-        invitation.contactMethodId,
-        nowMs,
-        ...primaryGuard.binds,
-      ),
-      // The partial unique indexes on `person_links` are the collision guard:
-      // another link for this Account or this Person, made since the
-      // assessment, errors the whole batch.
-      env.DATABASE.prepare(
-        `INSERT INTO person_links (id, account_id, person_id, verification_id, started_at)
-         SELECT ?, ?, ?, ?, ?
-         WHERE ${primaryGuard.sql} AND ${verificationGuard.sql}`,
-      ).bind(
-        linkId,
-        accountId,
-        invitation.tenantPersonId,
-        verificationId,
-        nowMs,
-        ...primaryGuard.binds,
-        ...verificationGuard.binds,
-      ),
-    );
-    const correlation = new AuditCorrelation(env.DATABASE, {
+    // Following the link proved the contact the board approved. Another link
+    // for this Account or this Person, made since the assessment, errors the
+    // whole batch; the catch below sends that to the reassessment.
+    const proof = contactProofStatements({
+      database: env.DATABASE,
+      credentialConsumed: {
+        sql: `EXISTS (SELECT 1 FROM tenancy_invitations
+                      WHERE id = ? AND consumed_at = ? AND consumed_by_account_id = ?)`,
+        binds: [invitation.id, nowMs, accountId],
+      },
+      accountId,
+      personId: invitation.tenantPersonId,
+      channel: invitation.channel,
+      contactMethodId: invitation.contactMethodId,
+      reason: 'tenant_invitation',
       operationKey: operationKey('tenant-claim', 'person_verified'),
-      actorAccountId: accountId,
       nowMs,
     });
-    correlation.event({
-      kind: 'person_verified',
-      guard: {
-        sql: 'EXISTS (SELECT 1 FROM person_links WHERE id = ?)',
-        binds: [linkId],
-      },
-      detail: {
-        family: 'identity',
-        reason: 'tenant_invitation',
-        personVerificationId: verificationId,
-        personLinkId: linkId,
-        personId: invitation.tenantPersonId,
-        targetAccountId: accountId,
-      },
-    });
-    statements.push(...correlation.statements);
+    statements.push(...proof.statements);
   }
 
   let consumed: boolean;

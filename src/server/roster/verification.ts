@@ -22,7 +22,8 @@ import {
   checkClaimedNames,
   recordClaimedName,
 } from '../verification/rate-limit';
-import { AuditCorrelation, operationKey, type SqlGuard } from './audit';
+import { operationKey } from './audit';
+import { contactProofStatements } from './identity';
 
 // ADR 0022 phase 3c (#219): the DERIVED backend for /api/verify/request +
 // confirm. Mirrors `derive.ts`'s currency and one-hop-consolidation SQL
@@ -421,9 +422,6 @@ export async function confirmPersonVerification(
   }
 
   const nowMs = Date.now();
-  const verificationId = crypto.randomUUID();
-  const linkId = crypto.randomUUID();
-  const method = row.channel === 'email' ? 'otp_email' : 'otp_sms';
 
   // The update-primary marker: the code row landed in ITS post-state, this
   // command's `consumed_at`. Re-checks attempts/expiry at the boundary too,
@@ -435,79 +433,27 @@ export async function confirmPersonVerification(
      WHERE id = ? AND consumed_at IS NULL AND attempts < ? AND expires_at > ?`,
   ).bind(nowMs, row.id, MAX_ATTEMPTS, nowMs);
 
-  const primaryGuard: SqlGuard = {
-    sql: 'EXISTS (SELECT 1 FROM verification_codes WHERE id = ? AND consumed_at = ?)',
-    binds: [row.id, nowMs],
-  };
-
-  const insertVerification = env.DATABASE.prepare(
-    `INSERT INTO person_verifications (id, account_id, person_id, method, contact_method_id, contact_method_party_kind, reason, verified_at)
-     SELECT ?, ?, ?, ?, ?, 'person', 'automatic_contact_proof', ?
-     WHERE ${primaryGuard.sql}`,
-  ).bind(
-    verificationId,
-    accountId,
-    row.personId,
-    method,
-    row.contactMethodId,
-    nowMs,
-    ...primaryGuard.binds,
-  );
-
-  const verificationGuard: SqlGuard = {
-    sql: 'EXISTS (SELECT 1 FROM person_verifications WHERE id = ?)',
-    binds: [verificationId],
-  };
-
-  // The partial unique indexes on `person_links` (one current link per
-  // account, one per Person) are the structural collision guard: a race with
-  // another link for this account or this Person errors the whole batch,
-  // which the caller catches and reports as the same generic failure — zero
+  // The identity half, gated on the code's consumption. A link made for
+  // this account or this Person since the code was sent errors the whole
+  // batch, which the catch below reports as the same generic failure — zero
   // rows anywhere, per #219/D5.
-  const insertLink = env.DATABASE.prepare(
-    `INSERT INTO person_links (id, account_id, person_id, verification_id, started_at)
-     SELECT ?, ?, ?, ?, ?
-     WHERE ${primaryGuard.sql} AND ${verificationGuard.sql}`,
-  ).bind(
-    linkId,
-    accountId,
-    row.personId,
-    verificationId,
-    nowMs,
-    ...primaryGuard.binds,
-    ...verificationGuard.binds,
-  );
-
-  const linkGuard: SqlGuard = {
-    sql: 'EXISTS (SELECT 1 FROM person_links WHERE id = ?)',
-    binds: [linkId],
-  };
-
-  const correlation = new AuditCorrelation(env.DATABASE, {
-    operationKey: operationKey('verify-confirm', 'person_verified'),
-    actorAccountId: accountId,
-    nowMs,
-  });
-  correlation.event({
-    kind: 'person_verified',
-    guard: linkGuard,
-    detail: {
-      family: 'identity',
-      reason: 'automatic_contact_proof',
-      personVerificationId: verificationId,
-      personLinkId: linkId,
-      personId: row.personId,
-      targetAccountId: accountId,
+  const proof = contactProofStatements({
+    database: env.DATABASE,
+    credentialConsumed: {
+      sql: 'EXISTS (SELECT 1 FROM verification_codes WHERE id = ? AND consumed_at = ?)',
+      binds: [row.id, nowMs],
     },
+    accountId,
+    personId: row.personId,
+    channel: row.channel,
+    contactMethodId: row.contactMethodId,
+    reason: 'automatic_contact_proof',
+    operationKey: operationKey('verify-confirm', 'person_verified'),
+    nowMs,
   });
 
   try {
-    const results = await env.DATABASE.batch([
-      primary,
-      insertVerification,
-      insertLink,
-      ...correlation.statements,
-    ]);
+    const results = await env.DATABASE.batch([primary, ...proof.statements]);
     if (results[0].meta.changes !== 1) return { ok: false, reason: 'mismatch' };
     return { ok: true };
   } catch {
