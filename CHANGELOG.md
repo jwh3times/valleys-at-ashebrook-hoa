@@ -9,6 +9,19 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.34] - 2026-11-16
+
+### Changed
+
+- Ending a Tenancy early is now written once (#599). An owner ending a Tenancy from `/tenants`,
+  the board ending one from the Tenants panel, and the automatic ends when an Ownership ends, is
+  voided or transferred, or a Lot is retired each built their own end. The rule for which day it
+  ends on, the conditions it ends under, and its `tenancy_ended` Roster Change were therefore
+  written in three places, and the two routes' answers had already drifted once (#468). All three
+  now share one module. Every response, refusal message and Roster Change is unchanged; the owner
+  still sees the same "not found" for a Tenancy outside their Lots, and ending still never waits on
+  the tenant-access setting.
+
 ## [2.11.33] - 2026-11-15
 
 ### Changed

@@ -319,11 +319,21 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
   requiring `officialMode` AND `tenantAccessEnabled` literal JSON `true`, fail-closed
   (`documentVisibleTo` embeds it, so turning either gate off takes effect on the next request);
   `tenancyCurrentSql(alias, day)`, the one Tenancy currency rule; and `tenancyLossStatements`, the
-  statements that end Tenancies when their basis Ownership or Lot is lost. Never a Lot Authority
+  statements that end Tenancies when their basis Ownership or Lot is lost, each written through
+  `tenancy-ending.ts`'s `tenancyEndStatement` as an automatic end. Never a Lot Authority
   reader. Slice 3 adds `tenantAccessAvailable(env)` (both gates, read in route code) and
   `tenantAccessVisible` (the `/tenants` page rule), `basisCurrentSql` (basis Ownership still current),
   `TENANCY_MAX_MONTHS`/`latestTenancyEndDay`, and `CLEAR_REQUEST_CONTACT_SQL` (the one statement that
   nulls a decided or withdrawn request's name and contact).
+- `roster/tenancy-ending.ts` (#599): the one home of ending a Tenancy early. `tenancyEndStatement`
+  is the only writer of the guarded end `UPDATE` (on `MAX(start_day, day)`, unvoided, unended, before
+  the scheduled end day, plus an optional caller guard) and its `tenancy_ended` Roster Change, for
+  the caller's batch. `endTenancy(db, { tenancyId, today, by })` runs the owner's and the board's
+  `end` as one batch: `by` is `board` (authority is the route's guard; the caller's evidence) or
+  `lot-authority` (checked with `lotAuthorityBasis` before the write, outside the person's Lots
+  answering `not-found`, and with `lotAuthorityExists` inside it). It returns `{ ok: true }` or a
+  refusal (`not-found`, `voided`, `already-ended`, `end-day-reached`, `lost-race`) that each route
+  maps to its own response.
 - `roster/tenancy-approval.ts` (#294 slice 3): `approveTenancyRequest`, the board's approval as one
   batch; a single list of named checks builds both the in-batch gate and the diagnosis, so the `409`
   message cannot drift from the condition enforced (`APPROVAL_REFUSAL_MESSAGES`).
