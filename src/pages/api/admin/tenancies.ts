@@ -28,6 +28,7 @@ import {
   CLEAR_REQUEST_CONTACT_SQL,
   tenantAccessAvailable,
 } from '../../../server/roster/tenancy';
+import { endTenancy } from '../../../server/roster/tenancy-ending';
 import {
   approvalInvitation,
   inviteTenant,
@@ -78,7 +79,7 @@ async function existingTenancy(id: string) {
 
 /** Ends a current or upcoming Tenancy today. One that has not begun ends on
  * its start day, so it never runs. */
-async function endTenancy(
+async function endTenancyAction(
   body: unknown,
   actorAccountId: string,
   today: string,
@@ -87,52 +88,26 @@ async function endTenancy(
   if (!tenancyId) return new Response('tenancyId is required', { status: 400 });
   const evidence = parseEvidence(body);
   if (!evidence.ok) return new Response(evidence.error, { status: 400 });
-  const existing = await existingTenancy(tenancyId);
-  if (!existing) return new Response('Tenancy not found', { status: 404 });
-  if (existing.voidedAt !== null)
-    return new Response('Tenancy was voided', { status: 409 });
-  if (existing.actualEndDay !== null)
-    return new Response('Tenancy already ended', { status: 409 });
-  if (existing.scheduledEndDay <= today)
-    return new Response('Tenancy has already reached its end day', {
-      status: 409,
-    });
-
-  const nowMs = Date.now();
-  const primary = env.DATABASE.prepare(
-    `UPDATE tenancies
-     SET actual_end_day = MAX(start_day, ?), end_reason = 'board_ended',
-         ended_by_account_id = ?, updated_at = ?
-     WHERE id = ? AND voided_at IS NULL AND actual_end_day IS NULL
-       AND MAX(start_day, ?) < scheduled_end_day`,
-  ).bind(today, actorAccountId, nowMs, tenancyId, today);
-  const correlation = new AuditCorrelation(env.DATABASE, {
-    operationKey: operationKey('tenancies', 'end'),
-    actorAccountId,
-    nowMs,
+  const result = await endTenancy(env.DATABASE, {
+    tenancyId,
+    today,
+    by: { kind: 'board', accountId: actorAccountId, evidence: evidence.value },
   });
-  correlation.event({
-    kind: 'tenancy_ended',
-    guard: updatedRowGuard('tenancies', tenancyId, nowMs),
-    detail: {
-      family: 'roster_change',
-      effective: { day: today },
-      reason: 'board_ended',
-      evidence: evidence.value,
-      subjects: [
-        { column: 'tenancy_id', id: tenancyId, role: 'ended' },
-        { column: 'lot_id', id: existing.lotId, role: 'related' },
-        { column: 'party_id', id: existing.tenantPersonId, role: 'related' },
-      ],
-    },
-  });
-  const [result] = await env.DATABASE.batch([
-    primary,
-    ...correlation.statements,
-  ]);
-  if (result.meta.changes !== 1)
-    return new Response('Tenancy already ended or voided', { status: 409 });
-  return new Response(null, { status: 204 });
+  if (result.ok) return new Response(null, { status: 204 });
+  switch (result.refusal) {
+    case 'not-found':
+      return new Response('Tenancy not found', { status: 404 });
+    case 'voided':
+      return new Response('Tenancy was voided', { status: 409 });
+    case 'already-ended':
+      return new Response('Tenancy already ended', { status: 409 });
+    case 'end-day-reached':
+      return new Response('Tenancy has already reached its end day', {
+        status: 409,
+      });
+    case 'lost-race':
+      return new Response('Tenancy already ended or voided', { status: 409 });
+  }
 }
 
 /** Voids a Tenancy recorded in error. An ended one may still be voided. */
@@ -296,7 +271,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     case 'refuse':
       return refuseRequest(parsed.value, actorAccountId, associationDateIso());
     case 'end':
-      return endTenancy(parsed.value, actorAccountId, associationDateIso());
+      return endTenancyAction(
+        parsed.value,
+        actorAccountId,
+        associationDateIso(),
+      );
     case 'void':
       return voidTenancy(parsed.value, actorAccountId);
     default:
