@@ -365,7 +365,12 @@ boolean`. Lot Record helpers (#291 slice 3, ADR 0024) — `fetchLotViolations` (
 - `roster/` and `verification/`: homeowner verification support. `roster/verification.ts` is the
   ADR 0022 phase 3c derived-mode Person matcher and confirm flow, `roster/identity.ts` is the
   shared Person Link creation/ending machinery behind `/api/verify/unlink` and
-  `/api/admin/person-links`, `roster/bootstrap.ts` is the first-System-Administrator bootstrap
+  `/api/admin/person-links` — including `contactProofStatements` (#600), the one writer of
+  accepted contact proof (the `automatic_contact_proof` Person Verification, the Person Link and the
+  `person_verified` event, all gated on the caller's consumed credential) that one-time-code
+  confirmation and the Tenancy Claim (`roster/tenancy-claim.ts`) both batch; board
+  `manualVerificationStatements` and the bootstrap keep their own writers —
+  `roster/bootstrap.ts` is the first-System-Administrator bootstrap
   behind `POST /api/bootstrap/board`, and `roster/transfer-effects.ts` is the phase 3d (#220)
   transfer-time effects engine behind `/api/admin/roster-ownerships` and
   `/api/admin/roster-representations` (see [`http-endpoints.md`](./http-endpoints.md) and [`data-model.md`](./data-model.md)) — all four join the phase 3b roster writer machinery

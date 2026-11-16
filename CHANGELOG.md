@@ -9,6 +9,34 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.37] - 2026-11-16
+
+### Changed
+
+- Recording that someone proved a contact on file is now written once (#600). Confirming a one-time
+  code at `/verify-property` and claiming a Tenancy Invitation each wrote their own copy of the same
+  three records: the contact-proof Person Verification, the Person Link it creates, and the
+  `person_verified` Identity Event. The invitation claim's copy was taken line for line from the
+  code confirmation. Both now share one writer. Every record, reason and response is unchanged, and
+  each still decides for itself how a refused or colliding attempt is answered. Manual verification
+  by the board and the first-administrator bootstrap keep their own, because they differ.
+
+## [2.11.36] - 2026-11-16
+
+### Changed
+
+- Dependency updates (Dependabot, #598): `@astrojs/react` 7.1.7 → 7.1.8, `astro` 7.4.10 → 7.4.11,
+  `better-auth`, `@better-auth/core` and `@better-auth/drizzle-adapter` 1.7.20 → 1.7.22,
+  `@cloudflare/vitest-plugin` 1.7.0 → 1.8.1, `@cloudflare/workers-types` 5.20261110.1 →
+  5.20261113.1, `@napi-rs/canvas` 1.1.0 → 1.1.1, `@testing-library/user-event` 14.6.9 → 14.6.10,
+  `jsdom` 31.0.0 → 31.0.1, `prettier` 3.9.10 → 3.10.1 and `wrangler` 4.160.0 → 4.161.0.
+
+## [2.11.35] - 2026-11-16
+
+### Changed
+
+- Dependency update (Dependabot, #597): `oxlint-tsgolint` 7.0.2006 → 7.0.2007.
+
 ## [2.11.34] - 2026-11-16
 
 ### Changed
@@ -5309,7 +5337,11 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.33...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.37...HEAD
+[2.11.37]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.36...v2.11.37
+[2.11.36]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.35...v2.11.36
+[2.11.35]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.34...v2.11.35
+[2.11.34]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.33...v2.11.34
 [2.11.33]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.32...v2.11.33
 [2.11.32]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.31...v2.11.32
 [2.11.31]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.30...v2.11.31
