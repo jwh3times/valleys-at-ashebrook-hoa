@@ -60,8 +60,8 @@ Related:
   answers 404 before its capability gate, and 404 satisfies both "not 401" and "not 403".
 - **A test that pins a CHECK constraint** should resolve the migration that most recently defines
   it, not hard-code a filename that a later rebuild supersedes.
-- **drizzle-orm wraps SQLite errors**, so `.rejects.toThrow(/CHECK/i)` must inspect `.cause` too
-  (`expectRejectsWithReason`).
+- **drizzle-orm wraps SQLite errors**, so `.rejects.toThrow(/CHECK/i)` must inspect `.cause` too,
+  as the local `expectRejectsWithReason` helper in `test/server/proxy-schema.test.ts` does.
 - **Assert spacing on collapsed whitespace** (`html.replace(/\s+/g, ' ')`). Astro's JSX glues a
   line-ending `{expr}` onto the next line's text ("HOAboard"), and drops a line break between text
   and an element, so render the page and read it.
@@ -110,7 +110,7 @@ Related:
   `curl.exe`: `curl` is `Invoke-WebRequest`.
 - **A fake provider can't catch a provider's API change.** Stripe API `2026-10-28.endive` rejected
   `payment_method_types` on Checkout Sessions, and only the sandbox rehearsal showed it. The
-  rehearsal's pitfalls are in `SETUP.md`.
+  rehearsal's steps are in [`SETUP.md`](../../SETUP.md#online-payments-stripe-sandbox).
 - **Read the library, not its docs**, for Better Auth behavior: verify against
   `node_modules/better-auth/dist`. Sessions live in Workers KV, not the D1 `sessions` table, so
   editing D1 rows changes nothing.

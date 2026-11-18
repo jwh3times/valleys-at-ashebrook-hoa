@@ -9,6 +9,22 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.38] - 2026-11-18
+
+### Changed
+
+- Lessons that lived only in one workstation's agent memory now live in the repository, where Codex
+  and the other machine read them too. Three new guides join `AGENTS.md`'s "Where to look next"
+  table: `docs/agents/merging.md` (waiting on a PR's current head, merge order with changelog and
+  Dependabot PRs, finding the Version run by commit, the changelog footer, and CodeQL runs that
+  fail or never start), `docs/agents/verification.md` (proving a new test fails on the old code,
+  and the ways production differs from local runs) and `docs/agents/workstation.md` (Git Bash,
+  Wrangler, stray processes, the production-confirmation hook and long paths on Windows). The
+  existing guides gain D1 and SQLite migration traps (`migrations.md`), board mechanics
+  (`issue-tracker.md`), diagnosing a Dependabot alert that opened no PR (`ci-and-release.md`),
+  syncing agents in a worktree (`agent-skills.md`), and a note that the association is
+  self-managed (`domain.md`).
+
 ## [2.11.37] - 2026-11-16
 
 ### Changed
@@ -5337,7 +5353,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.37...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.38...HEAD
+[2.11.38]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.37...v2.11.38
 [2.11.37]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.36...v2.11.37
 [2.11.36]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.35...v2.11.36
 [2.11.35]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.34...v2.11.35
