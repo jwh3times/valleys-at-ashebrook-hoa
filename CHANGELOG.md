@@ -9,6 +9,20 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 No unreleased changes.
 
+## [2.11.39] - 2026-11-18
+
+### Changed
+
+- Claude Code asks permission less often in this repository. The project `.claude/settings.json`
+  now allows, without a prompt, the read-only commands agents run most here: reading the project
+  board (`gh project item-list`, `field-list`, `view`), `gh label list` and `gh run watch`, the
+  exact `git fetch -q` forms the shared skills use, status and fetch in the private companion, the
+  repository's read-only check scripts (`check-changelog`, `next-version`, `check-skills`,
+  `check-docs`), the `npm run -s` forms of checks already allowed, and the read-only
+  Context7, Cloudflare docs and browser-tab MCP tools. No added rule allows an interpreter, a
+  package runner or a `git fetch` wildcard, any of which would let an agent run arbitrary code;
+  the production-confirmation hook still runs on every call.
+
 ## [2.11.38] - 2026-11-18
 
 ### Changed
@@ -5353,7 +5367,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.38...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.39...HEAD
+[2.11.39]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.38...v2.11.39
 [2.11.38]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.37...v2.11.38
 [2.11.37]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.36...v2.11.37
 [2.11.36]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.35...v2.11.36
