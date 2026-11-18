@@ -15,6 +15,12 @@ instructions. The `PostToolUse` hook in `.claude/settings.json` re-syncs after a
 change, and CI plus `/ship` run `npm run sync:agents:check` to reject generated-tree drift. See
 [ADR 0021](../adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
 
+In a linked worktree under `.worktrees/`, the `PostToolUse` hook resolves the primary clone and
+correctly does nothing, so run `node scripts/sync-agents.mjs` in the worktree by hand. A worktree
+has no `node_modules` either: run the primary copy's tools directly, for example
+`node ../../node_modules/prettier/bin/prettier.cjs --check <file>`. To check what Codex discovers,
+`codex debug prompt-input "hi"` in the repository prints its skill roots and every skill it found.
+
 ## Shared `.mjs` scripts
 
 `scripts/sync-agents.mjs`, `scripts/lint-agent-neutrality.mjs`, `scripts/sync-main.mjs`,

@@ -63,6 +63,51 @@ The only tell was npm's own banner printing `@0.15.0` when the merge had minted 
 checkout behind `origin/main`, naming the migrations it lacks, so the silent no-op becomes a loud
 refusal; `MIGRATE_ALLOW_BEHIND=1` is the documented override.
 
+## SQLite and D1 traps
+
+Each of these passed locally or looked like validation, and failed or misled somewhere else.
+
+- **D1 rejects `PRAGMA foreign_keys=OFF`,** which drizzle-kit emits around table rebuilds, while
+  Miniflare accepts it, so the whole Workers suite passes and production is the first to refuse.
+  Use `PRAGMA defer_foreign_keys = true` / `false`. Foreign keys are enforced in the Workers test
+  pool.
+- **D1 caps a compound `SELECT` at five terms.** A sixth `UNION ALL` fails with
+  `too many terms in compound SELECT`, which refuses a `CREATE VIEW` and fails the whole migration.
+  `CASE` with `COALESCE` over one table replaces a branch-per-column union, and is cheaper.
+- **`ALTER TABLE … RENAME` reparses every view.** A rebuild fails at the rename if a view still
+  references the table: drop those views in the same file and recreate them in the next.
+- **`LIKE` is not a format check.** `CHECK("effective_day" LIKE '____-__-__')` admits `zzzz-99-99`,
+  because `_` matches any character. Use
+  `GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`.
+- **`INSERT OR IGNORE` also swallows `CHECK` and `NOT NULL` violations**, so a malformed row
+  vanishes instead of failing. Use `ON CONFLICT DO NOTHING` to skip rows that already exist.
+- **Drizzle's `text(…, { enum })` emits no SQL constraint.** It refines the TypeScript type only.
+  A real constraint needs `check()`.
+- **Drizzle emits FK actions only on `CREATE TABLE`** ("The drizzle-kit ALTER trap" below). A later
+  `DROP COLUMN` can silently reverse such a pin if drizzle-kit emits a `__new_*` table recreate
+  instead of a bare `DROP COLUMN`: inspect the generated SQL.
+- **`ON DELETE SET NULL` is the quiet twin of `RESTRICT`.** A new `RESTRICT` key turns a shipped
+  endpoint's 409 into a 500, which is loud and cross-cutting: extend the endpoint's pre-check for
+  every table that references the row. `SET NULL` silently erases a column, unrecoverably when the
+  column is transition-only: deleting a draft meeting once nulled an in-force resolution's
+  provenance two hops away. Trace both hops for every new key.
+- **SQLite checks foreign keys row by row.** Deleting from a self-referencing table such as
+  `audit_events` fails on the first referenced row: delete the children first
+  (`WHERE correlation_sequence > 0`), then the rest, test cleanup helpers included.
+- **`Number.isInteger(1e21)` is `true`, and SQLite stores such a value as `REAL`.** A column meant to
+  hold integer cents needs an explicit cap, not only an integer check.
+- **Catching `'UNIQUE'` as a string conflates indexes.** Identify which index refused the write,
+  then re-query to see whether the existing row is really the same entry.
+- **A generated migration's `meta/` JSON is unformatted**, so run the project-wide
+  `npm run format:check`, not a per-file Prettier.
+- **`drizzle-kit generate` needs a terminal once a column is renamed:** it asks whether a rename is
+  a drop plus an add, and with no TTY it dies mid-diff. The generator isn't part of the workflow
+  anyway (above).
+- **A `wrangler d1 export` dump doesn't re-import with `--local --file`:** statement order breaks
+  foreign keys, and a naive DDL-first reorder makes Wrangler's splitter glue `CASE … END` views to
+  what follows. Split it into schema, data (prefixed with `PRAGMA defer_foreign_keys=TRUE`) and one
+  file per view, and import in that order.
+
 ## Plat Lot numbers (`0038`)
 
 Apply `0038` **before** merging/deploying #413's dependent code. It adds nullable

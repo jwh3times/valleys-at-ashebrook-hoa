@@ -61,3 +61,11 @@ the project doesn't use (reconsider) or there's a real gap (note it for `/domain
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
 > _Contradicts ADR-0007 (event-sourced orders) — but worth reopening because…_
+
+## The association is self-managed
+
+The document corpus holds a large body of material from a former management company, including an
+owner portal that took payments. That arrangement is not current: the association manages itself
+(ADR 0025). Before treating any corpus document as current practice, check its date and whether it
+predates the change, and keep any manager's name out of public issues and commits; refer to the
+role.
