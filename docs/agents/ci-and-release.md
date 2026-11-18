@@ -114,6 +114,28 @@ so a vulnerable zod shipped in the Worker. A lockfile refresh cannot move an exa
 reports `security_update_not_possible` for it. If the plugin's copy is ever hoisted while vulnerable,
 add a root `overrides.zod` caret floor, as #499 did until #313 removed the need.
 
+## A Dependabot alert with no pull request
+
+Why Dependabot opened no PR for an open alert is visible only through GraphQL, not the REST alerts
+API or `gh`:
+
+```bash
+gh api graphql -f query='{ repository(owner:"jwh3times",name:"valleys-at-ashebrook-hoa"){
+  vulnerabilityAlerts(first:10,states:OPEN){ nodes{ number createdAt
+    dependabotUpdate{ pullRequest{number state} error{title body errorType} } } } } }'
+```
+
+- **`security_update_not_possible` can be wrong.** For a transitive dependency whose parent is
+  pinned in the lockfile, Dependabot reports the current version as the highest installable even
+  when the parent's caret range already admits the patch. Check with
+  `npm view <parent>@<pinned> dependencies`. When the range admits it,
+  `npm audit fix --package-lock-only` re-resolves the lockfile with no override.
+- **A failed security update is not retried on a schedule**, and green version-update PRs say
+  nothing about it: they are a separate job type.
+- **Alerts can stay open for hours after the fix merges** (seven on #499, seconds on #440). Compare
+  the version GraphQL's `vulnerableRequirements` names with the merged lockfile before acting, and
+  wait rather than dismiss: a dismissed alert may not reopen if the version returns.
+
 ## Actions are pinned to commit SHAs
 
 Every `uses:` in `.github/workflows/` names a full 40-character commit SHA, with the version it

@@ -78,21 +78,24 @@ no ready issue exists. `/ask-matt` maps the flow itself.
 This file carries what binds every change. Detail lives in `docs/agents/`, one file per surface —
 load the one your task touches.
 
-| Load this                                                      | When you are                                                                  |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| [`dev-flow.md`](./docs/agents/dev-flow.md)                     | Starting any change — what this repository adds to the shared flow.           |
-| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.  |
-| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                            |
-| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.               |
-| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze. |
-| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.   |
-| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.           |
-| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                     |
-| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                      |
-| [`human-follow-up.md`](./docs/agents/human-follow-up.md)       | Filing a step only a human can take — the private issue and the wiki page.    |
-| [`agent-skills.md`](./docs/agents/agent-skills.md)             | Editing a skill, an agent, or a shared `scripts/*.mjs` file.                  |
-| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                      |
-| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                     |
+| Load this                                                      | When you are                                                                     |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [`dev-flow.md`](./docs/agents/dev-flow.md)                     | Starting any change — what this repository adds to the shared flow.              |
+| [`http-endpoints.md`](./docs/agents/http-endpoints.md)         | Adding or changing an API route — guard order, status codes, race re-checks.     |
+| [`data-model.md`](./docs/agents/data-model.md)                 | Changing a table, column, FK, or CHECK constraint.                               |
+| [`migrations.md`](./docs/agents/migrations.md)                 | Writing a migration, or applying one to local or production D1.                  |
+| [`roster-and-access.md`](./docs/agents/roster-and-access.md)   | Touching authorization, the party roster, Access Grants, or the write freeze.    |
+| [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.      |
+| [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.              |
+| [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                        |
+| [`merging.md`](./docs/agents/merging.md)                       | Merging a PR — checks on the current head, order, the tag, the changelog footer. |
+| [`verification.md`](./docs/agents/verification.md)             | Proving a new test can fail, or checking a claim before reporting it.            |
+| [`workstation.md`](./docs/agents/workstation.md)               | Running Wrangler, `gh`, local servers or the confirmation hook on a dev machine. |
+| [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                         |
+| [`human-follow-up.md`](./docs/agents/human-follow-up.md)       | Filing a step only a human can take — the private issue and the wiki page.       |
+| [`agent-skills.md`](./docs/agents/agent-skills.md)             | Editing a skill, an agent, or a shared `scripts/*.mjs` file.                     |
+| [`triage-labels.md`](./docs/agents/triage-labels.md)           | Applying a triage label.                                                         |
+| [`domain.md`](./docs/agents/domain.md)                         | Exploring the codebase — which domain docs to read first.                        |
 
 `docs/adr/` records the decisions behind all of it; [`docs/adr/README.md`](./docs/adr/README.md)
 indexes every ADR with a one-line title.

@@ -130,6 +130,31 @@ Two routing rules decided 2026-09-05, alongside the public/private rule above:
 Moved to [`human-follow-up.md`](./human-follow-up.md): the private issue, the board fields, the wiki
 page and its contact-value scan. This heading stays so links to it still land.
 
+## Board mechanics
+
+- **`gh project item-list --format json` omits empty fields per item**, so one item's keys say
+  nothing about the board. Count a field across items, and read a card's current value before
+  writing one. The keys are lowercased on the first word with spaces kept: `next Action`,
+  `blocking Item`.
+- **Filter items by `content.repository` as well as number** before taking an item id to
+  `item-edit`: the board spans both trackers, and their numbers overlap.
+- **A draft becomes an issue in place only through GraphQL**:
+  `convertProjectV2DraftIssueItemToIssue(input: {itemId, repositoryId})`, with the repository's
+  `node_id`. It keeps the card's position and copies the body, so rewrite the body for its tracker
+  and add the labels and fields afterwards.
+- **Board writes need `gh`'s `project` scope**, not only `read:project`. Without it the end-session
+  board step did nothing for weeks, and nothing errored.
+- **A ticked `Human-TODO` line can hide a next step.** When a decision is ticked, check whether it
+  authorizes a human action, and file that action as its own unticked line with its issue and wiki
+  page. Two operator steps were once found living only inside ticked items.
+- **`needs-info` with `blocked` is not a label conflict.** A conflict is two of the five readiness
+  labels together; `blocked` and the priority labels sit beside one
+  ([triage labels](./triage-labels.md)).
+- **When moving where something is tracked or named**, grep `.agents/skills/`, `.claude/agents/`,
+  `docs/adr/` and the private companion for the old name before calling it done, then
+  `npm run sync:agents`. Skills that read a settings file inherit the change; one with a hard-coded
+  claim breaks quietly.
+
 ## Public repository
 
 jwh3times/valleys-at-ashebrook-hoa

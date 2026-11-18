@@ -29,6 +29,10 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   **When:** CI, Dependabot, versioning or the changelog workflow changes; the confirmation hook's
   install-script rule changes (the Worker-types paragraph cites it, as does the matching comment in
   `.github/workflows/build.yml`).
+- `docs/agents/merging.md`, `docs/agents/verification.md`, `docs/agents/workstation.md` — what to
+  do after a PR opens, how to prove a test or a claim, and the development machines' tool traps.
+  **When:** a merge, verification or workstation lesson is learned that no script or test enforces;
+  a command or check they quote changes.
 - `docs/agents/agent-skills.md` — how the skill and agent trees are generated, and the shared
   `.mjs` scripts. **When:** `scripts/sync-agents.mjs`, the generated trees, or the shared-script
   set changes.
