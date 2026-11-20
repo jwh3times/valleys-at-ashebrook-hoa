@@ -558,11 +558,13 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
   called non-provider patterns) remains unavailable for this user-owned public repository: GitHub
   currently limits it to organization-owned repositories on GitHub Team with
   [Secret Protection enabled](https://docs.github.com/en/code-security/how-tos/secure-your-secrets/detect-secret-leaks/enabling-secret-scanning-for-generic-patterns).
-- **Protected `main`** — an active GitHub ruleset with an empty bypass list requires every change to
-  arrive through a pull request, blocks force pushes and branch deletion, requires the branch to be
-  up to date, and requires the build gate, changelog check and code-quality analysis to pass, with
-  CodeQL gating as described above. Required approvals remain zero for the solo maintainer; the PR
-  and checks still apply to the repository owner.
+- **Protected `main`** — an active GitHub ruleset requires every change to arrive through a pull
+  request, blocks force pushes and branch deletion, requires the branch to be up to date, and
+  requires the build gate, changelog check and code-quality analysis to pass, with CodeQL gating as
+  described above. Required approvals remain zero for the solo maintainer; the PR and checks still
+  apply to the repository owner. Its one bypass actor is the release GitHub App, whose token only
+  `.github/workflows/version.yml` uses, to push the changelog stamp commit and the release tag after
+  each merge (ADR 0030).
 - **Synthetic-fixture gate** — `npm run lint:fixtures` (`scripts/check-fixture-values.ts`) fails CI
   when any phone number or email address in the tracked tree is outside the NANP fictional ranges
   or the RFC 2606 reserved domains, aside from a short allowlist of published contact addresses and

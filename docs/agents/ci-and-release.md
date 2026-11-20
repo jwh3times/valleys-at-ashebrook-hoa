@@ -147,7 +147,8 @@ corresponds to in a trailing comment:
 
 A release tag is mutable — whoever controls the action's repository can re-point `v7` at different
 code, and every workflow that trusts the tag runs it on the next push. A SHA cannot be re-pointed.
-CI here has repository write (`version.yml` pushes tags) and reads no secrets it should not, but it
+CI here has repository write (`version.yml` pushes the stamp commit to `main` and the tags, with
+the release App's token, which bypasses the ruleset) and reads no secrets it should not, but it
 runs on every PR, so the blast radius of a compromised action is the whole pipeline.
 
 Dependabot's `github-actions` ecosystem understands pinned SHAs: it proposes updates by rewriting
