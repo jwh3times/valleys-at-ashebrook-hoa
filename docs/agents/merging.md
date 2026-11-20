@@ -43,9 +43,9 @@ polling.
   `chore(release): v<x.y.z> [skip ci]` commit, then tags the merge commit and creates its GitHub
   Release. Confirm with `git tag --points-at <merge commit>`: the tag is on the merge, not on
   `main`'s new tip.
-- **The stamp commit runs no GitHub workflow.** Cloudflare Workers Builds may still build it
-  (ADR 0030); that redeploys the same Worker, since the commit changes only `CHANGELOG.md` and
-  `changelog.d/`.
+- **The stamp commit runs no workflow and deploys nothing.** Its `[skip ci]` skips `build` and
+  `Version`, and Cloudflare Workers Builds skips it too: its check run on the stamp commit reads
+  `skipped`. Only CodeQL analyzes it.
 
 - **Close a private issue by hand**, then run `npm run sync:main`.
 

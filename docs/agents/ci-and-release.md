@@ -5,7 +5,8 @@ grouped dependency PR hide a real failure.
 
 ## The pipeline
 
-`.github/workflows/build.yml` runs on every PR and every push to `main`, in this order:
+`.github/workflows/build.yml` runs on every PR and every push to `main` except the Version
+workflow's `[skip ci]` stamp commit ([Changelog](#changelog)), in this order:
 
 ```
 types:worker (regenerate) → format:check → lint → shared scripts' node:test → sync:agents:check
@@ -185,9 +186,10 @@ tags each merge commit and creates its GitHub Release from the section. The push
 the release GitHub App, the `main` ruleset's one bypass actor, since `GITHUB_TOKEN` cannot bypass a
 ruleset; the App's client ID is the `RELEASE_APP_CLIENT_ID` variable and its key the
 `RELEASE_APP_PRIVATE_KEY` secret. `[skip ci]` keeps the stamp commit from starting `build` or
-`Version` again. Cloudflare Workers Builds documents no commit-message skip, so it may build the
-stamp commit; that redeploys the same Worker, because the commit changes only `CHANGELOG.md` and
-`changelog.d/`. A build watch path excluding those two paths would skip it.
+`Version` again, and Cloudflare Workers Builds skips it too, though its documentation mentions only
+build watch paths: the `Workers Builds` check run on the v2.11.40 stamp commit reported `skipped`,
+with no watch path configured. So a stamp commit deploys nothing. CodeQL's default setup ignores
+`[skip ci]` and still analyzes it, which gates nothing.
 
 The Changelog Version workflow (`.github/workflows/changelog.yml`) runs on every PR, Dependabot's
 included, and **fails it when the branch adds, removes or renumbers a version section, adds entries

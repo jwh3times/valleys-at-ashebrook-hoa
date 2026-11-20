@@ -540,6 +540,8 @@ nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and 
 - **Dependabot** — dependency update PRs and security alerts (`.github/dependabot.yml`).
 - **CI** — every pull request and every push to `main` runs format, type-check, unit tests,
   Worker/D1 integration tests (`test:server`), and build gates (`.github/workflows/build.yml`).
+  The one exception is the Version workflow's `[skip ci]` changelog stamp commit, which changes
+  only `CHANGELOG.md` and `changelog.d/` (ADR 0030); CodeQL still analyzes it.
 - **Actions pinned to commit SHAs** — every `uses:` in `.github/workflows/` names a full commit SHA
   with the human-readable version beside it in a comment, rather than a moving tag like `@v7`. A
   release tag can be re-pointed at different code by whoever controls the action's repository; a
