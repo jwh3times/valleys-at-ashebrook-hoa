@@ -17,9 +17,9 @@ name: Version
 # The push uses a token from the release GitHub App, which the main ruleset lists as its one bypass
 # actor: `GITHUB_TOKEN` cannot bypass a ruleset. The App's client ID is the RELEASE_APP_CLIENT_ID
 # variable and its private key the RELEASE_APP_PRIVATE_KEY secret. `[skip ci]` keeps the App's push
-# from starting CI or this workflow again. Cloudflare Workers Builds deploys main outside Actions
-# (ADR 0004) and documents no commit-message skip, so a stamp commit may rebuild the same Worker;
-# it changes only CHANGELOG.md and changelog.d/, which the built Worker never reads.
+# from starting CI or this workflow again, and Cloudflare Workers Builds, which deploys main outside
+# Actions (ADR 0004), skips it too: its check run on the v2.11.40 stamp commit reported `skipped`,
+# with no build watch path configured.
 #
 # To see which release a checkout corresponds to: git describe --tags
 
