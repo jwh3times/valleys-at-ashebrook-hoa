@@ -24,7 +24,8 @@ has no `node_modules` either: run the primary copy's tools directly, for example
 ## Shared `.mjs` scripts
 
 `scripts/sync-agents.mjs`, `scripts/lint-agent-neutrality.mjs`, `scripts/sync-main.mjs`,
-`scripts/next-version.mjs`, `scripts/check-changelog.mjs` and `scripts/check-docs.mjs`, each with
+`scripts/next-version.mjs`, `scripts/check-changelog.mjs`, `scripts/stamp-changelog.mjs`,
+`scripts/check-docs.mjs` and `scripts/check-skills.mjs`, each with
 its `node:test` suite, are the one exception to TypeScript-only `scripts/`: they are shared
 **byte-for-byte** with other repositories, so they are plain `.mjs`, Prettier-ignored, outside the
 TypeScript programs and Vitest, and must never be edited here — change the canonical copy in

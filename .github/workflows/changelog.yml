@@ -1,21 +1,15 @@
 name: Changelog Version
 
-# Verifies that CHANGELOG.md documents the version THIS PR's merge will mint.
+# Verifies the branch's changelog fragments (`Scheme: stamp-on-tag`, ADR 0030). A branch writes its
+# entries to its own `changelog.d/<branch-slug>.md` and never names a version: version.yml stamps
+# each merge's section and tag after it lands. scripts/check-changelog.mjs fails a PR that adds,
+# removes or renumbers a version section, adds entries to `## [Unreleased]`, edits or deletes a
+# fragment another merge added, or adds a fragment that does not parse. A PR with no fragment
+# passes: version.yml writes its section from the PR title. So Dependabot PRs need no exemption.
 #
-# Every merge to main is auto-tagged v<major>.<minor>.<build> by version.yml, where the
-# build slot auto-increments. scripts/next-version.mjs predicts that tag from the release
-# line and existing tags — the SAME algorithm version.yml uses to create it. This job runs
-# that script and fails the PR unless CHANGELOG.md has a matching `## [<version>]` section,
-# so the changelog can never silently fall behind the tags.
-#
-# Dependabot PRs are exempt: they don't edit the changelog, and the /ship skill backfills
-# their entries later (see .claude/skills/ship/SKILL.md). version.yml still tags them. The
-# exemption is checked INSIDE the step (not via a job-level `if`) so the check always
-# reports a status — a skipped job can otherwise leave a required check pending forever.
-#
-# Race note: the prediction is exact only if no other PR merges between this run and this
-# PR's merge. Enable branch protection's "Require branches to be up to date before merging"
-# so an intervening merge forces a re-sync + re-run here, keeping the prediction honest.
+# The job keeps its name because the main ruleset requires
+# "Verify changelog names the target version". It always reports: a required check that never
+# reports holds the merge forever.
 
 on:
   pull_request:
@@ -35,18 +29,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # full history + tags, needed to predict the build number
+          fetch-depth: 0 # full history and tags, needed for the merge base with main
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
 
-      - name: Verify CHANGELOG.md documents the target version
-        env:
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-        run: |
-          if [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
-            echo "Dependabot PR — changelog entry is backfilled by /ship on the next human PR. Skipping."
-            exit 0
-          fi
-          node scripts/check-changelog.mjs
+      - name: Verify the changelog fragments and that no released section changed
+        run: node scripts/check-changelog.mjs

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+Every merge to `main` is released (the Version workflow tags `v<major>.<minor>.<build>`), and each
+release gets its own section below. Branches never edit this file: each writes its entries to
+`changelog.d/`, and the workflow stamps them into the section for the version its merge mints.
+`Unreleased` stays empty. Tags `v0.1.1` to `v0.1.6` predate a section per build and have none.
+
 ## [Unreleased]
 
 No unreleased changes.

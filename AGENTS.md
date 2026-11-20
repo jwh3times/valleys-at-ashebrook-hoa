@@ -88,7 +88,7 @@ load the one your task touches.
 | [`voting-and-ballots.md`](./docs/agents/voting-and-ballots.md) | Touching elections, motions, ballots — or anything naming `ballot_choices`.      |
 | [`module-map.md`](./docs/agents/module-map.md)                 | Looking for where a helper or server module lives and what it owes.              |
 | [`ci-and-release.md`](./docs/agents/ci-and-release.md)         | Debugging CI, bumping a dependency, or cutting a version.                        |
-| [`merging.md`](./docs/agents/merging.md)                       | Merging a PR — checks on the current head, order, the tag, the changelog footer. |
+| [`merging.md`](./docs/agents/merging.md)                       | Merging a PR — checks on the current head, the stamp commit, the release tag.    |
 | [`verification.md`](./docs/agents/verification.md)             | Proving a new test can fail, or checking a claim before reporting it.            |
 | [`workstation.md`](./docs/agents/workstation.md)               | Running Wrangler, `gh`, local servers or the confirmation hook on a dev machine. |
 | [`issue-tracker.md`](./docs/agents/issue-tracker.md)           | Reading or writing GitHub issues (`gh` CLI conventions).                         |
@@ -506,8 +506,9 @@ node scripts/sync-agents.mjs
 ```
 
 `scripts/sync-agents.mjs`, `lint-agent-neutrality.mjs`, `check-docs.mjs`, `check-skills.mjs`, and
-`sync-main.mjs`, `next-version.mjs` and `check-changelog.mjs` where this repository carries them, are
-canonical in `jwh3times/skills` with their tests: fix them there, then copy them here.
+`sync-main.mjs`, `next-version.mjs`, `check-changelog.mjs` and `stamp-changelog.mjs` where this
+repository carries them, are canonical in `jwh3times/skills` with their tests: fix them there, then
+copy them here.
 `sync-agents.mjs` also writes the marked blocks in this file: change them in `jwh3times/skills`, not
 here.
 

@@ -63,7 +63,10 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   supports TypeScript 7.
 - `docs/workstation-bootstrap.md` — prerequisites and value-free commands for a new workstation.
   **When:** a prerequisite or bootstrap command changes.
-- `CHANGELOG.md` — release notes, one dated section per merge. `ship-owned`.
+- `CHANGELOG.md` — release notes, one dated section per merge, stamped by `version.yml` after each
+  merge. `frozen`: a branch edits only the policy text at the top.
+- `changelog.d/*.md` — the branch's changelog fragment, one per branch (`changelog.d/README.md`).
+  `ship-owned`.
 - `CLAUDE.md` — the Claude Code entry point beside `AGENTS.md`. **When:** only a Claude-specific
   note changes.
 - `CONTEXT.md` — the domain glossary, written through `/domain-modeling`. `frozen` for this skill:
