@@ -6,16 +6,10 @@ heading is one setting. How the pipeline, versioning and the changelog guard wor
 
 ## Scheme
 
-per-merge — `.github/workflows/version.yml` tags every merge to `main` `v<major>.<minor>.<build>`,
-and each merge's dated changelog section names the version it mints.
-
-## Skipped tags
-
-backfill — a merged Dependabot PR (exempt from the `Changelog Version` guard) gets its section on the
-next ship.
-
-- **Ignore:** `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5` and `v0.1.6`, released before the
-  changelog kept a section per build.
+stamp-on-tag — `.github/workflows/version.yml` tags every merge to `main`
+`v<major>.<minor>.<build>` with a GitHub Release. Each branch's entries live in its own
+`changelog.d/<branch-slug>.md` fragment; the workflow stamps them into the merge's dated section
+and tags the merge commit (ADR 0030).
 
 ## Ask before bumping
 

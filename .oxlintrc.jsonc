@@ -91,8 +91,11 @@
         "scripts/check-docs.test.mjs",
         "scripts/check-skills.mjs",
         "scripts/check-skills.test.mjs",
+        "scripts/stamp-changelog.mjs",
+        "scripts/stamp-changelog.test.mjs",
       ],
       "rules": {
+        "eslint/no-shadow": "off",
         "typescript/no-floating-promises": "off",
         "typescript/restrict-template-expressions": "off",
         "typescript/require-array-sort-compare": "off",

@@ -91,8 +91,8 @@ Python on pushes to `main` and on pull requests, with one exception:
   **neutral**, with "configurations not found", and no `Analyze` jobs run (#433, #475 and #521,
   among others). A Dependabot PR whose head is a commit of the owner's runs all three analyses.
 - **A neutral check does not block the merge.** The `main` ruleset's `code_scanning` rule blocks a
-  failing analysis, not a neutral one, and its bypass list is empty, so such PRs merge and their
-  code is scanned on `main` afterwards.
+  failing analysis, not a neutral one, and its only bypass actor is the release App's stamp push,
+  so such PRs merge and their code is scanned on `main` afterwards.
 - **To scan before merging, update the branch:** `gh pr update-branch <n>` makes a merge commit
   under the owner's account, and that commit is scanned. A dependency bump only changes
   `package.json` and the lockfile, so a post-merge scan is usually acceptable for it.
@@ -147,7 +147,8 @@ corresponds to in a trailing comment:
 
 A release tag is mutable — whoever controls the action's repository can re-point `v7` at different
 code, and every workflow that trusts the tag runs it on the next push. A SHA cannot be re-pointed.
-CI here has repository write (`version.yml` pushes tags) and reads no secrets it should not, but it
+CI here has repository write (`version.yml` pushes the stamp commit to `main` and the tags, with
+the release App's token, which bypasses the ruleset) and reads no secrets it should not, but it
 runs on every PR, so the blast radius of a compromised action is the whole pipeline.
 
 Dependabot's `github-actions` ecosystem understands pinned SHAs: it proposes updates by rewriting
@@ -165,16 +166,31 @@ commit and creates a GitHub release from the `package.json` major/minor release 
 tag for a new line uses the package build value (`0.2.0` → `v0.2.0`); later merges on the same line
 increment the build tag (`v0.2.1`, `v0.2.2`, …). When bumping major or minor, `x.y.0` remains
 valid and is not incremented to `x.y.1` unless an `x.y.0` tag already exists.
+`scripts/stamp-changelog.mjs` makes that computation the way `scripts/next-version.mjs` does, once
+per merge, in the order the merges landed.
 
 ## Changelog
 
-The Changelog Version workflow (`.github/workflows/changelog.yml`) runs on every non-dependabot PR
-and **fails it unless `CHANGELOG.md` documents the version that PR's merge will mint**.
-
-`scripts/next-version.mjs` computes that version, and the Version workflow tags with the same script.
-The `/ship` skill (`.claude/skills/ship/`) classifies the branch's project-level release impact as
-major, minor, or build before writing the matching changelog section; for a major or minor
+No branch names a version (`Scheme: stamp-on-tag`, ADR 0030). The `/ship` skill classifies the
+branch's project-level release impact as major, minor, or build; for a major or minor
 classification it idempotently updates `package.json` and `package-lock.json` from the merge-base
-release line, while a build classification leaves the package version unchanged.
+release line, while a build classification leaves the package version unchanged. It writes the
+branch's entries to its own `changelog.d/<branch-slug>.md` fragment and never edits
+`CHANGELOG.md` (`changelog.d/README.md`).
 
-Dependabot PRs are exempt; their entries are backfilled by `/ship` on the next human PR.
+After each merge, the Version workflow runs `scripts/stamp-changelog.mjs`. It turns each untagged
+merge's fragments (or, with none, its PR title) into a dated section with its footer link, and
+pushes them in one `chore(release): v<x.y.z> [skip ci]` commit that deletes the used fragments. It
+tags each merge commit and creates its GitHub Release from the section. The push uses a token from
+the release GitHub App, the `main` ruleset's one bypass actor, since `GITHUB_TOKEN` cannot bypass a
+ruleset; the App's client ID is the `RELEASE_APP_CLIENT_ID` variable and its key the
+`RELEASE_APP_PRIVATE_KEY` secret. `[skip ci]` keeps the stamp commit from starting `build` or
+`Version` again. Cloudflare Workers Builds documents no commit-message skip, so it may build the
+stamp commit; that redeploys the same Worker, because the commit changes only `CHANGELOG.md` and
+`changelog.d/`. A build watch path excluding those two paths would skip it.
+
+The Changelog Version workflow (`.github/workflows/changelog.yml`) runs on every PR, Dependabot's
+included, and **fails it when the branch adds, removes or renumbers a version section, adds entries
+to `## [Unreleased]`, edits or deletes a fragment already on `main`, or adds a fragment that does
+not parse**. Its job keeps the name the ruleset requires, `Verify changelog names the target
+version`.

@@ -47,7 +47,8 @@ The labels are defined in [`docs/agents/triage-labels.md`](./docs/agents/triage-
 - Treat each product item as requiring its own spec before build.
 - Keep security, authorization, and visibility checks server-side.
 - Add or update tests with every behavior change.
-- Update `CHANGELOG.md` when an item ships.
+- Record a shipped item in its branch's `changelog.d/` fragment; the Version workflow stamps it into
+  `CHANGELOG.md` after the merge.
 - Add an ADR when an item changes a durable architecture or operating decision.
 
 ## What stays in files, not issues

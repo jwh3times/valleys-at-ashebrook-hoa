@@ -43,11 +43,12 @@ file with the configuration change.
 
 4. Open a Pull Request against `main` whose description opens with `Closes #N` (or `Part of #N`
    when it delivers one slice of a larger issue); an issue number in the title alone links
-   nothing. CI's **Changelog Version** check
-   (`.github/workflows/changelog.yml`) fails the PR unless it adds a `## [<version>]` section to
-   `CHANGELOG.md` for the version the merge will mint — compute that version with
-   `scripts/next-version.mjs`, or run the `ship` skill to handle the doc, changelog, and PR flow for
-   you. Dependabot PRs are exempt.
+   nothing. Put the PR's changelog entries in its own `changelog.d/<branch-slug>.md` fragment
+   (`changelog.d/README.md`), never in `CHANGELOG.md`, or run the `ship` skill to handle the doc,
+   changelog, and PR flow for you. After the merge, the Version workflow stamps the fragment into
+   the release's dated section. CI's **Changelog Version** check
+   (`.github/workflows/changelog.yml`) fails a PR that edits a released section or
+   `## [Unreleased]`, or another merge's fragment.
 
 ## Conventions to honour
 

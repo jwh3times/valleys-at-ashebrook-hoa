@@ -1,7 +1,7 @@
 # Merging
 
-Everything from an open pull request to a finished merge: checks, order, the version tag, and the
-changelog footer. `/ship` stops when the PR opens, so these steps are done by hand. Each one below
+Everything from an open pull request to a finished merge: checks, order, and the release the merge
+gets. `/ship` stops when the PR opens, so these steps are done by hand. Each one below
 has been missed at least once. The merge itself needs no second confirmation (`AGENTS.md`, Deploy).
 How the pipeline, versioning and the changelog guard work is in
 [`ci-and-release.md`](./ci-and-release.md).
@@ -12,24 +12,19 @@ How the pipeline, versioning and the changelog guard work is in
   wait until `gh api repos/<owner>/<repo>/commits/<head>/check-runs` shows every run `completed`.
   Run straight after `gh pr update-branch`, `gh pr checks <n> --watch` watched the old head and
   reported success while the new head's `build` was still queued, and then failed (#572, #576).
-- **`main` is protected by a ruleset with no bypass**, not by classic branch protection, so
+- **`main` is protected by a ruleset**, not by classic branch protection, so
   `.../branches/main/protection` answers 404. Required: the changelog check, `build`, CodeQL and code
-  quality, with branches up to date. Auto-merge is off. To change the ruleset, fetch it, edit the
-  `rules` array, and `PUT` the whole array back: a `PUT` replaces it. Keep `code_scanning` and
-  `code_quality` exactly as they are.
-- **Merge one changelog-carrying PR at a time.** Every PR edits `CHANGELOG.md`, so parallel branches
-  collide. When two are open, merge the larger one first, then on the other merge `main`, keep both
-  sections newest first, and renumber that branch's own section to what
-  `node scripts/next-version.mjs` prints after `git fetch --tags`. The winner's tag is minted
-  asynchronously, so check the tags first.
-- **A changelog PR goes before a Dependabot PR.** A Dependabot PR claims no version, so merging it
-  first takes the number the other PR's section names and forces a re-ship. In the other order, the
-  Dependabot PR only needs `gh pr update-branch` and a green re-run, and the next `/ship` backfills
-  its section.
-- **Renumber only the branch's own section.** Before renaming a section heading, check
-  `git tag -l "v<that version>"` is empty. The v1.1.0 ship renamed the already-released `[1.0.22]`
-  into `[1.1.0]`, deleting a release from the record, and CI passed because the guard checks only the
-  target version.
+  quality, with branches up to date. Auto-merge is off. Its one bypass actor is the release GitHub
+  App, which pushes `version.yml`'s stamp commit; nobody else bypasses it. To change the ruleset,
+  fetch it, edit the `rules` array, and `PUT` the whole ruleset back: a `PUT` replaces it. Keep
+  `bypass_actors`, `code_scanning` and `code_quality` exactly as they are.
+- **PRs merge in any order.** No branch names a version or edits `CHANGELOG.md`: each writes its own
+  `changelog.d/<branch-slug>.md` fragment (`Scheme: stamp-on-tag`, ADR 0030), so open PRs don't
+  collide over the changelog, and a Dependabot PR passes the changelog check like any other.
+- **Wait for the stamp before updating the next branch.** About a minute after each merge, the
+  stamp commit moves `main` again, and the ruleset requires branches to be up to date. Run
+  `gh pr update-branch` after that merge's `Version` run finishes, or the branch needs a second
+  update and a second `build`.
 
 ## Merging
 
@@ -43,19 +38,14 @@ polling.
 
 - **Find the Version run by commit.** `gh run list --workflow version.yml --limit 1` right after a
   merge can return the previous merge's run, because the new one isn't queued yet. Select the run
-  whose `headSha` is the merge commit, watch it, then confirm `git tag --points-at origin/main`.
-- **Check the changelog footer.** Every new or backfilled section needs its `[x.y.z]: …/compare/…`
-  link, and `[Unreleased]` must compare from the newest tag. The changelog guard doesn't check the
-  footer, and v2.11.34 shipped without its link.
-- **Reconcile tags with sections.** Every tag from `v0.2.0` on needs a `## [x.y.z]` section:
-
-  ```bash
-  for t in $(git tag --sort=version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$'); do
-    v="${t#v}"; grep -q "^## \[$v\]" CHANGELOG.md || echo "MISSING: $t"
-  done
-  ```
-
-  The ignored `v0.1.x` tags (`releases.md`) will show; nothing else should.
+  whose `headSha` is the merge commit and watch it. It stamps the merge's section into
+  `CHANGELOG.md` with its footer link, deletes the merge's fragments, and pushes that as a
+  `chore(release): v<x.y.z> [skip ci]` commit, then tags the merge commit and creates its GitHub
+  Release. Confirm with `git tag --points-at <merge commit>`: the tag is on the merge, not on
+  `main`'s new tip.
+- **The stamp commit runs no GitHub workflow.** Cloudflare Workers Builds may still build it
+  (ADR 0030); that redeploys the same Worker, since the commit changes only `CHANGELOG.md` and
+  `changelog.d/`.
 
 - **Close a private issue by hand**, then run `npm run sync:main`.
 
