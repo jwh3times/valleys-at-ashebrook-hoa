@@ -14,6 +14,17 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.41] - 2026-11-20
+
+### Changed
+
+- Release docs: Cloudflare Workers Builds skips the Version workflow's `[skip ci]` stamp commit,
+  as the first stamped release (v2.11.40) showed, so a stamp commit deploys nothing. ADR 0030,
+  `docs/agents/ci-and-release.md`, `docs/agents/merging.md` and the `version.yml` header had said
+  Workers Builds might rebuild it. The release docs and `SECURITY.md` now say that CodeQL's
+  default setup still analyzes the stamp commit, and no longer say `build` runs on every push to
+  `main`. No site behavior changes.
+
 ## [2.11.40] - 2026-11-20
 
 ### Changed
@@ -5392,7 +5403,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.40...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.41...HEAD
+[2.11.41]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.40...v2.11.41
 [2.11.40]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.39...v2.11.40
 [2.11.39]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.38...v2.11.39
 [2.11.38]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.37...v2.11.38

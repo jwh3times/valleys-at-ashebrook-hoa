@@ -24,9 +24,10 @@ The stamp commit goes straight to `main`, which the ruleset otherwise forbids, s
 pushes it with a token from a release GitHub App listed as the ruleset's one bypass actor
 (`GITHUB_TOKEN` cannot be one). Every first-parent commit on `main` is a release, so the repository
 merges with merge commits only. `[skip ci]` keeps the stamp commit from starting `build` or
-`Version`. Cloudflare Workers Builds, which deploys `main` (ADR 0004), documents no commit-message
-skip, so it may build the stamp commit; that redeploys the same Worker, since the commit changes
-only `CHANGELOG.md` and `changelog.d/` and the Worker reads neither. The ruleset is strict about
+`Version`, and Cloudflare Workers Builds, which deploys `main` (ADR 0004), skips it as well.
+(Corrected 2026-11-20: this record first said Workers Builds might build the stamp commit, since
+its documentation names no commit-message skip. Its check run on the first stamp commit, for
+v2.11.40, reported `skipped` with no build watch path configured.) The ruleset is strict about
 up-to-date branches, so the stamp commit also puts every open PR behind `main` once more, and a PR
 is updated after the `Version` run (`docs/agents/merging.md`). The changelog check keeps the name
 the ruleset requires, now checks the fragments instead of a predicted version, and drops the
