@@ -14,6 +14,14 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.50] - 2026-11-22
+
+### Changed
+
+- The Doc map in `docs/agents/docs.md` no longer lists the `jwh3times/skills` skills by hand. The
+  list had gone stale, missing `land` and `dependabot`, so the entry now points to the
+  `shared-skills` block in `AGENTS.md`, which the install keeps current. No site behavior changes.
+
 ## [2.11.49] - 2026-11-22
 
 ### Added
@@ -5457,7 +5465,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.49...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.50...HEAD
+[2.11.50]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.49...v2.11.50
 [2.11.49]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.48...v2.11.49
 [2.11.48]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.47...v2.11.48
 [2.11.47]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.46...v2.11.47
