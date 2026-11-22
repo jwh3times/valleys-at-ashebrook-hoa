@@ -14,6 +14,18 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.49] - 2026-11-22
+
+### Added
+
+- `docs/agents/dependabot.md` holds what the shared `dependabot` skill reads to review this
+  repository's Dependabot PRs, in the session and in the scheduled review: the label its verdicts
+  carry, the minor bumps reviewed in full (`oxlint` and `vitest`), the install CI runs, where the
+  dependencies are used, the hard peers a major has to satisfy (`@astrojs/cloudflare`,
+  `better-auth-cloudflare`, `@cloudflare/vitest-plugin`), and the gates and known fixes for each
+  kind of bump, among them `npm run types:worker` for Worker types drift. The Doc map lists it. No
+  site behavior changes.
+
 ## [2.11.48] - 2026-11-22
 
 ### Changed
@@ -5445,7 +5457,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.48...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.49...HEAD
+[2.11.49]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.48...v2.11.49
 [2.11.48]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.47...v2.11.48
 [2.11.47]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.46...v2.11.47
 [2.11.46]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.45...v2.11.46
