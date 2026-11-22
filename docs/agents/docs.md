@@ -39,8 +39,9 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
 - `docs/agents/dev-flow.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`,
   `docs/agents/domain.md` — the conventions the flow skills read. **When:** a convention or route changes.
 - `docs/agents/` settings (`workspace`, `human-follow-up`, `docs`, `releases`, `ship`, `handoffs`,
-  and the settings sections of `issue-tracker`) — what the shared skills read. **When:** a setting
-  changes.
+  `dependabot`, and the settings sections of `issue-tracker`) — what the shared skills read.
+  **When:** a setting changes; for `dependabot`, a Dependabot group, a hard peer it cites, a CI gate
+  or a fix it names changes.
 - `README.md` — human developers: overview and local setup. **When:** a setup step or an npm script
   that is part of setup changes.
 - `SETUP.md` — the deployer's guide: Cloudflare resources, secrets, roster import, docs import.
