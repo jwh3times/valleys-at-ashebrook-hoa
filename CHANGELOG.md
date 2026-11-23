@@ -14,6 +14,19 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.55] - 2026-11-23
+
+### Changed
+
+- `docs/agents/guard.md` holds this repository's own rules for the shared PreToolUse guard,
+  `scripts/guard.mjs`, on top of the ones it applies everywhere: it denies the abandoned Drizzle
+  snapshot generator (`npm run db:generate`, `drizzle-kit generate`) and `npx skills update`, and
+  protects `private/`, the local secret and binding files, `.wrangler/` and `node_modules/`.
+  Production commands stay with the confirmation hook. The Doc map in `docs/agents/docs.md` names
+  the file and when it changes. No site behavior changes.
+- `.oxlintrc.jsonc` no longer turns `promise/always-return` off for the shared scripts: the
+  canonical copies from `jwh3times/skills` pass it now.
+
 ## [2.11.54] - 2026-11-23
 
 ### Changed
@@ -5491,7 +5504,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.54...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.55...HEAD
+[2.11.55]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.54...v2.11.55
 [2.11.54]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.53...v2.11.54
 [2.11.53]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.52...v2.11.53
 [2.11.52]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.51...v2.11.52
