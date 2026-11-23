@@ -14,6 +14,14 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.51] - 2026-11-22
+
+### Changed
+
+- `THIRD_PARTY_NOTICES.md` no longer lists the `jwh3times/skills` skills by hand. The list had gone
+  stale, missing `land` and `dependabot`, so it now points to the `shared-skills` block in
+  `AGENTS.md`. The attribution and license notices are unchanged. No site behavior changes.
+
 ## [2.11.50] - 2026-11-22
 
 ### Changed
@@ -5465,7 +5473,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.50...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.51...HEAD
+[2.11.51]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.50...v2.11.51
 [2.11.50]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.49...v2.11.50
 [2.11.49]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.48...v2.11.49
 [2.11.48]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.47...v2.11.48
