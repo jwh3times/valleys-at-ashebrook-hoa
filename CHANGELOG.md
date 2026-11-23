@@ -14,6 +14,12 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.52] - 2026-11-22
+
+### Changed
+
+- Take the latest shared skills and scripts from `jwh3times/skills` (#625)
+
 ## [2.11.51] - 2026-11-22
 
 ### Changed
@@ -5473,7 +5479,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.51...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.52...HEAD
+[2.11.52]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.51...v2.11.52
 [2.11.51]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.50...v2.11.51
 [2.11.50]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.49...v2.11.50
 [2.11.49]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.48...v2.11.49
