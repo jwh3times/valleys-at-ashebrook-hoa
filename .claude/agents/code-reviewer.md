@@ -1,6 +1,7 @@
 ---
 name: code-reviewer
 description: Reviews Valleys at Ashebrook diffs for access-control and correctness bugs before merging — tier enforcement, two-layer API gating, fail-closed auth, transition-only fields, ballot secrecy, coercion traps, and Workers/D1 conventions.
+model: inherit
 tools: Read, Grep, Glob, Bash
 ---
 
