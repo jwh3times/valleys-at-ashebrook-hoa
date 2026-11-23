@@ -99,7 +99,6 @@
       ],
       "rules": {
         "eslint/no-shadow": "off",
-        "promise/always-return": "off",
         "typescript/no-floating-promises": "off",
         "typescript/restrict-template-expressions": "off",
         "typescript/require-array-sort-compare": "off",

@@ -42,6 +42,10 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   `dependabot`, and the settings sections of `issue-tracker`) — what the shared skills read.
   **When:** a setting changes; for `dependabot`, a Dependabot group, a hard peer it cites, a CI gate
   or a fix it names changes.
+- `docs/agents/guard.md` — the commands `scripts/guard.mjs` denies or asks about here, and the paths
+  it protects, on top of its universal rules and the production-confirmation hook. **When:** a
+  never-run command or a never-remove path in `workspace.md` changes, or the confirmation hook
+  starts or stops covering a command.
 - `README.md` — human developers: overview and local setup. **When:** a setup step or an npm script
   that is part of setup changes.
 - `SETUP.md` — the deployer's guide: Cloudflare resources, secrets, roster import, docs import.
