@@ -79,6 +79,7 @@
       // repositories, so a rule they trip is switched off here rather than fixed here. node:test
       // awaits the promises its top-level test() calls return.
       "files": [
+        "scripts/sync-agents.mjs",
         "scripts/sync-agents.test.mjs",
         "scripts/lint-agent-neutrality.test.mjs",
         "scripts/sync-main.mjs",
@@ -93,9 +94,12 @@
         "scripts/check-skills.test.mjs",
         "scripts/stamp-changelog.mjs",
         "scripts/stamp-changelog.test.mjs",
+        "scripts/guard.mjs",
+        "scripts/guard.test.mjs",
       ],
       "rules": {
         "eslint/no-shadow": "off",
+        "promise/always-return": "off",
         "typescript/no-floating-promises": "off",
         "typescript/restrict-template-expressions": "off",
         "typescript/require-array-sort-compare": "off",
