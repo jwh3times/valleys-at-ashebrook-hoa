@@ -1,6 +1,6 @@
 # Docs
 
-Settings the shared `docs-updater`, `end-session` and `ship` skills read (installed from
+Settings the shared `docs-updater`, `end-session` and `open-pr` skills read (installed from
 `jwh3times/skills`, ADR 0029). Each `##` heading is one setting.
 
 ## Doc map
@@ -38,7 +38,7 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
   set changes.
 - `docs/agents/dev-flow.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`,
   `docs/agents/domain.md` — the conventions the flow skills read. **When:** a convention or route changes.
-- `docs/agents/` settings (`workspace`, `human-follow-up`, `docs`, `releases`, `ship`, `handoffs`,
+- `docs/agents/` settings (`workspace`, `human-follow-up`, `docs`, `releases`, `open-pr`, `handoffs`,
   `dependabot`, `test-proof`, and the settings sections of `issue-tracker`) — what the shared
   skills read.
   **When:** a setting changes; for `dependabot`, a Dependabot group, a hard peer it cites, a CI gate

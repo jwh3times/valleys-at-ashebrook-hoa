@@ -532,7 +532,7 @@ step only a human can take — a dashboard, DNS, or zone setting, a production m
 force-push, a named sign-off, an association decision — the closing report is not where it lives.
 File a `ready-for-human` follow-up issue on the **private** tracker and add it to the project
 board, write step-by-step instructions on the private wiki linked from its `Human-TODO` page, then
-report both links — never in the public PR body. `ship`, `end-session`, and `docs-updater` follow
+report both links — never in the public PR body. `open-pr`, `end-session`, and `docs-updater` follow
 [`docs/agents/human-follow-up.md`](./docs/agents/human-follow-up.md), and `code-reviewer` flags a
 diff that introduces an operator step without them.
 

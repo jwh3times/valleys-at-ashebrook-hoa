@@ -1,7 +1,7 @@
 # Guard
 
 The commands and paths `scripts/guard.mjs` stops here, on top of the rules it applies everywhere.
-Each `##` heading is one setting, defined in `.agents/skills/ship/settings/guard.md`. Production
+Each `##` heading is one setting, defined in `.agents/skills/open-pr/settings/guard.md`. Production
 commands (deploys, remote D1 writes, Worker secrets, corpus and roster writes, Wrangler) are
 confirmation-gated by `scripts/require-production-confirmation.ts`, so they are not repeated here.
 
