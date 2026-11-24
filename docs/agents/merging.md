@@ -1,7 +1,7 @@
 # Merging
 
 Everything from an open pull request to a finished merge: checks, order, and the release the merge
-gets. `/ship` stops when the PR opens, so these steps are done by hand. Each one below
+gets. `/open-pr` stops when the PR opens, so these steps are done by hand. Each one below
 has been missed at least once. The merge itself needs no second confirmation (`AGENTS.md`, Deploy).
 How the pipeline, versioning and the changelog guard work is in
 [`ci-and-release.md`](./ci-and-release.md).

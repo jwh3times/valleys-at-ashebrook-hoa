@@ -172,7 +172,7 @@ per merge, in the order the merges landed.
 
 ## Changelog
 
-No branch names a version (`Scheme: stamp-on-tag`, ADR 0030). The `/ship` skill classifies the
+No branch names a version (`Scheme: stamp-on-tag`, ADR 0030). The `/open-pr` skill classifies the
 branch's project-level release impact as major, minor, or build; for a major or minor
 classification it idempotently updates `package.json` and `package-lock.json` from the merge-base
 release line, while a build classification leaves the package version unchanged. It writes the

@@ -12,7 +12,7 @@ from authored `.claude/agents`. Never edit generated trees or reintroduce skill 
 `core.symlinks=false`, Git stages linked contents as duplicate files. Each authored Claude custom
 agent is rendered as a Codex custom-agent TOML file, preserving its name, description, and developer
 instructions. The `PostToolUse` hook in `.claude/settings.json` re-syncs after authored inputs
-change, and CI plus `/ship` run `npm run sync:agents:check` to reject generated-tree drift. See
+change, and CI plus `/open-pr` run `npm run sync:agents:check` to reject generated-tree drift. See
 [ADR 0021](../adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
 
 In a linked worktree under `.worktrees/`, the `PostToolUse` hook resolves the primary clone and
