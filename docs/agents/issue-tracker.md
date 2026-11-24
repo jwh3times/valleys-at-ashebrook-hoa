@@ -177,6 +177,8 @@ not join it on its own: add it with `gh project item-add 6 --owner jwh3times --u
 - `Blocking Item` (text): what blocks it, when something does. A blocker that is an issue in the
   same tracker is a native `blocked_by` edge (see **Blocking**), not text here. A blocker on the
   other tracker stays here, so no edge links a public issue to a private one.
+- `Due` (date): set only when the action has a real deadline (an expiry, a renewal, an offer's end,
+  a date someone else set), never an aspirational one; empty otherwise.
 
 The issue is the record; durable facts go in its body and comments, never only in a field.
 

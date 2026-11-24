@@ -39,7 +39,8 @@ Settings the shared `docs-updater`, `end-session` and `ship` skills read (instal
 - `docs/agents/dev-flow.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`,
   `docs/agents/domain.md` — the conventions the flow skills read. **When:** a convention or route changes.
 - `docs/agents/` settings (`workspace`, `human-follow-up`, `docs`, `releases`, `ship`, `handoffs`,
-  `dependabot`, and the settings sections of `issue-tracker`) — what the shared skills read.
+  `dependabot`, `test-proof`, and the settings sections of `issue-tracker`) — what the shared
+  skills read.
   **When:** a setting changes; for `dependabot`, a Dependabot group, a hard peer it cites, a CI gate
   or a fix it names changes.
 - `docs/agents/guard.md` — the commands `scripts/guard.mjs` denies or asks about here, and the paths
