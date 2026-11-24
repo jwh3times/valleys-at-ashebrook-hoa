@@ -14,6 +14,12 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.62] - 2026-11-24
+
+### Changed
+
+- chore: bump `actions/create-github-app-token` from `3.3.0` to `3.4.0` in the actions-minor-and-patch group across 1 directory (#626)
+
 ## [2.11.61] - 2026-11-24
 
 ### Changed
@@ -5542,7 +5548,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.61...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.62...HEAD
+[2.11.62]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.61...v2.11.62
 [2.11.61]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.60...v2.11.61
 [2.11.60]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.59...v2.11.60
 [2.11.59]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.58...v2.11.59
