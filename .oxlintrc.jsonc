@@ -75,10 +75,13 @@
   },
   "overrides": [
     {
-      // The shared scripts and their node:test suites are copied byte-for-byte from other
-      // repositories, so a rule they trip is switched off here rather than fixed here. node:test
-      // awaits the promises its top-level test() calls return.
+      // The shared scripts and their node:test suites, and the scripts inside installed skills,
+      // are copied byte-for-byte from other repositories, so a rule they trip is switched off
+      // here rather than fixed here. node:test awaits the promises its top-level test() calls
+      // return.
       "files": [
+        ".agents/skills/**/*.mjs",
+        ".claude/skills/**/*.mjs",
         "scripts/sync-agents.mjs",
         "scripts/sync-agents.test.mjs",
         "scripts/lint-agent-neutrality.test.mjs",
