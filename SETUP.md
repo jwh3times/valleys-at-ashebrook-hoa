@@ -557,7 +557,7 @@ resource, binding, or secret.
 
 ## Online Payments (Stripe sandbox)
 
-Online dues payments (ADR 0025, #538) are being built in slices, and none of them is live. A
+Online dues payments (ADR 0025, #538) are built, and none of it is live in production. A
 homeowner can start a payment from `/lot-records` with the **Pay** action, which sends them to
 Stripe's hosted Checkout page and back to `/lot-records/payments/<id>`; Stripe's webhook,
 `POST /api/webhooks/payments`, records what Stripe confirms on the lot's dues ledger. Production
