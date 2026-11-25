@@ -16,8 +16,10 @@ change, and CI plus `/open-pr` run `npm run sync:agents:check` to reject generat
 [ADR 0021](../adr/0021-authored-agent-skills-generate-tool-specific-trees.md).
 
 In a linked worktree under `.worktrees/`, the `PostToolUse` hook resolves the primary clone and
-correctly does nothing, so run `node scripts/sync-agents.mjs` in the worktree by hand. A worktree
-has no `node_modules` either: run the primary copy's tools directly, for example
+correctly does nothing, so run `node scripts/sync-agents.mjs` in the worktree by hand. A new
+worktree has no `node_modules` until `npm ci` installs it there (see
+[workstation bootstrap](../workstation-bootstrap.md)); until then, run the primary copy's tools
+directly, for example
 `node ../../node_modules/prettier/bin/prettier.cjs --check <file>`. To check what Codex discovers,
 `codex debug prompt-input "hi"` in the repository prints its skill roots and every skill it found.
 
