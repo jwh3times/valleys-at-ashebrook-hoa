@@ -14,6 +14,12 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.68] - 2026-11-26
+
+### Changed
+
+- chore(deps-dev): bump `@testing-library/jest-dom` from `7.0.1` to `8.0.0` in the testing-library group (#643)
+
 ## [2.11.67] - 2026-11-25
 
 ### Changed
@@ -5584,7 +5590,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.67...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.68...HEAD
+[2.11.68]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.67...v2.11.68
 [2.11.67]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.66...v2.11.67
 [2.11.66]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.65...v2.11.66
 [2.11.65]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.64...v2.11.65
