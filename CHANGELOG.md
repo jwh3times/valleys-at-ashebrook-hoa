@@ -14,6 +14,12 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.71] - 2026-11-27
+
+### Changed
+
+- chore(deps-dev): bump `oxlint` from `1.94.0` to `1.95.0` in the oxlint group across 1 directory (#649)
+
 ## [2.11.70] - 2026-11-27
 
 ### Changed
@@ -5602,7 +5608,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.70...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.71...HEAD
+[2.11.71]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.70...v2.11.71
 [2.11.70]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.69...v2.11.70
 [2.11.69]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.68...v2.11.69
 [2.11.68]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.67...v2.11.68
