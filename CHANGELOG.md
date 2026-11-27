@@ -14,6 +14,16 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.72] - 2026-11-27
+
+### Changed
+
+- `docs/agents/merging.md` and `docs/agents/dependabot.md` now say an oxlint minor can stop honoring
+  the suppression comments code relied on, as 1.95.0 did for two admin effects (#649). The fix is the
+  same as for a new `correctness` rule: rewrite the code on the Dependabot branch, never re-suppress
+  it or disable the rule. `AGENTS.md` now names the shared admin hook `useAdminResource` among the
+  users of the documented mount-fetch shape. No site behavior changes.
+
 ## [2.11.71] - 2026-11-27
 
 ### Changed
@@ -5608,7 +5618,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.71...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.72...HEAD
+[2.11.72]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.71...v2.11.72
 [2.11.71]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.70...v2.11.71
 [2.11.70]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.69...v2.11.70
 [2.11.69]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.68...v2.11.69
