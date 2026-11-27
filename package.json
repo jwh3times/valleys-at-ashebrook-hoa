@@ -71,7 +71,7 @@
     "@vitejs/plugin-react": "^6.3.0",
     "drizzle-kit": "^0.31.11",
     "jsdom": "^31.0.1",
-    "oxlint": "^1.94.0",
+    "oxlint": "^1.95.0",
     "oxlint-tsgolint": "^7.0.2008",
     "pdfjs-dist": "^6.5.438",
     "prettier": "^3.10.1",
