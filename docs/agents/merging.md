@@ -90,6 +90,11 @@ a grouped PR's title doesn't give it.
   `npx oxlint --version` with the `package.json` pin; `npm install` is the fix.
 - **An oxlint minor can add a `correctness` rule that fails on real code** (#536). Fix the code on
   the Dependabot branch rather than disabling the rule.
+- **An oxlint minor can also stop honoring suppression comments** the code relied on (#649: 1.95.0
+  ignores suppressions while its React hooks validations are on, so two effects carrying an
+  `oxlint-disable-next-line react/exhaustive-deps` comment failed `npm run lint`). The fix is the
+  same: rewrite the code on the Dependabot branch, here into the mount-fetch shape `AGENTS.md`
+  describes, never re-suppress it or disable the rule.
 
 ## Closing references
 

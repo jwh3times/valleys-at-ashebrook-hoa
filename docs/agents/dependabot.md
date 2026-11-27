@@ -34,7 +34,8 @@ Valleys at Ashebrook HOA
 
 - `oxlint` and `oxlint-tsgolint`, any minor: `.oxlintrc.jsonc` enables the `correctness` category
   wholesale, so a rule a release adds to it or moves into it fails `npm run lint` on code nobody
-  touched (#267, #536; `ci-and-release.md`, `merging.md`). They arrive as the `oxlint` group's own
+  touched (#267, #536; `ci-and-release.md`, `merging.md`). A release can also stop honoring the
+  suppression comments code relied on (#649, `merging.md`). They arrive as the `oxlint` group's own
   PR.
 - `vitest` and `@vitest/*`, any minor: Vitest 5.1 broke every Workers-pool suite with a `vi.mock()`
   factory, because its module mocker calls `AsyncLocalStorage#disable()`, which workerd does not
@@ -122,7 +123,8 @@ verdict.
   on #614 names. The route without an install, applying the diff from the failing log, is in
   `merging.md`.
 - **oxlint** (`oxlint` group): the gate is `npm run lint`. A new `correctness` rule that fails on
-  real code is fixed in the code on the Dependabot branch, never by disabling the rule (#536). A
+  real code is fixed in the code on the Dependabot branch, never by disabling the rule (#536). So is
+  a suppression comment the release stopped honoring: rewrite the code, never re-suppress (#649). A
   local `Rule '…' not found in plugin` is a stale `node_modules`: reinstall.
 - **Vitest** (`vitest`, `@vitest/*`, `@cloudflare/vitest-plugin`): `npm test` and the full
   `npm run test:server`. Before a `vitest` major, read `@cloudflare/vitest-plugin`'s `vitest` peer

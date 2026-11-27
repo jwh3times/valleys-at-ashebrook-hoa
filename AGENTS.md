@@ -250,11 +250,12 @@ _inside_ the effect callback. So a clean `npm run lint` is not proof no effect s
 synchronously.
 
 The documented **mount-fetch shape** is what both that rule and
-`react/exhaustive-effect-dependencies` expect, and what eight components already use (admin
-`ReportsManager`, `MeetingsManager`, `BoardServicePanel`, `ResolutionsManager`,
-`LotViolationsManager`, `DuesLedgerManager`, `PaymentsManager`, and member `ProxyManager`): a
-`useCallback`-memoized loader declared as the effect's dependency, started from a function declared
-inside the effect callback, with an unmount/cleanup flag guarding the eventual write.
+`react/exhaustive-effect-dependencies` expect, and what the shared admin hook `useAdminResource`
+and eight components already use (admin `ReportsManager`, `MeetingsManager`, `BoardServicePanel`,
+`ResolutionsManager`, `LotViolationsManager`, `DuesLedgerManager`, `PaymentsManager`, and member
+`ProxyManager`): a `useCallback`-memoized loader declared as the effect's dependency, started from
+a function declared inside the effect callback, with an unmount/cleanup flag guarding the eventual
+write.
 `LotViolationsManager`, `DuesLedgerManager` and `PaymentsManager` each need a second loader (one
 for the filtered/gated list, one read once for the lot list, and in the first two the feature gate)
 plus a read-sequence guard, because a row action's reload has no
