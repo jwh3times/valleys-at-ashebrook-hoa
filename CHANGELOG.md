@@ -14,6 +14,12 @@ release gets its own section below. Branches never edit this file: each writes i
 
 No unreleased changes.
 
+## [2.11.70] - 2026-11-27
+
+### Changed
+
+- chore(deps): bump the `npm-minor-and-patch` group across 1 directory with 4 updates (#650)
+
 ## [2.11.69] - 2026-11-26
 
 ### Changed
@@ -5596,7 +5602,8 @@ j***@gmail.com`) so a recipient can tell a real request from an attacker probing
   negative value previously dropped items off the end), and the members "approve" action refuses a
   `propertyId` that doesn't exist (`404`) or is inactive (`409`).
 
-[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.69...HEAD
+[Unreleased]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.70...HEAD
+[2.11.70]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.69...v2.11.70
 [2.11.69]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.68...v2.11.69
 [2.11.68]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.67...v2.11.68
 [2.11.67]: https://github.com/jwh3times/valleys-at-ashebrook-hoa/compare/v2.11.66...v2.11.67
