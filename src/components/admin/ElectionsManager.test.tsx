@@ -470,6 +470,45 @@ describe('ElectionsManager', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens a recorded election with its saved tallies and ballots filled in', async () => {
+    mocked.fetchLots.mockResolvedValue([property()]);
+    mocked.fetchElections.mockResolvedValue([
+      election({
+        title: 'Recorded election',
+        status: 'closed',
+        candidates: [candidate({ votes: 42 })],
+        ballots: [
+          {
+            propertyId: 'p1',
+            address: '100 Main St',
+            weight: 3,
+            viaProxy: false,
+            castByPersonId: null,
+            proxyId: null,
+          },
+        ],
+      }),
+    ]);
+    render(<ElectionsManager />);
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^history$/i }),
+    );
+    const card = screen
+      .getByText('Recorded election')
+      .closest('.panel-card') as HTMLElement;
+    await userEvent.click(
+      within(card).getByRole('button', { name: /details/i }),
+    );
+
+    expect(within(card).getByLabelText(/tally — alice/i)).toHaveValue(42);
+    expect(
+      within(card).getByLabelText(/ballot returned — 100 main st/i),
+    ).toBeChecked();
+    expect(
+      within(card).getByLabelText(/weight override.*100 main st/i),
+    ).toHaveValue(3);
+  });
+
   it('adds an election and reloads', async () => {
     mocked.fetchElections.mockResolvedValue([]);
     mocked.saveElection.mockResolvedValue(undefined);
