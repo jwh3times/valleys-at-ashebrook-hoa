@@ -215,10 +215,9 @@ export default function ElectionsManager() {
   // data the moment its panel opens — not re-synced on every subsequent
   // reload, the same choice MeetingsManager makes for its attendance forms,
   // so a half-typed tally isn't clobbered by the panel's own save-then-reload.
-  useEffect(() => {
-    if (!expandedId) return;
-    const found = elections.find((e) => e.id === expandedId);
-    if (!found) return;
+  // Called from toggleExpand, the only place a panel opens, rather than from
+  // an effect on `expandedId`, so the seed lands in the same render.
+  function seedPanelForms(found: ElectionDetail) {
     setTallyForm(
       Object.fromEntries(
         found.candidates.map((c) => [
@@ -241,9 +240,7 @@ export default function ElectionsManager() {
       ),
     );
     setWinnerForm({});
-    // Re-derive only when the expanded election changes.
-    // oxlint-disable-next-line react/exhaustive-deps
-  }, [expandedId]);
+  }
 
   function resetElection() {
     setEditingElectionId(null);
@@ -272,7 +269,10 @@ export default function ElectionsManager() {
   }
 
   function toggleExpand(id: string) {
-    setExpandedId((prev) => (prev === id ? null : id));
+    const next = expandedId === id ? null : id;
+    setExpandedId(next);
+    const found = next ? elections.find((e) => e.id === next) : undefined;
+    if (found) seedPanelForms(found);
     resetCandidate();
     setMsg('');
   }

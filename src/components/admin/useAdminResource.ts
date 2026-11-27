@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 function messageOf(err: unknown, fallback: string): string {
   return (err as { message?: string } | null)?.message ?? fallback;
@@ -26,30 +26,52 @@ export function useAdminResource<T>(fetcher: () => Promise<T>, initial: T) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
+  // useCallback so the mount effect can declare `load` as its dependency.
+  // Every caller passes a module-level fetcher, so this is stable and the
+  // effect runs once on mount; an inline fetcher would reload every render.
+  // `isStale` lets the mount load drop a response that lands after unmount.
+  const load = useCallback(
+    async (isStale: () => boolean) => {
+      setLoading(true);
+      setLoadError('');
+      try {
+        const next = await fetcher();
+        if (isStale()) return;
+        setData(next);
+      } catch (err: unknown) {
+        if (isStale()) return;
+        const message = messageOf(err, 'could not load.');
+        setLoadError(message);
+        setMsg('Error: ' + message);
+        throw err;
+      } finally {
+        // In `finally` so a rejected fetcher can't strand the manager on
+        // "Loading…" forever, which is what an unguarded `await` did here.
+        if (!isStale()) setLoading(false);
+      }
+    },
+    [fetcher],
+  );
+
   async function reload() {
-    setLoading(true);
-    setLoadError('');
-    try {
-      setData(await fetcher());
-    } catch (err: unknown) {
-      const message = messageOf(err, 'could not load.');
-      setLoadError(message);
-      setMsg('Error: ' + message);
-      throw err;
-    } finally {
-      // In `finally` so a rejected fetcher can't strand the manager on
-      // "Loading…" forever, which is what an unguarded `await` did here.
-      setLoading(false);
-    }
+    await load(() => false);
   }
 
   useEffect(() => {
-    // Load once on mount, matching the managers' previous `useEffect(…, [])`.
-    // The rejection is already recorded in loadError/msg by reload(); catching
-    // it here only keeps it from surfacing as an unhandled rejection.
-    void reload().catch(() => {});
-    // oxlint-disable-next-line react/exhaustive-deps
-  }, []);
+    // React's documented mount-fetch shape: the load is started from a
+    // function declared inside the effect and guarded by `ignore`, which the
+    // cleanup flips so a late response can't write state. The rejection is
+    // already recorded in loadError/msg by load(); catching it here only
+    // keeps it from surfacing as an unhandled rejection.
+    let ignore = false;
+    async function loadOnMount() {
+      await load(() => ignore).catch(() => {});
+    }
+    void loadOnMount();
+    return () => {
+      ignore = true;
+    };
+  }, [load]);
 
   /** Runs `action`, then shows `successMsg`, or the message the action
    * returns when the outcome needs saying more exactly. */
